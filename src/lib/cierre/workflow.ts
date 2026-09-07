@@ -85,6 +85,8 @@ export const PASOS: DefinicionPaso[] = [
       "query_tax_declarations",
       "query_tax_position",
       "proponer_fijar_coeficiente",
+      "proponer_fijar_perdida",
+      "proponer_fijar_saldo_favor_iva",
       "proponer_confirmar_apertura",
     ],
     href: () => "/empresa/apertura",
@@ -380,6 +382,20 @@ export interface ResumenApertura {
   pagosProvisionales: { total: number; conAcuse: number };
   /** Cobertura de la descarga del SAT desde el arranque. */
   sincronizacion: { periodosCubiertos: number; periodosTotales: number; faltantes: number };
+  /**
+   * LO QUE DICE la anual del ejercicio anterior, campo por campo. Sin esto, un
+   * dato `sin-dato` sólo podía terminar en «captúralo»: ahora se puede decir
+   * qué reporta la anual (o que no reporta nada) antes de pedir nada.
+   */
+  anualAnterior: {
+    ejercicio: number;
+    presentadaEl: string | null;
+    isrIngresos: number | null;
+    isrDeducciones: number | null;
+    isrBaseGravable: number | null;
+    isrCoeficienteUtilidad: number | null;
+    isrPerdidaPendiente: number | null;
+  } | null;
 }
 
 export interface HechosCierre {
@@ -631,6 +647,9 @@ function cifrasDelPaso(clave: ClavePasoCierre, h: HechosCierre): Record<string, 
                 perdidaPendiente: h.extras.apertura.perdidaPendiente,
                 pagosProvisionalesConocidos: h.extras.apertura.pagosProvisionales,
                 descargaSat: h.extras.apertura.sincronizacion,
+                // Lo que la anual reporta: si la pérdida viene `sin-dato`, aquí
+                // se ve si la anual trae una cifra o si de plano no la reporta.
+                declaracionAnualAnterior: h.extras.apertura.anualAnterior,
               },
             }
           : {}),

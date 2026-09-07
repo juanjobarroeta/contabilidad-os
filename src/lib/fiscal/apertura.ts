@@ -61,6 +61,19 @@ export interface PagoProvisionalInput {
   tieneAcuse: boolean;
 }
 
+/** Lo que la declaración anual guardada reporta, tal cual. */
+export interface AnualResumen {
+  ejercicio: number;
+  periodo: string;
+  presentadaEl: string | null;
+  status: string;
+  isrIngresos: number | null;
+  isrDeducciones: number | null;
+  isrBaseGravable: number | null;
+  isrCoeficienteUtilidad: number | null;
+  isrPerdidaPendiente: number | null;
+}
+
 export interface AperturaInputs {
   hoy: Date;
   rfc: string;
@@ -80,6 +93,13 @@ export interface AperturaInputs {
   perdidaManual: { valor: number | null; anio: number | null };
   /** Remanente extraído de la anual del ejercicio anterior (isrPerdidaPendiente). */
   perdidaDeAnual: { valor: number; ejercicio: number } | null;
+  /**
+   * LO QUE DICE la anual del ejercicio anterior, campo por campo. No decide
+   * nada: viaja para que quien lea el punto de partida (el contador o el
+   * copiloto) pueda ver POR QUÉ un dato falta — «la anual 2025 no trae pérdida
+   * pendiente» es una respuesta; «captúrala» sin mirarla, no.
+   */
+  anualAnterior?: AnualResumen | null;
   /** Ledger PerdidaFiscal (Art. 57) — lo consume el provisional PF. */
   perdidasLedger: {
     ejercicio: number;
@@ -138,6 +158,8 @@ export interface EstadoApertura {
     faltantes: string[];
     backfillTerminado: boolean;
   };
+  /** La anual del ejercicio anterior tal como está guardada (o null si no hay). */
+  anualAnterior: AnualResumen | null;
   confirmada: boolean;
   confirmadaAt: string | null;
   confirmadaPor: string | null;
@@ -328,6 +350,7 @@ export function decidirApertura(i: AperturaInputs): EstadoApertura {
       corridasImportadas: i.nomina.corridasImportadasSat,
     },
     sincronizacion: i.sincronizacion,
+    anualAnterior: i.anualAnterior ?? null,
     confirmada: i.confirmacion.confirmadaAt != null,
     confirmadaAt: i.confirmacion.confirmadaAt?.toISOString() ?? null,
     confirmadaPor: i.confirmacion.confirmadaPor,
@@ -430,6 +453,8 @@ export async function estadoApertura(companyId: string, hoy: Date = new Date()):
         orderBy: { periodo: "desc" },
         select: {
           periodo: true,
+          status: true,
+          fechaPresentacion: true,
           isrIngresos: true,
           isrDeducciones: true,
           isrBaseGravable: true,
@@ -501,6 +526,19 @@ export async function estadoApertura(companyId: string, hoy: Date = new Date()):
       anualPrev?.isrPerdidaPendiente != null
         ? { valor: anualPrev.isrPerdidaPendiente, ejercicio: prevYear }
         : null,
+    anualAnterior: anualPrev
+      ? {
+          ejercicio: prevYear,
+          periodo: anualPrev.periodo,
+          presentadaEl: anualPrev.fechaPresentacion?.toISOString().slice(0, 10) ?? null,
+          status: anualPrev.status,
+          isrIngresos: anualPrev.isrIngresos,
+          isrDeducciones: anualPrev.isrDeducciones,
+          isrBaseGravable: anualPrev.isrBaseGravable,
+          isrCoeficienteUtilidad: anualPrev.isrCoeficienteUtilidad,
+          isrPerdidaPendiente: anualPrev.isrPerdidaPendiente,
+        }
+      : null,
     perdidasLedger: perdidas
       .filter((p) => !p.agotada)
       .map((p) => ({

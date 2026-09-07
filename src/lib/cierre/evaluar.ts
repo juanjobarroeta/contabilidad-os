@@ -271,6 +271,17 @@ export async function cargarHechosCierre(
             periodosTotales: apertura.sincronizacion.periodosTotales,
             faltantes: apertura.sincronizacion.faltantes.length,
           },
+          anualAnterior: apertura.anualAnterior
+            ? {
+                ejercicio: apertura.anualAnterior.ejercicio,
+                presentadaEl: apertura.anualAnterior.presentadaEl,
+                isrIngresos: apertura.anualAnterior.isrIngresos,
+                isrDeducciones: apertura.anualAnterior.isrDeducciones,
+                isrBaseGravable: apertura.anualAnterior.isrBaseGravable,
+                isrCoeficienteUtilidad: apertura.anualAnterior.isrCoeficienteUtilidad,
+                isrPerdidaPendiente: apertura.anualAnterior.isrPerdidaPendiente,
+              }
+            : null,
         }
       : null,
   };

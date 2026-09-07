@@ -21,13 +21,19 @@ function staged(overrides: Partial<ChatPendingAction> = {}): ChatPendingAction {
 }
 
 describe("isReversibleType — lista blanca estricta", () => {
-  it("acepta los cinco tipos reversibles", () => {
+  it("acepta los tipos reversibles, capturas del punto de partida incluidas", () => {
     for (const t of [
       "conciliar",
       "categorizacion",
       "resolver_hallazgo",
       "posponer_hallazgo",
       "marcar_pendiente",
+      "confirmar_paso",
+      "omitir_paso",
+      "fijar_coeficiente",
+      "fijar_perdida",
+      "fijar_saldo_favor_iva",
+      "confirmar_apertura",
     ]) {
       expect(isReversibleType(t)).toBe(true);
     }

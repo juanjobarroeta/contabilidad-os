@@ -280,6 +280,8 @@ export const TOOL_LABELS: Record<string, string> = {
   query_cierre_paso: "Revisando el paso",
   proponer_confirmar_paso: "Preparando la confirmación",
   proponer_fijar_coeficiente: "Preparando el coeficiente",
+  proponer_fijar_perdida: "Preparando las pérdidas por amortizar",
+  proponer_fijar_saldo_favor_iva: "Preparando el saldo a favor inicial",
   proponer_confirmar_apertura: "Preparando la confirmación del punto de partida",
   proponer_omitir_paso: "Preparando la omisión",
   proponer_conciliacion: "Preparando la conciliación",

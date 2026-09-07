@@ -90,6 +90,10 @@ export async function executeToolCall(
       return proponerDecisionPaso("omitir", input, companyId, context);
     case "proponer_fijar_coeficiente":
       return proponerFijarCoeficiente(input, companyId, context);
+    case "proponer_fijar_perdida":
+      return proponerFijarPerdida(input, companyId, context);
+    case "proponer_fijar_saldo_favor_iva":
+      return proponerFijarSaldoFavorIva(input, companyId, context);
     case "proponer_confirmar_apertura":
       return proponerConfirmarApertura(companyId, context);
     case "proponer_resolver_hallazgo":
@@ -553,6 +557,99 @@ async function proponerFijarCoeficiente(input: ToolInput, companyId: string, con
   const pa = await stageChatPendingAction(context.conversationId!, companyId, summary, {
     type: "fijar_coeficiente",
     payload: { valor: redondeado, anio, anterior },
+  });
+  return propuestaStaged(summary, pa.token);
+}
+
+/**
+ * Pérdidas por amortizar del punto de partida. Sin `valor` toma lo que reporta
+ * la anual del ejercicio anterior; si la anual existe y NO reporta pérdida, no
+ * inventa un cero: se lo dice al copiloto para que él lo proponga explícito.
+ */
+async function proponerFijarPerdida(input: ToolInput, companyId: string, context: ToolContext): Promise<string> {
+  const guard = requiereInApp(context);
+  if (guard) return guard;
+
+  const { estadoApertura } = await import("../fiscal/apertura");
+  const apertura = await estadoApertura(companyId);
+  if (!apertura.perdidaPendiente.aplica) {
+    return JSON.stringify({
+      error:
+        "Esta empresa no amortiza el remanente de pérdidas por esta vía (es persona física: las pérdidas van en el ledger del Art. 57).",
+    });
+  }
+  const anual = apertura.anualAnterior;
+  const dictado = typeof input.valor === "number";
+  const valor = dictado ? (input.valor as number) : (anual?.isrPerdidaPendiente ?? null);
+  if (valor == null) {
+    return JSON.stringify({
+      error: anual
+        ? `La declaración anual ${anual.ejercicio} está guardada pero NO reporta pérdida pendiente (isrPerdidaPendiente vacío). ` +
+          "Dilo así y, si de la anual se ve que no hay pérdidas por amortizar, vuelve a llamarme con valor: 0 para dejarlo capturado como revisado."
+        : "No hay declaración anual guardada del ejercicio anterior de la cual leer la pérdida. Dile al usuario qué falta (capturar la anual o dictarte el monto).",
+      anual: anual ?? null,
+    });
+  }
+  if (!Number.isFinite(valor) || valor < 0) {
+    return JSON.stringify({ error: "El remanente de pérdidas debe ser un monto positivo (o cero)." });
+  }
+  const redondeado = Math.round(valor * 100) / 100;
+  const anterior = apertura.perdidaPendiente.valor;
+  if (anterior != null && Math.abs(anterior - redondeado) < 0.005) {
+    return JSON.stringify({
+      error: `El remanente de pérdidas ya está capturado en ${redondeado}: no hay nada que cambiar.`,
+    });
+  }
+  const anio = typeof input.anio === "number" ? input.anio : (anual?.ejercicio ?? null);
+  const origen = dictado ? "dictado por el usuario" : `de la declaración anual ${anual?.ejercicio}`;
+  const summary =
+    (redondeado === 0
+      ? "Capturar en $0 las pérdidas fiscales por amortizar del punto de partida"
+      : `Capturar ${redondeado.toLocaleString("es-MX", { style: "currency", currency: "MXN" })} de pérdidas fiscales por amortizar en el punto de partida`) +
+    ` (${origen})` +
+    (anterior != null ? `. Ahora está en ${anterior}.` : ". Hoy no hay dato capturado: el motor lo toma como cero sin que nadie lo haya revisado.") +
+    " Con esto el ISR provisional amortiza lo que corresponde.";
+
+  const pa = await stageChatPendingAction(context.conversationId!, companyId, summary, {
+    type: "fijar_perdida",
+    payload: { valor: redondeado, anio, anterior, origen },
+  });
+  return propuestaStaged(summary, pa.token);
+}
+
+/** Saldo a favor de IVA inicial del punto de partida (Art. 6 LIVA). */
+async function proponerFijarSaldoFavorIva(input: ToolInput, companyId: string, context: ToolContext): Promise<string> {
+  const guard = requiereInApp(context);
+  if (guard) return guard;
+  if (typeof input.valor !== "number") {
+    return JSON.stringify({
+      error: "Falta el valor. Revisa la declaración de IVA del mes anterior al primer periodo computado y dime el monto (0 es válido).",
+    });
+  }
+  const valor = input.valor;
+  if (!Number.isFinite(valor) || valor < 0) {
+    return JSON.stringify({ error: "El saldo a favor inicial debe ser un monto positivo (o cero)." });
+  }
+  const redondeado = Math.round(valor * 100) / 100;
+
+  const { estadoApertura } = await import("../fiscal/apertura");
+  const apertura = await estadoApertura(companyId);
+  const anterior = apertura.ivaSaldoFavor.valor;
+  if (anterior != null && Math.abs(anterior - redondeado) < 0.005) {
+    return JSON.stringify({ error: `El saldo a favor inicial ya está en ${redondeado}: no hay nada que cambiar.` });
+  }
+  const origen = "dictado por el usuario tras revisar la declaración";
+  const summary =
+    (redondeado === 0
+      ? `Capturar en $0 el saldo a favor de IVA inicial (${apertura.periodoAnterior})`
+      : `Fijar el saldo a favor de IVA inicial en ${redondeado.toLocaleString("es-MX", { style: "currency", currency: "MXN" })} (${apertura.periodoAnterior})`) +
+    (anterior != null
+      ? `. Ahora está en ${anterior} (${apertura.ivaSaldoFavor.fuente.etiqueta}).`
+      : ". Hoy no hay dato capturado: el arrastre del Art. 6 LIVA arranca en cero sin que nadie lo haya revisado.");
+
+  const pa = await stageChatPendingAction(context.conversationId!, companyId, summary, {
+    type: "fijar_saldo_favor_iva",
+    payload: { valor: redondeado, anterior, origen },
   });
   return propuestaStaged(summary, pa.token);
 }
@@ -1329,6 +1426,10 @@ async function queryTaxDeclarations(input: ToolInput, companyId: string) {
     take: Math.min((input.limit as number) || 10, 20),
   });
 
+  // La proyección devolvía cinco cifras y ninguna del ISR anual: el copiloto
+  // «consultaba las declaraciones» y seguía sin poder ver la pérdida fiscal
+  // pendiente, el coeficiente o la base gravable — así que terminaba mandando
+  // al contador a abrir la declaración. Ahora devuelve lo que la fila guarda.
   return JSON.stringify(
     declarations.map((d) => ({
       id: d.id,
@@ -1338,9 +1439,20 @@ async function queryTaxDeclarations(input: ToolInput, companyId: string) {
       ivaTrasladadoCobrado: d.ivaTrasladadoCobrado,
       ivaAcreditableGastado: d.ivaAcreditableGastado,
       ivaPagar: d.ivaPagar,
+      ivaSaldoFavor: d.ivaSaldoFavor,
       isrIngresos: d.isrIngresos,
+      isrDeducciones: d.isrDeducciones,
+      isrBaseGravable: d.isrBaseGravable,
+      isrCoeficienteUtilidad: d.isrCoeficienteUtilidad,
+      isrPerdidaPendiente: d.isrPerdidaPendiente,
+      isrTasa: d.isrTasa,
+      isrSaldoFavor: d.isrSaldoFavor,
       isrPagar: d.isrPagar,
       fechaPresentacion: d.fechaPresentacion?.toISOString().substring(0, 10),
+      lineaCaptura: d.lineaCaptura,
+      // De dónde salió la fila: capturada a mano, con acuse del SAT, o calculada.
+      capturadaAMano: d.isHistorical,
+      tieneAcuse: d.acusePdfNombre != null || d.acuseUrl != null || d.acuseData != null,
     }))
   );
 }

@@ -562,6 +562,34 @@ export const tools: Anthropic.Tool[] = [
     },
   },
   {
+    name: "proponer_fijar_perdida",
+    description:
+      "Propone CAPTURAR el remanente de pérdidas fiscales por amortizar del punto de partida (Company.perdidaFiscalPendiente, Art. 14 LISR) y lo deja pendiente del tap del usuario. Sin `valor` toma el que reporta la declaración anual del ejercicio anterior (isrPerdidaPendiente). CERO es un valor válido y deliberado: úsalo cuando hayas MIRADO la anual y ésta no reporte pérdidas — capturar 0 dice «revisado», que no es lo mismo que no tener dato. Antes de llamarla, consulta la anual (query_tax_declarations tipo DECLARACION_ANUAL) y di qué encontraste.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        valor: {
+          type: "number",
+          description: "Monto a capturar (>= 0). Omítelo para usar el que reporta la anual del ejercicio anterior.",
+        },
+        anio: { type: "number", description: "Ejercicio del que viene la pérdida. Default: el de la anual usada." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "proponer_fijar_saldo_favor_iva",
+    description:
+      "Propone CAPTURAR el saldo a favor de IVA inicial del punto de partida — la fila IVA_MENSUAL del mes anterior al primer mes computado, la misma que lee el arrastre del Art. 6 LIVA — pendiente del tap del usuario. CERO es un valor válido cuando hayas revisado la declaración de ese mes y no haya saldo a favor. Consulta primero (query_tax_declarations tipo IVA_MENSUAL de ese periodo) y di de dónde sale la cifra.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        valor: { type: "number", description: "Saldo a favor inicial a capturar (>= 0)." },
+      },
+      required: ["valor"],
+    },
+  },
+  {
     name: "proponer_confirmar_apertura",
     description:
       "Propone estampar la confirmación del PUNTO DE PARTIDA fiscal de la empresa (saldo a favor inicial, pérdidas, coeficiente y obligaciones revisados), pendiente del tap del usuario. Es lo que apaga la señal «el punto de partida aún no está confirmado». No confirma el paso del cierre: eso es proponer_confirmar_paso.",

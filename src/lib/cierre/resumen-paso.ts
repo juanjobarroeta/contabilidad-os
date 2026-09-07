@@ -103,6 +103,12 @@ Escribe la apertura de este paso para el contador, en español de México:
 2. Qué hay que hacer, en orden, como lista corta (máximo 4 puntos). Cita las cifras de arriba tal cual cuando importen.
 3. Si algo impide avanzar, dilo con precisión: qué falta y dónde se captura.
 
+Si un dato NO está capturado pero las cifras traen de dónde deducirlo (por
+ejemplo lo que reporta la declaración anual del ejercicio anterior), DILO con el
+valor y ofrécelo — no mandes a capturar a ciegas algo que el sistema ya puede
+leer. Si la anual existe y no reporta ese dato, dilo también: eso es una
+respuesta, no un pendiente del contador.
+
 Reglas: no inventes cifras ni las recalcules; usa sólo las de arriba. NUNCA le pidas al contador un dato que aparezca en las cifras. Si una cifra viene "no disponible", di qué falta para tenerla. No saludes, no te presentes, no ofrezcas ayuda genérica. Máximo 130 palabras. Markdown mínimo (negritas y lista).`;
 }
 
