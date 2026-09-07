@@ -26,6 +26,7 @@ import { SyntageClient } from "@/lib/fiscal/cumplimiento/syntage/client";
 import { descargarXmlDeRef } from "@/lib/fiscal/cumplimiento/syntage/descarga-xml";
 import { importarCatalogo, importarBalanza } from "./ce-import-apply";
 import { parseCatalogoCuentas } from "./ce-import";
+import { CODIGO_AGRUPADOR_OFICIAL } from "./codigo-agrupador";
 
 type Json = Record<string, unknown>;
 
@@ -207,13 +208,33 @@ export interface RellenoNombresResult {
   nombradas: number;
   /** Las que siguen sin nombre real: no aparecen con Desc en ningún catálogo. */
   siguenSinNombre: string[];
+  /** Cuentas sin código agrupador antes del barrido. */
+  sinAgrupadorAntes: number;
+  /** Cuántas quedaron con su agrupador, tomado del catálogo presentado. */
+  agrupadas: number;
+  /** De ésas, cuántas traen un código que SÍ está en el Anexo 24 vigente. */
+  agrupadasValidas: number;
+  /** Las que siguen sin agrupador: no aparecen en ningún catálogo presentado. */
+  siguenSinAgrupador: string[];
   /** Catálogos leídos, del más nuevo al más viejo. */
-  catalogosLeidos: Array<{ periodo: string; cuentasConDesc: number; nombro: number }>;
+  catalogosLeidos: Array<{ periodo: string; cuentasConDesc: number; nombro: number; agrupo: number }>;
   error?: string;
 }
 
+const VACIO = {
+  sinNombreAntes: 0,
+  nombradas: 0,
+  siguenSinNombre: [] as string[],
+  sinAgrupadorAntes: 0,
+  agrupadas: 0,
+  agrupadasValidas: 0,
+  siguenSinAgrupador: [] as string[],
+  catalogosLeidos: [] as RellenoNombresResult["catalogosLeidos"],
+};
+
 /**
- * Rellena el NOMBRE de las cuentas que se quedaron con su propio código.
+ * Rellena, desde los catálogos YA PRESENTADOS al SAT, el NOMBRE y el CÓDIGO
+ * AGRUPADOR de las cuentas que se quedaron sin ellos.
  *
  * POR QUÉ EXISTE. `leerEImportarContabilidadElectronicaSyntage` importa sólo el
  * catálogo MÁS RECIENTE (`catalogos.reduce(masReciente)`) y descarta los demás
@@ -230,7 +251,13 @@ export interface RellenoNombresResult {
  * que da igual de qué generación venga el archivo.
  *
  * Va del catálogo más NUEVO al más viejo y se detiene en cuanto no queda nada
- * por nombrar: el nombre vigente gana, y no se bajan 27 XML para nada.
+ * por nombrar ni por agrupar: lo vigente gana, y no se bajan 27 XML para nada.
+ *
+ * EL AGRUPADOR, IGUAL. Cada <Ctas> del catálogo trae su CodAgrup — es lo que la
+ * empresa YA declaró al SAT para esa cuenta. Pedirle al contador que etiquete
+ * 350 cuentas a mano teniendo el dato en un XML que nosotros mismos bajamos es
+ * inventarle trabajo. Sólo se escribe donde falta: un agrupador puesto por una
+ * persona no se pisa nunca.
  */
 export async function rellenarNombresDeCuentas(
   companyId: string,
@@ -241,29 +268,38 @@ export async function rellenarNombresDeCuentas(
     where: { id: companyId },
     select: { rfc: true, tier: true },
   });
-  if (!company) return { companyId, sinNombreAntes: 0, nombradas: 0, siguenSinNombre: [], catalogosLeidos: [], error: "Empresa no encontrada" };
+  if (!company) return { companyId, ...VACIO, error: "Empresa no encontrada" };
 
   const base = { companyId, rfc: company.rfc };
   const entity = await client.findEntityByRfc(company.rfc);
   if (!entity) {
-    return { ...base, sinNombreAntes: 0, nombradas: 0, siguenSinNombre: [], catalogosLeidos: [], error: "Sin entidad en Syntage para ese RFC" };
+    return { ...base, ...VACIO, error: "Sin entidad en Syntage para ese RFC" };
   }
 
   // Las que traen el código por nombre. Para una cuenta sin subcuenta el código
   // es `cuentaSAT` (los códigos con guiones no llevan punto, así que no se
   // descomponen); con subcuenta, el código es la subcuenta.
   const cuentas = await prisma.chartAccount.findMany({
-    where: { companyId },
-    select: { id: true, cuentaSAT: true, subcuenta: true, nombre: true },
+    where: { companyId, isActive: true },
+    select: { id: true, cuentaSAT: true, subcuenta: true, nombre: true, codAgrup: true },
   });
   const pendientes = new Map<string, { id: string; codigo: string }>();
+  // Sin agrupador PROPIO: el fallback del XML (subcuenta/cuentaSAT) sólo vale
+  // si de casualidad es un código del Anexo 24; con numeración propia
+  // (1301-0000-0000) no lo es, y la CE se rechaza.
+  const sinAgrupador = new Map<string, { id: string; codigo: string }>();
   for (const c of cuentas) {
-    const codigo = c.subcuenta ?? c.cuentaSAT;
-    if (c.nombre.trim() === codigo.trim()) pendientes.set(codigo.trim(), { id: c.id, codigo: codigo.trim() });
+    const codigo = (c.subcuenta ?? c.cuentaSAT).trim();
+    if (c.nombre.trim() === codigo) pendientes.set(codigo, { id: c.id, codigo });
+    const emitido = c.codAgrup ?? codigo;
+    if (!c.codAgrup && !(emitido in CODIGO_AGRUPADOR_OFICIAL)) {
+      sinAgrupador.set(codigo, { id: c.id, codigo });
+    }
   }
   const sinNombreAntes = pendientes.size;
-  if (sinNombreAntes === 0) {
-    return { ...base, sinNombreAntes: 0, nombradas: 0, siguenSinNombre: [], catalogosLeidos: [] };
+  const sinAgrupadorAntes = sinAgrupador.size;
+  if (sinNombreAntes === 0 && sinAgrupadorAntes === 0) {
+    return { ...base, ...VACIO };
   }
 
   const entityId = String((entity as Json).id ?? "");
@@ -278,28 +314,50 @@ export async function rellenarNombresDeCuentas(
 
   const catalogosLeidos: RellenoNombresResult["catalogosLeidos"] = [];
   let nombradas = 0;
+  let agrupadas = 0;
+  let agrupadasValidas = 0;
   const tope = opts.maxCatalogos ?? 40;
 
   for (const rec of catalogos.slice(0, tope)) {
-    if (pendientes.size === 0) break;
+    if (pendientes.size === 0 && sinAgrupador.size === 0) break;
     const doc = await descargarDocumentoCe(client, rec as Json, "CT");
     if (!doc) continue;
     const { cuentas: delXml } = parseCatalogoCuentas(doc.xml);
     const conDesc = delXml.filter((c) => c.desc.trim() !== "");
     let nombroAqui = 0;
-    for (const c of conDesc) {
-      const pend = pendientes.get(c.numCta.trim());
-      if (!pend) continue;
-      await prisma.chartAccount.update({ where: { id: pend.id }, data: { nombre: c.desc.trim() } });
-      pendientes.delete(pend.codigo);
-      nombroAqui++;
-      nombradas++;
+    let agrupoAqui = 0;
+    for (const c of delXml) {
+      const codigo = c.numCta.trim();
+      const desc = c.desc.trim();
+      const codAgrup = c.codAgrup.trim();
+      const pendNombre = desc ? pendientes.get(codigo) : undefined;
+      const pendAgrup = codAgrup ? sinAgrupador.get(codigo) : undefined;
+      if (!pendNombre && !pendAgrup) continue;
+      await prisma.chartAccount.update({
+        where: { id: (pendNombre ?? pendAgrup)!.id },
+        data: {
+          ...(pendNombre ? { nombre: desc } : {}),
+          ...(pendAgrup ? { codAgrup } : {}),
+        },
+      });
+      if (pendNombre) {
+        pendientes.delete(codigo);
+        nombroAqui++;
+        nombradas++;
+      }
+      if (pendAgrup) {
+        sinAgrupador.delete(codigo);
+        agrupoAqui++;
+        agrupadas++;
+        if (codAgrup in CODIGO_AGRUPADOR_OFICIAL) agrupadasValidas++;
+      }
     }
     const p = periodoDe(rec as Json);
     catalogosLeidos.push({
       periodo: `${p.anio}-${String(p.mes).padStart(2, "0")}`,
       cuentasConDesc: conDesc.length,
       nombro: nombroAqui,
+      agrupo: agrupoAqui,
     });
   }
 
@@ -310,6 +368,13 @@ export async function rellenarNombresDeCuentas(
     // Éstas no aparecen con descripción en NINGÚN catálogo presentado: hay que
     // preguntarle al contador, no seguir barriendo.
     siguenSinNombre: [...pendientes.keys()].sort(),
+    sinAgrupadorAntes,
+    agrupadas,
+    // Un agrupador que la empresa declaró pero que NO está en el Anexo 24
+    // vigente se escribe igual (es lo que se presentó), pero no se cuenta como
+    // resuelto: la CE lo seguiría rechazando y decir lo contrario sería mentir.
+    agrupadasValidas,
+    siguenSinAgrupador: [...sinAgrupador.keys()].sort(),
     catalogosLeidos,
   };
 }

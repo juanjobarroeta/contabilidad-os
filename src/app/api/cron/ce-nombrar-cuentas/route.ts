@@ -6,7 +6,8 @@ import { rellenarNombresDeCuentas } from "@/lib/contabilidad/ce-import-syntage";
 // ─────────────────────────────────────────────────────────────────────────────
 // GET/POST /api/cron/ce-nombrar-cuentas?companyId=<id>[&maxCatalogos=40]
 //
-// Le pone NOMBRE a las cuentas que se quedaron con su propio código.
+// Le pone NOMBRE y CÓDIGO AGRUPADOR a las cuentas que se quedaron sin ellos,
+// leyéndolos de los catálogos que la empresa YA presentó al SAT.
 //
 // POR QUÉ IMPORTA. Una cuenta cuyo `nombre` es su número rompe cualquier
 // conciliación por familia: el dinero está bien contabilizado y aun así cae en
@@ -14,6 +15,15 @@ import { rellenarNombresDeCuentas } from "@/lib/contabilidad/ce-import-syntage";
 // 16 cuentas así, y `1301-0028-0000` sola trae $6.98M —casi con seguridad
 // TRAVELER, que tiene $6.81M en piso—. Sin esto, el hueco de $33.2M contra la
 // balanza no se puede desarmar.
+//
+// EL AGRUPADOR, IGUAL. Cada <Ctas> del catálogo trae su CodAgrup: es el código
+// que la empresa ya declaró al SAT para esa cuenta. Pedirle al contador que
+// etiquete cientos de cuentas a mano teniendo el dato en un XML que nosotros
+// mismos bajamos es inventarle trabajo. Sólo se escribe donde falta — un
+// agrupador puesto por una persona no se pisa nunca — y `agrupadasValidas`
+// dice cuántas quedaron con un código que de verdad existe en el Anexo 24: uno
+// declarado mal se guarda igual (es lo que se presentó) pero no se cuenta como
+// resuelto, porque la CE lo seguiría rechazando.
 //
 // DE DÓNDE SALEN LOS NOMBRES. De los catálogos (fileType "CT") ya presentados
 // al SAT y guardados en Syntage. El importador de CE toma sólo el MÁS RECIENTE
@@ -62,11 +72,12 @@ async function handle(req: Request) {
     ...r,
     elapsedMs: Date.now() - startedAt,
     nota:
-      "Los nombres salen de los catálogos CT ya presentados al SAT. Sólo actualiza cuentas " +
+      "Los nombres y los códigos agrupadores salen de los catálogos CT ya presentados al SAT. Sólo actualiza cuentas " +
       "existentes: nunca crea, porque el plan de cuentas cambió de numeración en 2024-10 y " +
       "leer un catálogo viejo duplicaría el catálogo. `siguenSinNombre` son las que no " +
       "aparecen con Desc en NINGÚN catálogo presentado — ésas van con el contador, no con " +
-      "otro barrido.",
+      "otro barrido. `agrupadasValidas` < `agrupadas` significa que el catálogo presentado trae " +
+      "códigos que no están en el Anexo 24 vigente: la CE los seguiría rechazando.",
   };
 
   console.log(
@@ -77,6 +88,10 @@ async function handle(req: Request) {
       sinNombreAntes: r.sinNombreAntes,
       nombradas: r.nombradas,
       siguenSinNombre: r.siguenSinNombre.length,
+      sinAgrupadorAntes: r.sinAgrupadorAntes,
+      agrupadas: r.agrupadas,
+      agrupadasValidas: r.agrupadasValidas,
+      siguenSinAgrupador: r.siguenSinAgrupador.length,
       catalogos: r.catalogosLeidos.length,
     }),
   );

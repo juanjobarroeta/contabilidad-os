@@ -49,7 +49,10 @@ export const LLANO: Record<string, TextoLlano> = {
   "ce:agrupadores": {
     ir: "Ir al catálogo de cuentas",
     hacer: "Etiquetar las cuentas que faltan",
-    que: "Cada cuenta contable lleva la etiqueta que pide el SAT; sin ella la contabilidad electrónica se rechaza.",
+    que:
+      "Cada cuenta contable lleva la etiqueta que pide el SAT (código agrupador); sin ella la contabilidad " +
+      "electrónica se rechaza. Si la empresa ya presentó catálogos al SAT, la mayoría se rellenan solas desde " +
+      "ahí — a mano sólo quedan las que nunca se declararon.",
   },
   "ce:posteo": {
     ir: "Ir a generar las pólizas",
