@@ -199,6 +199,7 @@ export async function POST(req: Request) {
         construccionPaginas: true,
         automotrizPaginas: true,
         hospitalPaginas: true,
+        salameriaPaginas: true,
         company: {
           select: {
             id: true,
@@ -254,6 +255,8 @@ export async function POST(req: Request) {
     automotrizPaginas: string[];
     /** Páginas visibles del satélite Hospital; [] = todas (sin restricción). */
     hospitalPaginas: string[];
+    /** Páginas visibles del satélite Salamería; [] = todas (sin restricción). */
+    salameriaPaginas: string[];
   };
   const byId = new Map<string, CompanyEntry>();
 
@@ -275,6 +278,7 @@ export async function POST(req: Request) {
       construccionPaginas: m.construccionPaginas ?? [],
       automotrizPaginas: m.automotrizPaginas ?? [],
       hospitalPaginas: m.hospitalPaginas ?? [],
+      salameriaPaginas: m.salameriaPaginas ?? [],
     });
   }
 
@@ -300,6 +304,7 @@ export async function POST(req: Request) {
         construccionPaginas: [], // acceso vía despacho: ve todas las páginas
         automotrizPaginas: [], // acceso vía despacho: ve todas las páginas
         hospitalPaginas: [], // acceso vía despacho: ve todas las páginas
+        salameriaPaginas: [], // acceso vía despacho: ve todas las páginas
       });
     }
   }
@@ -334,6 +339,7 @@ export async function POST(req: Request) {
         construccionPaginas: [],
         automotrizPaginas: [],
         hospitalPaginas: [],
+        salameriaPaginas: [],
       });
     }
   }
