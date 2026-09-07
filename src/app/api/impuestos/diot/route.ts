@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { archivoDiot2025, archivoDiotLegacy } from "@/lib/fiscal/diot";
 import { cargarProveedoresDiot, totalesDiot } from "@/lib/fiscal/diot-datos";
@@ -62,6 +63,27 @@ export async function GET(req: Request) {
       layout === "legacy" ? archivoDiotLegacy(rows) : archivoDiot2025(rows);
     const periodo = `${year}${String(month).padStart(2, "0")}`;
     const filename = `DIOT_${periodo}.txt`;
+
+    // Bajar el archivo DEJA RASTRO: el estado «generada» del checklist existía
+    // pero era inalcanzable, porque nadie escribía nunca la fila. Se marca
+    // CALCULATED y NUNCA se degrada una ya presentada; un VIEWER no cambia
+    // estado por descargar. Best-effort: si esto falla, el archivo igual baja.
+    if (member.role !== "VIEWER") {
+      try {
+        const p = `${year}-${String(month).padStart(2, "0")}`;
+        const existente = await prisma.taxDeclaration.findFirst({
+          where: { companyId, tipo: "DIOT", periodo: p },
+          select: { id: true, status: true },
+        });
+        if (!existente) {
+          await prisma.taxDeclaration.create({
+            data: { companyId, tipo: "DIOT", periodo: p, status: "CALCULATED" },
+          });
+        }
+      } catch (e) {
+        console.error("[diot] no se pudo marcar como generada:", companyId, e instanceof Error ? e.message : e);
+      }
+    }
 
     return new Response(content, {
       headers: {

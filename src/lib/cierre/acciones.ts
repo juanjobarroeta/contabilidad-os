@@ -29,6 +29,9 @@ const CANDIDATAS: Partial<Record<ClavePasoCierre, { senal: string; tools: string
     { senal: "fx:apertura", tools: ["proponer_confirmar_apertura"] },
   ],
   banco: [{ senal: "x:firmas_conciliacion", tools: ["proponer_firmar_conciliacion"] }],
+  // La DIOT no lleva tarjeta automática: nadie más que el humano sabe si ya la
+  // presentó, y proponérselo al abrir el paso sería empujar a declarar hecho
+  // algo que quizá no está. La tool existe para cuando él lo diga en el chat.
 };
 
 /**
@@ -57,6 +60,7 @@ export const TIPO_DE_TOOL: Record<string, string> = {
   proponer_fijar_saldo_favor_iva: "fijar_saldo_favor_iva",
   proponer_confirmar_apertura: "confirmar_apertura",
   proponer_firmar_conciliacion: "firmar_conciliacion",
+  proponer_marcar_diot_presentada: "marcar_diot_presentada",
 };
 
 /** ¿La salida de una herramienta `proponer_*` dejó una tarjeta puesta? */

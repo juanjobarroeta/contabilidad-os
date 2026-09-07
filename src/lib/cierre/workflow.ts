@@ -216,21 +216,6 @@ export const PASOS: DefinicionPaso[] = [
     bloqueaSiError: false,
   },
   {
-    clave: "diot",
-    titulo: "DIOT",
-    descripcion: "Archivo generado y presentado.",
-    aplica: (ctx) => ctx.tieneDiot,
-    checks: ["fx:diot"],
-    dependeDe: ["impuestos"],
-    tools: ["query_tax_declarations"],
-    href: (ctx) => `/impuestos?tab=presentar&${mes(ctx)}`,
-    revisar: [
-      "Que el archivo esté generado y presentado, y que los terceros y montos cuadren con el IVA acreditable",
-    ],
-    requiereConfirmacion: true,
-    bloqueaSiError: false,
-  },
-  {
     clave: "contabilidad",
     titulo: "Contabilidad",
     descripcion: "Mes contabilizado, balanza cuadrada y cuentas con código agrupador.",
@@ -265,12 +250,35 @@ export const PASOS: DefinicionPaso[] = [
     bloqueaSiError: false,
   },
   {
+    clave: "diot",
+    titulo: "DIOT",
+    descripcion: "Archivo generado y presentado.",
+    aplica: (ctx) => ctx.tieneDiot,
+    checks: ["fx:diot"],
+    // Va con lo que se presenta al SAT, al final, y después de la
+    // contabilidad: la DIOT sale de los mismos proveedores pagados que cierra
+    // el mes. Presentarla antes de postear es firmar cifras que aún se mueven
+    // — y corregirla después es una complementaria.
+    dependeDe: ["impuestos", "contabilidad"],
+    tools: ["query_tax_declarations", "proponer_marcar_diot_presentada"],
+    href: (ctx) => `/impuestos?tab=presentar&${mes(ctx)}#diot`,
+    revisar: [
+      "Que el archivo esté generado y presentado, y que los terceros y montos cuadren con el IVA acreditable",
+      "Que alguien haya registrado la presentación: la DIOT no se sincroniza del SAT como las demás",
+    ],
+    requiereConfirmacion: true,
+    bloqueaSiError: false,
+  },
+  {
     clave: "declaracion",
     titulo: "Declaración",
     descripcion: "Presentada en el SAT, acuse capturado y pago conciliado en banco.",
     aplica: () => true,
     checks: ["fx:declaracion-periodo", "fx:fecha-limite", "x:pago_conciliado"],
-    dependeDe: ["impuestos", "diot"],
+    // NO depende de la DIOT: son obligaciones distintas que vencen el mismo
+    // día. Tener la DIOT aquí decía que presentar el IVA espera a la
+    // informativa, y no es verdad.
+    dependeDe: ["impuestos"],
     tools: ["query_tax_position", "query_tax_declarations", "query_obligations"],
     href: (ctx) => `/impuestos?tab=presentar&${mes(ctx)}`,
     revisar: [

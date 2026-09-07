@@ -10,9 +10,9 @@ export type ClavePasoCierre =
   | "banco"
   | "complementos"
   | "impuestos"
-  | "diot"
   | "contabilidad"
   | "revision"
+  | "diot"
   | "declaracion"
   | "entregables";
 
@@ -24,9 +24,11 @@ export const ORDEN_PASOS: ClavePasoCierre[] = [
   "banco",
   "complementos",
   "impuestos",
-  "diot",
   "contabilidad",
   "revision",
+  // La DIOT y la declaración son lo que se PRESENTA al SAT: van juntas al
+  // final, con la contabilidad ya cerrada detrás.
+  "diot",
   "declaracion",
   "entregables",
 ];

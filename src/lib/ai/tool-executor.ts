@@ -96,6 +96,8 @@ export async function executeToolCall(
       return proponerFijarSaldoFavorIva(input, companyId, context);
     case "proponer_firmar_conciliacion":
       return proponerFirmarConciliacion(input, companyId, context);
+    case "proponer_marcar_diot_presentada":
+      return proponerMarcarDiotPresentada(input, companyId, context);
     case "proponer_confirmar_apertura":
       return proponerConfirmarApertura(companyId, context);
     case "proponer_resolver_hallazgo":
@@ -703,6 +705,41 @@ async function proponerFirmarConciliacion(input: ToolInput, companyId: string, c
   const pa = await stageChatPendingAction(context.conversationId!, companyId, summary, {
     type: "firmar_conciliacion",
     payload: { bankAccountId: cuenta.bankAccountId, year, month, etiqueta: cuenta.etiqueta },
+  });
+  return propuestaStaged(summary, pa.token);
+}
+
+/**
+ * La DIOT presentada. No se sincroniza sola (el backfill del SAT trae IVA, ISR
+ * e IEPS, nunca la informativa), así que su estado depende de que alguien lo
+ * registre — y el único que puede decir «ya la presenté» es el humano.
+ */
+async function proponerMarcarDiotPresentada(input: ToolInput, companyId: string, context: ToolContext): Promise<string> {
+  const guard = requiereInApp(context);
+  if (guard) return guard;
+  const { year, month } = periodoCierre(input, context);
+  const periodo = `${year}-${String(month).padStart(2, "0")}`;
+
+  const obligacion = await prisma.companyObligation.count({ where: { companyId, activa: true, tipo: "DIOT" } });
+  if (obligacion === 0) {
+    return JSON.stringify({ error: "Esta empresa no tiene registrada la obligación de DIOT." });
+  }
+  const fila = await prisma.taxDeclaration.findFirst({
+    where: { companyId, tipo: "DIOT", periodo },
+    select: { status: true },
+  });
+  if (fila && (fila.status === "FILED" || fila.status === "PAID")) {
+    return JSON.stringify({ error: `La DIOT de ${periodo} ya está registrada como presentada.` });
+  }
+  const acuseUrl = typeof input.acuse_url === "string" && input.acuse_url.startsWith("http") ? input.acuse_url : null;
+
+  const summary =
+    `Registrar la DIOT de ${periodo} como PRESENTADA ante el SAT` +
+    (acuseUrl ? ", con la URL del acuse" : "") +
+    ". Sólo queda asentado aquí: la DIOT no se descarga del SAT, así que este registro es la única constancia en el sistema. Se revierte en Impuestos → Presentar.";
+  const pa = await stageChatPendingAction(context.conversationId!, companyId, summary, {
+    type: "marcar_diot_presentada",
+    payload: { year, month, acuseUrl },
   });
   return propuestaStaged(summary, pa.token);
 }

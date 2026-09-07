@@ -46,6 +46,7 @@ export type PendingActionType =
   | "fijar_perdida"
   | "fijar_saldo_favor_iva"
   | "firmar_conciliacion"
+  | "marcar_diot_presentada"
   | "confirmar_apertura";
 
 /** Acciones irreversibles — JAMÁS stageables. Se documentan para los tests. */
@@ -103,6 +104,10 @@ export type ChatPendingAction =
       type: "firmar_conciliacion";
       payload: { bankAccountId: string; year: number; month: number; etiqueta: string };
     })
+  | (BasePending & {
+      type: "marcar_diot_presentada";
+      payload: { year: number; month: number; acuseUrl: string | null };
+    })
   | (BasePending & { type: "confirmar_apertura"; payload: Record<string, never> });
 
 /** True si el tipo es una acción reversible permitida (lista blanca estricta). */
@@ -120,6 +125,7 @@ export function isReversibleType(type: string): type is PendingActionType {
     type === "fijar_perdida" ||
     type === "fijar_saldo_favor_iva" ||
     type === "firmar_conciliacion" ||
+    type === "marcar_diot_presentada" ||
     type === "confirmar_apertura"
   );
 }
@@ -201,6 +207,7 @@ type StagePayload =
   | { type: "fijar_perdida"; payload: { valor: number; anio: number | null; anterior: number | null; origen: string } }
   | { type: "fijar_saldo_favor_iva"; payload: { valor: number; anterior: number | null; origen: string } }
   | { type: "firmar_conciliacion"; payload: { bankAccountId: string; year: number; month: number; etiqueta: string } }
+  | { type: "marcar_diot_presentada"; payload: { year: number; month: number; acuseUrl: string | null } }
   | { type: "confirmar_apertura"; payload: Record<string, never> };
 
 /**
@@ -445,6 +452,40 @@ async function ejecutar(
       return {
         ok: true,
         message: `Conciliación de ${etiqueta} firmada para ${String(month).padStart(2, "0")}/${year}. Se puede quitar la firma en Contabilidad → Conciliación.`,
+      };
+    }
+
+    case "marcar_diot_presentada": {
+      // El MISMO update que el botón «Marcar presentada» de la tarjeta de la
+      // DIOT (action file-diot). Reversible: ahí mismo se revierte.
+      const { year, month, acuseUrl } = pa.payload;
+      const periodo = `${year}-${String(month).padStart(2, "0")}`;
+      const existente = await prisma.taxDeclaration.findFirst({
+        where: { companyId: pa.companyId, tipo: "DIOT", periodo },
+        select: { id: true, status: true },
+      });
+      if (existente && (existente.status === "FILED" || existente.status === "PAID")) {
+        return { ok: false, error: `La DIOT de ${periodo} ya está marcada como presentada.` };
+      }
+      const datos = { status: "FILED" as const, fechaPresentacion: new Date(), ...(acuseUrl ? { acuseUrl } : {}) };
+      if (existente) {
+        await prisma.taxDeclaration.update({ where: { id: existente.id }, data: datos });
+      } else {
+        await prisma.taxDeclaration.create({
+          data: { companyId: pa.companyId, tipo: "DIOT", periodo, ...datos },
+        });
+      }
+      registrarBitacora({
+        companyId: pa.companyId,
+        userId: confirmingUserId,
+        accion: "diot.presentar",
+        entidad: "TaxDeclaration",
+        entidadId: existente?.id ?? periodo,
+        detalle: { periodo, acuseUrl: acuseUrl ?? null, via: "copiloto" },
+      });
+      return {
+        ok: true,
+        message: `DIOT de ${periodo} marcada como presentada. Si te equivocaste, se revierte en Impuestos → Presentar.`,
       };
     }
 
