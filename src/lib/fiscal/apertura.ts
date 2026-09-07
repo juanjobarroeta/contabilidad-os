@@ -25,6 +25,7 @@ import { prisma } from "../prisma";
 import type { DeclarationStatus } from "@prisma/client";
 import { getSatSyncStatus } from "../sat-status";
 import { coeficienteAnualConHistorial } from "../impuestos";
+import { tieneAcuse } from "./presentacion";
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -361,22 +362,9 @@ export function decidirApertura(i: AperturaInputs): EstadoApertura {
 
 const GUARDADA_STATUSES: DeclarationStatus[] = ["CALCULATED", "FILED", "PAID"];
 
-/** Rastro de acuse en una fila (sin traer los bytes del PDF). */
-function tieneAcuseDe(row: {
-  acusePdfNombre: string | null;
-  acuseUrl: string | null;
-  lineaCaptura: string | null;
-  acuseData: unknown;
-  fechaPresentacion: Date | null;
-}): boolean {
-  return (
-    row.acusePdfNombre != null ||
-    row.acuseUrl != null ||
-    row.lineaCaptura != null ||
-    row.acuseData != null ||
-    row.fechaPresentacion != null
-  );
-}
+// Rastro de acuse: vive en `fiscal/presentacion.ts` para que la procedencia del
+// punto de partida y lo que muestran las pantallas sean la MISMA definición.
+const tieneAcuseDe = tieneAcuse;
 
 /**
  * Primer mes computado por la app: el de la factura timbrada más antigua.

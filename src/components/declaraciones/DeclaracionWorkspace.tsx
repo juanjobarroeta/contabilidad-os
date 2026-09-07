@@ -2,6 +2,7 @@
 
 import { descargarUrl } from "@/lib/descargar";
 import { haceCuanto } from "@/lib/tiempo-relativo";
+import type { EvidenciaPresentacion } from "@/lib/fiscal/presentacion";
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useCompany } from "@/components/layout/CompanyProvider";
@@ -41,8 +42,9 @@ interface CierreData {
     vencimiento: string; estado: Estado;
     lineaCaptura: string | null; acuseUrl: string | null; fechaPresentacion: string | null;
     declaracionId: string | null; acusePdfDisponible: boolean; calculado: boolean;
+    evidencia?: EvidenciaPresentacion;
   };
-  diot: { aplica: boolean; proveedores: number; vencimiento: string; estado: Estado; acuseUrl: string | null; fechaPresentacion: string | null } | null;
+  diot: { aplica: boolean; proveedores: number; vencimiento: string; estado: Estado; acuseUrl: string | null; fechaPresentacion: string | null; evidencia?: EvidenciaPresentacion } | null;
 }
 interface AcuseFaltante { tipo: "DECLARACION_ANUAL" | "IVA_MENSUAL" | "ISR_PROVISIONAL"; periodo: string; etiqueta: string; motivo: string; critico?: boolean; }
 interface HallazgoDTO {
@@ -636,9 +638,14 @@ function Presentar({
           </button>
           {data.diot.estado === "FILED" ? (
             <div className="mt-3 flex items-center justify-between gap-3 rounded-md bg-cos-jade-tint p-3">
-              <p className="flex items-center gap-1.5 text-[13px] font-medium text-cos-jade-ink">
-                <CheckCircle2 className="h-4 w-4" /> Presentada {data.diot.fechaPresentacion ? `el ${fmtFecha(data.diot.fechaPresentacion)}` : ""}
-              </p>
+              <div>
+                <p className="flex items-center gap-1.5 text-[13px] font-medium text-cos-jade-ink">
+                  <CheckCircle2 className="h-4 w-4" /> Presentada {data.diot.fechaPresentacion ? `el ${fmtFecha(data.diot.fechaPresentacion)}` : ""}
+                </p>
+                {/* La DIOT no la devuelve el SAT: aquí la procedencia casi
+                    siempre es «a mano», y decirlo evita creerle de más. */}
+                <p className="mt-0.5 text-[11.5px] text-cos-jade-ink/80">{data.diot.evidencia?.etiqueta ?? "presentada"}</p>
+              </div>
               <button onClick={() => onFileDiot(false)} disabled={savingDiot} className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1.5 text-[12.5px] hover:bg-cos-card disabled:opacity-50">
                 {savingDiot ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />} Revertir
               </button>
@@ -672,6 +679,9 @@ function FederalPresentar({
         <div className="flex items-center justify-between gap-3 rounded-md bg-cos-jade-tint p-3.5">
           <div>
             <p className="flex items-center gap-1.5 font-medium text-cos-jade-ink"><CheckCircle2 className="h-4 w-4" /> Presentada {f.fechaPresentacion ? `el ${fmtFecha(f.fechaPresentacion)}` : ""}</p>
+            {/* De dónde lo sabemos. Un «Presentada» sin procedencia no distingue
+                el acuse del SAT de alguien que apretó el botón. */}
+            <p className="mt-0.5 text-[12px] text-cos-jade-ink/80">{f.evidencia?.etiqueta ?? "presentada"}</p>
             <div className="mt-1 flex items-center gap-3">
               {f.acusePdfDisponible && f.declaracionId && (
                 <button type="button" onClick={() => void descargarUrl(`/api/declaraciones/acuse/${f.declaracionId}`, "acuse.pdf")} className="inline-flex items-center gap-1 text-[12.5px] text-cos-jade-ink underline"><Download className="h-3.5 w-3.5" /> Descargar acuse</button>
@@ -679,9 +689,13 @@ function FederalPresentar({
               {f.acuseUrl && <a href={f.acuseUrl} target="_blank" rel="noreferrer" className="text-[12.5px] text-cos-jade-ink underline">Ver acuse</a>}
             </div>
           </div>
-          <button onClick={() => onFile(false)} disabled={saving} className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1.5 text-[12.5px] hover:bg-cos-card">
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />} Revertir
-          </button>
+          {/* Con el acuse del SAT guardado no hay nada que revertir: revertir
+              borraba la línea de captura y la fecha que nos dio el SAT. */}
+          {!f.evidencia?.acuseDescargable && (
+            <button onClick={() => onFile(false)} disabled={saving} className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1.5 text-[12.5px] hover:bg-cos-card">
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />} Revertir
+            </button>
+          )}
         </div>
       </Card>
     );

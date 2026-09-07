@@ -4,9 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Money } from "@/components/ui";
 import { AjusteInflacionPanel } from "./AjusteInflacionPanel";
+import type { EvidenciaPresentacion } from "@/lib/fiscal/presentacion";
 import {
   Calculator, Loader2, CheckCircle2, AlertCircle, Save,
-  FileText, TrendingUp, TrendingDown, Pencil, X,
+  FileText, TrendingUp, TrendingDown, Pencil, X, Download,
 } from "lucide-react";
 
 type DecResult = {
@@ -29,7 +30,14 @@ type DecResult = {
     deducciones: { compras: number; sueldos: number; cuotasImss: number; infonavitSar: number; depreciacion: number; ptu: number; ajusteInflacionDeducible: number; otras: number; total: number };
   };
   dataSources: Record<string, { monto: number; count?: string; sobreescritoManual?: boolean }>;
-  existingDeclaration: { id: string; status: string } | null;
+  existingDeclaration: {
+    id: string;
+    status: string;
+    isHistorical?: boolean;
+    evidencia?: EvidenciaPresentacion;
+    acuseUrl?: string | null;
+    lineaCaptura?: string | null;
+  } | null;
 };
 
 export function DeclaracionAnualView() {
@@ -165,9 +173,11 @@ export function DeclaracionAnualView() {
               </div>
               {result.existingDeclaration && (
                 <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                  result.existingDeclaration.status === "FILED" ? "bg-cos-jade-tint text-cos-jade-ink" : "bg-cos-brand-tint text-cos-brand-ink"
+                  result.existingDeclaration.evidencia?.presentada ? "bg-cos-jade-tint text-cos-jade-ink" : "bg-cos-brand-tint text-cos-brand-ink"
                 }`}>
-                  {result.existingDeclaration.status === "FILED" ? "Presentada" : "Calculada"}
+                  {result.existingDeclaration.evidencia?.presentada
+                    ? result.existingDeclaration.evidencia.conEvidencia ? "Presentada" : "Presentada (a mano)"
+                    : "Calculada"}
                 </span>
               )}
             </div>
@@ -301,18 +311,56 @@ export function DeclaracionAnualView() {
             </div>
           )}
 
-          {/* Actions */}
-          <div className="flex gap-3">
-            <button onClick={() => handleSave("CALCULATED")} disabled={saving}
-              className="flex items-center gap-2 rounded-control bg-cos-brand px-4 py-2 text-sm font-medium text-white hover:bg-cos-brand-deep disabled:opacity-50">
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Guardar cálculo
-            </button>
-            <button onClick={() => handleSave("FILED")} disabled={saving}
-              className="flex items-center gap-2 rounded-control bg-cos-jade-ink px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50">
-              <FileText className="h-4 w-4" />
-              Marcar como presentada
-            </button>
+          {/* Acciones. «Marcar como presentada» sólo existe cuando NO tenemos
+              prueba: si el acuse del SAT ya está en la app (lo trae el backfill
+              de Syntage), preguntarlo sería pedir lo que ya sabemos. */}
+          <div className="space-y-3">
+            {result.existingDeclaration?.evidencia?.conEvidencia && (
+              <div className="rounded-card border border-cos-jade-ink/20 bg-cos-jade-tint p-4">
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-cos-jade-ink">
+                  <CheckCircle2 className="h-4 w-4" /> {result.existingDeclaration.evidencia.etiqueta}
+                </p>
+                <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-cos-jade-ink">
+                  {result.existingDeclaration.lineaCaptura && (
+                    <span className="font-mono">Línea de captura {result.existingDeclaration.lineaCaptura}</span>
+                  )}
+                  {result.existingDeclaration.evidencia.acuseDescargable && (
+                    result.existingDeclaration.acuseUrl ? (
+                      <a href={result.existingDeclaration.acuseUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 underline">
+                        <Download className="h-3.5 w-3.5" /> Ver acuse
+                      </a>
+                    ) : (
+                      <a href={`/api/declaraciones/acuse/${result.existingDeclaration.id}`} className="inline-flex items-center gap-1 underline">
+                        <Download className="h-3.5 w-3.5" /> Descargar acuse
+                      </a>
+                    )
+                  )}
+                </div>
+                <p className="mt-2 text-xs text-cos-jade-ink/80">
+                  Lo de arriba es NUESTRO cálculo del ejercicio; guárdalo para comparar contra lo declarado.
+                </p>
+              </div>
+            )}
+            <div className="flex flex-wrap gap-3">
+              <button onClick={() => handleSave("CALCULATED")} disabled={saving}
+                className="flex items-center gap-2 rounded-control bg-cos-brand px-4 py-2 text-sm font-medium text-white hover:bg-cos-brand-deep disabled:opacity-50">
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Guardar cálculo
+              </button>
+              {!result.existingDeclaration?.evidencia?.conEvidencia && (
+                <button onClick={() => handleSave("FILED")} disabled={saving}
+                  className="flex items-center gap-2 rounded-control bg-cos-jade-ink px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50">
+                  <FileText className="h-4 w-4" />
+                  Marcar como presentada
+                </button>
+              )}
+            </div>
+            {!result.existingDeclaration?.evidencia?.conEvidencia && (
+              <p className="text-xs text-cos-ink-faint">
+                No tenemos el acuse de este ejercicio. Marcarla la deja registrada como capturada a mano;
+                en cuanto el SAT nos devuelva el acuse, el dato pasa a tener respaldo.
+              </p>
+            )}
           </div>
         </div>
       )}
