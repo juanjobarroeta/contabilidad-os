@@ -24,6 +24,7 @@ import {
   Check,
   ChevronDown,
   ExternalLink,
+  ArrowRight,
   Loader2,
   MessageCircle,
   Send,
@@ -31,6 +32,7 @@ import {
   Sparkles,
   Wrench,
 } from "lucide-react";
+import { esEnlaceInterno } from "@/lib/ui/enlace";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { PeriodSelector, usePeriod } from "@/components/contabilidad/PeriodProvider";
 import { EspinaPasos } from "@/components/cierre/EspinaPasos";
@@ -422,7 +424,13 @@ function CierrePageInner() {
                           : "bg-cos-brand text-white hover:bg-cos-brand-deep"
                       )}
                     >
-                      <ExternalLink className="h-3.5 w-3.5" />
+                      {/* Flecha, no icono de «se abre fuera»: son pantallas de
+                          la misma app y el botón navega aquí mismo. */}
+                      {esEnlaceInterno(accion.cta.href) ? (
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      ) : (
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      )}
                       {accion.cta.label}
                     </Link>
                   )}
@@ -671,7 +679,7 @@ function CierrePageInner() {
             href={`/cierre/negocio?y=${year}&m=${month}`}
             className="inline-flex items-center gap-1.5 self-start text-[12.5px] text-cos-ink-soft hover:text-cos-ink"
           >
-            Ver cómo se lo cuento al dueño del negocio <ExternalLink className="h-3.5 w-3.5" />
+            Ver cómo se lo cuento al dueño del negocio <ArrowRight className="h-3.5 w-3.5" />
           </Link>
 
           {/* Los doce pasos: mapa, para quien lo quiera. */}
