@@ -260,7 +260,8 @@ export default function OperadorPage() {
             <p className="mt-1">
               Agrupadores: {agrupadores.agrupadas} de {agrupadores.sinAgrupadorAntes} rellenados
               {agrupadores.agrupadas > 0 && ` · ${agrupadores.agrupadasValidas} con código válido del Anexo 24`}
-              {agrupadores.siguenSinAgrupador > 0 && ` · ${agrupadores.siguenSinAgrupador} sin declarar en ningún catálogo`}
+              {agrupadores.siguenSinAgrupador > 0 &&
+                ` · ${agrupadores.siguenSinAgrupadorCuentas} cuenta(s) en ${agrupadores.siguenSinAgrupador} código(s) sin declarar en ningún catálogo`}
             </p>
             <p className="mt-0.5">
               Nombres: {agrupadores.nombradas} de {agrupadores.sinNombreAntes} rellenados

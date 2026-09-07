@@ -72,6 +72,7 @@ export async function POST(req: Request) {
     agrupadas: r.agrupadas,
     agrupadasValidas: r.agrupadasValidas,
     siguenSinAgrupador: r.siguenSinAgrupador.length,
+    siguenSinAgrupadorCuentas: r.siguenSinAgrupadorCuentas,
     catalogosLeidos: r.catalogosLeidos.length,
     elapsedMs: Date.now() - t0,
   });

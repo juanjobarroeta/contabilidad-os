@@ -21,6 +21,7 @@ function base(): ReadinessInputs {
     posted: true,
     requiereBalance: true,
     esEmpresaNueva: false,
+    cuentasSinAgrupador: 0,
   };
 }
 
