@@ -16,6 +16,7 @@
 
 import type { ClavePasoCierre } from "./claves";
 import type { CierreEvaluado, PasoConDecision } from "./evaluar";
+import { estadoDelPeriodo } from "./estado-periodo";
 import { LLANO } from "./lenguaje";
 
 /** Herramientas candidatas por paso, en orden de preferencia. */
@@ -139,9 +140,14 @@ export function accionesDelCierre(cierre: CierreEvaluado): AccionCierre[] {
 /**
  * Pasos que aplican y ya no piden nada: sirven para el avance honesto («3 de 9
  * listos») sin contar los que no aplican a la empresa.
+ *
+ * Un mes YA DECLARADO cuenta completo: lo cerró el contribuyente ante el SAT,
+ * y arrastrar «2 de 10» sobre un mes presentado hace dos años es inventar
+ * trabajo. Lo que haya quedado suelto se sigue viendo como observación.
  */
 export function avanceDelCierre(cierre: CierreEvaluado): { listos: number; total: number } {
   const aplican = cierre.pasos.filter((p) => p.estadoCalculado !== "no_aplica");
+  if (estadoDelPeriodo(cierre).declarado) return { listos: aplican.length, total: aplican.length };
   const listos = aplican.filter(
     (p) => p.estado === "CONFIRMADO" || p.estado === "OMITIDO" || p.estadoCalculado === "listo"
   );

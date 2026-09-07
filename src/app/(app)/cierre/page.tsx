@@ -39,6 +39,7 @@ import { TOOL_LABELS, useChat, type ChatContexto } from "@/components/ai/useChat
 import { Alert, Loading, RetryButton } from "@/components/ui/feedback";
 import { cn } from "@/lib/utils";
 import { accionesDelCierre, avanceDelCierre, type AccionCierre } from "@/lib/cierre/acciones";
+import { estadoDelPeriodo } from "@/lib/cierre/estado-periodo";
 import { PASO_LLANO } from "@/lib/cierre/lenguaje";
 import type { CierreEvaluado, PasoConDecision } from "@/lib/cierre/evaluar";
 import { esClavePaso, type ClavePasoCierre } from "@/lib/cierre/claves";
@@ -59,7 +60,6 @@ function CierrePageInner() {
   const [omitiendo, setOmitiendo] = useState(false);
   const [motivo, setMotivo] = useState("");
   const [porque, setPorque] = useState(false);
-  const [verSigue, setVerSigue] = useState(false);
   const [verPasos, setVerPasos] = useState(false);
   const [verChat, setVerChat] = useState(false);
   const finRef = useRef<HTMLDivElement>(null);
@@ -109,10 +109,17 @@ function CierrePageInner() {
   // ── Qué toca ahora ─────────────────────────────────────────────────────────
   const acciones = useMemo(() => (cierre ? accionesDelCierre(cierre) : []), [cierre]);
   const avance = useMemo(() => (cierre ? avanceDelCierre(cierre) : { listos: 0, total: 0 }), [cierre]);
+  // Un mes ya declarado ante el SAT no es trabajo pendiente: lo cerró el
+  // contribuyente. Lo que haya quedado suelto se muestra como observación.
+  const periodo = useMemo(
+    () => (cierre ? estadoDelPeriodo(cierre) : { declarado: false, detalle: null, pagado: false }),
+    [cierre]
+  );
   const accion: AccionCierre | null = useMemo(() => {
+    if (periodo.declarado && !elegida) return null;
     if (acciones.length === 0) return null;
     return acciones.find((a) => a.clave === elegida) ?? acciones.find((a) => a.paso === pasoElegido) ?? acciones[0];
-  }, [acciones, elegida, pasoElegido]);
+  }, [acciones, elegida, pasoElegido, periodo.declarado]);
 
   // El paso activo es el de la acción; sin acciones, el primero sin decidir.
   const pasoActivo: PasoConDecision | null = useMemo(() => {
@@ -255,7 +262,6 @@ function CierrePageInner() {
     setPasoElegido(a.paso);
     setPorque(false);
     setAviso(null);
-    setVerSigue(false);
     const params = new URLSearchParams(searchParams.toString());
     params.set("accion", a.clave);
     params.set("paso", a.paso);
@@ -353,19 +359,12 @@ function CierrePageInner() {
         <Loading label="Revisando el cierre del periodo…" />
       ) : (
         <>
-          {/* Avance: UNA fracción, y que se entienda. */}
-          <div className="rounded-card border border-cos-line bg-cos-card px-4 py-3">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[13px] text-cos-ink">
-                <span className="font-semibold">{avance.listos} de {avance.total}</span> partes del mes listas
-              </p>
-              <p className="font-mono text-[12px] text-cos-ink-soft">
-                {acciones.length === 0 ? "sin pendientes" : `${acciones.length} por resolver`}
-              </p>
-            </div>
-            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-cos-paper">
-              <div className="h-full rounded-full bg-cos-jade-ink transition-all" style={{ width: `${pct}%` }} />
-            </div>
+          {/* Avance: una sola barra, sin números repetidos. */}
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-cos-paper">
+            <div
+              className={cn("h-full rounded-full transition-all", periodo.declarado ? "bg-cos-jade-ink" : "bg-cos-brand")}
+              style={{ width: `${pct}%` }}
+            />
           </div>
 
           {/* AHORA: lo único que toca. */}
@@ -445,6 +444,24 @@ function CierrePageInner() {
                     </button>
                   )}
                 </div>
+              </>
+            ) : periodo.declarado ? (
+              <>
+                <p className="font-mono text-[10.5px] uppercase tracking-wide text-cos-jade-ink">Mes cerrado</p>
+                <h2 className="mt-1 flex items-start gap-2 text-[17px] font-semibold leading-snug text-cos-ink sm:text-[19px]">
+                  <Check className="mt-0.5 h-5 w-5 shrink-0 text-cos-jade-ink" />
+                  Este mes ya se declaró ante el SAT.
+                </h2>
+                <p className="mt-1.5 text-[13.5px] leading-relaxed text-cos-ink-soft">
+                  {periodo.detalle ?? "La declaración del periodo está presentada."}
+                  {periodo.pagado ? " El pago está ligado a su movimiento del banco." : ""}
+                </p>
+                {acciones.length > 0 && (
+                  <p className="mt-2 text-[12.5px] text-cos-amber-ink">
+                    Quedaron {acciones.length} observacion{acciones.length === 1 ? "" : "es"} de contabilidad. No detienen
+                    nada: el mes ya está presentado.
+                  </p>
+                )}
               </>
             ) : (
               <>
@@ -542,42 +559,38 @@ function CierrePageInner() {
             {aviso && <p className="mt-2 text-[12.5px] text-cos-red-ink">{aviso}</p>}
           </section>
 
-          {/* Lo que sigue. */}
+          {/* Lo que sigue: a la vista, numerado. La lista ES el mapa — tener el
+              avance en un sitio y el índice en otro era la mitad de la confusión. */}
           {siguen.length > 0 && (
             <section className="rounded-card border border-cos-line bg-cos-card">
-              <button
-                type="button"
-                onClick={() => setVerSigue((v) => !v)}
-                className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
-                aria-expanded={verSigue}
-              >
-                <span className="text-[13px] font-medium text-cos-ink">Lo que sigue ({siguen.length})</span>
-                <ChevronDown className={cn("h-4 w-4 text-cos-ink-faint transition-transform", verSigue && "rotate-180")} />
-              </button>
-              {verSigue && (
-                <ul className="border-t border-cos-line">
-                  {siguen.map((a) => (
-                    <li key={a.clave}>
-                      <button
-                        type="button"
-                        onClick={() => elegir(a)}
-                        className="flex w-full items-start gap-2 border-b border-cos-line-soft px-4 py-2.5 text-left last:border-b-0 hover:bg-cos-paper"
-                      >
-                        <span
-                          className={cn(
-                            "mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full",
-                            a.urgencia === "bloquea" ? "bg-cos-red-ink" : "bg-cos-amber-ink"
-                          )}
-                        />
-                        <span className="min-w-0">
-                          <span className="block text-[13px] text-cos-ink">{a.hacer}</span>
-                          <span className="block text-[12px] text-cos-ink-soft">{a.dato}</span>
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <p className="px-4 pt-3 text-[12px] font-medium uppercase tracking-wide text-cos-ink-faint">
+                {periodo.declarado ? "Observaciones del mes" : `Después de esto (${siguen.length})`}
+              </p>
+              <ul className="mt-1">
+                {siguen.map((a, i) => (
+                  <li key={a.clave}>
+                    <button
+                      type="button"
+                      onClick={() => elegir(a)}
+                      className="flex w-full items-start gap-3 border-t border-cos-line-soft px-4 py-3 text-left hover:bg-cos-paper"
+                    >
+                      <span className="mt-0.5 font-mono text-[11px] text-cos-ink-faint">
+                        {String(i + 2).padStart(2, "0")}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[13.5px] text-cos-ink">{a.hacer}</span>
+                        <span className="block text-[12px] text-cos-ink-soft">{a.dato}</span>
+                      </span>
+                      {a.urgencia === "bloquea" && !periodo.declarado && (
+                        <span className="mt-0.5 shrink-0 text-[10.5px] text-cos-red-ink">detiene</span>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <p className="border-t border-cos-line px-4 py-2.5 text-[12px] text-cos-ink-soft">
+                {avance.listos} de {avance.total} partes del mes ya están listas.
+              </p>
             </section>
           )}
 
@@ -669,7 +682,7 @@ function CierrePageInner() {
               className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
               aria-expanded={verPasos}
             >
-              <span className="text-[13px] font-medium text-cos-ink">Ver las doce partes del cierre</span>
+              <span className="text-[13px] font-medium text-cos-ink">Ver las doce partes del cierre (detalle contable)</span>
               <ChevronDown className={cn("h-4 w-4 text-cos-ink-faint transition-transform", verPasos && "rotate-180")} />
             </button>
             {verPasos && (

@@ -11,6 +11,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { accionesDelCierre, avanceDelCierre } from "./acciones";
+import { estadoDelPeriodo } from "./estado-periodo";
 import type { CierreEvaluado } from "./evaluar";
 
 export interface ResumenNegocio {
@@ -46,13 +47,10 @@ export function resumenNegocio(cierre: CierreEvaluado): ResumenNegocio {
   const iva = num(cifrasDecl.ivaPagar);
   const aPagar = isr == null && iva == null ? null : { iva, isr };
 
-  // Sólo se dice «ya está declarado» cuando el paso de declaración lo dice:
-  // suponerlo por ausencia de pendientes sería inventarle tranquilidad a alguien.
-  const declarado =
-    declaracion != null &&
-    declaracion.estadoCalculado !== "no_aplica" &&
-    declaracion.senales.every((s) => s.estado === "ok" || s.estado === "na") &&
-    declaracion.senales.length > 0;
+  // Una sola fuente para «ya se declaró»: la misma señal que mira la pantalla
+  // del contador. Suponerlo por ausencia de pendientes sería inventarle
+  // tranquilidad a alguien.
+  const { declarado } = estadoDelPeriodo(cierre);
 
   const vistos = new Set<string>();
   const falta: ResumenNegocio["falta"] = [];
@@ -64,7 +62,9 @@ export function resumenNegocio(cierre: CierreEvaluado): ResumenNegocio {
   }
 
   return {
-    alDia: acciones.length === 0,
+    // Un mes ya declarado está al corriente aunque queden observaciones
+    // contables: ante el SAT el mes está presentado.
+    alDia: declarado || acciones.length === 0,
     listos: avance.listos,
     total: avance.total,
     falta,
