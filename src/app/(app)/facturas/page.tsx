@@ -34,6 +34,11 @@ interface Invoice {
   tipo: "INGRESO" | "EGRESO" | "NOMINA" | "PAGO" | "TRASLADO";
   metodoPago?: string; // "PUE" | "PPD"
   status: string; // DRAFT | STAMPED | CANCELLED
+  // Cancelar no es un acto instantáneo: un CFDI de más de $1,000 a un tercero
+  // sólo se cancela CON ACEPTACIÓN del receptor y, mientras eso no pasa, el SAT
+  // lo mantiene VIGENTE. Estas dos columnas separan «lo pedimos» de «quedó».
+  cancelSolicitadaAt?: string | null;
+  cancelEstadoSat?: string | null;
   subtotal: number;
   total: number;
   totalImpuestos: number;
@@ -84,6 +89,30 @@ const TIPO_META: Record<string, { label: string; plain: string; badge: string }>
   traslado:  { label: "Traslado",   plain: "Traslado",            badge: "bg-cos-slate-tint text-cos-ink-soft" },
   cancelada: { label: "Cancelada",  plain: "Cancelada",           badge: "bg-cos-red-tint text-cos-red-ink" },
 };
+
+/**
+ * Qué decir del trámite de cancelación, si es que hay uno. Tres situaciones
+ * que la pantalla mezclaba en una sola palabra:
+ *  · solicitada y sin resolver → el CFDI SIGUE VIGENTE y sigue contando;
+ *  · cancelada y el SAT lo confirma → nada que decir, el badge basta;
+ *  · cancelada aquí pero VIGENTE en el SAT → al mes le faltan ingresos.
+ */
+function avisoCancelacion(inv: Invoice): { texto: string; alarma: boolean } | null {
+  const sat = (inv.cancelEstadoSat ?? "").trim().toLowerCase();
+  if (inv.status === "CANCELLED") {
+    if (sat.startsWith("vigente") || sat.includes("en proceso")) {
+      return { texto: "Cancelada aquí, pero el SAT la reporta VIGENTE — revísala", alarma: true };
+    }
+    return null;
+  }
+  if (inv.cancelSolicitadaAt) {
+    return {
+      texto: "Cancelación solicitada · sigue vigente hasta que el receptor acepte",
+      alarma: false,
+    };
+  }
+  return null;
+}
 
 /** The filter/badge key for an invoice: cancelled wins, else its tipo. */
 function keyOf(inv: Invoice): FilterKey | "traslado" {
@@ -688,6 +717,11 @@ export default function FacturasPage() {
                   {k === "nomina" && esAsimilado(inv.regimenNomina) && (
                     <span className="mt-1 block text-[11px] font-medium text-cos-ink-faint">Asimilados</span>
                   )}
+                  {/* Una cancelación SOLICITADA no es una cancelación: el
+                      comprobante sigue vigente y sigue contando en el mes. */}
+                  {inv.status !== "CANCELLED" && inv.cancelSolicitadaAt && (
+                    <span className="mt-1 block text-[11px] font-medium text-cos-amber-ink">En proceso</span>
+                  )}
                 </span>
                 {/* La contraparte sale del Customer cuando existe; si no (público
                     en general y extranjeros, que no llevan Customer), del nombre
@@ -954,7 +988,17 @@ function FacturaModal({ inv, onClose, onVer, onCancelled }: { inv: Invoice; onCl
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ motivo, ...(motivo === "01" ? { sustituyeUuid: sustituye.trim() } : {}) }),
       });
-      if (!res.ok) throw new Error((await res.json()).error ?? "Error al cancelar");
+      const out = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(out?.error ?? "Error al cancelar");
+      // Si el SAT sólo abrió el trámite, decirlo AQUÍ: cerrar el diálogo en
+      // silencio dejaba creer que el comprobante ya no cuenta, cuando sigue
+      // vigente y sigue causando IVA e ISR hasta que el receptor acepte.
+      if (out?.cancelacion && out.cancelacion.consumada === false) {
+        setErr(out.cancelacion.mensaje as string);
+        setBusy(false);
+        onCancelled();
+        return;
+      }
       onCancelled();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Error al cancelar");
@@ -996,6 +1040,24 @@ function FacturaModal({ inv, onClose, onVer, onCancelled }: { inv: Invoice; onCl
             <Info className="h-3.5 w-3.5" /> {nota}
           </p>
         )}
+
+        {/* El estado REAL del trámite de cancelación, que «Cancelada» a secas
+            escondía: solicitada y sin resolver (sigue contando), o —lo grave—
+            cancelada aquí y vigente en el SAT. */}
+        {(() => {
+          const av = avisoCancelacion(inv);
+          if (!av) return null;
+          return (
+            <p
+              className={`mt-3 flex items-start gap-1.5 rounded-[10px] px-3 py-2.5 text-[13px] ${
+                av.alarma ? "bg-cos-red-tint text-cos-red-ink" : "bg-cos-amber-tint text-cos-amber-ink"
+              }`}
+            >
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {av.texto}
+              {inv.cancelEstadoSat ? ` (SAT: ${inv.cancelEstadoSat})` : ""}
+            </p>
+          );
+        })()}
 
         {inv.tipo === "EGRESO" && <NaturalezaRow inv={inv} />}
 

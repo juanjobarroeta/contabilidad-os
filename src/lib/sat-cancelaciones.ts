@@ -13,6 +13,8 @@
 // regla de decisión —la parte delicada— es unit-testeable sin tocar el SAT.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { diceCancelado } from "./facturas/cancelacion-estado";
+
 /** Un renglón de metadata del SAT (subconjunto que nos importa). */
 export interface SatMetadataRow {
   uuid: string;
@@ -167,13 +169,17 @@ export function mesesBacklogCancelaciones(
   return out.sort((a, b) => b.year - a.year || b.month - a.month);
 }
 
-/** True si el estatus del SAT indica cancelado. Robusto a "0" o texto "Cancelado". */
+/**
+ * True si el estatus del SAT indica cancelado. Robusto a "0" o texto "Cancelado".
+ *
+ * Delega en `diceCancelado` porque el prefijo suelto `"cancel"` era una mina:
+ * «CancelaBLE con aceptación» —que significa que TODAVÍA se puede pedir la
+ * cancelación, o sea que el comprobante está VIGENTE— empieza igual, y bastaba
+ * que apareciera en esta columna para que borráramos del mes un ingreso que el
+ * SAT sigue contando.
+ */
 export function esEstatusCancelado(estatus: string | null | undefined): boolean {
-  if (estatus == null) return false;
-  const v = estatus.trim().toLowerCase();
-  if (v === "") return false;
-  // SAT usa "0" = cancelado, "1" = vigente; algunos export traen texto.
-  return v === "0" || v.startsWith("cancel");
+  return diceCancelado(estatus);
 }
 
 /**

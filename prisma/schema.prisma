@@ -956,6 +956,17 @@ model Invoice {
   cancelMotivo        String? // "01" | "02" | "03" | "04"
   cancelSustituyeUuid String? // required when motivo = 01
 
+  // SOLICITAR una cancelación no es cancelar. Desde la reforma de 2022, un CFDI
+  // de más de $1,000 a un tercero es "cancelable CON ACEPTACIÓN": el SAT lo deja
+  // «En proceso» y el comprobante sigue VIGENTE —contando para IVA e ISR— hasta
+  // que el receptor acepta o pasan 72 h sin respuesta. Si el receptor RECHAZA,
+  // sigue vigente para siempre. Marcarlo CANCELLED al pedirlo borraba del mes
+  // ingresos que el SAT todavía cuenta (caso real: $2.6M de un mes de $3.2M).
+  cancelSolicitadaAt DateTime?
+  // Lo ÚLTIMO que dijo el SAT del proceso ("En proceso", "Cancelado con
+  // aceptación", "Solicitud rechazada", "Vigente"…), tal cual, sin interpretar.
+  cancelEstadoSat    String?
+
   // Provenance: which product module created this invoice. NULL = generic/manual.
   origenModulo ModuloApp?
 

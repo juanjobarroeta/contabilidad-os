@@ -96,6 +96,19 @@ export type PacOutcome<T> =
       needsReconfigure: boolean;
     };
 
+/** Lo que el PAC dice del trámite de cancelación. */
+export interface PacCancelacion {
+  /**
+   * `cancelado`: el SAT ya no lo reconoce.
+   * `en_proceso`: solicitado, pendiente de que el receptor acepte — SIGUE VIGENTE.
+   * `desconocido`: el PAC no lo dijo. Se trata como en proceso: nunca se da por
+   * cancelado un comprobante sin que alguien lo afirme.
+   */
+  estado: "cancelado" | "en_proceso" | "desconocido";
+  /** Lo que respondió el PAC, tal cual, para la bitácora. */
+  detalle: string | null;
+}
+
 export interface PacProvider {
   /** Nombre del PAC activo (para logs/telemetría). */
   readonly name: string;
@@ -113,12 +126,19 @@ export interface PacProvider {
   discardDraft(apiKey: string, draftId: string): Promise<void>;
 
   /** Cancela un CFDI timbrado ante el SAT, con motivo (y sustitución si motivo 01). */
+  /**
+   * Pide la cancelación al SAT. Devuelve QUÉ PASÓ, no sólo que la petición se
+   * aceptó: un CFDI «cancelable con aceptación» queda `en_proceso` y SIGUE
+   * VIGENTE hasta que el receptor acepte (o pasen 72 h). Antes esto devolvía
+   * `void` y el llamador marcaba la factura cancelada al primer ok — borrando
+   * del mes ingresos que el SAT todavía cuenta.
+   */
   cancelCfdi(
     apiKey: string,
     pacId: string,
     motivo: string,
     sustituyeUuid?: string
-  ): Promise<PacOutcome<void>>;
+  ): Promise<PacOutcome<PacCancelacion>>;
 
   /** Provisiona el emisor en el PAC (org + datos legales + CSD + llave live). */
   provisionOrg(companyId: string): Promise<OrgProvisionResult>;

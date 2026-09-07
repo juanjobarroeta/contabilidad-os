@@ -13,6 +13,7 @@ import type {
   CfdiInput,
   OrgProvisionResult,
   PacOutcome,
+  PacCancelacion,
   PacProvider,
   StampedCfdi,
 } from "./types";
@@ -66,6 +67,28 @@ function fail(e: any): Extract<PacOutcome<never>, { ok: false }> {
   };
 }
 
+/**
+ * Traduce la respuesta de Facturapi a nuestro estado. CONSERVADOR por diseño:
+ * sólo `cancelado` cuando la respuesta lo afirma; cualquier otra cosa —incluido
+ * un formato que no reconozcamos— se queda en proceso, porque dar por cancelado
+ * un comprobante que sigue vigente le quita al mes ingresos reales.
+ */
+export function leerCancelacionFacturapi(res: unknown): PacCancelacion {
+  const r = (res ?? {}) as { status?: unknown; cancellation_status?: unknown };
+  const status = typeof r.status === "string" ? r.status.trim().toLowerCase() : "";
+  const cancel = typeof r.cancellation_status === "string" ? r.cancellation_status.trim().toLowerCase() : "";
+  const detalle = [status && `status=${status}`, cancel && `cancellation_status=${cancel}`]
+    .filter(Boolean)
+    .join(" ") || null;
+
+  // "canceled" (Facturapi usa la grafía de una sola l) + aceptada o sin
+  // aceptación requerida = consumada.
+  if (status === "canceled" && cancel !== "pending") return { estado: "cancelado", detalle };
+  if (cancel === "accepted" || cancel === "none") return { estado: "cancelado", detalle };
+  if (cancel === "pending") return { estado: "en_proceso", detalle };
+  return { estado: "desconocido", detalle };
+}
+
 export const facturapiPacProvider: PacProvider = {
   name: "facturapi",
 
@@ -107,15 +130,19 @@ export const facturapiPacProvider: PacProvider = {
     }
   },
 
-  async cancelCfdi(apiKey, pacId, motivo, sustituyeUuid): Promise<PacOutcome<void>> {
+  async cancelCfdi(apiKey, pacId, motivo, sustituyeUuid): Promise<PacOutcome<PacCancelacion>> {
     try {
-      // Facturapi params: { motive, substitution? }.
+      // Facturapi params: { motive, substitution? }. La respuesta trae la
+      // factura: `status` ("canceled" cuando el SAT ya la canceló) y
+      // `cancellation_status` ("accepted" | "pending" | "none" | "rejected"),
+      // que es lo que distingue una cancelación consumada de una SOLICITADA
+      // que espera la aceptación del receptor.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (getFacturapiClient(apiKey) as any).invoices.cancel(pacId, {
+      const res = await (getFacturapiClient(apiKey) as any).invoices.cancel(pacId, {
         motive: motivo,
         ...(sustituyeUuid ? { substitution: sustituyeUuid } : {}),
       });
-      return { ok: true, data: undefined };
+      return { ok: true, data: leerCancelacionFacturapi(res) };
     } catch (e) {
       return fail(e);
     }

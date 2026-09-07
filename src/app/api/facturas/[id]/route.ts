@@ -115,6 +115,12 @@ export async function DELETE(
   }
 
   // Stamped CFDI → must cancel at SAT via the PAC, with the motivo.
+  // `consumada` distingue una cancelación REAL de una SOLICITADA que espera la
+  // aceptación del receptor: en ese segundo caso el SAT deja el comprobante
+  // VIGENTE (hasta 72 h, o para siempre si el receptor rechaza) y sigue
+  // causando IVA e ISR. Darlo por cancelado le quitaba al mes ingresos reales.
+  let consumada = true;
+  let detallePac: string | null = null;
   if (invoice.facturapiId && invoice.company.facturapiApiKey) {
     const out = await getPacProvider().cancelCfdi(
       invoice.company.facturapiApiKey,
@@ -129,6 +135,8 @@ export async function DELETE(
         { status: out.status }
       );
     }
+    consumada = out.data.estado === "cancelado";
+    detallePac = out.data.detalle;
   } else if (invoice.status !== "STAMPED") {
     // DRAFT / never stamped → safe to cancel locally only.
   } else {
@@ -139,11 +147,19 @@ export async function DELETE(
     );
   }
 
+  const ahora = new Date();
   const updated = await prisma.invoice.update({
     where: { id },
     data: {
-      status: "CANCELLED",
-      canceladaAt: new Date(),
+      // Sólo se marca cancelada cuando el SAT la dio por cancelada. Si quedó en
+      // proceso, la factura SIGUE STAMPED —y sigue contando en IVA e ISR, que
+      // es lo correcto— con la solicitud registrada; el cron de vigencia la
+      // confirma (o la libera si el receptor rechaza).
+      ...(consumada
+        ? { status: "CANCELLED" as const, canceladaAt: ahora }
+        : {}),
+      cancelSolicitadaAt: ahora,
+      cancelEstadoSat: consumada ? "Cancelado" : "En proceso",
       cancelMotivo: motivo,
       cancelSustituyeUuid: sustituyeUuid ?? null,
     },
@@ -162,11 +178,25 @@ export async function DELETE(
       total: invoice.total,
       motivo,
       sustituyeUuid: sustituyeUuid ?? null,
+      // Queda en la bitácora si se canceló de verdad o sólo se SOLICITÓ, y qué
+      // contestó el PAC: sin esto no había forma de auditar la diferencia.
+      resultado: consumada ? "cancelada" : "solicitada",
+      pac: detallePac,
     },
     req,
   });
 
-  return NextResponse.json(updated);
+  return NextResponse.json({
+    ...updated,
+    cancelacion: {
+      consumada,
+      mensaje: consumada
+        ? "Cancelada ante el SAT."
+        : "Cancelación SOLICITADA. El receptor tiene 72 horas para aceptarla; " +
+          "mientras tanto el CFDI sigue VIGENTE y cuenta para IVA e ISR. " +
+          "Lo confirmamos solos en cuanto el SAT lo resuelva.",
+    },
+  });
 }
 
 // PATCH /api/facturas/[id] — update contador fields on an invoice.
