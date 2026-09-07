@@ -56,6 +56,14 @@ const DEFAULT_ACCOUNTS: Array<{
   { cuentaSAT: "4180", nombre: "Ingresos por venta de vehículos",       tipo: "INGRESO" },
   { cuentaSAT: "5110", nombre: "Costo de ventas de vehículos",          tipo: "COSTO"   },
   { cuentaSAT: "5205", nombre: "Intereses de plan piso",                tipo: "GASTO"   },
+  // Salamería module accounts (auto-created on first use per company).
+  { cuentaSAT: "1108", nombre: "Almacén de mercancías",                 tipo: "ACTIVO"  },
+  { cuentaSAT: "1109", nombre: "Mercancía en tránsito",                 tipo: "ACTIVO"  },
+  { cuentaSAT: "4190", nombre: "Ingresos por venta de mercancía",       tipo: "INGRESO" },
+  { cuentaSAT: "4191", nombre: "Ingresos por envío",                    tipo: "INGRESO" },
+  { cuentaSAT: "5120", nombre: "Costo de mercancía vendida",            tipo: "COSTO"   },
+  { cuentaSAT: "5121", nombre: "Mermas y caducidades",                  tipo: "GASTO"   },
+  { cuentaSAT: "5207", nombre: "Fletes y paqueterías",                  tipo: "GASTO"   },
 ];
 
 /**
@@ -1162,4 +1170,449 @@ export async function postVehiculoVendido(
       abono: { cuentaSAT: "1115" },
     });
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Salamería module (importadora y distribuidora de abarrote gourmet)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// El ciclo del importador: la mercancía entra al almacén con su costo
+// ATERRIZADO (valor de factura + prorrateo del pedimento), se vende contra
+// ingreso, y sale del almacén a costo del LOTE que realmente se surtió.
+//
+// Dos cosas que este módulo hace distinto al resto y no son estilo:
+//
+// 1. EL IVA DE IMPORTACIÓN NO ENGORDA EL ALMACÉN. Se carga a 1118 (acreditable)
+//    igual que el IVA de una compra nacional. Prorratearlo al costo —el error
+//    clásico— infla el inventario 16 % y hace que el estado de resultados
+//    reporte un margen que no existe.
+//
+// 2. EL ANTICIPO DE PREVENTA NO ES INGRESO. La cubeta de Lotus se cobra en
+//    marzo y llega en junio; hasta que llega, ese dinero es un PASIVO (2103
+//    Anticipos de clientes). Reconocerlo como venta al cobrarlo adelanta
+//    ingreso de un ejercicio a otro y deja la utilidad del mes inventada.
+//    `postAnticipoSalameria` lo abona a 2103 y `postVentaSalameria` lo CARGA
+//    de vuelta al entregar, en vez de volver a tocar el banco.
+
+export type SalFormaPagoPosting =
+  | "EFECTIVO"
+  | "TRANSFERENCIA"
+  | "TARJETA"
+  | "OXXO"
+  | "CREDITO";
+
+/**
+ * La cuenta que recibe el cargo del cobro. OXXO y TARJETA entran por el banco
+ * (la pasarela deposita); CREDITO no cobra nada todavía y se va a clientes.
+ */
+function salCuentaCobro(formaPago: SalFormaPagoPosting): string {
+  switch (formaPago) {
+    case "EFECTIVO":
+      return "1100"; // Caja
+    case "TRANSFERENCIA":
+    case "TARJETA":
+    case "OXXO":
+      return "1101"; // Bancos
+    case "CREDITO":
+      return "1103"; // Cuentas por cobrar
+  }
+}
+
+/**
+ * Importación LIBERADA — la mercancía salió de la aduana y ya es vendible.
+ *   DR 1108 Almacén de mercancías  (= Σ costo aterrizado de los lotes)
+ *   DR 1118 IVA acreditable        (= IVA pagado en aduana, si > 0)
+ *   CR 2104 Acreedores diversos    (= la suma)
+ *
+ * `costoMercancia` YA trae prorrateados flete, arancel, DTA, agente y
+ * maniobras (lo calcula `prorratearImportacion` en lib/salameria/costeo.ts).
+ * `ivaImportacion` llega aparte justamente porque NO es costo.
+ */
+export async function postImportacionLiberada(
+  tx: Tx,
+  args: {
+    companyId: string;
+    importacionId: string;
+    folio: string;
+    costoMercancia: number;
+    ivaImportacion: number;
+    fecha: Date;
+    proveedorNombre?: string;
+    pedimento?: string | null;
+  }
+): Promise<void> {
+  const desc =
+    `Importación ${args.folio}` +
+    (args.pedimento ? ` — pedimento ${args.pedimento}` : "") +
+    (args.proveedorNombre ? ` — ${args.proveedorNombre}` : "");
+
+  if (!(args.costoMercancia > 0)) {
+    throw new Error(
+      `postImportacionLiberada: costoMercancia debe ser > 0, llegó ${args.costoMercancia}`
+    );
+  }
+
+  if (!(args.ivaImportacion > 0)) {
+    await postBalancedEntry(tx, {
+      companyId: args.companyId,
+      fecha: args.fecha,
+      descripcion: desc,
+      monto: args.costoMercancia,
+      fuente: "SALAMERIA",
+      referencia: args.importacionId,
+      referenciaTipo: "SAL_IMPORTACION_LIBERADA",
+      cargo: { cuentaSAT: "1108" },
+      abono: { cuentaSAT: "2104" },
+    });
+    return;
+  }
+
+  const total = args.costoMercancia + args.ivaImportacion;
+  const year = args.fecha.getUTCFullYear();
+  const month = args.fecha.getUTCMonth() + 1;
+
+  const [almacen, ivaAcred, acreedores] = await Promise.all([
+    getOrCreateAccount(tx, args.companyId, "1108"),
+    getOrCreateAccount(tx, args.companyId, "1118"),
+    getOrCreateAccount(tx, args.companyId, "2104"),
+  ]);
+
+  const base = {
+    companyId: args.companyId,
+    fecha: args.fecha,
+    year,
+    month,
+    descripcion: desc,
+    referencia: args.importacionId,
+    referenciaTipo: "SAL_IMPORTACION_LIBERADA",
+    fuente: "SALAMERIA" as EntrySource,
+  };
+
+  await tx.accountingEntry.createMany({
+    data: [
+      { ...base, chartAccountId: almacen.id, monto: args.costoMercancia, tipo: "CARGO" },
+      { ...base, chartAccountId: ivaAcred.id, monto: args.ivaImportacion, tipo: "CARGO" },
+      { ...base, chartAccountId: acreedores.id, monto: total, tipo: "ABONO" },
+    ],
+  });
+}
+
+/**
+ * Compra NACIONAL recibida (la que no pasa por aduana).
+ *   DR 1108 Almacén de mercancías
+ *   DR 1118 IVA acreditable       (si > 0 — casi todo el abarrote es tasa 0 %)
+ *   CR 2104 Acreedores diversos
+ */
+export async function postCompraSalameriaRecibida(
+  tx: Tx,
+  args: {
+    companyId: string;
+    compraId: string;
+    folio: string;
+    subtotal: number;
+    iva: number;
+    fecha: Date;
+    proveedorNombre?: string;
+  }
+): Promise<void> {
+  const desc =
+    `Compra ${args.folio}` +
+    (args.proveedorNombre ? ` — ${args.proveedorNombre}` : "");
+
+  if (!(args.iva > 0)) {
+    await postBalancedEntry(tx, {
+      companyId: args.companyId,
+      fecha: args.fecha,
+      descripcion: desc,
+      monto: args.subtotal,
+      fuente: "SALAMERIA",
+      referencia: args.compraId,
+      referenciaTipo: "SAL_COMPRA_RECIBIDA",
+      cargo: { cuentaSAT: "1108" },
+      abono: { cuentaSAT: "2104" },
+    });
+    return;
+  }
+
+  const year = args.fecha.getUTCFullYear();
+  const month = args.fecha.getUTCMonth() + 1;
+
+  const [almacen, ivaAcred, acreedores] = await Promise.all([
+    getOrCreateAccount(tx, args.companyId, "1108"),
+    getOrCreateAccount(tx, args.companyId, "1118"),
+    getOrCreateAccount(tx, args.companyId, "2104"),
+  ]);
+
+  const base = {
+    companyId: args.companyId,
+    fecha: args.fecha,
+    year,
+    month,
+    descripcion: desc,
+    referencia: args.compraId,
+    referenciaTipo: "SAL_COMPRA_RECIBIDA",
+    fuente: "SALAMERIA" as EntrySource,
+  };
+
+  await tx.accountingEntry.createMany({
+    data: [
+      { ...base, chartAccountId: almacen.id, monto: args.subtotal, tipo: "CARGO" },
+      { ...base, chartAccountId: ivaAcred.id, monto: args.iva, tipo: "CARGO" },
+      {
+        ...base,
+        chartAccountId: acreedores.id,
+        monto: args.subtotal + args.iva,
+        tipo: "ABONO",
+      },
+    ],
+  });
+}
+
+/**
+ * Compra pagada (liquida el pasivo que creó la recepción o la liberación).
+ *   DR 2104 Acreedores diversos
+ *   CR 1100 Caja / 1101 Bancos
+ */
+export async function postCompraSalameriaPagada(
+  tx: Tx,
+  args: {
+    companyId: string;
+    compraId: string;
+    folio: string;
+    total: number;
+    formaPago: "EFECTIVO" | "TRANSFERENCIA" | "TARJETA";
+    fecha: Date;
+    proveedorNombre?: string;
+  }
+): Promise<void> {
+  const desc =
+    `Pago compra ${args.folio}` +
+    (args.proveedorNombre ? ` — ${args.proveedorNombre}` : "");
+
+  await postBalancedEntry(tx, {
+    companyId: args.companyId,
+    fecha: args.fecha,
+    descripcion: desc,
+    monto: args.total,
+    fuente: "SALAMERIA",
+    referencia: args.compraId,
+    referenciaTipo: "SAL_COMPRA_PAGADA",
+    cargo: { cuentaSAT: "2104" },
+    abono: { cuentaSAT: salCuentaCobro(args.formaPago) },
+  });
+}
+
+/**
+ * Anticipo de PREVENTA cobrado (la mercancía todavía no llega).
+ *   DR 1100 Caja / 1101 Bancos
+ *   CR 2103 Anticipos de clientes
+ *
+ * No toca ingresos ni IVA trasladado: para efectos del libro operativo esto es
+ * deuda con el cliente. (El CFDI de anticipo, si se emite, sí traslada IVA —
+ * eso lo lleva el motor fiscal desde el CFDI, no este asiento.)
+ */
+export async function postAnticipoSalameria(
+  tx: Tx,
+  args: {
+    companyId: string;
+    pedidoId: string;
+    folio: string;
+    importe: number;
+    formaPago: Exclude<SalFormaPagoPosting, "CREDITO">;
+    fecha: Date;
+  }
+): Promise<void> {
+  await postBalancedEntry(tx, {
+    companyId: args.companyId,
+    fecha: args.fecha,
+    descripcion: `Anticipo preventa ${args.folio}`,
+    monto: args.importe,
+    fuente: "SALAMERIA",
+    referencia: args.pedidoId,
+    referenciaTipo: "SAL_ANTICIPO",
+    cargo: { cuentaSAT: salCuentaCobro(args.formaPago) },
+    abono: { cuentaSAT: "2103" },
+  });
+}
+
+/**
+ * Pedido ENTREGADO — se reconoce el ingreso.
+ *   DR 1100/1101/1103        (= lo que se cobra AHORA: total − anticipo)
+ *   DR 2103 Anticipos        (= el anticipo que ya se había cobrado, si hubo)
+ *   CR 4190 Ingresos por venta de mercancía  (= subtotal − descuento)
+ *   CR 4191 Ingresos por envío               (= envío cobrado, si > 0)
+ *   CR 2102 IVA trasladado                   (= iva, si > 0)
+ *
+ * El anticipo entra por el DEBE porque cancela el pasivo: el dinero ya había
+ * entrado al banco cuando se cobró, volver a cargarlo lo contaría dos veces.
+ */
+export async function postVentaSalameria(
+  tx: Tx,
+  args: {
+    companyId: string;
+    pedidoId: string;
+    descripcion: string; // "Pedido PED-0412 — Pastelería X"
+    /** Mercancía, ya neta de descuento y sin IVA. */
+    mercancia: number;
+    /** Envío cobrado al cliente, sin IVA (0 si recoge en tienda). */
+    envio: number;
+    iva: number;
+    /** Anticipo cobrado antes y abonado a 2103. 0 si no hubo preventa. */
+    anticipoAplicado: number;
+    formaPago: SalFormaPagoPosting;
+    fecha: Date;
+  }
+): Promise<void> {
+  const total = args.mercancia + args.envio + args.iva;
+  if (!(total > 0)) {
+    throw new Error(`postVentaSalameria: total debe ser > 0, llegó ${total}`);
+  }
+  if (args.anticipoAplicado > total + 1e-6) {
+    throw new Error(
+      `postVentaSalameria: el anticipo (${args.anticipoAplicado}) excede el total (${total})`
+    );
+  }
+
+  const porCobrar = total - args.anticipoAplicado;
+  const year = args.fecha.getUTCFullYear();
+  const month = args.fecha.getUTCMonth() + 1;
+
+  const [cobro, ingresos, ingresoEnvio, ivaTras, anticipos] = await Promise.all([
+    porCobrar > 0
+      ? getOrCreateAccount(tx, args.companyId, salCuentaCobro(args.formaPago))
+      : null,
+    getOrCreateAccount(tx, args.companyId, "4190"),
+    args.envio > 0 ? getOrCreateAccount(tx, args.companyId, "4191") : null,
+    args.iva > 0 ? getOrCreateAccount(tx, args.companyId, "2102") : null,
+    args.anticipoAplicado > 0 ? getOrCreateAccount(tx, args.companyId, "2103") : null,
+  ]);
+
+  const base = {
+    companyId: args.companyId,
+    fecha: args.fecha,
+    year,
+    month,
+    descripcion: args.descripcion,
+    referencia: args.pedidoId,
+    referenciaTipo: "SAL_PEDIDO_ENTREGADO",
+    fuente: "SALAMERIA" as EntrySource,
+  };
+
+  await tx.accountingEntry.createMany({
+    data: [
+      ...(cobro
+        ? [{ ...base, chartAccountId: cobro.id, monto: porCobrar, tipo: "CARGO" as const }]
+        : []),
+      ...(anticipos
+        ? [
+            {
+              ...base,
+              chartAccountId: anticipos.id,
+              monto: args.anticipoAplicado,
+              tipo: "CARGO" as const,
+            },
+          ]
+        : []),
+      { ...base, chartAccountId: ingresos.id, monto: args.mercancia, tipo: "ABONO" as const },
+      ...(ingresoEnvio
+        ? [{ ...base, chartAccountId: ingresoEnvio.id, monto: args.envio, tipo: "ABONO" as const }]
+        : []),
+      ...(ivaTras
+        ? [{ ...base, chartAccountId: ivaTras.id, monto: args.iva, tipo: "ABONO" as const }]
+        : []),
+    ],
+  });
+}
+
+/**
+ * Costo de la mercancía que salió del almacén, a costo del LOTE surtido (FEFO).
+ *   DR 5120 Costo de mercancía vendida
+ *   CR 1108 Almacén de mercancías
+ */
+export async function postCostoVentaSalameria(
+  tx: Tx,
+  args: {
+    companyId: string;
+    pedidoId: string;
+    descripcion: string;
+    costo: number;
+    fecha: Date;
+  }
+): Promise<void> {
+  await postBalancedEntry(tx, {
+    companyId: args.companyId,
+    fecha: args.fecha,
+    descripcion: `Costo de venta — ${args.descripcion}`,
+    monto: args.costo,
+    fuente: "SALAMERIA",
+    referencia: args.pedidoId,
+    referenciaTipo: "SAL_COSTO_VENTA",
+    cargo: { cuentaSAT: "5120" },
+    abono: { cuentaSAT: "1108" },
+  });
+}
+
+/**
+ * Merma o caducidad — mercancía que se perdió sin venderse.
+ *   DR 5121 Mermas y caducidades
+ *   CR 1108 Almacén de mercancías
+ *
+ * Es la cuenta que hace visible el costo de comprar de más: en un negocio de
+ * alimentos con caducidad, el inventario que no rota no es un activo, es una
+ * pérdida que todavía no se reconoce.
+ */
+export async function postMermaSalameria(
+  tx: Tx,
+  args: {
+    companyId: string;
+    movimientoId: string;
+    descripcion: string;
+    costo: number;
+    fecha: Date;
+  }
+): Promise<void> {
+  await postBalancedEntry(tx, {
+    companyId: args.companyId,
+    fecha: args.fecha,
+    descripcion: args.descripcion,
+    monto: args.costo,
+    fuente: "SALAMERIA",
+    referencia: args.movimientoId,
+    referenciaTipo: "SAL_MERMA",
+    cargo: { cuentaSAT: "5121" },
+    abono: { cuentaSAT: "1108" },
+  });
+}
+
+/**
+ * Lo que la paquetería le cobra a la empresa por mandar el pedido.
+ *   DR 5207 Fletes y paqueterías
+ *   CR 1100 Caja / 1101 Bancos
+ *
+ * Va aparte de 4191 a propósito: lo cobrado y lo pagado por envío rara vez son
+ * iguales, y verlos como dos renglones es lo que dice si el envío gratis a
+ * partir de $3,000 se está pagando solo.
+ */
+export async function postEnvioPagadoSalameria(
+  tx: Tx,
+  args: {
+    companyId: string;
+    envioId: string;
+    descripcion: string;
+    costo: number;
+    formaPago: "EFECTIVO" | "TRANSFERENCIA" | "TARJETA";
+    fecha: Date;
+  }
+): Promise<void> {
+  await postBalancedEntry(tx, {
+    companyId: args.companyId,
+    fecha: args.fecha,
+    descripcion: args.descripcion,
+    monto: args.costo,
+    fuente: "SALAMERIA",
+    referencia: args.envioId,
+    referenciaTipo: "SAL_ENVIO_PAGADO",
+    cargo: { cuentaSAT: "5207" },
+    abono: { cuentaSAT: salCuentaCobro(args.formaPago) },
+  });
 }

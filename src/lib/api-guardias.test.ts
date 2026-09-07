@@ -52,6 +52,7 @@ const AUTENTICADORES: RegExp[] = [
   /\brequireAutoPortalAccount\b/,
   /\bverifyPurifPortalToken\b/,
   /\bverifyAutoPortalToken\b/,
+  /\brequireSalCuenta\b/,
   // Tokens firmados de recurso único
   /\bverifyFileToken\b/,
   /\bverifyDraftToken\b/,
@@ -93,6 +94,7 @@ const ESCOPADORES: RegExp[] = [
   /\brequireAutoPortalAccount\b/,
   /\bverifyPurifPortalToken\b/,
   /\bverifyAutoPortalToken\b/,
+  /\brequireSalCuenta\b/,
   /\bverifyFileToken\b/,
   /\bverifyDraftToken\b/,
   /\bverifyTwilioSignature/,

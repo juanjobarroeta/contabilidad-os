@@ -395,6 +395,18 @@ model Company {
   hospProtocolos   HospProtocolo[]
   hospPlanes       HospPlanTratamiento[]
   hospDepositos    HospDeposito[]
+
+  // Salamería
+  salConfig        SalConfig?
+  salProductos     SalProducto[]
+  salLotes         SalLote[]
+  salMovimientos   SalMovimiento[]
+  salCompras       SalCompra[]
+  salImportaciones SalImportacion[]
+  salListas        SalListaPrecio[]
+  salCuentas       SalCuenta[]
+  salPedidos       SalPedido[]
+  salEnvios        SalEnvio[]
 }
 
 model CompanyMember {
@@ -458,6 +470,10 @@ model CompanyMember {
   /// Páginas visibles del satélite Hospital (rejilla de Usuarios); mismo
   /// contrato que automotrizPaginas: [] = ve todas.
   hospitalPaginas String[] @default([])
+
+  /// Sólo para el satélite SALAMERÍA: páginas visibles del ERP. Mismo
+  /// contrato que automotrizPaginas: [] = ve todas.
+  salameriaPaginas String[] @default([])
 
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -712,6 +728,7 @@ enum ModuloApp {
   AUTOMOTRIZ
   JCPT
   HOSPITAL
+  SALAMERIA
 }
 
 // ─── Module 3: Invoicing / CFDI ───────────────────────────────────────────────
@@ -761,6 +778,10 @@ model Customer {
   hospPagadores HospPagador[]
   hospEpisodios HospEpisodio[]
 
+  // Salamería
+  salCuenta  SalCuenta[]
+  salPedidos SalPedido[]
+
   @@unique([companyId, rfc])
 }
 
@@ -802,6 +823,10 @@ model Supplier {
   // Hospital
   hospMedicos HospMedico[]
   hospLotes   HospLote[]
+
+  // Salamería
+  salCompras       SalCompra[]
+  salImportaciones SalImportacion[]
 
   @@unique([companyId, rfc])
 }
@@ -984,6 +1009,9 @@ model Invoice {
   hospCargos            HospCargo[]
   hospLotes             HospLote[]
   hospMovimientosInsumo HospMovimientoInsumo[]
+
+  // Salamería: el pedido (tienda o mostrador) que se facturó con este CFDI.
+  salPedido SalPedido?
   servicioVenta        ServicioVenta?
   nominaCosto          NominaCosto?
   vehiculoCostos       VehiculoCosto[]
@@ -1425,6 +1453,8 @@ model BankTransaction {
   purifVentaCobrada     PurifVenta?
   purifGastoPagado      PurifGasto?
   purifCompraPagada     PurifCompra?
+  salCompraPagada       SalCompra?
+  salPagoRecibido       SalPago?
   // Conciliación uno-a-varios: asignaciones por factura (ver ConciliacionDetalle).
   conciliacionDetalles  ConciliacionDetalle[]
 
@@ -2430,6 +2460,7 @@ enum EntrySource {
   DEPRECIACION // depreciación contable mensual — REGENERABLE (postMonth la reconstruye del registro de activos)
   INVENTARIO // costo de venta por inventario periódico — REGENERABLE (postMonth lo deriva del conteo capturado)
   HOSPITAL // vertical hospitalario (satélite Hospital)
+  SALAMERIA // importadora/distribuidora de abarrote gourmet (satélite Salamería)
 }
 
 /// Conteo físico del inventario al cierre del mes (método PERIÓDICO, Art. 39
@@ -7977,4 +8008,679 @@ enum HospEpisodioOrigen {
   CAPTURA
   COTIZACION
   CFDI
+}
+
+// ─── Module: Salamería — importadora y distribuidora de abarrote gourmet ─────
+//
+// Gated behind CompanyModule(modulo = SALAMERIA). El satélite `Salameria`
+// (React/Vite, dos builds: ADMIN y TIENDA) renderiza la UI; los datos, el auth
+// y la contabilidad viven aquí. Primer cliente: MERCEDES TRESPALACIOS
+// («La Salamería — mercado de delicias»), persona física que importa y
+// distribuye repostería gourmet (Lotus Biscoff, Callebaut, Nutella, Kataifi,
+// Maldon) a pastelerías y cafeterías, y vende al público en línea.
+//
+// LA CADENA DEL PRODUCTO
+//
+//   IMPORTACIÓN ──▶ ALMACÉN ──▶ PEDIDO ──▶ FACTURA ──▶ BANCO ──▶ CONTABILIDAD
+//   pedimento       lote con    tienda o    hub         hub        hub
+//   y costeo        caducidad   mostrador
+//
+// «Si entró por la aduana tiene costo; si tiene costo tiene lote; si tiene
+// lote tiene caducidad.» Los tres primeros eslabones son de este módulo; los
+// otros tres ya existen en el hub y NO se duplican.
+//
+// DOS DECISIONES QUE EXPLICAN EL RESTO DEL ESQUEMA:
+//
+// 1. EL LOTE ES LA VERDAD, no el producto. Un importador de alimentos no puede
+//    llevar un solo saldo por SKU: la misma caja de Biscoff comprada en marzo y
+//    en agosto tiene costo distinto (tipo de cambio distinto) y caducidad
+//    distinta. Por eso el inventario son filas de `SalLote` con su costo
+//    aterrizado y su fecha, y la salida es PEPS por caducidad (FEFO): sale
+//    primero lo que primero vence. El costo de venta sale del lote que
+//    realmente salió, no de un promedio que esconde el margen.
+//
+// 2. EL IVA DE IMPORTACIÓN NO ES COSTO. Todo lo que paga el pedimento —flete
+//    internacional, arancel, DTA, agente aduanal, maniobras— se prorratea al
+//    costo de cada caja (`prorratea = true`); el IVA pagado en aduana es
+//    ACREDITABLE y se va a 1118, nunca al inventario. Meterlo al costo infla
+//    el almacén 16 % y se come el margen en el papel. Es el error clásico del
+//    importador y aquí es estructural, no una nota al pie.
+
+/// Configuración por empresa. Una fila por Company con módulo SALAMERIA.
+model SalConfig {
+  id        String   @id @default(cuid())
+  companyId String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Series de folio, consecutivas por empresa.
+  seriePedido      String @default("PED")
+  serieCompra      String @default("OC")
+  serieImportacion String @default("IMP")
+
+  /// IVA por default de un producto nuevo. La mayoría del abarrote es tasa 0 %
+  /// (Art. 2-A LIVA: alimentos no preparados), por eso el default es 0 y no
+  /// 0.16 — se sube a mano en lo que sí grava (utensilios, empaque, algunos
+  /// preparados). Un default de 0.16 haría cobrar IVA de más en casi todo.
+  ivaTasaDefault Decimal @default(0) @db.Decimal(18, 6)
+
+  /// Días de anticipación con que un lote entra a «Por vencer».
+  diasAlertaCaducidad Int @default(90)
+
+  // ── Tienda en línea ────────────────────────────────────────────────────────
+  tiendaNombre     String  @default("La Salamería")
+  tiendaDominio    String? // lasalameriadeli.com
+  tiendaActiva     Boolean @default(false)
+  /// Compra mínima para el envío con tarifa preferente (0 = sin regla).
+  envioUmbral      Decimal @default(0) @db.Decimal(18, 6)
+  /// Lo que se cobra de envío al alcanzar el umbral, y lo que se cobra abajo.
+  envioTarifa      Decimal @default(0) @db.Decimal(18, 6)
+  envioTarifaBase  Decimal @default(0) @db.Decimal(18, 6)
+  /// Porcentaje de anticipo exigido en un pedido de preventa (0.5 = 50 %).
+  anticipoPreventa Decimal @default(0) @db.Decimal(18, 6)
+
+  avisoPrivacidadUrl String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+enum SalUnidad {
+  PZA
+  CAJA
+  KG
+  G
+  L
+  ML
+}
+
+/// El SKU. `costoPromedio` y `stock` son ESPEJOS derivados de los lotes: se
+/// recalculan al mover inventario y sirven para listar sin agregar en cada
+/// consulta. La verdad está en `SalLote` — si los dos se contradicen, gana el
+/// lote (`scripts/salameria-recalcular-stock.ts`).
+model SalProducto {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sku    String
+  nombre String
+  /// URL de la tienda: /producto/crema-lotus-biscoff-8kg. Único por empresa.
+  slug   String
+
+  marca       String? // Lotus, Callebaut, Ferrero, Maldon…
+  categoria   String? // Chocolatería, Pastas, Sal y especias…
+  descripcion String? @db.Text
+
+  unidad        SalUnidad @default(PZA)
+  /// Contenido declarado tal como se vende: «8 kg», «12 pz de 454 g».
+  presentacion  String?
+  /// Piezas por caja, para el mayoreo (0 = no aplica).
+  piezasPorCaja Int       @default(0)
+  /// Kilos por unidad de venta. Es lo que prorratea el flete por peso y lo que
+  /// cotiza la paquetería; sin esto el envío se cobra a ojo.
+  pesoKg        Decimal   @default(0) @db.Decimal(18, 6)
+
+  // ── SAT (para que la factura salga sola desde el pedido) ──────────────────
+  claveProdServ String? // c_ClaveProdServ
+  claveUnidad   String?  @default("H87") // c_ClaveUnidad, H87 = Pieza
+  /// null = exento; 0 = tasa 0 % (el caso normal del alimento); 0.16 = gravado.
+  ivaTasa       Decimal? @default(0) @db.Decimal(18, 6)
+
+  // ── Inventario (espejo de los lotes) ─────────────────────────────────────
+  costoPromedio Decimal @default(0) @db.Decimal(18, 6)
+  stock         Decimal @default(0) @db.Decimal(18, 6)
+  stockMinimo   Decimal @default(0) @db.Decimal(18, 6)
+
+  // ── Tienda ────────────────────────────────────────────────────────────────
+  activo       Boolean   @default(true)
+  /// Visible en la tienda pública. Un producto puede existir para el mostrador
+  /// y no publicarse en línea (exclusivos de mayoreo, muestras).
+  publicado    Boolean   @default(false)
+  destacado    Boolean   @default(false)
+  /// PRE ORDER: se vende antes de que llegue el contenedor. Vende sin stock y
+  /// exige anticipo; `fechaLlegada` es lo que la tienda promete.
+  preventa     Boolean   @default(false)
+  fechaLlegada DateTime?
+  /// URLs de las imágenes, en orden. La primera es la de la tarjeta.
+  imagenes     String[]  @default([])
+
+  company     Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  lotes       SalLote[]
+  movimientos SalMovimiento[]
+  precios     SalPrecio[]
+  compraItems SalCompraItem[]
+  impItems    SalImportacionItem[]
+  partidas    SalPedidoPartida[]
+
+  @@unique([companyId, sku])
+  @@unique([companyId, slug])
+  @@index([companyId, activo])
+  @@index([companyId, publicado])
+  @@index([companyId, categoria])
+}
+
+/// Una fila por LOTE físico. `cantidad` es lo que QUEDA (se descuenta al
+/// surtir); `costoUnitario` es el costo aterrizado de ESE lote y ya no cambia.
+model SalLote {
+  id         String   @id @default(cuid())
+  companyId  String
+  productoId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  /// Código de lote del fabricante. Puede repetirse entre productos.
+  codigo    String?
+  caducidad DateTime?
+
+  cantidadInicial Decimal @db.Decimal(18, 6)
+  cantidad        Decimal @db.Decimal(18, 6)
+  /// Costo aterrizado por unidad: valor en factura + prorrateo del pedimento.
+  costoUnitario   Decimal @db.Decimal(18, 6)
+
+  /// De dónde nació el lote (uno de los dos, nunca los dos).
+  importacionId String?
+  compraId      String?
+
+  company     Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  producto    SalProducto     @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  importacion SalImportacion? @relation(fields: [importacionId], references: [id], onDelete: SetNull)
+  compra      SalCompra?      @relation(fields: [compraId], references: [id], onDelete: SetNull)
+  movimientos SalMovimiento[]
+
+  // FEFO: el índice por caducidad es lo que hace barata la consulta «¿de qué
+  // lote sale?» y la de «¿qué vence en 90 días?».
+  @@index([companyId, caducidad])
+  @@index([productoId, caducidad])
+  @@index([companyId, productoId])
+}
+
+enum SalMovTipo {
+  ENTRADA_IMPORTACION
+  ENTRADA_COMPRA
+  ENTRADA_DEVOLUCION
+  SALIDA_PEDIDO
+  SALIDA_MERMA
+  SALIDA_CADUCIDAD
+  AJUSTE
+}
+
+/// Kardex: una fila por movimiento, con signo. Nunca se borra ni se edita —
+/// una corrección es un AJUSTE nuevo. Es el rastro que explica por qué el
+/// stock de hoy es el que es.
+model SalMovimiento {
+  id         String   @id @default(cuid())
+  companyId  String
+  productoId String
+  loteId     String?
+  createdAt  DateTime @default(now())
+
+  tipo          SalMovTipo
+  fecha         DateTime   @default(now())
+  /// CON SIGNO: positivo entra, negativo sale. Sumar la columna da el stock.
+  cantidad      Decimal    @db.Decimal(18, 6)
+  costoUnitario Decimal    @default(0) @db.Decimal(18, 6)
+
+  /// Qué lo causó: el id del pedido, de la importación, de la compra.
+  referencia     String?
+  referenciaTipo String?
+  nota           String?
+  usuarioId      String?
+
+  company  Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  producto SalProducto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  lote     SalLote?    @relation(fields: [loteId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, fecha])
+  @@index([productoId, fecha])
+  @@index([companyId, referenciaTipo, referencia])
+}
+
+enum SalCompraEstado {
+  BORRADOR
+  ORDENADA
+  RECIBIDA
+  PAGADA
+  CANCELADA
+}
+
+enum SalFormaPago {
+  EFECTIVO
+  TRANSFERENCIA
+  TARJETA
+}
+
+/// Compra NACIONAL a proveedor (lo que no viene por aduana). Recibir crea los
+/// lotes y postea DR almacén + IVA acreditable / CR acreedores.
+model SalCompra {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  folio      String
+  supplierId String?
+  estado     SalCompraEstado @default(ORDENADA)
+  fecha      DateTime        @default(now())
+
+  subtotal Decimal @default(0) @db.Decimal(18, 6)
+  iva      Decimal @default(0) @db.Decimal(18, 6)
+
+  notas      String?
+  recibidaAt DateTime?
+
+  pagadaAt          DateTime?
+  formaPago         SalFormaPago?
+  bankAccountId     String?
+  bankTransactionId String?       @unique
+
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  supplier        Supplier?        @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  bankTransaction BankTransaction? @relation(fields: [bankTransactionId], references: [id])
+  items           SalCompraItem[]
+  lotes           SalLote[]
+
+  @@unique([companyId, folio])
+  @@index([companyId, estado])
+  @@index([companyId, fecha])
+}
+
+model SalCompraItem {
+  id         String @id @default(cuid())
+  compraId   String
+  productoId String
+
+  cantidad      Decimal @db.Decimal(18, 6)
+  costoUnitario Decimal @db.Decimal(18, 6)
+  importe       Decimal @db.Decimal(18, 6)
+
+  loteCodigo String?
+  caducidad  DateTime?
+
+  compra   SalCompra   @relation(fields: [compraId], references: [id], onDelete: Cascade)
+  producto SalProducto @relation(fields: [productoId], references: [id])
+
+  @@index([compraId])
+  @@index([productoId])
+}
+
+enum SalImportacionEstado {
+  BORRADOR
+  EN_TRANSITO
+  EN_ADUANA
+  LIBERADA
+  CANCELADA
+}
+
+/// El contenedor. Mientras viaja es MERCANCÍA EN TRÁNSITO (1109) — ya se pagó
+/// pero no se puede vender; al LIBERAR se prorratean los costos del pedimento,
+/// nacen los lotes con su costo aterrizado y el saldo pasa a almacén (1108).
+model SalImportacion {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  folio  String
+  estado SalImportacionEstado @default(EN_TRANSITO)
+
+  /// Proveedor del extranjero (Supplier canónico del hub).
+  supplierId String?
+
+  // ── Pedimento ─────────────────────────────────────────────────────────────
+  pedimento      String? // 15 dígitos
+  aduana         String?
+  fechaPedimento DateTime?
+  fechaLlegada   DateTime?
+  liberadaAt     DateTime?
+
+  /// La factura del proveedor viene en su moneda; el costo del inventario se
+  /// lleva en pesos. `tipoCambio` es el del pedimento (DOF del día), y se
+  /// congela aquí para que el costo no se mueva cuando se mueva el dólar.
+  moneda     String  @default("USD")
+  tipoCambio Decimal @default(1) @db.Decimal(18, 6)
+
+  notas String?
+
+  company  Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  supplier Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  items    SalImportacionItem[]
+  costos   SalImportacionCosto[]
+  lotes    SalLote[]
+
+  @@unique([companyId, folio])
+  @@index([companyId, estado])
+  @@index([companyId, fechaLlegada])
+}
+
+model SalImportacionItem {
+  id            String @id @default(cuid())
+  importacionId String
+  productoId    String
+
+  cantidad     Decimal @db.Decimal(18, 6)
+  /// Precio unitario en la MONEDA de la importación (lo que dice la factura).
+  precioMoneda Decimal @db.Decimal(18, 6)
+
+  loteCodigo String?
+  caducidad  DateTime?
+
+  /// Costo aterrizado por unidad, en pesos. Se calcula AL LIBERAR y se guarda
+  /// para poder auditar el prorrateo después (es la columna que explica el
+  /// margen; recalcularla al vuelo la haría depender de costos capturados
+  /// más tarde y el histórico dejaría de cuadrar con los lotes).
+  costoUnitario Decimal? @db.Decimal(18, 6)
+
+  importacion SalImportacion @relation(fields: [importacionId], references: [id], onDelete: Cascade)
+  producto    SalProducto    @relation(fields: [productoId], references: [id])
+
+  @@index([importacionId])
+  @@index([productoId])
+}
+
+enum SalCostoTipo {
+  FLETE_INTERNACIONAL
+  SEGURO
+  ARANCEL
+  DTA
+  IVA_IMPORTACION
+  AGENTE_ADUANAL
+  MANIOBRAS
+  ALMACENAJE
+  FLETE_NACIONAL
+  OTRO
+}
+
+enum SalProrrateoBase {
+  VALOR
+  PESO
+  CANTIDAD
+}
+
+/// Cada gasto del pedimento. `prorratea = false` en el IVA de importación: es
+/// acreditable (1118), no costo. Ver el encabezado del módulo.
+model SalImportacionCosto {
+  id            String @id @default(cuid())
+  importacionId String
+
+  tipo        SalCostoTipo
+  descripcion String?
+  /// Siempre en PESOS: lo que se pagó en México, ya convertido.
+  importe     Decimal      @db.Decimal(18, 6)
+
+  /// true = entra al costo de la mercancía. false = va a su propia cuenta
+  /// (hoy sólo el IVA de importación, que es acreditable).
+  prorratea Boolean          @default(true)
+  /// Cómo se reparte entre las partidas. El flete pesa por PESO; el arancel
+  /// y el resto, por VALOR.
+  base      SalProrrateoBase @default(VALOR)
+
+  supplierId String?
+
+  importacion SalImportacion @relation(fields: [importacionId], references: [id], onDelete: Cascade)
+
+  @@index([importacionId])
+}
+
+enum SalListaTipo {
+  MENUDEO
+  MAYOREO
+  CLIENTE
+}
+
+/// Lista de precios. La `publica` es la que ve la tienda sin sesión; una
+/// cuenta de mayoreo trae la suya y los precios cambian al iniciar sesión.
+model SalListaPrecio {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  nombre  String
+  tipo    SalListaTipo @default(MAYOREO)
+  /// Sólo una lista por empresa debería tener publica = true (la del menudeo).
+  publica Boolean      @default(false)
+  activa  Boolean      @default(true)
+
+  /// Descuento general sobre el precio de lista, para no capturar renglón por
+  /// renglón (0.15 = 15 % abajo). Los renglones de `precios` lo pisan.
+  descuento Decimal @default(0) @db.Decimal(18, 6)
+
+  company Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  precios SalPrecio[]
+  cuentas SalCuenta[]
+
+  @@unique([companyId, nombre])
+  @@index([companyId, activa])
+}
+
+/// Precio de UN producto en UNA lista, con quiebre por volumen: el renglón que
+/// aplica es el de mayor `minimo` que la cantidad pedida alcanza.
+model SalPrecio {
+  id         String @id @default(cuid())
+  listaId    String
+  productoId String
+
+  precio Decimal @db.Decimal(18, 6) // sin IVA
+  minimo Decimal @default(1) @db.Decimal(18, 6)
+
+  lista    SalListaPrecio @relation(fields: [listaId], references: [id], onDelete: Cascade)
+  producto SalProducto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
+
+  @@unique([listaId, productoId, minimo])
+  @@index([productoId])
+}
+
+/// Cuenta de la tienda. Es la sesión del COMPRADOR, separada de la del
+/// personal (audiencia `salameria:tienda`): jamás toca datos de otro cliente
+/// ni entra al ERP. `customerId` la amarra al directorio fiscal del hub para
+/// que su pedido se facture solo.
+model SalCuenta {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  email        String
+  passwordHash String
+  nombre       String?
+  telefono     String?
+
+  customerId String?
+  /// La lista de precios de esta cuenta. Sin ella ve la pública (menudeo).
+  listaId    String?
+
+  /// Crédito de mayorista: días y tope. 0 = sólo contado.
+  diasCredito   Int     @default(0)
+  limiteCredito Decimal @default(0) @db.Decimal(18, 6)
+
+  activa      Boolean   @default(true)
+  ultimoLogin DateTime?
+
+  company  Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  lista    SalListaPrecio? @relation(fields: [listaId], references: [id], onDelete: SetNull)
+  pedidos  SalPedido[]
+
+  @@unique([companyId, email])
+  @@index([companyId, activa])
+}
+
+enum SalPedidoOrigen {
+  TIENDA
+  MOSTRADOR
+  WHATSAPP
+  TELEFONO
+}
+
+enum SalPedidoEstado {
+  CARRITO
+  PENDIENTE_PAGO
+  PAGADO
+  SURTIDO
+  ENVIADO
+  ENTREGADO
+  CANCELADO
+}
+
+/// El pedido, venga de la tienda o del mostrador. `CARRITO` es el carrito vivo
+/// del comprador (una fila, no una tabla aparte): al pagar cambia de estado y
+/// deja de poder editarse. Los precios se CONGELAN en la partida al agregarla,
+/// para que una lista que cambie mañana no reescriba lo que ya se cobró.
+model SalPedido {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  folio  String
+  origen SalPedidoOrigen @default(TIENDA)
+  estado SalPedidoEstado @default(CARRITO)
+  fecha  DateTime        @default(now())
+
+  cuentaId   String?
+  customerId String?
+
+  // ── Envío ────────────────────────────────────────────────────────────────
+  envioNombre     String?
+  envioTelefono   String?
+  envioCalle      String?
+  envioColonia    String?
+  envioCiudad     String?
+  envioEstado     String?
+  envioCp         String?
+  envioReferencia String?
+  /// Recoger en tienda en vez de enviar.
+  recogeEnTienda  Boolean @default(false)
+
+  // ── Dinero (todo sin IVA salvo `total`) ──────────────────────────────────
+  subtotal  Decimal @default(0) @db.Decimal(18, 6)
+  descuento Decimal @default(0) @db.Decimal(18, 6)
+  envio     Decimal @default(0) @db.Decimal(18, 6)
+  iva       Decimal @default(0) @db.Decimal(18, 6)
+  total     Decimal @default(0) @db.Decimal(18, 6)
+
+  /// Lo cobrado hasta hoy (suma de SalPago aplicados). Un pedido de preventa
+  /// vive con `pagado` = anticipo hasta que llega el contenedor.
+  pagado     Decimal @default(0) @db.Decimal(18, 6)
+  /// El pedido trae al menos una partida de preventa: no se puede surtir hasta
+  /// que llegue, y el anticipo cobrado es pasivo (2103), no ingreso.
+  esPreventa Boolean @default(false)
+
+  notas String?
+
+  pagadoAt          DateTime?
+  surtidoAt         DateTime?
+  entregadoAt       DateTime?
+  canceladoAt       DateTime?
+  motivoCancelacion String?
+
+  /// CFDI timbrado en el hub (POST /api/facturas).
+  invoiceId String? @unique
+
+  company  Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  cuenta   SalCuenta?         @relation(fields: [cuentaId], references: [id], onDelete: SetNull)
+  customer Customer?          @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  invoice  Invoice?           @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  partidas SalPedidoPartida[]
+  pagos    SalPago[]
+  envios   SalEnvio[]
+
+  @@unique([companyId, folio])
+  @@index([companyId, estado])
+  @@index([companyId, fecha])
+  @@index([cuentaId, estado])
+}
+
+model SalPedidoPartida {
+  id         String @id @default(cuid())
+  pedidoId   String
+  productoId String
+
+  cantidad        Decimal  @db.Decimal(18, 6)
+  /// Congelados al agregar la partida.
+  precio          Decimal  @db.Decimal(18, 6) // unitario sin IVA
+  ivaTasa         Decimal? @db.Decimal(18, 6)
+  importe         Decimal  @db.Decimal(18, 6) // cantidad * precio
+  nombreCongelado String?
+
+  /// Se llena al SURTIR: qué lotes salieron y a qué costo. Es lo que hace
+  /// auditable el costo de venta y lo que permite rastrear un lote si el
+  /// fabricante manda una alerta sanitaria.
+  lotesSurtidos Json?
+  costoUnitario Decimal @default(0) @db.Decimal(18, 6)
+
+  esPreventa Boolean @default(false)
+
+  pedido   SalPedido   @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  producto SalProducto @relation(fields: [productoId], references: [id])
+
+  @@index([pedidoId])
+  @@index([productoId])
+}
+
+enum SalPagoMetodo {
+  TARJETA
+  TRANSFERENCIA
+  EFECTIVO
+  OXXO
+  CREDITO
+}
+
+/// Un cobro contra un pedido. Un pedido de preventa tiene dos: el anticipo y
+/// el saldo. `esAnticipo` decide el asiento: pasivo (2103) o ingreso (4190).
+model SalPago {
+  id        String   @id @default(cuid())
+  pedidoId  String
+  createdAt DateTime @default(now())
+
+  metodo     SalPagoMetodo
+  importe    Decimal       @db.Decimal(18, 6)
+  fecha      DateTime      @default(now())
+  esAnticipo Boolean       @default(false)
+
+  /// Id del cargo en la pasarela (Stripe / Mercado Pago) o la referencia de la
+  /// transferencia. Único por empresa: es lo que hace idempotente el webhook y
+  /// evita cobrar dos veces cuando la pasarela reintenta.
+  referenciaExterna String? @unique
+
+  bankTransactionId String? @unique
+
+  pedido          SalPedido        @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  bankTransaction BankTransaction? @relation(fields: [bankTransactionId], references: [id])
+
+  @@index([pedidoId])
+}
+
+enum SalEnvioEstado {
+  PENDIENTE
+  RECOLECTADO
+  EN_TRANSITO
+  ENTREGADO
+  INCIDENCIA
+}
+
+model SalEnvio {
+  id        String   @id @default(cuid())
+  companyId String
+  pedidoId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  paqueteria String?
+  guia       String?
+  estado     SalEnvioEstado @default(PENDIENTE)
+  /// Lo que la paquetería le cobra a la empresa (gasto), no lo que se le cobró
+  /// al cliente (eso vive en SalPedido.envio).
+  costo      Decimal        @default(0) @db.Decimal(18, 6)
+
+  enviadoAt   DateTime?
+  entregadoAt DateTime?
+  nota        String?
+
+  company Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  pedido  SalPedido @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, estado])
+  @@index([pedidoId])
 }

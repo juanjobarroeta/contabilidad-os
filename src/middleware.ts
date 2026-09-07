@@ -107,6 +107,11 @@ export const config = {
     // Hospital (satélite): expediente, cuenta del paciente, censo, agenda,
     // farmacia y el directorio derivado de CFDIs. Ver docs/HOSPITAL.md.
     "/api/hospital/:path*",
+    // Salamería (satélite): el ERP del importador Y la tienda pública. Las
+    // rutas /api/salameria/tienda/* las llama el NAVEGADOR de un comprador
+    // cualquiera desde el dominio de la tienda, así que ese origen también
+    // tiene que estar en API_ALLOWED_ORIGINS. Ver docs/SALAMERIA.md.
+    "/api/salameria/:path*",
     // PurificadoraOS (satélite) administra clientes y concilia contra el
     // estado de cuenta desde su propio origen, así que las superficies
     // canónicas de clientes y bancos también necesitan CORS.

@@ -284,3 +284,55 @@ export async function verifyAutoPortalToken(
     email: (payload.email as string) ?? "",
   };
 }
+
+// ─── Salamería: tokens de la tienda en línea ─────────────────────────────────
+// El comprador de la tienda (menudeo o mayorista) NO es un User ni un
+// CompanyMember: su cuenta vive en SalCuenta con audiencia propia, y su token
+// jamás pasa por requireUser. `customerId` es OPCIONAL a propósito — quien
+// compra al menudeo puede no querer factura, y exigirle un RFC para poder
+// agregar al carrito es la forma más rápida de perder la venta.
+
+const SAL_TIENDA_AUDIENCE = "salameria:tienda";
+
+export type SalTiendaTokenPayload = {
+  sub: string; // SalCuenta id
+  companyId: string;
+  customerId?: string | null;
+  email: string;
+};
+
+export async function signSalTiendaToken(
+  payload: SalTiendaTokenPayload,
+  opts?: { expiry?: string }
+): Promise<string> {
+  return new SignJWT({
+    companyId: payload.companyId,
+    customerId: payload.customerId ?? null,
+    email: payload.email,
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject(payload.sub)
+    .setIssuedAt()
+    .setIssuer(ISSUER)
+    .setAudience(SAL_TIENDA_AUDIENCE)
+    .setExpirationTime(opts?.expiry ?? SEVEN_DAYS)
+    .sign(getSecretKey());
+}
+
+export async function verifySalTiendaToken(
+  token: string
+): Promise<SalTiendaTokenPayload> {
+  const { payload } = await jwtVerify(token, getSecretKey(), {
+    issuer: ISSUER,
+    audience: SAL_TIENDA_AUDIENCE,
+  });
+  if (!payload.sub || !payload.companyId) {
+    throw new Error("Token de tienda incompleto");
+  }
+  return {
+    sub: payload.sub,
+    companyId: payload.companyId as string,
+    customerId: (payload.customerId as string | null) ?? null,
+    email: (payload.email as string) ?? "",
+  };
+}

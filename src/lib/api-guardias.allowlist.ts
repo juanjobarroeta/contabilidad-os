@@ -45,6 +45,26 @@ export const RUTAS_PUBLICAS: EntradaAllowlist[] = [
     razon: "Login del portal de clientes finales; credenciales + rate limit en el handler.",
   },
   {
+    ruta: "api/salameria/tienda/login/route.ts",
+    razon:
+      "Login de la tienda en línea; credenciales + rate limit por IP y por email en el handler.",
+  },
+  {
+    ruta: "api/salameria/tienda/registro/route.ts",
+    razon:
+      "Alta pública de comprador (menudeo). Rate limit por IP; la cuenta nace SIN lista de mayoreo ni crédito, así que no puede autoasignarse precios.",
+  },
+  {
+    ruta: "api/salameria/tienda/catalogo/route.ts",
+    razon:
+      "Escaparate de la tienda: sólo productos publicados y precios de la lista pública, acotado por tiendaPublica(companyId) (módulo habilitado + tienda encendida). No devuelve costo, lotes, proveedor ni existencias exactas.",
+  },
+  {
+    ruta: "api/salameria/tienda/producto/[slug]/route.ts",
+    razon:
+      "Ficha pública del producto (la URL que se comparte e indexa). Mismo acotamiento y misma omisión de costo/lotes/existencia que el catálogo.",
+  },
+  {
     ruta: "api/purificadora/portal/login/route.ts",
     razon: "Login del portal de clientes finales; credenciales + rate limit en el handler.",
   },
