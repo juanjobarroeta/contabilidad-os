@@ -57,7 +57,7 @@ export const GET = withAuthz(async (req: Request) => {
     : [];
   const techo = { OR: [{ year: { lt: anio } }, { year: anio, month: { lte: mes } }] };
 
-  const [declaradoRaw, derivadoRaw, cuentas, asientosBanco] = await Promise.all([
+  const [declaradoRaw, derivadoRaw, cuentas, asientosBanco, ceTotal] = await Promise.all([
     // Sólo el mes de corte: saldoFin YA es el acumulado a esa fecha.
     prisma.ceBalanzaMes.findMany({
       where: { companyId, anio, mes, esPadre: false },
@@ -78,7 +78,13 @@ export const GET = withAuthz(async (req: Request) => {
     // cobrar y por pagar sólo pueden crecer, y el saldo derivado deja de ser
     // una posición para volverse un acumulado. La UI tiene que poder decirlo.
     prisma.accountingEntry.count({ where: { companyId, fuente: "BANCO" }, take: 1 }),
-  ]);
+      // ¿La empresa tiene CE en CUALQUIER período? Con cero, la columna
+    // «declarado» no está pendiente: no va a existir nunca (p. ej. RESICO, que
+    // no presenta Contabilidad Electrónica). Enseñar una comparación contra una
+    // columna estructuralmente vacía convierte todo el derivado en una
+    // «diferencia por explicar» que no hay que explicar.
+    prisma.ceBalanzaMes.count({ where: { companyId } }),
+]);
 
   const porId = new Map(cuentas.map((c) => [c.id, c]));
   const porCodigo = new Map(cuentas.map((c) => [c.subcuenta ?? c.cuentaSAT, c]));
@@ -112,6 +118,8 @@ export const GET = withAuthz(async (req: Request) => {
   return NextResponse.json({
     anio,
     mes,
+    /** false = la empresa NUNCA ha presentado CE; la comparación no aplica. */
+    tieneCe: ceTotal > 0,
     /** El período donde arranca el libro derivado. Null = sin apertura. */
     ancla: apertura ? { anio: apertura.year, mes: apertura.month } : null,
     /** El corte pedido es anterior al ancla: sólo hay columna declarada. */
