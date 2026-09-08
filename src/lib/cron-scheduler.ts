@@ -131,6 +131,12 @@ const JOBS: Job[] = [
   // Desglosa la contraparte de los movimientos bancarios ya importados. Local
   // y gratis (un regex sobre texto ya guardado), así que va con el piso barato.
   { name: "bancos-contraparte-backfill", everyMs: 6 * HOUR, firstDelayMs: 50 * MIN, minMs: MIN_LOCAL },
+  // El RFC de la contraparte, que ningún estado de cuenta trae: se pide a
+  // Banxico el CEP de cada SPEI con su clave de rastreo. A diferencia del
+  // barrido de arriba, esto SÍ cuesta (una llamada por movimiento), así que va
+  // con el piso caro y se gatea a empresas con pago vigente. Gap-driven:
+  // converge y se apaga sola.
+  { name: "cep-rfc", everyMs: 6 * HOUR, firstDelayMs: 55 * MIN, minMs: MIN_CARO },
   // Del MISMO rawXml: CP y régimen del cliente, que los importadores dejaban en
   // "616" y sin CP. Sin esto, facturarle a un cliente importado exigía capturar
   // sus datos fiscales a mano. Gap-driven: converge y se apaga solo.

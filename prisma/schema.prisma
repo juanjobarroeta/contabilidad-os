@@ -1446,6 +1446,13 @@ model BankTransaction {
    * costó 243 re-parseos de acuses anuales. Se marca aunque no se extraiga nada.
    */
   contraparteAt     DateTime?
+  /**
+   * MARCA DE INTENTO de la consulta al CEP de Banxico (misma disciplina que
+   * `contraparteAt`): se sella aunque no se obtenga RFC, porque un SPEI que
+   * Banxico no encuentra —traspasos propios, claves mal leídas— volvería a
+   * consultarse en cada corrida para siempre, pagando lo mismo cada vez.
+   */
+  cepAt             DateTime?
 
   // Reconciliation
   status           ReconciliationStatus @default(UNMATCHED)
