@@ -340,7 +340,16 @@ export interface DepositoParaAsiento {
   folio?: string | null;
 }
 
-export const cuentaDeFormaPago = (formaPago: HospFormaPago): ClaveMotor => (formaPago === "EFECTIVO" ? "CAJA" : "BANCOS");
+/**
+ * Sólo el efectivo entra a una cuenta que el banco nunca ve. Tarjeta,
+ * transferencia y cheque van a FONDOS_EN_TRANSITO y ahí esperan: el dinero
+ * llega al banco días después (el adquirente liquida en lote y neto de
+ * comisión), y quien lo baja a BANCOS es el movimiento bancario conciliado.
+ * Si el cobro entrara directo a BANCOS, la misma cantidad se cargaría dos
+ * veces: al cobrar en caja y al llegar el depósito.
+ */
+export const cuentaDeFormaPago = (formaPago: HospFormaPago): ClaveMotor =>
+  formaPago === "EFECTIVO" ? "CAJA" : "FONDOS_EN_TRANSITO";
 
 const enRango = (fecha: Date, rango?: { desde: Date; hasta: Date }) =>
   !rango || (fecha.getTime() >= rango.desde.getTime() && fecha.getTime() < rango.hasta.getTime());
