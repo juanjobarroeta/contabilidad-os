@@ -364,6 +364,23 @@ export function leerSublineas(lineas: string[], out: DatosSpei): void {
       continue;
     }
 
+    // BBVA, pago a cuenta de tercero: «BNET 0486661343 Jose Armando Orteg
+    // Ref. 0013034979». El nombre va EN MEDIO, entre el folio del portal y la
+    // referencia, así que ninguna otra regla lo alcanza: tiene espacios (no es
+    // clave de rastreo), tiene dígitos (no es nombre limpio) y no es CLABE.
+    // Son 43 movimientos al mes en un solo hospital, y sin nombre la mesa no
+    // tiene con qué identificar quién pagó. La estructura BNET…Ref. es prueba
+    // suficiente por sí misma: no necesita otra señal del bloque.
+    const tercero = /^BNET\s+\d{6,}\s+(.+?)\s+Ref\.?\s*\d{4,}\s*$/i.exec(l);
+    if (tercero) {
+      const nombre = tercero[1].trim();
+      if (RE_NOMBRE_LIMPIO.test(nombre) && nombre.split(/\s+/).length >= 2) {
+        out.contraparteNombre ??= nombre.toUpperCase();
+        hayPrueba = true;
+      }
+      continue;
+    }
+
     // Nombre: sin un solo dígito y con al menos dos palabras. Se guarda y se
     // decide al final, cuando ya se sabe si el bloque probó ser un SPEI.
     if (RE_NOMBRE_LIMPIO.test(l) && l.trim().split(/\s+/).length >= 2) {
