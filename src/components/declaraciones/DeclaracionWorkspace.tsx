@@ -10,7 +10,7 @@ import { Card, Money, Loading, Alert, RetryButton } from "@/components/ui";
 import {
   ChevronLeft, ChevronRight, Upload, Download, Loader2, RotateCcw,
   CheckCircle2, AlertTriangle, CalendarDays, Printer, ChevronRight as ChevronR, FileWarning,
-  AlertCircle, FileText, RefreshCw,
+  AlertCircle, FileText, RefreshCw, HelpCircle, Scale,
 } from "lucide-react";
 import Link from "next/link";
 import { IvaPanel, IsrPanel, RetencionesPanel } from "@/components/papeles/panels";
@@ -57,6 +57,28 @@ interface CierreData {
       nota?: string; fundamento?: { ley: string; articulo: string };
       fechaPresentacion: string | null; evidencia?: EvidenciaPresentacion;
     }[];
+  } | null;
+  // IEPS: su propia declaración de pago definitivo (Art. 5º LIEPS), el mismo
+  // día 17 pero con su acuse. `monto` es null a propósito cuando falta decidir
+  // el acreditamiento del Art. 4º: ahí el importe del mes NO está determinado.
+  ieps?: {
+    aplica: boolean; periodo: string; origen: "cfdi" | "csf" | "cfdi+csf";
+    trasladado: number; pagado: number;
+    pagadoAcreditable: number; pagadoNoAcreditable: number; pagadoSinClasificar: number;
+    retenido: number; renglones: number;
+    porTasa: {
+      tasa: number | null; trasladado: number; pagado: number; renglones: number;
+      inciso: { certeza: "unico" | "ambiguo" | "desconocido"; etiqueta: string; acreditablePorInciso: boolean | null };
+    }[];
+    acreditamiento: {
+      decision: "acredita" | "no_acredita" | "sin_decidir";
+      decididoAt: string | null; nota: string | null; hayQueDecidir: boolean;
+    };
+    monto: number | null; acreditado: number; completo: boolean; motivo: string;
+    sinObligacionRegistrada: boolean;
+    vencimiento: string; estado: Estado;
+    lineaCaptura: string | null; acuseUrl: string | null; fechaPresentacion: string | null;
+    evidencia?: EvidenciaPresentacion; baseFecha: "CFDI";
   } | null;
 }
 interface AcuseFaltante { tipo: "DECLARACION_ANUAL" | "IVA_MENSUAL" | "ISR_PROVISIONAL"; periodo: string; etiqueta: string; motivo: string; critico?: boolean; }
@@ -107,6 +129,7 @@ export function DeclaracionWorkspace() {
   const [diotAcuse, setDiotAcuse] = useState("");
   const [savingDiot, setSavingDiot] = useState(false);
   const [savingIsn, setSavingIsn] = useState<string | null>(null);
+  const [savingIeps, setSavingIeps] = useState(false);
 
   // Auditor findings (company-wide) — drive the Revisión tab + its count badge.
   const [flags, setFlags] = useState<HallazgoDTO[] | null>(null);
@@ -188,7 +211,13 @@ export function DeclaracionWorkspace() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ companyId: activeCompany!.id, periodo: data!.periodo, ...bodyExtra }),
     });
-    if (!res.ok) throw new Error();
+    // El mensaje del servidor importa: el IEPS rechaza presentar con 409 y
+    // explica por qué («falta decidir el Art. 4º»). Tragárselo dejaría al
+    // usuario con un «no se pudo» que no dice qué hacer.
+    if (!res.ok) {
+      const msg = await res.json().then((d) => d?.error).catch(() => null);
+      throw new Error(typeof msg === "string" && msg ? msg : "");
+    }
   }
 
   async function fileFederal(filing: boolean) {
@@ -215,6 +244,32 @@ export function DeclaracionWorkspace() {
       await load();
     } catch { setError(`No se pudo guardar el ISN de ${entidad}`); }
     finally { setSavingIsn(null); }
+  }
+
+  // El IEPS no se puede marcar presentado mientras el Art. 4º esté sin
+  // contestar: el servidor responde 409 con el motivo y aquí se muestra tal cual.
+  async function fileIeps(filing: boolean) {
+    if (!activeCompany || !data) return;
+    setSavingIeps(true);
+    try {
+      await post({ action: filing ? "file-ieps" : "unfile-ieps", fechaPresentacion: fecha || null });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error && e.message ? e.message : "No se pudo guardar el IEPS");
+    } finally { setSavingIeps(false); }
+  }
+
+  // La decisión del Art. 4º es de la EMPRESA, no del mes: se guarda una vez y
+  // rige todos los periodos que todavía no se han presentado.
+  async function decidirIeps(acredita: boolean) {
+    if (!activeCompany || !data) return;
+    setSavingIeps(true);
+    try {
+      await post({ action: "decidir-ieps", acredita });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error && e.message ? e.message : "No se pudo guardar la decisión");
+    } finally { setSavingIeps(false); }
   }
 
   async function fileDiot(filing: boolean) {
@@ -335,6 +390,7 @@ export function DeclaracionWorkspace() {
               companyId={activeCompany.id} month={month} year={year}
               diotAcuse={diotAcuse} setDiotAcuse={setDiotAcuse} savingDiot={savingDiot} onFileDiot={fileDiot}
               savingIsn={savingIsn} onFileIsn={fileIsn}
+              savingIeps={savingIeps} onFileIeps={fileIeps} onDecidirIeps={decidirIeps}
             />
           )}
         </div>
@@ -632,6 +688,7 @@ function FlagCard({ h, busy, onResolve, onIgnore }: { h: HallazgoDTO; busy: bool
 function Presentar({
   data, fecha, setFecha, saving, acuseParsed, acuseUploading, acuseError, onUpload, onFile,
   companyId, month, year, diotAcuse, setDiotAcuse, savingDiot, onFileDiot, savingIsn, onFileIsn,
+  savingIeps, onFileIeps, onDecidirIeps,
 }: {
   data: CierreData; fecha: string; setFecha: (s: string) => void; saving: boolean;
   acuseParsed: AcuseMensualParsed | null; acuseUploading: boolean; acuseError: string;
@@ -639,6 +696,7 @@ function Presentar({
   companyId: string; month: number; year: number;
   diotAcuse: string; setDiotAcuse: (s: string) => void; savingDiot: boolean; onFileDiot: (filing: boolean) => void;
   savingIsn: string | null; onFileIsn: (entidad: string, filing: boolean) => void;
+  savingIeps: boolean; onFileIeps: (filing: boolean) => void; onDecidirIeps: (acredita: boolean) => void;
 }) {
   const f = data.federal;
   return (
@@ -755,6 +813,12 @@ function Presentar({
         </Card>
       )}
 
+      {data.ieps?.aplica && (
+        <IepsPresentar
+          ieps={data.ieps} saving={savingIeps} onFile={onFileIeps} onDecidir={onDecidirIeps}
+        />
+      )}
+
       {data.diot?.aplica && (
         <Card className="rounded-card border-cos-line p-5 shadow-card">
           <div className="flex items-center justify-between">
@@ -793,6 +857,166 @@ function Presentar({
         </Card>
       )}
     </div>
+  );
+}
+
+// ── IEPS ──────────────────────────────────────────────────────────────────────
+// Lo que esta tarjeta tiene que lograr: que nadie vea un total de IEPS que la
+// app se inventó. El acreditamiento del Art. 4º cambia el importe COMPLETO y no
+// se puede deducir del CFDI, así que mientras esté sin contestar la tarjeta
+// enseña los dos lados y dice qué falta — no un número.
+function IepsPresentar({
+  ieps, saving, onFile, onDecidir,
+}: {
+  ieps: NonNullable<CierreData["ieps"]>;
+  saving: boolean;
+  onFile: (filing: boolean) => void;
+  onDecidir: (acredita: boolean) => void;
+}) {
+  const pct = (t: number | null) =>
+    t === null ? "cuota" : `${(t * 100).toFixed(2).replace(/\.?0+$/, "")} %`;
+
+  return (
+    <Card id="ieps" className="scroll-mt-24 rounded-card border-cos-line p-5 shadow-card">
+      <div className="flex items-center justify-between">
+        <span className="block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">
+          IEPS · pago definitivo mensual
+        </span>
+        <EstadoBadge estado={ieps.estado} />
+      </div>
+      <p className="mt-2 text-[12.5px] text-cos-ink-soft">
+        Declaración propia ante el SAT (Art. 5º LIEPS) · vence {fmtFecha(ieps.vencimiento)}
+        {ieps.origen === "csf" && " · en el padrón; sin movimientos este mes se presenta en ceros"}
+      </p>
+
+      {/* Traslada IEPS y no lo tiene en el padrón: no lo arregla esta pantalla,
+          pero callarlo sería dejar vencer una declaración que sí existe. */}
+      {ieps.sinObligacionRegistrada && (
+        <p className="mt-2 flex items-start gap-1.5 rounded-md bg-cos-amber-tint p-2.5 text-[12px] text-cos-amber-ink">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          Esta empresa trasladó IEPS en sus comprobantes pero no tiene la obligación registrada en el padrón.
+          La declaración se debe presentar igual; revisa la Constancia de Situación Fiscal.
+        </p>
+      )}
+
+      {/* Los dos lados, por tasa, con el inciso del que puede venir. La tasa
+          sola no basta: el acreditamiento del Art. 4º se limita POR INCISO. */}
+      {ieps.porTasa.length > 0 && (
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full min-w-[420px] text-[12.5px]">
+            <thead>
+              <tr className="text-left text-cos-ink-faint">
+                <th className="pb-1.5 font-medium">Tasa</th>
+                <th className="pb-1.5 font-medium">Concepto probable</th>
+                <th className="pb-1.5 text-right font-medium">Trasladado</th>
+                <th className="pb-1.5 text-right font-medium">Pagado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ieps.porTasa.map((t) => (
+                <tr key={String(t.tasa)} className="border-t border-cos-line-soft">
+                  <td className="py-1.5 font-medium text-cos-ink">{pct(t.tasa)}</td>
+                  <td className="py-1.5 pr-3 text-cos-ink-soft">
+                    {t.inciso.etiqueta}
+                    {t.inciso.certeza === "ambiguo" && (
+                      <span className="ml-1 text-cos-amber-ink">· no se puede saber cuál desde el CFDI</span>
+                    )}
+                  </td>
+                  <td className="py-1.5 text-right tabular-nums">{t.trasladado.toLocaleString("es-MX", { style: "currency", currency: "MXN" })}</td>
+                  <td className="py-1.5 text-right tabular-nums">{t.pagado.toLocaleString("es-MX", { style: "currency", currency: "MXN" })}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {ieps.retenido > 0 && (
+        <p className="mt-2 text-[11.5px] text-cos-ink-faint">
+          Además, {ieps.retenido.toLocaleString("es-MX", { style: "currency", currency: "MXN" })} de IEPS retenido
+          (Art. 5º-A): se entera aparte y no forma parte de este cálculo.
+        </p>
+      )}
+
+      {/* LA DECISIÓN. Sólo se pregunta si hay IEPS pagado a proveedores: sin
+          eso la respuesta no mueve ningún número y preguntar sería trabajo
+          inventado. */}
+      {ieps.acreditamiento.hayQueDecidir ? (
+        <div className="mt-3 rounded-md border border-cos-line bg-cos-paper p-3.5">
+          <p className="flex items-center gap-1.5 text-[13px] font-medium text-cos-ink">
+            <HelpCircle className="h-4 w-4" /> Falta una decisión tuya: ¿esta empresa acredita el IEPS que le trasladan?
+          </p>
+          <p className="mt-1 text-[12px] text-cos-ink-soft">
+            El Art. 4º LIEPS sólo permite acreditarlo a quien es contribuyente del mismo bien, y sólo por ciertos
+            incisos. Un comerciante que revende no acredita; un productor o importador sí. La diferencia este mes son{" "}
+            {ieps.pagadoAcreditable.toLocaleString("es-MX", { style: "currency", currency: "MXN" })}.
+          </p>
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            <button onClick={() => onDecidir(true)} disabled={saving}
+              className="inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-3 py-2 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Scale className="h-4 w-4" />} Sí acredita
+            </button>
+            <button onClick={() => onDecidir(false)} disabled={saving}
+              className="inline-flex items-center gap-1.5 rounded-control border border-cos-line px-3 py-2 text-[13px] hover:bg-cos-card disabled:opacity-50">
+              No acredita
+            </button>
+          </div>
+        </div>
+      ) : (
+        ieps.acreditamiento.decision !== "sin_decidir" && (
+          <p className="mt-2 text-[11.5px] text-cos-ink-faint">
+            Criterio del despacho:{" "}
+            {ieps.acreditamiento.decision === "acredita" ? "sí acredita" : "no acredita"} el IEPS trasladado
+            {ieps.acreditamiento.decididoAt ? ` (decidido el ${fmtFecha(ieps.acreditamiento.decididoAt)})` : ""}.{" "}
+            <button onClick={() => onDecidir(ieps.acreditamiento.decision !== "acredita")} disabled={saving}
+              className="underline hover:text-cos-ink">Cambiar</button>
+          </p>
+        )
+      )}
+
+      {/* El número — o su ausencia. Un total inventado sería peor que ninguno. */}
+      <div className="mt-3 flex items-center justify-between gap-3 border-t border-cos-line-soft pt-3">
+        <div className="min-w-0">
+          <span className="text-[12.5px] text-cos-ink-soft">
+            {ieps.monto === null ? "Sin determinar" : ieps.completo ? "IEPS del mes" : "IEPS del mes (incompleto)"}
+          </span>
+          <p className="mt-0.5 text-[11.5px] text-cos-ink-faint">{ieps.motivo}</p>
+        </div>
+        {ieps.monto === null ? (
+          <span className="shrink-0 text-[14px] font-semibold text-cos-ink-faint">—</span>
+        ) : (
+          <Money value={ieps.monto} size={16} weight={700} />
+        )}
+      </div>
+
+      {ieps.estado === "FILED" ? (
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-md bg-cos-jade-tint p-3">
+          <div>
+            <p className="flex items-center gap-1.5 text-[13px] font-medium text-cos-jade-ink">
+              <CheckCircle2 className="h-4 w-4" /> Presentada{" "}
+              {ieps.fechaPresentacion ? `el ${fmtFecha(ieps.fechaPresentacion)}` : ""}
+            </p>
+            <p className="mt-0.5 text-[11.5px] text-cos-jade-ink/80">{ieps.evidencia?.etiqueta ?? "presentada"}</p>
+          </div>
+          {/* Con el acuse del SAT guardado no hay nada que revertir. */}
+          {!ieps.evidencia?.acuseDescargable && (
+            <button onClick={() => onFile(false)} disabled={saving}
+              className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1.5 text-[12.5px] hover:bg-cos-card disabled:opacity-50">
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />} Revertir
+            </button>
+          )}
+        </div>
+      ) : (
+        <button onClick={() => onFile(true)} disabled={saving || ieps.monto === null}
+          className="mt-3 inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-3 py-2 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Marcar presentada
+        </button>
+      )}
+
+      <p className="mt-2 text-[11px] text-cos-ink-faint">
+        Calculado por fecha de CFDI, no por flujo de efectivo ({ieps.renglones} renglones de impuesto).
+      </p>
+    </Card>
   );
 }
 

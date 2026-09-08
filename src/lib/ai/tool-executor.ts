@@ -4,6 +4,8 @@ import {
   detectComplementosRecibidosPendientes,
 } from "@/lib/complementos";
 import { computeTaxPosition } from "@/lib/impuestos";
+import { leerRenglonesIeps } from "@/lib/fiscal/ieps/leer";
+import { aPagarIeps, periodoIeps, type DecisionAcreditamiento } from "@/lib/fiscal/ieps/periodo";
 import { checklistDeclaracion } from "@/lib/fiscal/checklist-declaracion";
 import { getSatSyncStatus } from "@/lib/sat-status";
 import { signFileToken, publicBaseUrl } from "@/lib/facturas/file-token";
@@ -187,19 +189,49 @@ export async function executeToolCall(
         year = presentado ? now.getFullYear() : prev.getFullYear();
         month = presentado ? now.getMonth() + 1 : prev.getMonth() + 1;
       }
-      const pos = await computeTaxPosition(companyId, year, month);
+      const [pos, renglonesIeps, empresaIeps] = await Promise.all([
+        computeTaxPosition(companyId, year, month),
+        // `computeTaxPosition` calcula IVA e ISR y NO toca IEPS. Sin esto el
+        // copiloto contestaba «no tengo el IEPS» de un impuesto que la app ya
+        // calcula en el cierre: cada «no puedo» suyo es una tool que falta.
+        leerRenglonesIeps(prisma, companyId, year, month),
+        prisma.company.findUnique({ where: { id: companyId }, select: { iepsAcredita: true } }),
+      ]);
+      const pIeps = periodoIeps(year, month, renglonesIeps);
+      const decisionIeps: DecisionAcreditamiento =
+        empresaIeps?.iepsAcredita == null ? "sin_decidir" : empresaIeps.iepsAcredita ? "acredita" : "no_acredita";
+      const resIeps = aPagarIeps(pIeps, decisionIeps);
+      // Sólo viaja cuando hay algo que decir: un bloque de ceros en cada
+      // respuesta invitaría al modelo a hablar de un impuesto que no aplica.
+      const ieps =
+        pIeps.renglones > 0
+          ? {
+              declaracion_aparte: "IEPS es su propia declaración mensual (Art. 5º LIEPS), NO va en el total de IVA/ISR.",
+              trasladado: pIeps.trasladado,
+              pagado: pIeps.pagado,
+              retenido: pIeps.retenido,
+              acreditamiento: decisionIeps,
+              monto: resIeps.monto,
+              motivo: resIeps.motivo,
+              porTasa: pIeps.porTasa.map((t) => ({ tasa: t.tasa, inciso: t.inciso.etiqueta, trasladado: t.trasladado, pagado: t.pagado })),
+            }
+          : undefined;
       // Cadena de arrastre rota (mes con CFDIs sin declaración guardada): el
       // usuario de WhatsApp/chat DEBE enterarse — las cifras pueden estar
       // sobrestimadas por tomar en cero el saldo a favor / pagos provisionales.
-      return JSON.stringify(
-        pos.advertencias.length > 0
-          ? {
-              ...pos,
-              instruccion_para_el_asistente:
-                "Comunica al usuario TODAS las 'advertencias' tal cual, antes de las cifras: los montos pueden estar sobrestimados por falta de declaraciones guardadas.",
-            }
-          : pos
-      );
+      const instrucciones = [
+        ...(pos.advertencias.length > 0
+          ? ["Comunica al usuario TODAS las 'advertencias' tal cual, antes de las cifras: los montos pueden estar sobrestimados por falta de declaraciones guardadas."]
+          : []),
+        ...(ieps && ieps.monto === null
+          ? ["El IEPS del mes NO está determinado: falta decidir el acreditamiento del Art. 4º LIEPS. NO inventes un importe; di que falta esa decisión y que se toma en /impuestos, pestaña Presentar."]
+          : []),
+      ];
+      return JSON.stringify({
+        ...pos,
+        ...(ieps ? { ieps } : {}),
+        ...(instrucciones.length > 0 ? { instruccion_para_el_asistente: instrucciones.join(" ") } : {}),
+      });
     }
     // Knowledge base de legislación fiscal — company-independent (es ley, no
     // datos de la empresa), por eso ignora companyId.

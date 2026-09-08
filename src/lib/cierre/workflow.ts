@@ -211,6 +211,7 @@ export const PASOS: DefinicionPaso[] = [
       "Cadena de arrastre: que los meses anteriores con actividad tengan su declaración guardada",
       "ISR provisional con su coeficiente, pérdidas amortizadas y pagos anteriores",
       "Retenciones de ISR e IVA a enterar",
+      "IEPS del periodo si la empresa lo traslada: es declaración APARTE (Art. 5º LIEPS) y su importe depende de la decisión de acreditamiento del Art. 4º",
     ],
     requiereConfirmacion: true,
     bloqueaSiError: false,

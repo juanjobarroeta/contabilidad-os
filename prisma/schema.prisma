@@ -199,6 +199,19 @@ model Company {
   perdidaFiscalPendiente Decimal? @db.Decimal(18, 6) // Monto ACTUALIZADO del remanente pendiente de amortizar
   perdidaFiscalAnio      Int? // Ejercicio al que corresponde el remanente (última anual)
 
+  // IEPS — ¿esta empresa ACREDITA el IEPS que le trasladan sus proveedores?
+  // (Art. 4º LIEPS). No se deduce del régimen ni del CFDI: el acreditamiento
+  // sólo procede para ciertos incisos y para quien es contribuyente del MISMO
+  // bien. Un comerciante que revende chocolate paga IEPS y NO lo resta; un
+  // productor de bebidas sí. La diferencia es todo el importe del mes, así que
+  // la decide el contador y queda firmada, con quién y cuándo.
+  // null = SIN DECIDIR, que NO es lo mismo que false: mientras esté en null el
+  // cierre no enseña un total de IEPS, enseña que falta la decisión.
+  iepsAcredita     Boolean?
+  iepsAcreditaAt   DateTime?
+  iepsAcreditaPor  String? // userId de quien la tomó
+  iepsAcreditaNota String?
+
   // Apertura fiscal — momento en que el contador revisó y CONFIRMÓ el punto de
   // partida (saldo a favor de IVA inicial, pérdidas por amortizar, coeficiente,
   // pagos provisionales previos y obligaciones). Null = aún sin confirmar. Las
@@ -2004,9 +2017,15 @@ model TaxDeclaration {
   ivaPagar              Decimal? @db.Decimal(18, 6)
   ivaSaldoFavorAnterior Decimal? @db.Decimal(18, 6) // Carryover from previous months
 
-  // IEPS (definitivo mensual — capturado del acuse; el motor llega después)
+  // IEPS definitivo mensual (Art. 5º LIEPS). `iepsPagar` nació capturándose del
+  // acuse; ahora también lo calcula el cierre desde los CFDIs.
   iepsPagar      Decimal? @db.Decimal(18, 6)
   iepsSaldoFavor Decimal? @db.Decimal(18, 6)
+  // Congelado al presentar: trasladado, pagado, el desglose por tasa con su
+  // inciso probable y —lo que importa— QUÉ SE DECIDIÓ sobre el acreditamiento
+  // del Art. 4º. Si mañana el contador cambia esa decisión, lo ya declarado no
+  // cambia: sin esto no habría forma de saber con qué criterio se presentó.
+  iepsDetalle    Json?
 
   // Último parse COMPLETADO del acuse anual con Claude (aunque no extrajera
   // nada). Sin esta marca, el centinela isrIngresos==null re-parseaba el mismo
