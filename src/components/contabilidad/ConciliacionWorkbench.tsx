@@ -527,13 +527,29 @@ export function ConciliacionWorkbench({
             </button>
           </div>
 
+          {/* `min-w-0` EN LAS DOS COLUMNAS, y no es cosmético: por defecto un
+              hijo de grid tiene `min-width: auto`, o sea que NO puede encogerse
+              por debajo del ancho mínimo de su contenido. La columna derecha
+              trae piezas que no se pueden encoger —el importe, los chips de
+              confianza, el botón de conciliar— así que fijaba un mínimo grande,
+              el grid se desbordaba de su tarjeta y la derecha quedaba CORTADA
+              fuera de la pantalla. Con min-w-0 las columnas ceden y el
+              `truncate` de adentro hace su trabajo. */}
           <div className="grid grid-cols-1 lg:grid-cols-2 lg:divide-x lg:divide-cos-line">
             {/* ── Izquierda: movimientos del banco ── */}
-            <section>
+            <section className="flex min-w-0 flex-col">
               <p className="border-b border-cos-line-soft px-5 py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-cos-ink-faint">
                 Movimientos del banco · {sinConciliar} sin conciliar{esperanPosteo > 0 ? ` · ${esperanPosteo} por contabilizar` : ""}{cuentaSel ? " en esta cuenta" : ""}
               </p>
-              <ul className="max-h-[430px] overflow-y-auto">
+              {/* La lista CRECE hasta donde llegue la fila del grid. Con una
+                  altura fija, cuando la columna derecha era más alta (la que
+                  manda, porque el grid estira las dos), quedaba un hueco en
+                  blanco enorme debajo del último movimiento y parecía que la
+                  mesa se cortaba. Ahora ese espacio se usa para enseñar más
+                  movimientos, que es justo lo que hace falta ahí. En móvil,
+                  donde las columnas se apilan y no hay nada que estirar, se
+                  mantiene el tope para que la lista no empuje todo hacia abajo. */}
+              <ul className="max-h-[430px] flex-1 overflow-y-auto lg:max-h-none lg:min-h-[430px]">
                 {pendientes.map((m) => {
                   const activo = selTx?.id === m.id;
                   return (
@@ -583,7 +599,7 @@ export function ConciliacionWorkbench({
             </section>
 
             {/* ── Derecha: CFDIs candidatos ── */}
-            <section className="border-t border-cos-line lg:border-t-0">
+            <section className="min-w-0 border-t border-cos-line lg:border-t-0">
               <p className="border-b border-cos-line-soft px-5 py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-cos-ink-faint">
                 {selTx
                   ? `CFDI candidatos · ${seleccion.length} seleccionados`
