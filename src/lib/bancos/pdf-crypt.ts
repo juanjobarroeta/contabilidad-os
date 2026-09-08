@@ -13,19 +13,48 @@ import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-// CÓMO SE CARGA EL PAQUETE, Y POR QUÉ ASÍ.
+// CÓMO SE CARGA EL PAQUETE. Costó tres intentos; queda escrito para no repetirlos.
 //
-// Tiene que ser OPACO A WEBPACK. Un `require.resolve("…/qpdf.wasm")` con cadena
-// literal sí lo analiza el bundler, que entonces intenta empaquetar el .wasm y
-// el build muere con «Module parse failed: Unexpected character '\u0000'».
-// Por eso va por `createRequire`: el bundler no puede seguirlo.
+// Hacen falta DOS cosas a la vez, y cada intento fallido cumplía una y rompía
+// la otra:
 //
-// Y se construye TARDE, dentro de la función. Antes se evaluaba al cargar el
-// módulo; si `process.cwd()` no es lo que se espera en ese momento, el fallo
-// ocurre al importar la ruta y sale como cualquier otra cosa.
+//   a) Que el bundler NO siga la ruta del .wasm. Un `require.resolve` con
+//      cadena literal sí lo analiza webpack, que intenta empaquetar el binario
+//      y el build muere con «Module parse failed: Unexpected character».
+//   b) Que en runtime salga un `require` DE VERDAD, invocable.
+//
+// `createRequire` importado de "node:module" cumple (a) —el bundler no puede
+// seguirlo— pero NO cumple (b): en el bundle del servidor de Next llega como
+// algo no invocable, y la primera llamada muere. Producción lo dijo con nombre
+// y apellido, una vez que se etiquetaron los pasos:
+//
+//   [qpdf] falló el arranque del módulo WASM:
+//     Error: [paso: require del módulo] f(...) is not a function
+//
+// `process.getBuiltinModule("module")` cumple las dos: va por una propiedad de
+// `process`, que el bundler no puede sustituir, y devuelve el módulo real de
+// Node con un `createRequire` que sí funciona. Existe desde Node 22.12; si no
+// estuviera, se cae al import de siempre en vez de tronar.
+//
+// Nada de esto se notó en meses porque este archivo sólo corría con PDFs
+// protegidos con contraseña. El día que el corte por páginas lo puso en cada
+// subida, salió a la primera.
 let req: NodeJS.Require | null = null;
 function getReq(): NodeJS.Require {
-  if (!req) req = createRequire(path.join(process.cwd(), "package.json"));
+  if (req) return req;
+  const anclaje = path.join(process.cwd(), "package.json");
+  const nativo = process.getBuiltinModule?.("module") as
+    | { createRequire?: (p: string) => NodeJS.Require }
+    | undefined;
+  const crear = typeof nativo?.createRequire === "function" ? nativo.createRequire : createRequire;
+  const candidato = crear(anclaje);
+  if (typeof candidato !== "function") {
+    throw new Error(
+      "no se pudo construir un require utilizable para cargar qpdf-wasm " +
+        `(createRequire devolvió ${typeof candidato})`,
+    );
+  }
+  req = candidato;
   return req;
 }
 
