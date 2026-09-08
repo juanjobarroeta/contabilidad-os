@@ -31,87 +31,98 @@ export interface FirmanteFiel {
   certificate(): {
     pemAsOneLine(): string;
     serialNumber(): { decimal(): string };
+    /** Vigencia final en ASN.1 UTCTime "YYMMDDHHMMSSZ" — es el campo `fert`. */
+    validTo(): string;
   };
 }
 
-/** El reto extraído de la página de login del SAT. */
+/**
+ * El reto extraído del `certform` del SAT. La forma exacta se fijó con una
+ * captura real (docs/sat-portal-captura.md, HAR de recon-sat-portal): el
+ * formulario sirve un `guid` de sesión y unos campos del applet que se reenvían;
+ * el cliente calcula `token` y `fert`.
+ */
 export interface RetoLogin {
-  /** El valor que hay que firmar (el `tokenValue` del formulario). */
-  token: string;
-  /** URL a la que se postea el sobre firmado (action del formulario). */
+  /** GUID de sesión que sirve el certform (hidden name="guid"). Va en el reto firmado. */
+  guid: string;
+  /** URL del applet del certform (hidden name="urlApplet"). Se reenvía tal cual. */
+  urlApplet: string;
+  /** Credencial requerida (hidden name="credentialsRequired", normalmente "CERT"). */
+  credentialsRequired: string;
+  /** Campo `ks` del certform (normalmente "null"). Se reenvía tal cual. */
+  ks: string;
+  /** URL a la que se postea el certform (sin action → la propia URL del formulario). */
   actionUrl: string;
 }
 
-/** El sobre firmado, listo para postear como formulario. */
+/** El sobre listo para postear: el `token` calculado y el `fert` (vigencia). */
 export interface SobreFirmado {
+  /**
+   * token = base64( base64(reto) + "#" + base64(base64(firma)) ),
+   * reto = "guid|RFC|serie", firma = RSA-SHA1(reto). Verificado contra la captura.
+   */
   token: string;
-  /** Firma del token en base64. */
-  firmaBase64: string;
-  /** Certificado en una sola línea base64 (sin cabeceras PEM). */
-  certificadoBase64: string;
-  /** Número de serie del certificado, en decimal (como lo espera el SAT). */
-  numeroSerie: string;
-  /** RFC del titular — se manda como pista y sirve para validar la respuesta. */
-  rfc: string;
+  /** Vigencia final del cert en "YYMMDDHHMMSSZ" (campo `fert`). */
+  fert: string;
 }
 
 /**
- * Extrae el reto de la página de login. El portal cambia el marcado sin avisar,
- * así que se buscan los campos por NOMBRE (name="tokenValue") y no por posición,
- * y se falla ruidosamente si no aparecen — un reto vacío firmado da un 200 que
- * miente, que es exactamente lo que hay que evitar.
+ * Extrae el reto del `certform`. Se busca por NOMBRE y se falla ruidosamente si
+ * falta el guid — sin él no hay reto que firmar, y un reto vacío da un 200 que
+ * miente. El certform no trae `action`: se postea a su propia URL.
  */
 export function extraerReto(html: string, urlBase: string): RetoLogin {
-  const token = valorDeInput(html, "tokenValue") ?? valorDeInput(html, "token");
-  if (!token) {
+  const guid = valorDeInput(html, "guid");
+  if (!guid) {
     throw new SatPortalAuthError(
-      "No se encontró el reto (tokenValue) en la página de login del SAT. " +
-        "El portal pudo haber cambiado su formulario.",
+      "No se encontró el guid en el certform del SAT. El portal pudo cambiar su formulario.",
     );
   }
-  const action = atributoDeForm(html, "action");
-  const actionUrl = action ? resolverUrl(action, urlBase) : urlBase;
-  return { token, actionUrl };
-}
-
-/**
- * Firma el reto con la FIEL y arma el sobre. `Credential` es el mismo objeto
- * que ya carga getFielForCompany — aquí sólo se usa su `sign()` y su
- * certificado, así que esta función es pura respecto a la red.
- *
- * El SAT firma con SHA-1 sobre el token (mismo algoritmo del sello de la
- * descarga masiva). Se deja parametrizable por si un endpoint pide SHA-256, sin
- * cambiar el resto.
- */
-export function firmarReto(
-  reto: RetoLogin,
-  credential: FirmanteFiel,
-  algoritmo: "sha1" | "sha256" = "sha1",
-): SobreFirmado {
-  const firmaBinaria = credential.sign(reto.token, algoritmo);
-  const cert = credential.certificate();
   return {
-    token: reto.token,
-    firmaBase64: Buffer.from(firmaBinaria, "binary").toString("base64"),
-    certificadoBase64: cert.pemAsOneLine(),
-    numeroSerie: cert.serialNumber().decimal(),
-    rfc: credential.rfc(),
+    guid,
+    urlApplet: valorDeInput(html, "urlApplet") ?? "",
+    credentialsRequired: valorDeInput(html, "credentialsRequired") ?? "CERT",
+    ks: valorDeInput(html, "ks") ?? "null",
+    actionUrl: urlBase,
   };
 }
 
 /**
- * El cuerpo `application/x-www-form-urlencoded` del POST de login. Los nombres
- * de campo replican los del formulario del SAT; se centralizan aquí para que un
- * cambio del portal se arregle en un solo lugar.
+ * Firma el reto y arma el `token` del certform. El reto es "guid|RFC|serie"; se
+ * firma con RSA-SHA1 (VERIFICADO contra la firma real capturada del portal — ver
+ * scripts/sat-login-verify.ts) y se empaqueta en el doble-base64 del applet:
+ *   token = base64( base64(reto) + "#" + base64( base64(firma) ) )
+ * El cert NO se manda: el SAT lo busca por el RFC/serie que van en el reto.
  */
-export function cuerpoDeLogin(sobre: SobreFirmado): string {
+export function firmarReto(reto: RetoLogin, credential: FirmanteFiel): SobreFirmado {
+  const cert = credential.certificate();
+  const desafio = `${reto.guid}|${credential.rfc()}|${cert.serialNumber().decimal()}`;
+  const firmaB64 = Buffer.from(credential.sign(desafio, "sha1"), "binary").toString("base64");
+  const parteReto = Buffer.from(desafio, "utf8").toString("base64");
+  const parteFirma = Buffer.from(firmaB64, "utf8").toString("base64"); // doble base64
+  const token = Buffer.from(`${parteReto}#${parteFirma}`, "utf8").toString("base64");
+  return { token, fert: cert.validTo() };
+}
+
+/**
+ * Cuerpo `application/x-www-form-urlencoded` del POST del certform. Los nombres
+ * replican el formulario real (ver docs/sat-portal-captura.md). El cert NO va —el
+ * SAT lo busca por el RFC/serie que van dentro del token.
+ */
+export function cuerpoDeLogin(reto: RetoLogin, sobre: SobreFirmado): string {
   const p = new URLSearchParams();
-  p.set("tokenValue", sobre.token);
-  p.set("guid", sobre.token);
-  p.set("firma", sobre.firmaBase64);
-  p.set("certificado", sobre.certificadoBase64);
-  p.set("numeroSerie", sobre.numeroSerie);
-  p.set("rfc", sobre.rfc);
+  p.set("token", sobre.token);
+  p.set("credentialsRequired", reto.credentialsRequired);
+  p.set("guid", reto.guid);
+  p.set("ks", reto.ks);
+  p.set("seeder", "");
+  p.set("arc", "");
+  p.set("tan", "");
+  p.set("placer", "");
+  p.set("secuence", "");
+  p.set("urlApplet", reto.urlApplet);
+  p.set("jcaptcha", "");
+  p.set("fert", sobre.fert);
   return p.toString();
 }
 
@@ -146,21 +157,6 @@ function valorDeInput(html: string, name: string): string | null {
   const tag = html.match(re)?.[0];
   if (!tag) return null;
   return tag.match(/\bvalue=["']([^"']*)["']/i)?.[1] ?? null;
-}
-
-function atributoDeForm(html: string, attr: string): string | null {
-  const tag = html.match(/<form[^>]*>/i)?.[0];
-  if (!tag) return null;
-  const re = new RegExp(`\\b${escapar(attr)}=["']([^"']*)["']`, "i");
-  return tag.match(re)?.[1] ?? null;
-}
-
-function resolverUrl(href: string, base: string): string {
-  try {
-    return new URL(href, base).toString();
-  } catch {
-    return href;
-  }
 }
 
 function escapar(s: string): string {

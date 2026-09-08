@@ -63,7 +63,7 @@ export async function abrirSesionSat(opts: AbrirSesionOpts): Promise<SesionSat> 
       Accept: "text/html",
       Cookie: cookieDe(pagina),
     },
-    body: cuerpoDeLogin(sobre),
+    body: cuerpoDeLogin(reto, sobre),
     redirect: "manual",
   });
 
