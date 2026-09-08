@@ -8,8 +8,13 @@
 // centavo) el monto del movimiento.
 //
 // Reglas de la casa:
-//  - Identidad primero: sólo se combinan facturas de la MISMA contraparte
-//    (RFC efectivo). Un subset-sum sobre toda la cartera fabrica coincidencias.
+//  - Identidad primero, en dos niveles: sólo se combinan facturas de la MISMA
+//    contraparte (RFC efectivo), y si el MOVIMIENTO ya trae contraparte
+//    identificada, el grupo tiene que ser ESA. Un subset-sum sobre toda la
+//    cartera fabrica coincidencias: visto en producción, el pago de nómina de
+//    una empleada por $4,989.20 recibió como sugerencia cinco facturas de una
+//    farmacia que sumaban exacto ese importe. Un clic y el sueldo de una
+//    persona quedaba cobrado contra facturas de otra.
 //  - Ante la duda, no se emite: si más de un subconjunto (de cualquier
 //    contraparte) suma el monto, no hay sugerencia. La exactitud al centavo es
 //    la señal; la ambigüedad la anula.
@@ -23,6 +28,8 @@ export interface FacturaParaPagoJunto {
   id: string;
   /** RFC efectivo de la contraparte (customer o contraparteRfc). */
   rfc: string | null;
+  /** Nombre de la contraparte, para cotejar cuando el movimiento no trae RFC. */
+  nombre?: string | null;
   /** Saldo pendiente de cobro/pago (total − porciones ya asignadas), en MXN. */
   saldo: number;
 }
@@ -41,6 +48,8 @@ const MAX_FACTURAS_POR_GRUPO = 24;
  *  posible, pero la probabilidad de coincidencia numérica crece con el tamaño
  *  del subconjunto; 6 cubre la operación real sin invitar falsos exactos. */
 const MAX_FACTURAS_EN_PAGO = 6;
+
+import { mismoNombre } from "./nombres";
 
 const aCentavos = (n: number): number => Math.round(n * 100);
 
@@ -90,15 +99,27 @@ function subconjuntosExactos(
   return soluciones;
 }
 
+/** Lo que el estado de cuenta ya sabe de la contraparte del movimiento. */
+export interface IdentidadMovimiento {
+  rfc?: string | null;
+  nombre?: string | null;
+}
+
 /**
  * Sugerencia de pago junto para un movimiento de `montoTx` MXN (valor
  * absoluto). `facturas` son los candidatos abiertos (cualquier contraparte);
  * el agrupado por RFC ocurre aquí. Devuelve la única combinación exacta, o
  * null si no existe o hay más de una (ambigüedad = silencio).
+ *
+ * `identidad` es la contraparte que el movimiento YA trae (del estado de
+ * cuenta o del CEP). Cuando existe, sólo se consideran los grupos que son esa
+ * misma parte: sumar exacto es una coincidencia numérica, y contra una
+ * identidad conocida que no empata, es una coincidencia FALSA.
  */
 export function sugerirPagoJunto(
   montoTx: number,
   facturas: FacturaParaPagoJunto[],
+  identidad?: IdentidadMovimiento,
 ): PagoJunto | null {
   const objetivo = aCentavos(Math.abs(montoTx));
   if (objetivo <= 0) return null;
@@ -113,6 +134,7 @@ export function sugerirPagoJunto(
 
   let unica: PagoJunto | null = null;
   for (const [rfc, grupo] of porRfc) {
+    if (!compatibleConIdentidad(rfc, grupo, identidad)) continue;
     const saldos = grupo.map((f) => aCentavos(f.saldo));
     const soluciones = subconjuntosExactos(saldos, objetivo, 2, MAX_FACTURAS_EN_PAGO);
     if (soluciones.length === 0) continue;
@@ -126,4 +148,24 @@ export function sugerirPagoJunto(
     };
   }
   return unica;
+}
+
+/**
+ * ¿Este grupo de facturas es la contraparte que el movimiento ya identificó?
+ *
+ * Sin identidad en el movimiento no hay nada que contradecir y pasa todo — es
+ * justo el caso en que el pago junto más ayuda. Con RFC, manda el RFC. Con sólo
+ * nombre, basta que UNA factura del grupo lo empate: van todas del mismo RFC,
+ * así que empatar una identifica al grupo entero.
+ */
+function compatibleConIdentidad(
+  rfcGrupo: string,
+  grupo: FacturaParaPagoJunto[],
+  identidad?: IdentidadMovimiento,
+): boolean {
+  const rfcTx = identidad?.rfc?.trim().toUpperCase();
+  if (rfcTx) return rfcTx === rfcGrupo.trim().toUpperCase();
+  const nombreTx = identidad?.nombre?.trim();
+  if (!nombreTx) return true;
+  return grupo.some((f) => mismoNombre(nombreTx, f.nombre));
 }

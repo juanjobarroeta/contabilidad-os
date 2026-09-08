@@ -126,6 +126,8 @@ function monthRange(year: number, month: number): { start: Date; end: Date } {
  *           Reclasificación fina contra pasivo provisionado: pendiente (Ola C).
  *       IGNORED + TAX_PAYMENT       → debits impuestos por pagar
  *       IGNORED + PAYROLL_NO_CFDI   → debits sueldos y salarios
+ *       IGNORED + PAYROLL_DISPERSED → debits acreedores diversos (el CFDI de
+ *           nómina ya reconoció el gasto; la transferencia sólo lo liquida)
  *       IGNORED + NON_DEDUCTIBLE    → debits gastos no deducibles
  *       IGNORED + IVA_COMISION      → debits IVA acreditable PENDIENTE (no es gasto)
  *       IGNORED + PENDING_MONTHLY_CFDI → debits "comisiones bancarias por conciliar"
@@ -163,6 +165,7 @@ export const IGNORED_TAGS_VALIDOS = new Set([
   "RENT",
   "FINANCIAL_INCOME",
   "IVA_COMISION",
+  "PAYROLL_DISPERSED",
 ]);
 
 /** Spec (pura) de la subcuenta contable de una cuenta bancaria. */
@@ -1089,6 +1092,29 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       if (tag === "TAX_PAYMENT") {
         drafts.push({ ...base, chartAccountId: accImpuestos.id, monto: absAmount, tipo: "CARGO" });
         drafts.push({ ...base, chartAccountId: ctaBanco(tx).id, monto: absAmount, tipo: "ABONO" });
+        continue;
+      }
+
+      if (tag === "PAYROLL_DISPERSED") {
+        // Dispersión de nómina cuyos recibos YA están timbrados: el gasto lo
+        // reconoció el CFDI de nómina (cargo a sueldos, abono a acreedores),
+        // así que la transferencia sólo LIQUIDA esa provisión. Cargarla otra
+        // vez a sueldos —que es lo único que había, vía PAYROLL_NO_CFDI—
+        // duplicaría el gasto: en un hospital real son $79,062 de dos
+        // dispersiones contra recibos por $734,303 ya asentados.
+        //
+        // Es la MISMA contrapartida que usa el match de un recibo suelto
+        // (accAcreedoresDiv); la diferencia es que aquí no se sabe A QUIÉN se
+        // le pagó, y eso vive en el layout de dispersión del banco, no en el
+        // libro. El saldo de acreedores dice cuánto falta por pagar, que es la
+        // pregunta contable que importa.
+        if (isCredit) {
+          drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,        monto: absAmount, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: accAcreedoresDiv.id,  monto: absAmount, tipo: "ABONO" });
+        } else {
+          drafts.push({ ...base, chartAccountId: accAcreedoresDiv.id,  monto: absAmount, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,        monto: absAmount, tipo: "ABONO" });
+        }
         continue;
       }
 

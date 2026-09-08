@@ -66,3 +66,32 @@ describe("sugerirPagoJunto — un SPEI que salda varias facturas de la misma con
     expect(r!.asignaciones.map((a) => a.invoiceId).sort()).toEqual(["a", "b"]);
   });
 });
+
+describe("la identidad del movimiento manda sobre la suma exacta", () => {
+  // Caso real: el pago de nómina de una empleada por $4,989.20 recibió como
+  // sugerencia cinco facturas de una farmacia que sumaban EXACTO ese importe.
+  const farmacia = [
+    { id: "w7346", rfc: "FME010101AAA", nombre: "FARMADROGUERIA MEDINA", saldo: 1200 },
+    { id: "w7029", rfc: "FME010101AAA", nombre: "FARMADROGUERIA MEDINA", saldo: 1789.2 },
+    { id: "w6969", rfc: "FME010101AAA", nombre: "FARMADROGUERIA MEDINA", saldo: 2000 },
+  ];
+
+  it("no ofrece facturas de otra parte cuando el movimiento trae nombre", () => {
+    expect(sugerirPagoJunto(4989.2, farmacia, { nombre: "STEPHANIE ISABELLE MENESES" })).toBeNull();
+  });
+
+  it("no ofrece facturas de otra parte cuando el movimiento trae RFC", () => {
+    expect(sugerirPagoJunto(4989.2, farmacia, { rfc: "MEMS900101AAA" })).toBeNull();
+  });
+
+  it("sí las ofrece cuando la identidad SÍ empata", () => {
+    expect(sugerirPagoJunto(4989.2, farmacia, { rfc: "fme010101aaa" })?.rfc).toBe("FME010101AAA");
+    expect(sugerirPagoJunto(4989.2, farmacia, { nombre: "Farmadrogueria Medina SA de CV" })?.rfc)
+      .toBe("FME010101AAA");
+  });
+
+  it("sin identidad en el movimiento, se comporta como siempre", () => {
+    expect(sugerirPagoJunto(4989.2, farmacia)?.asignaciones).toHaveLength(3);
+    expect(sugerirPagoJunto(4989.2, farmacia, {})?.asignaciones).toHaveLength(3);
+  });
+});

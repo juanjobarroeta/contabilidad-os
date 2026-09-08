@@ -41,7 +41,8 @@ export type TagSinFactura =
   | "INTERNAL_TRANSFER"
   | "RENT"
   | "FINANCIAL_INCOME"
-  | "IVA_COMISION";
+  | "IVA_COMISION"
+  | "PAYROLL_DISPERSED";
 
 /**
  * Las categorías que la mesa ofrece de un toque — las MISMAS del tab
@@ -52,6 +53,11 @@ export type TagSinFactura =
 export const CATEGORIAS_MESA: { tag: TagSinFactura | null; label: string }[] = [
   { tag: "TAX_PAYMENT", label: "Pago de impuestos" },
   { tag: "PAYROLL_NO_CFDI", label: "Nómina sin CFDI" },
+  // Sin familia en el categorizador de conceptos A PROPÓSITO: el texto
+  // «PAGO DE NOMINA» no dice si los recibos ya se timbraron, y de eso depende
+  // si la transferencia liquida la provisión (acreedores) o reconoce el gasto
+  // (sueldos). Lo elige quien mira la mesa, que sí lo sabe.
+  { tag: "PAYROLL_DISPERSED", label: "Dispersión de nómina ya timbrada" },
   { tag: "LOAN_RECEIVED", label: "Préstamo recibido" },
   { tag: "LOAN_GIVEN", label: "Préstamo otorgado" },
   { tag: "CAPITAL_CONTRIBUTION", label: "Aportación de capital" },
