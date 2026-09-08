@@ -184,6 +184,15 @@ async function uma(): Promise<boolean> {
   return ok;
 }
 
+// Códigos de salida: la diferencia importa porque de ella cuelga lo que se le
+// dice al humano. «Comparé y no coinciden» es un hallazgo; «no pude comparar»
+// es una avería del proceso. Colapsarlos en un solo código fue exactamente lo
+// que hizo que un `ts-node: not found` se publicara como si las tarifas del
+// SAT estuvieran mal (issue #915): la alarma decía un hecho que nadie midió.
+export const SALIDA_OK = 0;
+export const SALIDA_DISCREPANCIA = 1; // se cotejó y NO coincide
+export const SALIDA_NO_VERIFICABLE = 2; // no se pudo cotejar (red, fuente, runner)
+
 (async () => {
   let tarifasOk = true;
   let umaOk = true;
@@ -194,9 +203,9 @@ async function uma(): Promise<boolean> {
   if (solo.includes("uma")) umaOk = await uma();
   if (strict && (!tarifasOk || !umaOk)) {
     console.error(`${!tarifasOk ? "Tarifas: el Anexo 8 no coincide con tarifas.ts (o falta el ejercicio). " : ""}${!umaOk ? "UMA: el catálogo no coincide con el INEGI (o falta el ejercicio)." : ""}`);
-    process.exit(1);
+    process.exit(SALIDA_DISCREPANCIA);
   }
 })().catch((e) => {
-  console.error(e instanceof Error ? e.message : e);
-  process.exit(1);
+  console.error(`No se pudo cotejar: ${e instanceof Error ? e.message : e}`);
+  process.exit(SALIDA_NO_VERIFICABLE);
 });

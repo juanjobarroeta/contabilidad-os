@@ -33,7 +33,7 @@
     "fiscal:cumplimiento-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-cumplimiento-check.ts",
     "fiscal:efos-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-efos-check.ts",
     "fiscal:syntage-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/syntage-check.ts",
-    "fiscal:valores": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-valores-generar.ts",
+    "fiscal:valores": "tsx scripts/fiscal-valores-generar.ts",
     "copiloto:eval": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/copiloto-eval.ts",
     "automotriz:ingest-claves": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/automotriz-ingest-claves.ts",
     "prepare": "lefthook install || true",
@@ -95,6 +95,7 @@
     "playwright": "^1.62.1",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
+    "tsx": "^4.23.13",
     "typescript": "^5",
     "vitest": "^4.1.8"
   }
