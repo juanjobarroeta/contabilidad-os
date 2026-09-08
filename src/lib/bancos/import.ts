@@ -32,6 +32,7 @@ import { primeraReglaQueEmpata, signoDeMonto, type FamiliaConcepto } from "@/lib
 import { decodificarEstadoDeCuenta, esExcelBinario } from "@/lib/bancos/decodificar";
 import { camposContraparte, parseSpei } from "@/lib/bancos/spei-descripcion";
 import { nombresPorRfc } from "@/lib/bancos/contraparte-nombre";
+import { kickCron } from "@/lib/cron-scheduler";
 import { vincularComisionesDeCuenta } from "@/lib/bancos/comisiones-repo";
 
 export type ImportResult = {
@@ -331,6 +332,13 @@ export async function persistTransactions(opts: {
     } catch (e) {
       console.error(`[bancos/import] auto-conciliar tras importar falló para ${companyId}:`, e);
     }
+    // El RFC de la contraparte no viene en el estado: se pide a Banxico el CEP
+    // de cada SPEI recién importado. NO se hace aquí en línea —son ~1 s por
+    // movimiento y un estado trae cientos, que no caben en el presupuesto de la
+    // subida— sino que se dispara el cron acotado a esta empresa: vuelve en
+    // segundos y él mismo vuelve a auto-conciliar cuando encontró RFCs. Así el
+    // usuario no espera y la conciliación sí usa el dato.
+    kickCron("cep-rfc", 3_000, `companyId=${companyId}`);
   }
 
   return { imported, skipped, batchId: imported > 0 ? batch.id : null };
