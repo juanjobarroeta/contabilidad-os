@@ -40,7 +40,8 @@ export type TagSinFactura =
   | "NON_DEDUCTIBLE"
   | "INTERNAL_TRANSFER"
   | "RENT"
-  | "FINANCIAL_INCOME";
+  | "FINANCIAL_INCOME"
+  | "IVA_COMISION";
 
 /**
  * Las categorías que la mesa ofrece de un toque — las MISMAS del tab
@@ -54,6 +55,7 @@ export const CATEGORIAS_MESA: { tag: TagSinFactura | null; label: string }[] = [
   { tag: "LOAN_RECEIVED", label: "Préstamo recibido" },
   { tag: "LOAN_GIVEN", label: "Préstamo otorgado" },
   { tag: "CAPITAL_CONTRIBUTION", label: "Aportación de capital" },
+  { tag: "IVA_COMISION", label: "IVA de comisión bancaria" },
   { tag: "RENT", label: "Renta sin CFDI" },
   { tag: "FINANCIAL_INCOME", label: "Intereses ganados" },
   { tag: "NON_DEDUCTIBLE", label: "No deducible" },
@@ -79,6 +81,7 @@ export function familiaATag(familia: FamiliaConcepto): TagSinFactura | null {
     case "NON_DEDUCTIBLE":
     case "LOAN_RECEIVED":
     case "LOAN_GIVEN":
+    case "IVA_COMISION":
       return familia;
     case "RENT":
     case "FINANCIAL_INCOME":

@@ -243,12 +243,21 @@ export async function persistTransactions(opts: {
       hitsPorRegla.set(reglaMatch.id, (hitsPorRegla.get(reglaMatch.id) ?? 0) + 1);
     } else {
       // 2) Patrones hardcodeados de siempre.
-      const isBankFee = /comisi[oó]n|iva\s+comisi/i.test(desc);
+      // El IVA de la comisión va PRIMERO: su renglón también dice «comisión» y
+      // con el orden inverso se etiquetaba como gasto. Se acepta la abreviatura
+      // («IVA COM. TRANS. AMEX»), que es como la escriben BBVA y Banorte y por
+      // la que 12 renglones seguían cayendo en la mesa como gasto sin
+      // identificar.
+      const isIvaComision = /\biva\b[\s.]*(com\b|com\.|comisi)/i.test(desc);
+      const isBankFee = !isIvaComision && /comisi[oó]n/i.test(desc);
       const isTaxPayment =
         /pago\s+de\s+impuestos|^impuesto|recaudaci[oó]n|\bsat\b|tesofe/i.test(desc);
       const isInternalTransfer = /traspaso\s+(entre|a)\s+cuentas?\s+propias?|transferencia\s+propia/i.test(desc);
       const isBankNoise = /compensaci[oó]n\s+por\s+retraso/i.test(desc) || tx.monto === 0;
-      if (isBankFee) {
+      if (isIvaComision) {
+        status = "IGNORED";
+        notes = "IVA_COMISION";
+      } else if (isBankFee) {
         status = "IGNORED";
         notes = "PENDING_MONTHLY_CFDI";
       } else if (isTaxPayment) {

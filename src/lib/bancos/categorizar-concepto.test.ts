@@ -214,3 +214,23 @@ describe("extraerTokenConcepto", () => {
     expect(extraerTokenConcepto("café münchen")).toBe("MUNCHEN");
   });
 });
+
+describe("IVA de comisión bancaria: impuesto acreditable, no gasto", () => {
+  it("el IVA gana sobre la regla de comisiones aunque el renglón diga «COMISION»", () => {
+    const s = sugerirCategoriaConcepto("IVA COMISION 09992886C", "DEBITO");
+    expect(s?.familia).toBe("IVA_COMISION");
+    expect(s?.cuentaSugerida).toBe(COE_CODES.IVA_ACREDITABLE_PEND);
+  });
+
+  it("reconoce la abreviatura que usan BBVA y Banorte", () => {
+    // «IVA COM. TRANS. AMEX 09992886C» — 12 renglones al mes seguían cayendo
+    // en la mesa porque no empataban con «comisión».
+    expect(sugerirCategoriaConcepto("IVA COM. TRANS. AMEX 09992886C", "DEBITO")?.familia).toBe("IVA_COMISION");
+  });
+
+  it("la comisión misma sigue siendo gasto", () => {
+    const s = sugerirCategoriaConcepto("COMISION 09992886C APLICACION DE TASAS DE DESCUENTO", "DEBITO");
+    expect(s?.familia).toBe("COMISION");
+    expect(s?.cuentaSugerida).toBe(COE_CODES.COMISIONES_BANCARIAS);
+  });
+});

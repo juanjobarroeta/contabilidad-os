@@ -122,7 +122,7 @@ type Filter =
   | "all" | "UNMATCHED" | "MATCHED" | "IGNORED"
   | "PENDING" | "TAX_PAYMENT" | "PAYROLL_NO_CFDI" | "LOAN_RECEIVED"
   | "LOAN_GIVEN" | "CAPITAL_CONTRIBUTION" | "NON_DEDUCTIBLE" | "INTERNAL_TRANSFER"
-  | "RENT" | "FINANCIAL_INCOME";
+  | "RENT" | "FINANCIAL_INCOME" | "IVA_COMISION";
 
 // Categorías "sin factura" → tag de notes que persiste (PATCH ignore). null = ignorar simple.
 /** Movimientos por página. La lista crece con «Cargar más». */
@@ -134,6 +134,7 @@ const CATEGORIAS: { tag: string | null; label: string; icon: typeof Banknote }[]
   { tag: "LOAN_RECEIVED",        label: "Préstamo recibido",        icon: Banknote },
   { tag: "LOAN_GIVEN",           label: "Préstamo otorgado",        icon: Banknote },
   { tag: "CAPITAL_CONTRIBUTION", label: "Aportación de capital",    icon: Building2 },
+  { tag: "IVA_COMISION",         label: "IVA de comisión bancaria", icon: Banknote },
   { tag: "RENT",                 label: "Renta sin CFDI",           icon: Building2 },
   { tag: "FINANCIAL_INCOME",     label: "Intereses ganados",        icon: Banknote },
   { tag: "NON_DEDUCTIBLE",       label: "No deducible",             icon: Ban },
@@ -144,7 +145,7 @@ const CATEGORIAS: { tag: string | null; label: string; icon: typeof Banknote }[]
 const TAG_LABEL: Record<string, string> = {
   TAX_PAYMENT: "Impuestos", PENDING_MONTHLY_CFDI: "Pendiente CFDI",
   PAYROLL_NO_CFDI: "Nómina", LOAN_RECEIVED: "Préstamo", LOAN_GIVEN: "Préstamo otorgado",
-  RENT: "Renta", FINANCIAL_INCOME: "Intereses",
+  RENT: "Renta", FINANCIAL_INCOME: "Intereses", IVA_COMISION: "IVA comisión",
   CAPITAL_CONTRIBUTION: "Capital", NON_DEDUCTIBLE: "No deducible", INTERNAL_TRANSFER: "Transferencia",
 };
 // Chips de "Más filtros": tag de filtro → etiqueta + clave de conteo.

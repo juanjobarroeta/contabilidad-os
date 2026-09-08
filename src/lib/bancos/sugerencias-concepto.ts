@@ -159,6 +159,10 @@ async function construirAsiento(
       return contraCargoAbono(COE_CODES.PRESTAMOS_RECIBIDOS);
     case "LOAN_GIVEN":
       return contraCargoAbono(COE_CODES.PRESTAMOS_OTORGADOS);
+    case "IVA_COMISION":
+      // Impuesto acreditable, no gasto. Va a PENDIENTE porque el CFDI del banco
+      // (mensual) todavía no llega: sin comprobante el IVA aún no se acredita.
+      return contraCargoAbono(COE_CODES.IVA_ACREDITABLE_PEND);
   }
 }
 

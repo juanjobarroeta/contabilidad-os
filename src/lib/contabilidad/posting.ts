@@ -127,6 +127,7 @@ function monthRange(year: number, month: number): { start: Date; end: Date } {
  *       IGNORED + TAX_PAYMENT       → debits impuestos por pagar
  *       IGNORED + PAYROLL_NO_CFDI   → debits sueldos y salarios
  *       IGNORED + NON_DEDUCTIBLE    → debits gastos no deducibles
+ *       IGNORED + IVA_COMISION      → debits IVA acreditable PENDIENTE (no es gasto)
  *       IGNORED + PENDING_MONTHLY_CFDI → debits "comisiones bancarias por conciliar"
  *                                      (will be reconciled when monthly CFDI matches)
  *       IGNORED + RENT              → debits rentas
@@ -161,6 +162,7 @@ export const IGNORED_TAGS_VALIDOS = new Set([
   // CUALQUIER estado de cuenta — era cuestión de tiempo en datos reales.
   "RENT",
   "FINANCIAL_INCOME",
+  "IVA_COMISION",
 ]);
 
 /** Spec (pura) de la subcuenta contable de una cuenta bancaria. */
@@ -1061,6 +1063,26 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
         // a re-post, which the user can trigger manually).
         drafts.push({ ...base, chartAccountId: accComisionesBanc.id, monto: absAmount, tipo: "CARGO" });
         drafts.push({ ...base, chartAccountId: ctaBanco(tx).id, monto: absAmount, tipo: "ABONO" });
+        continue;
+      }
+
+      if (tag === "IVA_COMISION") {
+        // El IVA de una comisión bancaria NO es gasto: es impuesto acreditable.
+        // Iba a «comisiones bancarias» junto con la comisión, inflando el gasto
+        // y perdiendo el IVA por acreditar — en una cuenta con terminal son 77
+        // renglones al mes ($5,838 en un hospital real).
+        //
+        // Va a PENDIENTE (119) y no a pagado (118) a propósito: el dinero ya
+        // salió, pero el CFDI mensual del banco todavía no llega y sin
+        // comprobante el IVA no se acredita. Cuando el CFDI se concilie, pasa a
+        // acreditable por el camino normal.
+        if (isCredit) {
+          drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,          monto: absAmount, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: accIvaAcreditablePend.id, monto: absAmount, tipo: "ABONO" });
+        } else {
+          drafts.push({ ...base, chartAccountId: accIvaAcreditablePend.id, monto: absAmount, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,          monto: absAmount, tipo: "ABONO" });
+        }
         continue;
       }
 
