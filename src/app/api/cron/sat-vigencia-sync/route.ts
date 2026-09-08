@@ -9,6 +9,7 @@ import {
 } from "@/lib/fiscal/vigencia-cfdi";
 import { contradiceAlSat, estadoDeCancelacion } from "@/lib/facturas/cancelacion-estado";
 import { revertirDerivadosDeCancelada } from "@/lib/automotriz/revertir-cancelada";
+import { registrarBitacora } from "@/lib/audit";
 import {
   cupoPorEmpresa,
   empresasDelTurno,
@@ -333,6 +334,50 @@ async function handle(req: Request) {
   };
   await Promise.all(Array.from({ length: CARRILES }, (_, k) => carril(k)));
 
+  // ── DEVOLVER A VIGENTE LO QUE EL SAT DICE QUE ESTÁ VIGENTE ───────────────
+  // Marcarla en rojo no bastaba: mientras la fila siga CANCELLED, TODOS los
+  // motores fiscales la excluyen (`status: { not: "CANCELLED" }`), así que la
+  // pantalla decía la verdad en palabras y mentía en las cifras — al mes le
+  // seguía faltando ese ingreso y su IVA. La autoridad sobre si un CFDI existe
+  // es el SAT, y aquí tenemos su respuesta explícita: se le hace caso.
+  //
+  // Sólo con un «Vigente» afirmativo. Un "No Encontrado" o una respuesta que no
+  // entendamos NO revive nada (`contradiceAlSat` ya excluye `desconocido`).
+  const revigencias: Array<Record<string, unknown>> = [];
+  for (const c of contradicciones) {
+    try {
+      await prisma.invoice.update({
+        where: { id: c.id },
+        data: {
+          status: "STAMPED",
+          canceladaAt: null,
+          // Trámite abierto → se conserva como SOLICITUD: la pantalla dirá «en
+          // proceso de cancelación» y el comprobante seguirá contando, que es
+          // exactamente lo que dice el SAT.
+          cancelSolicitadaAt: c.sat === "en_proceso" ? new Date() : null,
+        },
+      });
+      registrarBitacora({
+        companyId: c.companyId,
+        accion: "factura.revigencia",
+        entidad: "Invoice",
+        entidadId: c.id,
+        detalle: {
+          uuid: c.uuid,
+          total: c.total,
+          motivo: "El SAT reporta el comprobante VIGENTE; estaba marcado como cancelado.",
+          satDice: c.sat,
+        },
+      });
+      revigencias.push({ uuid: c.uuid, total: c.total, sat: c.sat });
+    } catch (e) {
+      errores.push({
+        uuid: c.uuid,
+        error: `no se pudo devolver a vigente: ${e instanceof Error ? e.message : String(e)}`,
+      });
+    }
+  }
+
   const reversiones: Array<Record<string, unknown>> = [];
   if (cancelados.length > 0) {
     await prisma.invoice.updateMany({
@@ -417,6 +462,10 @@ async function handle(req: Request) {
     // filas de operación que restaurar el estatus no deshace— pero salen aquí y
     // salen en la pantalla de facturas, en rojo.
     contradicciones,
+    // Las que se devolvieron a vigente por orden del SAT: vuelven a contar en
+    // el IVA y el ISR de su mes. Lo que la cancelación hubiera revertido en la
+    // capa de operación (unidades, costos, kardex) NO se re-crea solo.
+    revigencias,
     // Facturas canceladas que todavía no se han cotejado con el SAT ni una vez.
     archivoPendiente,
     // Lo que se deshizo en la capa de operación, para poder cuadrar el antes
