@@ -9,38 +9,29 @@
 // evidencia del lote es el desencriptado, para que siempre pueda abrirse.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
+import path from "node:path";
 
 // CÓMO SE CARGA EL PAQUETE, Y POR QUÉ ASÍ.
 //
-// Esto era `createRequire(path.join(process.cwd(), "package.json"))`, y en
-// producción reventaba con «TypeError: e is not a function» — `e` es el propio
-// `req` minificado: en el bundle del servidor de Next, `createRequire` no
-// devuelve una función utilizable, así que la primera llamada `req(...)` moría.
-// Nadie lo notó durante meses porque este archivo SÓLO corría con PDFs
-// protegidos con contraseña; el día que el corte por páginas lo puso en cada
-// subida, salió a la primera.
+// Tiene que ser OPACO A WEBPACK. Un `require.resolve("…/qpdf.wasm")` con cadena
+// literal sí lo analiza el bundler, que entonces intenta empaquetar el .wasm y
+// el build muere con «Module parse failed: Unexpected character '\u0000'».
+// Por eso va por `createRequire`: el bundler no puede seguirlo.
 //
-// El `require` pelón, en cambio, está probado en producción: es lo que usa
-// `fiscal-kb/pdf.ts` para pdf-parse, y es lo que hizo funcionar la lectura de
-// páginas de este mismo flujo mientras qpdf fallaba. Los dos paquetes están en
-// `serverExternalPackages`, así que webpack no los empaqueta y el require llega
-// intacto a Node.
-//
-// Va DENTRO de las funciones a propósito: evaluarlo al cargar el módulo mete a
-// pdfjs/emscripten en el paso de build de Next.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function requerir(spec: string): any {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  return require(spec);
+// Y se construye TARDE, dentro de la función. Antes se evaluaba al cargar el
+// módulo; si `process.cwd()` no es lo que se espera en ese momento, el fallo
+// ocurre al importar la ruta y sale como cualquier otra cosa.
+let req: NodeJS.Require | null = null;
+function getReq(): NodeJS.Require {
+  if (!req) req = createRequire(path.join(process.cwd(), "package.json"));
+  return req;
 }
 
 let wasmBytes: Buffer | null = null;
 function getWasm(): Buffer {
-  if (!wasmBytes) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    wasmBytes = readFileSync(require.resolve("@jspawn/qpdf-wasm/qpdf.wasm"));
-  }
+  if (!wasmBytes) wasmBytes = readFileSync(getReq().resolve("@jspawn/qpdf-wasm/qpdf.wasm"));
   return wasmBytes;
 }
 
@@ -56,6 +47,17 @@ export type QpdfRun = { code: number; out: Buffer | null; stderr: string };
 
 /** Ejecuta el CLI de qpdf (WASM) sobre un buffer, en un FS virtual efímero.
  *  Cada llamada instancia un módulo nuevo — callMain solo corre una vez. */
+/** Arranca el módulo de emscripten etiquetando el paso: si truena aquí, el
+ *  problema es del propio glue WASM y no de cómo lo cargamos. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function arrancar(createModule: any, opciones: any): Promise<any> {
+  try {
+    return await createModule(opciones);
+  } catch (e) {
+    throw new Error(`[paso: arranque de emscripten] ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
 export async function runQpdf(args: string[], input: Buffer): Promise<QpdfRun> {
   try {
     return await correrQpdf(args, input);
@@ -68,20 +70,38 @@ export async function runQpdf(args: string[], input: Buffer): Promise<QpdfRun> {
 }
 
 async function correrQpdf(args: string[], input: Buffer): Promise<QpdfRun> {
-  // Interop: según cómo resuelva el runtime (CJS vs `require` de un ESM en Node
-  // 22, que devuelve el namespace), esto llega como función o como objeto con
-  // `default`. Llamar al objeto tira «X is not a function» — que es exactamente
-  // lo que reventó en producción cuando este camino, antes reservado a los PDFs
-  // con contraseña, pasó a correr en CADA subida.
+  // CADA PASO DICE SU NOMBRE. La corrida anterior sólo pudo reportar
+  // «TypeError: e is not a function» —un identificador minificado— y con eso no
+  // se puede saber si murió al construir el require, al cargar el módulo, al
+  // leer el .wasm o dentro del propio arranque de emscripten. Etiquetar los
+  // pasos convierte el siguiente fallo en un diagnóstico en vez de una
+  // adivinanza.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const mod0: any = requerir("@jspawn/qpdf-wasm/qpdf.js");
+  let mod0: any;
+  try {
+    mod0 = getReq()("@jspawn/qpdf-wasm/qpdf.js");
+  } catch (e) {
+    throw new Error(`[paso: require del módulo] ${e instanceof Error ? e.message : String(e)}`);
+  }
+  // Interop: según cómo resuelva el runtime (CJS, o `require` de un ESM en Node
+  // 22, que devuelve el namespace) esto llega como función o como objeto con
+  // `default`. Llamar al objeto tira «X is not a function».
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const createModule: any = typeof mod0 === "function" ? mod0 : mod0?.default;
   if (typeof createModule !== "function") {
-    return { code: 2, out: null, stderr: "qpdf-wasm no exportó una función de arranque" };
+    return {
+      code: 2,
+      out: null,
+      stderr: `[paso: forma del módulo] qpdf-wasm exportó ${typeof mod0}, no una función de arranque`,
+    };
+  }
+  try {
+    getWasm();
+  } catch (e) {
+    throw new Error(`[paso: lectura del .wasm] ${e instanceof Error ? e.message : String(e)}`);
   }
   let stderr = "";
-  const mod = await createModule({
+  const mod = await arrancar(createModule, {
     noInitialRun: true,
     print: () => {},
     printErr: (line: string) => { stderr += line + "\n"; },
