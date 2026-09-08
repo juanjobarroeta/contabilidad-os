@@ -9,7 +9,11 @@ import { persistTransactions } from "@/lib/bancos/import";
 import { pdfEstaProtegido, desencriptarPdf } from "@/lib/bancos/pdf-crypt";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+// La extracción parte el PDF en lotes de páginas y los corre en PARALELO, así
+// que el tiempo lo marca el lote más lento, no la suma. Aun así un estado de 17
+// páginas con 168 movimientos pasaba de 120 s y se veía como un timeout del
+// navegador: el margen sube para que el corte por lotes tenga dónde caber.
+export const maxDuration = 300;
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -103,10 +107,16 @@ export async function POST(req: Request, { params }: Params) {
     );
   }
 
-  // Safety gate: don't import when the balance doesn't reconcile, unless forced.
+  // Safety gate: no se importa si CUALQUIERA de los dos candados falla, salvo
+  // que el usuario lo fuerce. El de controles (los totales que el banco imprime)
+  // se agrega aquí porque atrapa lo que el de saldos no ve: si se escapan un
+  // cargo y un abono del mismo importe, el saldo cuadra igual y antes eso se
+  // importaba sin decir nada.
   // Si el usuario no confirma, el documento se descarta junto con la extracción:
   // solo persiste (como evidencia del lote) cuando la importación sucede.
-  const needsReview = extraction.balanceCheck.cuadra === false;
+  const saldosMal = extraction.balanceCheck.cuadra === false;
+  const controlesMal = extraction.controles?.cuadra === false;
+  const needsReview = saldosMal || controlesMal;
   if ((needsReview || extraction.transactions.length === 0) && !force) {
     return NextResponse.json({
       ok: false,
@@ -117,7 +127,9 @@ export async function POST(req: Request, { params }: Params) {
       message:
         extraction.transactions.length === 0
           ? "No se detectaron movimientos. Revisa el archivo."
-          : "La validación de saldos no cuadró. Revisa los movimientos y vuelve a enviar con confirmación.",
+          : controlesMal
+            ? "Los movimientos extraídos no coinciden con los totales que declara el banco. Revísalos y vuelve a enviar con confirmación."
+            : "La validación de saldos no cuadró. Revisa los movimientos y vuelve a enviar con confirmación.",
     }, { status: 200 });
   }
 
@@ -134,7 +146,12 @@ export async function POST(req: Request, { params }: Params) {
     // Evidencia de underwriting: el documento original y si su cuadre pasó.
     // cuadro=false ⇒ el usuario forzó la importación pese al descuadre.
     archivo: { bytes: buf, nombre: file.name, mime: mediaType },
-    cuadro: extraction.balanceCheck.cuadra ?? null,
+    // Cuadró de verdad = pasaron los dos candados que se pudieron correr. Un
+    // false de cualquiera manda: es evidencia de underwriting, no un adorno.
+    cuadro:
+      saldosMal || controlesMal
+        ? false
+        : (extraction.balanceCheck.cuadra ?? extraction.controles?.cuadra ?? null),
   });
 
   return NextResponse.json({
@@ -148,6 +165,7 @@ export async function POST(req: Request, { params }: Params) {
     descartadas: [],
     detectedBank: extraction.banco,
     balanceCheck: extraction.balanceCheck,
+    controles: extraction.controles,
     warnings: extraction.warnings,
     message: `${imported} movimiento(s) importados${skipped > 0 ? `, ${skipped} omitido(s) por parecer duplicados` : ""}.`,
   });

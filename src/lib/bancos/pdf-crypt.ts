@@ -31,11 +31,11 @@ export function pdfEstaProtegido(buf: Buffer): boolean {
   return buf.includes("/Encrypt");
 }
 
-type QpdfRun = { code: number; out: Buffer | null; stderr: string };
+export type QpdfRun = { code: number; out: Buffer | null; stderr: string };
 
 /** Ejecuta el CLI de qpdf (WASM) sobre un buffer, en un FS virtual efímero.
  *  Cada llamada instancia un módulo nuevo — callMain solo corre una vez. */
-async function runQpdf(args: string[], input: Buffer): Promise<QpdfRun> {
+export async function runQpdf(args: string[], input: Buffer): Promise<QpdfRun> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const createModule: any = req("@jspawn/qpdf-wasm/qpdf.js");
   let stderr = "";
