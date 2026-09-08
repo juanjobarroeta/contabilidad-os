@@ -9,17 +9,38 @@
 // evidencia del lote es el desencriptado, para que siempre pueda abrirse.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
-import path from "node:path";
 
-// Resolución desde la raíz del proyecto: el paquete va en serverExternalPackages
-// (no lo empaqueta webpack), así que node_modules está disponible en runtime.
-const req = createRequire(path.join(process.cwd(), "package.json"));
+// CÓMO SE CARGA EL PAQUETE, Y POR QUÉ ASÍ.
+//
+// Esto era `createRequire(path.join(process.cwd(), "package.json"))`, y en
+// producción reventaba con «TypeError: e is not a function» — `e` es el propio
+// `req` minificado: en el bundle del servidor de Next, `createRequire` no
+// devuelve una función utilizable, así que la primera llamada `req(...)` moría.
+// Nadie lo notó durante meses porque este archivo SÓLO corría con PDFs
+// protegidos con contraseña; el día que el corte por páginas lo puso en cada
+// subida, salió a la primera.
+//
+// El `require` pelón, en cambio, está probado en producción: es lo que usa
+// `fiscal-kb/pdf.ts` para pdf-parse, y es lo que hizo funcionar la lectura de
+// páginas de este mismo flujo mientras qpdf fallaba. Los dos paquetes están en
+// `serverExternalPackages`, así que webpack no los empaqueta y el require llega
+// intacto a Node.
+//
+// Va DENTRO de las funciones a propósito: evaluarlo al cargar el módulo mete a
+// pdfjs/emscripten en el paso de build de Next.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function requerir(spec: string): any {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require(spec);
+}
 
 let wasmBytes: Buffer | null = null;
 function getWasm(): Buffer {
-  if (!wasmBytes) wasmBytes = readFileSync(req.resolve("@jspawn/qpdf-wasm/qpdf.wasm"));
+  if (!wasmBytes) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    wasmBytes = readFileSync(require.resolve("@jspawn/qpdf-wasm/qpdf.wasm"));
+  }
   return wasmBytes;
 }
 
@@ -53,7 +74,7 @@ async function correrQpdf(args: string[], input: Buffer): Promise<QpdfRun> {
   // lo que reventó en producción cuando este camino, antes reservado a los PDFs
   // con contraseña, pasó a correr en CADA subida.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const mod0: any = req("@jspawn/qpdf-wasm/qpdf.js");
+  const mod0: any = requerir("@jspawn/qpdf-wasm/qpdf.js");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const createModule: any = typeof mod0 === "function" ? mod0 : mod0?.default;
   if (typeof createModule !== "function") {
