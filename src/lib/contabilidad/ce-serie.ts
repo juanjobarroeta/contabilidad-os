@@ -89,6 +89,10 @@ export async function guardarBalanzaMes(companyId: string, b: BalanzaMensual): P
 export interface ImportarSerieResult {
   periodos: { anio: number; mes: number; filas: number; accion: "importado" | "ya estaba" | "sin documento" }[];
   importados: number;
+  /** Registros de CE que Syntage tiene para la entidad (de cualquier tipo). */
+  registros: number;
+  /** De ésos, cuántos son balanzas (fileType "B") — lo único importable. */
+  balanzas: number;
 }
 
 /**
@@ -110,6 +114,10 @@ export async function importarSerieBalanzasSyntage(
 
   const records = await client.getEntityElectronicAccounting(entity.id);
   const balanzas = records.filter((r) => String(r.fileType ?? "") === "B");
+  // CERO registros no es un fallo: hay empresas que NUNCA han presentado
+  // contabilidad electrónica ante el SAT (las de ingresos bajo el umbral están
+  // relevadas de enviarla). Distinguirlo de «no lo hemos intentado» es lo que
+  // permite decirlo en pantalla sin mentir.
 
   // DESC por createdAt: el primero de cada período es el vigente.
   const porPeriodo = new Map<string, (typeof balanzas)[number]>();
@@ -125,7 +133,12 @@ export async function importarSerieBalanzasSyntage(
     ).map((g) => `${g.anio}-${g.mes}`),
   );
 
-  const result: ImportarSerieResult = { periodos: [], importados: 0 };
+  const result: ImportarSerieResult = {
+    periodos: [],
+    importados: 0,
+    registros: records.length,
+    balanzas: balanzas.length,
+  };
   const ordenados = [...porPeriodo.entries()].sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }));
   for (const [k, rec] of ordenados) {
     const { anio, mes } = periodoDe(rec);

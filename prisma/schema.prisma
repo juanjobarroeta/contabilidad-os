@@ -169,6 +169,13 @@ model Company {
   // botón manual ("Traer de Syntage automáticamente") es el único forzado de
   // re-importación y puede re-fijar esta marca.
   ceBootstrapAt DateTime?
+  /// Última vez que se consultó la SERIE de balanzas presentadas contra
+  /// Syntage, y cuántos registros de CE tenía la entidad en ese momento.
+  /// Distingue «el SAT no tiene CE de esta empresa» (hay empresas relevadas de
+  /// enviarla) de «no lo hemos mirado» — que en pantalla son cosas muy
+  /// distintas y antes se veían igual: un cero mudo.
+  cePresentadaRevisadaEn DateTime?
+  cePresentadaRegistros  Int?
 
   // Selected subscription plan (UI/trial only for now — no billing yet):
   // "BASICO" | "PROFESIONAL" | "DESPACHO".

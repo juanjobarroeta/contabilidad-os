@@ -42,6 +42,13 @@ function grupoDe(numCta: string): "activo" | "pasivo" | "capital" | "resultados"
 
 export function CePresentadoPanel({ companyId }: { companyId: string }) {
   const [periodos, setPeriodos] = useState<Periodo[]>([]);
+  // Por qué no hay balanzas: el plan, la fecha de la última consulta y cuántos
+  // registros tenía el SAT entonces.
+  const [revision, setRevision] = useState<{
+    tier: string | null;
+    revisadaEn: string | null;
+    registros: number | null;
+  } | null>(null);
   const [sel, setSel] = useState<Periodo | null>(null);
   const [cuentas, setCuentas] = useState<CuentaMes[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,6 +59,7 @@ export function CePresentadoPanel({ companyId }: { companyId: string }) {
       const res = await fetch(`/api/contabilidad/ce-serie?companyId=${companyId}&periodos=1`);
       const data = res.ok ? await res.json() : { periodos: [] };
       setPeriodos(data.periodos);
+      setRevision(data.revision ?? null);
       setSel(data.periodos.at(-1) ?? null);
       if (data.periodos.length === 0) setLoading(false);
     })();
@@ -80,13 +88,21 @@ export function CePresentadoPanel({ companyId }: { companyId: string }) {
   }, [cuentas]);
 
   if (periodos.length === 0 && !loading) {
-    return (
-      <p className="text-sm text-cos-ink-soft">
-        Aún no hay balanzas presentadas al SAT en el expediente de esta empresa.
-        Llegan solas con la sincronización SAT (serie de Contabilidad Electrónica);
-        cuando existan, aquí se compara lo declarado contra lo derivado.
-      </p>
-    );
+    // Tres vacíos MUY distintos, y antes se veían iguales: el plan no lo trae,
+    // el SAT no tiene nada de esta empresa, o todavía no lo hemos consultado.
+    // Decir «llegan solas» cuando nunca van a llegar es prometer en falso.
+    const fecha = revision?.revisadaEn
+      ? new Date(revision.revisadaEn).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })
+      : null;
+    const texto =
+      revision?.tier === "ASISTENTE"
+        ? "Tu plan no incluye la descarga automática de la contabilidad electrónica presentada al SAT. Puedes importar el XML de la balanza a mano en Mi Empresa."
+        : revision?.revisadaEn && (revision.registros ?? 0) === 0
+          ? `El SAT no tiene contabilidad electrónica presentada de esta empresa (consultado el ${fecha}). Hay contribuyentes relevados de enviarla: si tú sí la presentas, revisa que sea el mismo RFC.`
+          : revision?.revisadaEn
+            ? `Se consultó el ${fecha} y el SAT reporta ${revision.registros} archivo(s) de contabilidad electrónica, pero ninguna balanza importable todavía.`
+            : "Aún no se consulta la contabilidad electrónica presentada de esta empresa; llega con la próxima sincronización con el SAT.";
+    return <p className="text-sm text-cos-ink-soft">{texto}</p>;
   }
 
   return (
