@@ -475,10 +475,22 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
       pdfPassRef.current = password; // funcionó (o no hizo falta): recordar para la bolsa
       if (res.ok && data?.needsReview) {
         const n = data?.extraction?.transactions?.length ?? 0;
+        // El servidor YA calculó por qué no cuadra, y con números: «El banco
+        // declara 126 retiros y se extrajeron 119: faltan 7». Aquí había un
+        // texto fijo que hablaba de «saldos» y de «posible página faltante»
+        // aunque el problema fuera otro — el diagnóstico exacto se calculaba y
+        // se tiraba, y el usuario decidía a ciegas si importar.
+        const motivos: string[] = Array.isArray(data?.extraction?.warnings)
+          ? data.extraction.warnings
+          : [];
+        const detalle = motivos.length > 0
+          ? motivos.map((m: string) => `• ${m}`).join("\n")
+          : "Los saldos del estado no cuadran con la suma de los movimientos.";
         if (
           n > 0 &&
           confirm(
-            `Se detectaron ${n} movimientos pero los saldos del estado no cuadran con la suma (posible página faltante o lectura imperfecta). ¿Importar de todos modos?`
+            `${file.name}\n\nSe extrajeron ${n} movimientos, pero la revisión no cuadra:\n\n${detalle}\n\n` +
+            `Importar de todos modos deja el periodo con esas diferencias. ¿Continuar?`
           )
         ) {
           ({ data } = await enviar("?force=1"));
