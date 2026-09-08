@@ -60,7 +60,12 @@ export interface SyncResult {
    */
   ceBootstrap?: { importado: boolean } | null;
   /** Balanzas presentadas importadas a CeBalanzaMes en esta corrida. */
-  cePresentadas?: { importados: number } | null;
+  cePresentadas?: {
+    importados: number;
+    /** Registros de CE que Syntage tiene (0 = el SAT no tiene CE de esta empresa). */
+    registros: number;
+    balanzas: number;
+  } | null;
   error?: string;
 }
 
@@ -373,11 +378,39 @@ export async function syncCompanyComplianceSyntage(
   // Syntage extraía la CE y la pantalla seguía en 0 para siempre. Idempotente
   // (los períodos ya guardados se saltan sin descarga) y aislado: su fallo no
   // rompe opinión/CSF.
-  let cePresentadas: { importados: number } | null = null;
+  let cePresentadas: { importados: number; registros: number; balanzas: number } | null = null;
   if (planIncluyeSyntage(company.tier)) {
     try {
       const serie = await importarSerieBalanzasSyntage(companyId, {}, client);
-      if (serie.importados > 0) cePresentadas = { importados: serie.importados };
+      cePresentadas = {
+        importados: serie.importados,
+        registros: serie.registros,
+        balanzas: serie.balanzas,
+      };
+      // Rastro de la consulta: es lo que permite que la pantalla diga «el SAT
+      // no tiene CE de esta empresa» en vez de un cero mudo que se lee como
+      // «algo falló».
+      await prisma.company.update({
+        where: { id: companyId },
+        data: { cePresentadaRevisadaEn: new Date(), cePresentadaRegistros: serie.registros },
+      });
+      // El cero TAMBIÉN se dice. Reportar sólo cuando importó algo dejaba
+      // indistinguibles «el SAT no tiene CE de esta empresa» y «nunca corrió»:
+      // el mismo silencio que ya nos costó caro en el arranque de la CE (69
+      // archivos en Syntage y apertura en cero, sin una línea que lo dijera).
+      if (serie.importados === 0) {
+        const motivo =
+          serie.registros === 0
+            ? "Syntage no tiene registros de CE para esta empresa (no la ha presentado al SAT)"
+            : serie.balanzas === 0
+              ? `${serie.registros} registro(s) de CE pero ninguna balanza (fileType B)`
+              : "todas las balanzas ya estaban guardadas";
+        console.log(`[ce-serie] ${companyId} (${company.rfc}): sin importar — ${motivo}`);
+      } else {
+        console.log(
+          `[ce-serie] ${companyId} (${company.rfc}): ${serie.importados} balanza(s) importadas de ${serie.balanzas}`,
+        );
+      }
     } catch (e) {
       console.error(`[ce-serie] ${companyId} (${company.rfc}): ${e instanceof Error ? e.message : String(e)}`);
     }

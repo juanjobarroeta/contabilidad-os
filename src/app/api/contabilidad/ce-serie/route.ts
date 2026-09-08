@@ -24,12 +24,27 @@ export const GET = withAuthz(async (req: Request) => {
   // ?periodos=1 — los períodos PRESENTADOS (para el selector del panel: sólo
   // se puede elegir lo que existe, no un calendario abstracto).
   if (searchParams.get("periodos") === "1") {
-    const periodos = await prisma.ceBalanzaMes.groupBy({
-      by: ["anio", "mes"],
-      where: { companyId },
-      orderBy: [{ anio: "asc" }, { mes: "asc" }],
+    const [periodos, empresa] = await Promise.all([
+      prisma.ceBalanzaMes.groupBy({
+        by: ["anio", "mes"],
+        where: { companyId },
+        orderBy: [{ anio: "asc" }, { mes: "asc" }],
+      }),
+      prisma.company.findUnique({
+        where: { id: companyId },
+        select: { tier: true, cePresentadaRevisadaEn: true, cePresentadaRegistros: true },
+      }),
+    ]);
+    return NextResponse.json({
+      periodos: periodos.map((p) => ({ anio: p.anio, mes: p.mes })),
+      // Por qué la lista está vacía: sin esto, «el SAT no tiene CE de esta
+      // empresa» y «no lo hemos consultado» se ven idénticos.
+      revision: {
+        tier: empresa?.tier ?? null,
+        revisadaEn: empresa?.cePresentadaRevisadaEn ?? null,
+        registros: empresa?.cePresentadaRegistros ?? null,
+      },
     });
-    return NextResponse.json({ periodos: periodos.map((p) => ({ anio: p.anio, mes: p.mes })) });
   }
 
   // ?anio=&mes= — el estado del período: todas las HOJAS con sus cuatro
