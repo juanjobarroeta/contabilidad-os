@@ -56,6 +56,7 @@ export const CLAVES_MOTOR = [
   "ANTICIPOS_PACIENTES",
   "CAJA",
   "BANCOS",
+  "FONDOS_EN_TRANSITO",
   "CLIENTES",
 ] as const;
 
@@ -90,7 +91,8 @@ export const MAPA_DEFAULT: Record<ClaveMotor, DefinicionClave> = {
   INVENTARIO_FARMACIA: { clave: "INVENTARIO_FARMACIA", descripcion: "Inventario de farmacia", cuentaSAT: "115.01", tipo: "ACTIVO" },
   ANTICIPOS_PACIENTES: { clave: "ANTICIPOS_PACIENTES", descripcion: "Depósitos y anticipos de pacientes", cuentaSAT: "206.01", tipo: "PASIVO" },
   CAJA: { clave: "CAJA", descripcion: "Caja (depósitos en efectivo)", cuentaSAT: "101.01", tipo: "ACTIVO" },
-  BANCOS: { clave: "BANCOS", descripcion: "Bancos (depósitos por transferencia, tarjeta o cheque)", cuentaSAT: "102.01", tipo: "ACTIVO" },
+  BANCOS: { clave: "BANCOS", descripcion: "Bancos", cuentaSAT: "102.01", tipo: "ACTIVO" },
+  FONDOS_EN_TRANSITO: { clave: "FONDOS_EN_TRANSITO", descripcion: "Cobros en tránsito (tarjeta, transferencia o cheque que el banco todavía no deposita)", cuentaSAT: "107.05", tipo: "ACTIVO" },
   CLIENTES: { clave: "CLIENTES", descripcion: "Clientes (cuenta por cobrar del paciente o pagador)", cuentaSAT: "105.01", tipo: "ACTIVO" },
 };
 

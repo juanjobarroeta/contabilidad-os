@@ -167,10 +167,11 @@ describe("depósitos", () => {
     ...over,
   });
 
-  it("RECIBIDO: efectivo a CAJA, lo demás a BANCOS, contra ANTICIPOS_PACIENTES", () => {
+  it("RECIBIDO: efectivo a CAJA, lo demás a FONDOS_EN_TRANSITO, contra ANTICIPOS_PACIENTES", () => {
     expect(planesDeposito(dep())).toMatchObject([{ referenciaTipo: TIPO_ASIENTO.DEPOSITO_RECIBIDO, cargo: "CAJA", abono: "ANTICIPOS_PACIENTES", monto: 5000 }]);
-    expect(planesDeposito(dep({ formaPago: "TARJETA" }))[0].cargo).toBe("BANCOS");
-    expect(planesDeposito(dep({ formaPago: "TRANSFERENCIA" }))[0].cargo).toBe("BANCOS");
+    expect(planesDeposito(dep({ formaPago: "TARJETA" }))[0].cargo).toBe("FONDOS_EN_TRANSITO");
+    expect(planesDeposito(dep({ formaPago: "TRANSFERENCIA" }))[0].cargo).toBe("FONDOS_EN_TRANSITO");
+    expect(planesDeposito(dep({ formaPago: "CHEQUE" }))[0].cargo).toBe("FONDOS_EN_TRANSITO");
   });
 
   it("APLICADO / DEVUELTO traen el recibido y su etapa, cada una con su fecha", () => {
@@ -180,7 +181,7 @@ describe("depósitos", () => {
       [TIPO_ASIENTO.DEPOSITO_APLICADO, "ANTICIPOS_PACIENTES", "CLIENTES", "2026-10-03T12:00:00.000Z"],
     ]);
     const devuelto = planesDeposito(dep({ estado: "DEVUELTO", devueltoAt: F("2026-09-06T12:00:00Z"), formaPago: "CHEQUE" }));
-    expect(devuelto[1]).toMatchObject({ referenciaTipo: TIPO_ASIENTO.DEPOSITO_DEVUELTO, cargo: "ANTICIPOS_PACIENTES", abono: "BANCOS" });
+    expect(devuelto[1]).toMatchObject({ referenciaTipo: TIPO_ASIENTO.DEPOSITO_DEVUELTO, cargo: "ANTICIPOS_PACIENTES", abono: "FONDOS_EN_TRANSITO" });
   });
 
   it("con rango sólo las etapas del mes; CANCELADO sólo se reversa cuando se pide", () => {
@@ -265,7 +266,7 @@ describe("mes: previewMes() y asentarMes()", () => {
     const antes = await previewMes(comoDb(db), "c1", 2026, 9);
     expect(antes.activa).toBe(true);
     expect(antes.asientos.map((a) => [a.referenciaTipo, a.monto, a.asentado, a.cargo.codigo, a.abono.codigo])).toEqual([
-      ["HOSP_DEPOSITO_RECIBIDO", 3000, false, "102.01", "206.01"],
+      ["HOSP_DEPOSITO_RECIBIDO", 3000, false, "107.05", "206.01"],
       ["HOSP_FARMACIA_SALIDA", 200, false, "501.01", "115.01"],
       ["HOSP_HONORARIOS_RET_ISR", 1000, false, "205.06", "216.04"],
     ]);

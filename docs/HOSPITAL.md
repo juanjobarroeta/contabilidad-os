@@ -595,7 +595,7 @@ GET  /api/hospital/contabilidad/mapa?companyId= → { claves: [{ clave, descripc
      · claves del motor: INGRESO_HOSPITALIZACION (401.01), INGRESO_QUIROFANO (401.01), INGRESO_URGENCIAS, INGRESO_ESTUDIOS, INGRESO_FARMACIA_16, INGRESO_FARMACIA_0 (401.02),
        INGRESO_MATERIAL, INGRESO_OTROS, HONORARIOS_POR_CUENTA_DE_TERCEROS (205.06 acreedores diversos: médicos), RETENCION_ISR_HONORARIOS (216.04),
        (INGRESO_FARMACIA_0 usa 401.04 «gravados al 0 %»; 401.02 es «tasa general de contado»)
-       RETENCION_IVA_HONORARIOS (216.10), COSTO_FARMACIA (501.01), INVENTARIO_FARMACIA (115.01), ANTICIPOS_PACIENTES (206.01), CAJA (101.01), BANCOS (102.01), CLIENTES (105.01)
+       RETENCION_IVA_HONORARIOS (216.10), COSTO_FARMACIA (501.01), INVENTARIO_FARMACIA (115.01), ANTICIPOS_PACIENTES (206.01), CAJA (101.01), BANCOS (102.01), FONDOS_EN_TRANSITO (107.05), CLIENTES (105.01)
 PUT  /api/hospital/contabilidad/mapa { cuentas: { <clave>: { cuentaSAT?, subcuenta? } | null }, activa? } → guarda en HospConfig.cuentasContables (subcuenta = cuenta concreta
        del plan → también PostingCuentaOverride hospital:<clave>); `activa` enciende/apaga contabilidadActiva
 GET  /api/hospital/contabilidad/preview?companyId=&anio=&mes= → { piernasCfdi: [{ invoiceId, uuid, total, piernas: [{ clave, cuenta, monto }] }],
@@ -614,8 +614,10 @@ Motor: `src/lib/contabilidad/hospital.ts` (patrón taller.ts) parte el ingreso d
 `ivaContexto`; los honorarios facturados por el hospital van a HONORARIOS_POR_CUENTA_DE_TERCEROS (pasivo), no a ingreso. Fuente HOSPITAL
 (`src/lib/accounting/postings.ts`, postBalancedEntry): salida de farmacia a un episodio = COSTO_FARMACIA / INVENTARIO_FARMACIA al costo del lote;
 alta del episodio = retenciones de ISR 10 % e IVA 2/3 de los honorarios de cada médico persona física con RFC, sólo cuando el hospital es persona moral
-(HONORARIOS_POR_CUENTA_DE_TERCEROS contra 216.04/216.10; el saldo del pasivo es lo neto a pagar); depósito RECIBIDO = CAJA/BANCOS contra ANTICIPOS_PACIENTES; APLICADO = ANTICIPOS_PACIENTES contra CLIENTES;
-DEVUELTO = al revés. Lo que ya asentó (asientoAt) no se repite; unpostMonth del hub conserva la fuente HOSPITAL.
+(HONORARIOS_POR_CUENTA_DE_TERCEROS contra 216.04/216.10; el saldo del pasivo es lo neto a pagar); depósito RECIBIDO = CAJA (efectivo) o FONDOS_EN_TRANSITO (tarjeta, transferencia, cheque) contra ANTICIPOS_PACIENTES;
+APLICADO = ANTICIPOS_PACIENTES contra CLIENTES; DEVUELTO = al revés. El módulo NUNCA carga BANCOS: el dinero llega al banco días
+después (el adquirente liquida en lote y neto de comisión) y quien baja FONDOS_EN_TRANSITO a BANCOS es el movimiento bancario
+conciliado; si el cobro entrara directo a BANCOS, la misma cantidad se cargaría dos veces. Lo que ya asentó (asientoAt) no se repite; unpostMonth del hub conserva la fuente HOSPITAL.
 
 ### P4 expedientes históricos desde CFDIs y convenio 360
 
