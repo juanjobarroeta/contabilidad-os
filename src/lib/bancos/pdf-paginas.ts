@@ -13,10 +13,21 @@
 // acerca al techo, y como los lotes son independientes corren EN PARALELO: el
 // tiempo total es el del lote más lento, no la suma.
 //
-// Se usa qpdf (WASM), el mismo que ya desencripta los PDFs protegidos — sin
-// binarios nativos y sin dependencia nueva.
+// EL CORTE LO HACE pdf-lib (JS puro), no qpdf. Se intentó primero con qpdf
+// —ya estaba para desencriptar— y en el servidor de producción su módulo WASM
+// nunca arrancó: «falló el arranque del módulo WASM: f(...) is not a function».
+// El paquete carga perfecto en Node suelto; lo que falla es el `createRequire`
+// dentro del bundle de Next. Resultado real: TODOS los estados largos se leían
+// de una sola pasada y perdían movimientos (Banorte agosto: 247 extraídos de
+// 265, con $246,740 de depósitos y $408,666 de retiros faltantes) — y el
+// usuario sólo veía «no se pudo partir el PDF por páginas».
+//
+// pdf-lib no instancia WASM ni depende de cómo empaquete Next: es JS puro que
+// lee el PDF y escribe otro con las páginas pedidas. qpdf se queda donde sí
+// hace falta y no tiene sustituto: desencriptar los PDFs con contraseña.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { PDFDocument } from "pdf-lib";
 import { runQpdf } from "./pdf-crypt";
 
 /** Páginas por lote. Un estado bancario trae ~10-12 movimientos por página, así
@@ -65,17 +76,37 @@ export function rangosDeLotes(paginas: number, porLote = PAGINAS_POR_LOTE): [num
   return rangos;
 }
 
-/** Extrae un rango de páginas como PDF independiente. null si qpdf falla. */
+/**
+ * Extrae un rango de páginas (1-based, inclusivo) como PDF independiente.
+ *
+ * NUNCA lanza: el corte es una OPTIMIZACIÓN. Si falla se devuelve null y el
+ * llamador manda el documento completo, como antes — peor extracción, pero
+ * nunca una caída. Con pdf-lib primero y qpdf de respaldo: son dos motores
+ * distintos y que uno tropiece ya no deja al usuario sin lotes.
+ */
 export async function recortarPaginas(
   buf: Buffer,
   desde: number,
   hasta: number,
 ): Promise<Buffer | null> {
-  // NUNCA lanza. El corte es una OPTIMIZACIÓN, no un requisito: si qpdf no está
-  // disponible se extrae el documento completo, como antes. Que esto tirara una
-  // excepción convirtió una mejora en una caída — el camino de qpdf sólo se
-  // había ejercitado con PDFs protegidos (casi nunca), y al ponerlo en cada
-  // subida su primer tropiezo llegó al usuario como «e is not a function».
+  try {
+    // `ignoreEncryption`: un estado protegido llega aquí YA desencriptado por
+    // qpdf, pero algunos PDFs conservan el diccionario /Encrypt vacío y pdf-lib
+    // se niega a abrirlos sin esto.
+    const src = await PDFDocument.load(new Uint8Array(buf), { ignoreEncryption: true });
+    const total = src.getPageCount();
+    const ini = Math.max(1, desde);
+    const fin = Math.min(hasta, total);
+    if (ini > fin) return null;
+    const out = await PDFDocument.create();
+    const indices = Array.from({ length: fin - ini + 1 }, (_, i) => ini - 1 + i);
+    const paginas = await out.copyPages(src, indices);
+    for (const pag of paginas) out.addPage(pag);
+    return Buffer.from(await out.save());
+  } catch (e) {
+    console.error(`[pdf-paginas] pdf-lib no pudo recortar ${desde}-${hasta}:`, e);
+  }
+  // Respaldo: qpdf. Cuando su módulo sí arranca, hace el mismo trabajo.
   try {
     const { code, out, stderr } = await runQpdf(
       ["in.pdf", "--pages", ".", `${desde}-${hasta}`, "--", "out.pdf"],

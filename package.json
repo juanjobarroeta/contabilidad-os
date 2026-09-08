@@ -68,6 +68,7 @@
     "mcp-handler": "^2.1.0",
     "next": "^15.2.4",
     "next-auth": "^5.0.0-beta.25",
+    "pdf-lib": "^1.17.1",
     "pdf-parse": "^2.4.5",
     "prisma": "^6.5.0",
     "qrcode": "^1.5.4",
