@@ -75,7 +75,12 @@ jobs:
           [ -n "${{ github.event.inputs.anexo5 }}" ] && ARGS="$ARGS --anexo5 ${{ github.event.inputs.anexo5 }}"
           [ -n "${{ github.event.inputs.anexo8 }}" ] && ARGS="$ARGS --anexo8 ${{ github.event.inputs.anexo8 }}"
           [ -n "${{ github.event.inputs.lif }}" ] && ARGS="$ARGS --lif ${{ github.event.inputs.lif }}"
+          set +e
           npm run fiscal:valores -- $ARGS 2>&1 | tee salida.txt
+          code=${PIPESTATUS[0]}
+          set -e
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "Código de salida del generador: $code"
       - name: Pruebas de las tablas generadas
         run: npx vitest run src/lib/fiscal/multas.test.ts src/lib/fiscal/recargos.test.ts src/lib/fiscal/valores.test.ts src/lib/fiscal/fuentes
       - name: Abrir PR si cambió algo
@@ -98,8 +103,14 @@ jobs:
             ```
           add-paths: |
             src/lib/fiscal/datos/**
-      - name: Issue si las tarifas del Anexo 8 no coinciden con tarifas.ts
-        if: steps.gen.outcome == 'failure'
+      # El título del issue AFIRMA UN HECHO, así que tiene que ser el hecho que
+      # de verdad ocurrió. Código 1 = se cotejó contra el Anexo y no coincide.
+      # Cualquier otro = no se pudo cotejar (red, fuente caída, runner ausente):
+      # ahí no se sabe nada de las tarifas y decir lo contrario es inventar.
+      # Pasó: un `ts-node: not found` se publicó como «el Anexo 8 no coincide
+      # con tarifas.ts» (#915) cuando las tarifas estaban perfectas.
+      - name: Issue — las tarifas NO coinciden (cotejo hecho)
+        if: steps.gen.outputs.code == '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -107,6 +118,19 @@ jobs:
           T="Tarifas ISR: el Anexo 8 RMF ${{ steps.ej.outputs.ejercicio }} no coincide con tarifas.ts"
           existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$T\" in:title" --json number --jq 'length')
           if [ "$existing" = "0" ]; then
-            gh issue create --repo "$GITHUB_REPOSITORY" --title "$T" --body "$(printf 'El generador de valores fiscales falló en modo estricto (tarifas o descarga). Salida:\n\n```\n%s\n```\n\nCorrige src/lib/fiscal/tarifas.ts por PR contra el Anexo 8 (o pasa la URL explícita al workflow).' "$(cat salida.txt 2>/dev/null | tail -40)")"
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$T" --body "$(printf 'El cotejo contra el Anexo 8 CORRIÓ y encontró diferencias. Salida:\n\n```\n%s\n```\n\nCorrige src/lib/fiscal/tarifas.ts por PR contra el Anexo 8.' "$(cat salida.txt 2>/dev/null | tail -40)")"
+          fi
+          exit 1
+
+      - name: Issue — no se pudo cotejar
+        if: steps.gen.outputs.code != '0' && steps.gen.outputs.code != '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          T="Valores fiscales ${{ steps.ej.outputs.ejercicio }}: el cotejo no pudo correr"
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$T\" in:title" --json number --jq 'length')
+          if [ "$existing" = "0" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$T" --body "$(printf 'El generador terminó con código %s ANTES de poder comparar nada, así que **esto no dice nada sobre si las tarifas son correctas**: dice que la verificación no corrió. Salida:\n\n```\n%s\n```' "${{ steps.gen.outputs.code }}" "$(cat salida.txt 2>/dev/null | tail -40)")"
           fi
           exit 1
