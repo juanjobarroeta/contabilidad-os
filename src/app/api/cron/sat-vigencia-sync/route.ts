@@ -198,7 +198,12 @@ async function handle(req: Request) {
   // `cancelEstadoSat`; con eso el backlog es finito, se drena solo y después no
   // cuesta nada. Un comprobante que el SAT ya dio por cancelado no vuelve a
   // estar vigente, así que no hay nada que re-preguntar.
-  const cupoArchivo = Math.max(10, Math.floor(limit / 5));
+  // El archivo se lleva lo que el barrido normal NO usó. En estado de régimen
+  // el barrido está al día (la corrida real: 80 candidatas de un `limit` de
+  // 400), así que casi todo el presupuesto queda libre y el archivo se drena en
+  // horas y no en días. Cuando el barrido normal tenga trabajo, él manda: es lo
+  // que puede cambiar hoy, mientras que el archivo es una deuda que no crece.
+  const cupoArchivo = Math.max(10, limit - invoices.length);
   const canceladasSinVerificar = await prisma.invoice.findMany({
     where: {
       ...(onlyCompanyId ? { companyId: onlyCompanyId } : {}),
@@ -398,7 +403,12 @@ async function handle(req: Request) {
     checked,
     skipped,
     pendientes,
-    completado: pendientes === 0,
+    // El scheduler usa esta bandera para decidir cuándo volver: con `true` se va
+    // a su cadencia lenta (2 h). Mirar sólo el barrido normal la hacía mentir —
+    // decía «terminé» con miles de canceladas sin cotejar, y el archivo se
+    // drenaba a 100 cada 2 h (días) en vez de quedarse en el piso de 5 min
+    // hasta acabar. Aquí queda trabajo mientras quede CUALQUIERA de los dos.
+    completado: pendientes === 0 && archivoPendiente === 0,
     desde: desde.toISOString().slice(0, 10),
     recheckDays,
     cancelados: cancelados.map((c) => c.uuid),
@@ -417,7 +427,9 @@ async function handle(req: Request) {
     nota:
       pendientes === 0
         ? `Barrido completo del periodo desde ${desde.toISOString().slice(0, 10)}. Se re-verifica al cumplir ${recheckDays} días.`
-        : `Faltan ${pendientes} por verificar desde ${desde.toISOString().slice(0, 10)}. Re-ejecuta hasta pendientes = 0.`,
+        : archivoPendiente > 0 && pendientes === 0
+          ? `Barrido del periodo completo; faltan ${archivoPendiente} canceladas por cotejar con el SAT (una vez cada una).`
+          : `Faltan ${pendientes} por verificar desde ${desde.toISOString().slice(0, 10)}. Re-ejecuta hasta pendientes = 0.`,
   };
   console.log(
     "[cron/sat-vigencia-sync] done:",
