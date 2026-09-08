@@ -78,3 +78,52 @@ describe("duplicadosExactos — dos cobros iguales el mismo día pueden ser real
     ).toEqual([]);
   });
 });
+
+// Resumen tal cual lo imprime Banorte (ENLACE NEGOCIOS, agosto 2026, la misma
+// empresa que el estado de BBVA de arriba pero en otro banco).
+const RESUMEN_BANORTE = `
+Resumen del periodo
+Saldo inicial del periodo 	$ 395,814.44
++ Total de depósitos 	$ 2,140,520.31
+- Total de retiros 	$ 2,484,241.80
++ Intereses Netos Ganados 	$ 0.00
+- Total de comisiones Cobradas / Pagadas 	$ 36,488.52
+- IVA sobre comisiones (16%) 	$ 5,838.12
+- Intereses Cobrados / Pagados 	$ 0.00
+Saldo actual 	$ 9,766.31
+Saldo disponible al día* 	$ 9,766.31
+`;
+
+describe("Banorte: comisiones e IVA van FUERA del total de retiros", () => {
+  it("los suma al declarado, porque en el detalle sí son movimientos", () => {
+    const c = leerControles(RESUMEN_BANORTE);
+    expect(c.fuente).toBe("banorte");
+    expect(c.depositos?.total).toBe(2_140_520.31);
+    // 2,484,241.80 + 36,488.52 comisiones + 5,838.12 de IVA
+    expect(c.retiros?.total).toBe(2_526_568.44);
+    expect(c.retiros?.conteo).toBeNull(); // Banorte no publica conteos
+  });
+
+  it("con los cargos completos NO hay falsa alarma", () => {
+    const movs = [
+      mov("2026-08-03", 2_140_520.31, "DEPOSITOS"),
+      mov("2026-08-03", -2_484_241.80, "RETIROS"),
+      mov("2026-08-03", -36_488.52, "COMISION"),
+      mov("2026-08-03", -5_838.12, "IVA COMISION"),
+    ];
+    const r = cotejarControles(leerControles(RESUMEN_BANORTE), movs);
+    expect(r.cuadra).toBe(true);
+    expect(r.advertencias).toEqual([]);
+  });
+
+  it("lee «Saldo inicial del periodo» y «Saldo actual» pese al $ y los tabuladores", () => {
+    expect(leerSaldos(RESUMEN_BANORTE)).toEqual({ inicial: 395_814.44, final: 9_766.31 });
+  });
+
+  it("la identidad del propio banco cierra con esos números", () => {
+    const { inicial, final } = leerSaldos(RESUMEN_BANORTE);
+    const c = leerControles(RESUMEN_BANORTE);
+    const calculado = Math.round((inicial! + c.depositos!.total - c.retiros!.total) * 100) / 100;
+    expect(calculado).toBe(final);
+  });
+});
