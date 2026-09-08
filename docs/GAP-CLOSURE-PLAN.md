@@ -62,6 +62,7 @@ Target: 2–3 weeks. No general-availability sales before this gate passes.
 | REL-001E Consumer parity | IN_PROGRESS | Inventory notifications, firm cockpit, exports, and any remaining raw deadline calculations; add an API contract test before staging |
 | REL-003A Fail-closed empty-bank state | VERIFY | Reconciliation, declaration checklist, and workbench now classify zero bank movements as `NO_DATA`; no-data periods cannot become mathematically reconciled or open the normal signing path |
 | REL-003B Intentional no-bank workflow | VERIFY | Writer-only confirmation persists timestamp, user, and a required explanation; it is revocable, rejected when movements exist, and automatically stops opening the gate if movements later arrive. UI and downstream gates label it as a human decision and never as 100% reconciliation |
+| SAT-001 Native Buzón CE evidence pilot | IN_PROGRESS | The live credential-free CE preflight passes through the full SSO bootstrap; the session-aware form contract, exact signer envelope, redacted first-signed-POST probe, route allowlist, bounded transport, non-replayable run identity, durable single-flight lease, and awaited credential-use audits are implemented. No customer credential has been transmitted. Exit requires a supervised SMP login, authenticated RFC marker, fixed-period metadata inventory, and proof of whether SAT exposes original CE XML or receipts only |
 
 Current acceptance fixture: on 2026-09-08 in `America/Mexico_City`, the default monthly period is `2026-08` and the base federal deadline is `2026-09-17`.
 

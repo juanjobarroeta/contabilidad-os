@@ -5,6 +5,8 @@ export const SAT_READ_ERROR_CODES = [
   "NOT_CONFIGURED",
   "CREDENTIALS_UNAVAILABLE",
   "ACCESS_DENIED",
+  "RUN_IN_PROGRESS",
+  "RUN_ID_REUSED",
   "AUTH_REJECTED",
   "EFIRMA_EXPIRED",
   "NEEDS_USER_ACTION",
@@ -47,6 +49,16 @@ export const SAT_READ_ERROR_POLICY: Readonly<
   ACCESS_DENIED: Object.freeze({
     message: "SAT denied access to the requested resource.",
     recovery: "USER",
+    retryable: false,
+  }),
+  RUN_IN_PROGRESS: Object.freeze({
+    message: "A native SAT retrieval is already running for this company.",
+    recovery: "RETRY",
+    retryable: true,
+  }),
+  RUN_ID_REUSED: Object.freeze({
+    message: "This native SAT pilot run identifier has already been used.",
+    recovery: "OPERATOR",
     retryable: false,
   }),
   AUTH_REJECTED: Object.freeze({

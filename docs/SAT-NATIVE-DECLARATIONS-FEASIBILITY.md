@@ -38,6 +38,30 @@ Anonymous inspection on 2026-09-07 found:
 - In both realms, selecting **e.firma** changes the page to `.cer`, `.key`, private-key password, and RFC fields. No CAPTCHA is visible and no reCAPTCHA library was detected in that view.
 - The e.firma page signs a client-side challenge and posts realm-specific hidden fields. A CAPTCHA-free screen is not a supported API and can change without notice.
 
+The CE route was refreshed anonymously on 2026-09-08. The official receipt
+entry first crosses an exact `wwwmat.sat.gob.mx/nesp/app/plogin` bridge, then a
+constrained dynamic Liberty SSO initiation, then an empty same-origin auto-POST
+to the `mat-ptsc-totp_Aviso` password/CAPTCHA realm. Its fixed **e.firma**
+transition opens the separate `fiel_Aviso` realm. Only the session-aware path
+produces a usable form: `tokenuuid` and `guid` contain the same Base64-encoded
+UUID, `credentialsRequired=CERT`, `ks=null`, and `urlApplet` is fixed to the
+SAT login application. The form signs
+`tokenuuid|RFC|portalSerial` using RSA PKCS#1 v1.5 with SHA-1 and wraps the
+signature in SAT's double-Base64 envelope. Certificate and private-key bytes
+are not POST fields. Live challenge/cookie values and response bodies are not
+retained in the fixture.
+
+The credential-free native preflight passed live on 2026-09-08. Both observed
+SAT hosts currently negotiate legacy 1024-bit DHE that Node rejects at its
+default security level. The pilot transport pins TLS 1.2 and the sole observed
+`DHE-RSA-AES256-GCM-SHA384` suite on the two exact allowlisted hostnames. Its
+OpenSSL level-one exception relaxes more than DH policy, so the transport also
+requires the exact 1024-bit DH exchange, an RSA certificate chain with at least
+2048-bit keys, CA/hostname verification, and an explicit operator
+acknowledgement stored with the run. It refuses broader cipher fallback. This
+compatibility exception remains a production risk to monitor. The successful
+public preflight still does not prove an authenticated session.
+
 Therefore, the first implementation should use e.firma and must not build a CAPTCHA solver. If the SAT later presents a CAPTCHA or OTP, the job must stop in `NEEDS_USER_ACTION` and hand the session to an authorized user. Do not outsource, bypass, or evade the challenge.
 
 The applications do not share a proven universal session. Authentication and cookies must be isolated per SAT realm. A shared login abstraction can coordinate them, but Buzón/CE and Declaraciones each need their own tested driver. A redirect into another SAT subdomain must remain inside the same ephemeral CE job and must pass a strict domain-and-route allowlist.
@@ -60,6 +84,19 @@ The native portal client is not production-ready:
 - The current SAT e.firma page uses a client-side envelope containing a realm token, RFC, certificate serial number, signature, and additional hidden fields. The existing generic `tokenValue` request model is not sufficient evidence of a complete live HTTP login.
 - No declaration-list, declaration-download, CE-list, or CE-download native adapters exist.
 
+The evidence pilot now has a separate fail-closed foundation under
+`src/lib/fiscal/cumplimiento/sat-native/`: a dated sanitized public contract,
+exact HTTPS route allowlist, manual-redirect transport with origin-isolated
+cookies and bounded bodies/timeouts, credential-free public preflight, and a
+purpose-scoped one-use signer. Before decryption, the broker requires an enabled
+worker-only policy, a fixed RFC, platform-operator identity, explicit
+metadata-only acknowledgement, active company, current e.firma mandate,
+encrypted three-field credential set, and a durable per-company lease. Start
+and terminal credential-use audits are awaited. Operator run UUIDs are retained
+append-only and cannot be replayed; lease acquisition uses database time. These
+controls are not wired to an HTTP route, cron, or the legacy session/recon
+modules.
+
 ## Recommended architecture
 
 ```text
@@ -68,7 +105,7 @@ Scheduler/API
         -> SatReadSync lease + idempotency + per-RFC lock
             -> credential vault (purpose-scoped, audited use)
             -> realm driver: Declaraciones | Buzón entry + CE redirects
-                -> one ephemeral isolated browser process per active job
+                -> one ephemeral isolated typed-HTTP session per active job
                 -> allowlisted login/query/download actions only
             -> artifact normalizer
                 -> declaration index + original PDF/XLSX when available
@@ -80,8 +117,8 @@ Scheduler/API
 Implementation rules:
 
 1. Define a provider contract before portal code: `listDeclarations`, `downloadDeclarationArtifact`, `listElectronicAccounting`, and `downloadElectronicAccountingArtifact`. Preserve Syntage and native implementations behind the same normalized output. The contract must expose `originalSubmittedXml: UNVERIFIED` until the pilot proves availability.
-2. Start with a controlled headless-browser driver because SAT performs e.firma processing in client JavaScript and uses different federation protocols per application. Replace browser steps with a typed HTTP client only after redacted HAR fixtures prove every request, cookie, redirect, and anti-CSRF field.
-3. Use one ephemeral browser context per company/job. Never persist cookies, browser profiles, decrypted keys, passwords, screenshots, or raw HAR files in production.
+2. Use the typed HTTP CE driver for the observed public SSO and e.firma contract. Keep browser automation out of the production credential path; use a supervised browser only to investigate a contract change, then reduce the finding to redacted fixtures before changing the driver. Declaraciones remains a separate realm and must earn its own contract.
+3. Use one ephemeral HTTP session per company/job. Never persist cookies, decrypted keys, passwords, signed challenges, screenshots, or raw HAR files in production, and destroy the session after every outcome.
 4. Restrict navigation to an explicit SAT domain/route allowlist. Query forms may require POST, but the driver must have no method capable of clicking or calling filing, confirmation, amendment, cancellation, or payment actions.
 5. Persist immutable artifact metadata: company, source, SAT folio/operation, return/submission type, period, presented time, status, original filename/MIME type, SHA-256, fetched time, driver version, and source URL category. Deduplicate by SAT identity, not filename.
 6. Store original documents in encrypted object storage. Keep only references and extracted fields in Postgres; the current `bytea` declaration storage should not become the long-term archive.
@@ -106,9 +143,9 @@ At a conservative ten minutes per full job, 20 workers can process about 120 job
 
 ### Railway deployment boundary
 
-Do not run Chromium inside a Next.js request handler. Create a separate Railway worker service with an asynchronous database/queue contract, pinned browser/runtime versions, bounded concurrency, and enough memory for isolated browser contexts. The existing `railway.json` starts only the Next.js server, and Playwright is currently a development dependency with no browser-install step, so the deployed service is not ready to execute this driver.
+Do not run SAT retrieval inside a Next.js request handler. Create a separate Railway worker service with an asynchronous database/queue contract, a pinned Node/OpenSSL runtime, bounded concurrency, and isolated per-job HTTP sessions. The existing `railway.json` starts only the Next.js server, so the deployed service is not ready to execute this driver.
 
-The worker must be restart-safe: claim a sync run, write checkpoints after list/download steps, and resume idempotently after a Railway restart. Keep credential values out of the queue. Load them only inside the worker from the vault, preferably into memory-backed file payloads, and destroy the browser context immediately after the job. A browser-as-a-service would send the e.firma to another vendor and would defeat part of the reason for replacing Syntage.
+The worker must be restart-safe: claim a sync run, write checkpoints after list/download steps, and resume idempotently after a Railway restart. Keep credential values out of the queue. Load them only inside the worker's purpose-scoped signer and destroy all cookies and transient form state immediately after the job. A browser-as-a-service would send the e.firma to another vendor and would defeat part of the reason for replacing Syntage.
 
 ## Security and legal gates
 
@@ -137,9 +174,27 @@ Removing Syntage has one security benefit: the application stops exporting the c
 
 Exit gate: documented request/response contract and zero unresolved sensitive data in fixtures.
 
-Current implementation boundary: `src/lib/fiscal/cumplimiento/sat-native/pilot.ts` is disabled by default, requires a separate operator policy naming one authorized RFC, and passes only a read-only metadata request to an injected future Buzón adapter. The policy can be loaded from strict worker environment variables; only the literal value `SAT_NATIVE_PILOT_ENABLED=true` enables it. The selected target is stored in ignored local operator configuration with the switch still disabled, and its RFC is deliberately absent from the native-SAT source and tracked pilot configuration. The boundary cannot carry e.firma material, browser state, cookies, artifacts, URLs, or raw portal responses. It is deliberately not wired to `getFielForCompany` or `abrirSesionSat`.
+Current implementation boundary: `pilot.ts` remains disabled by default and
+returns metadata only. `credential-broker.ts` is the sole permitted credential
+path for this spike; it deliberately does not call `getFielForCompany`.
+`routes.ts`, `transport.ts`, and the dated fixture reject every unobserved
+host, route, redirect, query parameter, method, content type, and oversized
+response. `ce-login-probe.ts` can send exactly one signed form POST, emits only
+a fixed redacted redirect classification, never follows it, and destroys the
+cookie jar. The production entry points accept no injected credential or
+transport dependencies. The
+selected RFC remains only in ignored operator configuration and the switch
+remains disabled.
 
-The remaining blocker before a supervised probe is intentional: `getFielForCompany` directly decrypts the three stored credential fields rather than using the required purpose-scoped/audited vault, while `abrirSesionSat` remains hard-disabled (`CAPTURA_LISTA = false`) and has no redacted Buzón/CE fixture contract. A live adapter must not be added until a vault-backed signer boundary, a SAT-only route allowlist, redacted fixtures, and an explicit operator-run worker launch gate exist.
+The exact client-side signing and submission contract is now reproduced and
+covered offline. The remaining blocker is the supervised first signed POST,
+followed by mapping an authenticated success marker tied to the expected RFC.
+The historical ZIONX login in
+`docs/sat-portal-captura.md` used a different RFC and realm; it is evidence,
+not proof for SMP or the current Buzón CE entry. No live SMP login has been
+attempted. Immediately before the first attempt, the operator must explicitly
+confirm transmission of that company's `.cer`, `.key`, and e.firma password
+to the allowlisted SAT login origin for the stated read-only evidence purpose.
 
 ### Stage B — provider and declarations MVP, 2–3 weeks
 
@@ -179,7 +234,7 @@ Estimated delivery: 6–10 engineering weeks plus the four-week shadow period. T
 
 The current Syntage rate card starts at MXN7,500/month for 25 unique entities and 400 extractions: MXN300 per entity at full utilization before any other product costs. That is MXN90,000/year at the minimum tier. Larger listed tiers reduce the per-entity rate but increase the annual fixed commitment.
 
-Native portal compute and storage should be lower than that at modest monthly frequency. The economic risk is engineering and permanent maintenance, not browser CPU. One SAT markup/authentication change can consume days and block every tenant, while Syntage currently absorbs that work. At 1,000 companies, size the business case from observed browser-hours and artifact volume rather than worker count: `monthly infrastructure = browser-hours × measured worker-hour cost + storage + queue/database + observability`. Add an explicit maintenance reserve of at least several engineering days per quarter in the comparison.
+Native portal compute and storage should be lower than that at modest monthly frequency. The economic risk is engineering and permanent maintenance, not HTTP CPU. One SAT markup/authentication change can consume days and block every tenant, while Syntage currently absorbs that work. At 1,000 companies, size the business case from observed worker-hours and artifact volume rather than process count: `monthly infrastructure = worker-hours × measured worker-hour cost + storage + queue/database + observability`. Add an explicit maintenance reserve of at least several engineering days per quarter in the comparison.
 
 Use this payback calculation with measured values after shadow mode:
 

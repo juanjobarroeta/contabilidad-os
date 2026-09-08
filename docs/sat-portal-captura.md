@@ -1,4 +1,12 @@
-# Captura del portal SAT — lo único que falta para reemplazar a Syntage
+# Historical SAT portal capture — evidence only
+
+> Status correction, 2026-09-08: this document records an August login for
+> ZIONX against a different SAT realm. It does not prove that SMP can log into
+> the current Buzón CE flow. Do not run `scripts/recon-sat-portal.ts`: it can
+> persist raw HAR/HTML/screenshots and transient key material. The current
+> fail-closed plan and sanitized CE contract live in
+> `docs/SAT-NATIVE-DECLARATIONS-FEASIBILITY.md` and
+> `src/lib/fiscal/cumplimiento/sat-native/`. No live SMP login has occurred.
 
 ## Recon del 2026-08-21 — el login con e.firma YA FUNCIONA (medido)
 

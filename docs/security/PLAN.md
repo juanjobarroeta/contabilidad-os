@@ -45,6 +45,15 @@ Versión web (misma info, para leer del teléfono): artifact "Plan Bóveda" en c
 
 ## Bóveda de credenciales SAT (el centro del plan)
 
+**Pilot-only progress (2026-09-08):** the native Buzón CE spike now has an
+isolated purpose-scoped broker that rejects legacy plaintext, requires a current
+per-company e.firma mandate and platform operator, writes awaited start/finish
+audit rows, records each operator run UUID append-only to prevent replay, and
+holds a database-time compare-and-set single-flight lease before decrypting.
+This narrows the evidence pilot only; it does **not** complete V-1 because the
+existing SAT/Syntage/Facturapi credential readers have not yet been migrated to
+the global vault.
+
 Gaps que cierra, todos verificados: lecturas de credenciales sin auditar (4
 puntos de descifrado, 0 filas de bitácora); pass-through de filas en claro sin
 detector; una sola llave global sin AAD (un ciphertext de la empresa A descifra
