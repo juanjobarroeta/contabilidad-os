@@ -12,7 +12,12 @@ export interface ProveedorRenapo {
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
-export const TIMEOUT_RENAPO_MS = 10_000;
+/**
+ * Los proveedores consultan el portal de RENAPO por detrás y tarda: medido
+ * contra Tláloc en producción, entre 10 y 13 s por consulta. Con 10 s el
+ * timeout disparaba antes que la respuesta. `RENAPO_TIMEOUT_MS` lo ajusta.
+ */
+export const TIMEOUT_RENAPO_MS = Number(process.env.RENAPO_TIMEOUT_MS ?? 30_000);
 
 /** `fetch` con tope de tiempo; agotado o sin red → UPSTREAM_UNAVAILABLE. */
 export async function fetchConTimeout(url: string, init: RequestInit, ms: number = TIMEOUT_RENAPO_MS, fetchImpl: FetchLike = fetch): Promise<Response> {
