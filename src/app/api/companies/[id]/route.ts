@@ -125,6 +125,20 @@ export async function PATCH(req: Request, { params }: Params) {
   // e.firma pasaba el guardado con badge verde y reventaba después en la
   // descarga masiva con un mensaje genérico.
   if (estadoFiel === "COMPLETE") {
+    const actor = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { esOperador: true },
+    });
+    if (actor?.esOperador) {
+      return NextResponse.json(
+        {
+          error:
+            "Soporte de plataforma no puede aceptar la Autorización de uso de la e.firma por el cliente.",
+          codigo: "MANDATO_REQUIERE_CLIENTE",
+        },
+        { status: 403 },
+      );
+    }
     const empresa = await prisma.company.findUnique({ where: { id: companyId }, select: { rfc: true } });
     const v = validarCredencialSat({
       cerBase64: fielCer, keyBase64: fielKey, password: fielPassword,

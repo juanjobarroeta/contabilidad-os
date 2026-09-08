@@ -186,6 +186,17 @@ transport dependencies. The
 selected RFC remains only in ignored operator configuration and the switch
 remains disabled.
 
+For credentials stored before the current mandate existed, the company
+configuration exposes a separate acceptance-only workflow. It requires the
+exact current document version, a complete encrypted e.firma triplet, and an
+effective OWNER, ADMIN, or ACCOUNTANT role. VIEWER accounts and synthetic
+platform-operator access can inspect the missing state but cannot accept on the
+customer's behalf. Acceptance is limited to an interactive web session and a
+member whose module restriction is unrestricted or includes `CONTABILIDAD`;
+satellite bearer tokens and vertical-only staff cannot submit it. The
+acceptance and its security audit are committed in one transaction without
+decrypting or replacing the credential.
+
 The exact client-side signing and submission contract is now reproduced and
 covered offline. The remaining blocker is the supervised first signed POST,
 followed by mapping an authenticated success marker tied to the expected RFC.

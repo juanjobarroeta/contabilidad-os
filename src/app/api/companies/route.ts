@@ -367,6 +367,20 @@ export async function POST(req: Request) {
   // como e.firma en el onboarding pasaba con badge verde y reventaba después
   // en la descarga masiva con un mensaje genérico.
   if (estadoFiel === "COMPLETE") {
+    const actor = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { esOperador: true },
+    });
+    if (actor?.esOperador) {
+      return NextResponse.json(
+        {
+          error:
+            "Soporte de plataforma no puede aceptar la Autorización de uso de la e.firma por el cliente.",
+          codigo: "MANDATO_REQUIERE_CLIENTE",
+        },
+        { status: 403 },
+      );
+    }
     const v = validarCredencialSat({
       cerBase64: fielCer!, keyBase64: fielKey!, password: fielPassword!,
       rfcEsperado: rfcNorm, esperado: "FIEL",

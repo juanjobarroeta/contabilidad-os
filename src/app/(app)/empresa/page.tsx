@@ -11,6 +11,7 @@ import {
   Shield, Upload, FileKey2, FileText, Sparkles, ClipboardCheck, ChevronRight,
 } from "lucide-react";
 import { errorRegistroPatronal } from "@/lib/nomina/registro-patronal";
+import { MandatoEfirmaExistente } from "@/components/legal/MandatoEfirmaExistente";
 
 type DocType = "CSF" | "TARJETA_IMSS" | "ACUSE_ANUAL" | "ACUSE_MENSUAL" | "OTRO";
 type ImportDoc = {
@@ -1273,6 +1274,13 @@ export default function EmpresaPage() {
                 <p className="font-medium mb-1">¿Qué es la e.firma?</p>
                 <p>La Firma Electrónica Avanzada (FIEL) te permite autenticarte ante el SAT para descargar todos tus CFDIs emitidos y recibidos — necesario para calcular IVA acreditable con precisión.</p>
               </div>
+            )}
+
+            {hasFiel && activeCompany && (
+              <MandatoEfirmaExistente
+                key={activeCompany.id}
+                companyId={activeCompany.id}
+              />
             )}
 
             {/* Upload fields */}

@@ -199,7 +199,8 @@ export async function getEffectiveCompanyMembership(
  * When both exist, the more permissive role wins (e.g. if you're a
  * despacho OWNER but also an explicit VIEWER on this company, you get
  * OWNER-equivalent access — being downgraded by an explicit record is
- * confusing UX).
+ * confusing UX). `membership.accessViaDespacho` preserves that effective
+ * grant for callers that also enforce direct per-module restrictions.
  *
  * Pass `req` to enable bearer-token auth for cross-origin clients.
  */
@@ -226,6 +227,7 @@ export async function requireMembership(
       companyId,
       role: "OWNER" as MemberRole,
       createdAt: new Date(),
+      accessViaDespacho: false,
     };
     return { user, membership };
   }
@@ -308,7 +310,16 @@ export async function requireMembership(
     createdAt: new Date(),
   };
 
-  return { user, membership: { ...membership, role: effectiveRole } };
+  return {
+    user,
+    membership: {
+      ...membership,
+      role: effectiveRole,
+      // A direct module restriction does not remove the broader authority
+      // independently granted by membership in the owning despacho.
+      accessViaDespacho: Boolean(despachoMember),
+    },
+  };
 }
 
 /**

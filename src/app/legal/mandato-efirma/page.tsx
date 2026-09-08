@@ -8,14 +8,15 @@ export const metadata: Metadata = {
 };
 
 /**
- * Autorización de uso de la e.firma. Se acepta POR EMPRESA cada vez que se
- * carga o reemplaza la e.firma (onboarding y Configuración → Empresa); la
- * evidencia queda en LegalAcceptance con documento MANDATO_EFIRMA.
+ * Autorización de uso de la e.firma. Se acepta POR EMPRESA al cargar o
+ * reemplazar la e.firma y, para una credencial ya almacenada, mediante una
+ * confirmación expresa separada. La evidencia queda en LegalAcceptance con
+ * documento MANDATO_EFIRMA.
  *
  * Versión vigente: src/lib/legal/documentos.ts (MANDATO_EFIRMA.version). Al
  * cambiar el texto de forma sustancial, actualizar la fecha aquí y allá.
  *
- * BORRADOR PARA REVISIÓN LEGAL (2026-09-03): redactado como punto de partida;
+ * BORRADOR PARA REVISIÓN LEGAL (2026-09-08): redactado como punto de partida;
  * un abogado debe validar el alcance del mandato, la referencia al CFF y la
  * distribución de responsabilidad antes de considerarlo definitivo.
  */
@@ -24,7 +25,7 @@ export default function MandatoEfirmaPage() {
     <>
       <h1>Autorización de uso de la e.firma</h1>
       <p className="text-cos-ink-faint">
-        Última actualización: 3 de septiembre de 2026
+        Última actualización: 8 de septiembre de 2026
       </p>
 
       <p>
@@ -35,7 +36,8 @@ export default function MandatoEfirmaPage() {
         que usted registra en la Plataforma (el «Contribuyente»). Forma parte
         de los <Link href="/legal/terminos">Términos y Condiciones</Link> y se
         acepta de manera expresa, por cada Contribuyente, al cargar o
-        reemplazar su e.firma.
+        reemplazar su e.firma o, si la credencial ya estaba almacenada, mediante
+        una confirmación separada en la configuración de la empresa.
       </p>
 
       <h2>1. Naturaleza de la e.firma y declaraciones del Usuario</h2>
@@ -44,8 +46,8 @@ export default function MandatoEfirmaPage() {
         que, conforme al Código Fiscal de la Federación, produce los mismos
         efectos que la firma autógrafa de su titular, quien es responsable de
         su resguardo y de los actos realizados con ella. Al cargar la e.firma
-        de un Contribuyente, el Usuario declara bajo protesta de decir verdad
-        que:
+        de un Contribuyente o confirmar el uso de una credencial ya almacenada,
+        el Usuario declara bajo protesta de decir verdad que:
       </p>
       <ul>
         <li>
@@ -83,7 +85,8 @@ export default function MandatoEfirmaPage() {
           el <Link href="/legal/aviso-de-privacidad">Aviso de Privacidad</Link>,
           información fiscal del Contribuyente de carácter consultivo: opinión
           de cumplimiento, constancia de situación fiscal, declaraciones
-          presentadas y acuses, y estatus de los CFDI.
+          presentadas y sus acuses, contabilidad electrónica presentada y sus
+          acuses, y estatus de los CFDI.
         </li>
         <li>
           Verificar la vigencia del certificado para avisar al Usuario de su
