@@ -375,3 +375,76 @@ describe("posicionales — la etiqueta explícita siempre gana", () => {
     expect(parseSpei("COBRO IMP TPV GPRS A NOM EVOPA0002288173").contraparteNombre).toBeUndefined();
   });
 });
+
+// ── Sublíneas sin etiqueta (BBVA) ────────────────────────────────────────────
+// Bloques REALES del estado de agosto 2026 de CPM2307076Z9. BBVA no etiqueta
+// nada: imprime la CLABE, la clave de rastreo y el nombre sueltos, una por
+// línea, debajo del renglón del movimiento.
+describe("parseSpei · sublíneas de BBVA", () => {
+  it("saca CLABE, clave de rastreo y beneficiario de un SPEI enviado", () => {
+    const d = parseSpei("SPEI ENVIADO HSBC", undefined, [
+      "0030826CARTUCHOS ESTERILIZACION EN PE Ref. 0033122692 021",
+      "00021180040705338981",
+      "BNET01002608030033122692",
+      "CASONATO STEELCO SPA SA DE CV",
+    ]);
+    // BBVA imprime la CLABE con dos ceros de relleno al frente.
+    expect(d.contraparteClabe).toBe("021180040705338981");
+    expect(d.bancoContraparteCodigo).toBe("021"); // HSBC, coincide con el texto
+    expect(d.claveRastreo).toBe("BNET01002608030033122692");
+    expect(d.contraparteNombre).toBe("CASONATO STEELCO SPA SA DE CV");
+  });
+
+  it("hace lo mismo con un SPEI recibido (ordenante)", () => {
+    const d = parseSpei("SPEI RECIBIDO NU MEXICO", undefined, [
+      "0030826Paciente Silvia González Corte Ref. 0184255187 638",
+      "00638180010134873948",
+      "NU3AE3ES4QKL99VATOG30QCUNCNV",
+      "BRENDA ALINE CERVANTES GONZALEZ",
+    ]);
+    expect(d.contraparteClabe).toBe("638180010134873948");
+    expect(d.bancoContraparteCodigo).toBe("638");
+    expect(d.claveRastreo).toBe("NU3AE3ES4QKL99VATOG30QCUNCNV");
+    expect(d.contraparteNombre).toBe("BRENDA ALINE CERVANTES GONZALEZ");
+  });
+
+  // Una línea huérfana de un salto de página: el dígito de control no cuadra.
+  // Vale más no tener CLABE que apuntar a la cuenta de otro.
+  it("descarta una CLABE cuyo dígito de control no cuadra", () => {
+    const d = parseSpei("SPEI ENVIADO SANTANDER", undefined, [
+      "00005579100364597367",
+      "BNET01002608030032871616",
+      "STEPHANIE ISABELLE MENESES",
+    ]);
+    expect(d.contraparteClabe).toBeUndefined();
+    expect(d.bancoContraparteCodigo).toBeUndefined();
+    // La clave de rastreo sí es prueba suficiente de que el bloque es un SPEI.
+    expect(d.claveRastreo).toBe("BNET01002608030032871616");
+    expect(d.contraparteNombre).toBe("STEPHANIE ISABELLE MENESES");
+  });
+
+  // El candado del nombre: sin CLABE ni clave de rastreo en el bloque, no hay
+  // prueba de que sea el detalle de un SPEI y un pie de página pasaría por
+  // nombre de contraparte.
+  it("no toma por contraparte el pie de página de un estado de cuenta", () => {
+    const d = parseSpei("COMISION", undefined, [
+      "Informacion Financiera MONEDA NACIONAL",
+      "DOMICILIO FISCAL",
+    ]);
+    expect(d.contraparteNombre).toBeUndefined();
+  });
+
+  it("una etiqueta explícita le gana a la sublínea", () => {
+    const d = parseSpei("SPEI, Beneficiario: NOMBRE ETIQUETADO SA DE CV", undefined, [
+      "00021180040705338981",
+      "OTRO NOMBRE SUELTO SA",
+    ]);
+    expect(d.contraparteNombre).toBe("NOMBRE ETIQUETADO SA DE CV");
+    // …pero la CLABE, que la etiqueta no traía, sí se aprovecha.
+    expect(d.contraparteClabe).toBe("021180040705338981");
+  });
+
+  it("sin sublíneas se comporta igual que antes", () => {
+    expect(parseSpei("SPEI ENVIADO HSBC").contraparteClabe).toBeUndefined();
+  });
+});

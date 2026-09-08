@@ -59,9 +59,16 @@ SCHEMA:
   "saldoInicial": number | null,
   "saldoFinal": number | null,
   "movimientos": [
-    { "fecha": "YYYY-MM-DD", "descripcion": string, "monto": number, "referencia": string | null, "saldo": number | null }
+    { "fecha": "YYYY-MM-DD", "descripcion": string, "monto": number, "referencia": string | null, "saldo": number | null, "sublineas": string[] }
   ]
-}`;
+}
+
+SOBRE "sublineas": varios bancos (BBVA sobre todo) parten cada movimiento en
+varias líneas: debajo del renglón principal imprimen, SUELTAS y sin etiqueta, la
+CLABE de la contraparte, la clave de rastreo y su nombre. Copia esas líneas de
+continuación TAL CUAL, una por elemento, sin resumirlas, sin reordenarlas y sin
+corregirlas. Si un movimiento no tiene líneas debajo, devuelve [].
+NO metas esas líneas dentro de "descripcion": ahí va sólo el renglón principal.`;
 
 const USER_PROMPT = "Extrae los movimientos y saldos de este estado de cuenta siguiendo el schema exacto. Solo JSON.";
 
@@ -98,6 +105,8 @@ type RawExtraction = {
     monto: number;
     referencia: string | null;
     saldo: number | null;
+    /** Líneas de continuación del movimiento, tal cual las imprime el banco. */
+    sublineas?: string[] | null;
   }[];
 };
 
@@ -179,12 +188,19 @@ export async function extractStatementFromDocument(
     .filter((m) => m && m.fecha && typeof m.monto === "number")
     .map((m) => {
       const d = new Date(`${m.fecha}T12:00:00`);
+      // Las sublíneas NO se pegan a `descripcion`: esa cadena entra en la
+      // clave de deduplicación, y cambiarla haría que reimportar el mismo
+      // estado se viera como movimientos nuevos. Viajan aparte.
+      const sublineas = (m.sublineas ?? [])
+        .filter((x): x is string => typeof x === "string" && x.trim() !== "")
+        .map((x) => x.trim());
       return {
         fecha: d,
         descripcion: (m.descripcion ?? "").trim() || "Movimiento",
         monto: m.monto,
         referencia: m.referencia ?? undefined,
         saldo: typeof m.saldo === "number" ? m.saldo : undefined,
+        ...(sublineas.length > 0 ? { sublineas } : {}),
       };
     })
     .filter((t) => !isNaN(t.fecha.getTime()));

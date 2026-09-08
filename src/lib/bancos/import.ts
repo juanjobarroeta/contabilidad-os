@@ -207,7 +207,7 @@ export async function persistTransactions(opts: {
   // el nombre se resuelve por RFC desde el catálogo de clientes y los CFDIs de
   // la empresa — una consulta por lote, match exacto o nada.
   const speiPorFila = transactions.map((tx, i) =>
-    plan[i] ? parseSpei(tx.descripcion, tx.claveRastreoRaw) : null
+    plan[i] ? parseSpei(tx.descripcion, tx.claveRastreoRaw, tx.sublineas) : null
   );
   const rfcsSinNombre = [
     ...new Set(
