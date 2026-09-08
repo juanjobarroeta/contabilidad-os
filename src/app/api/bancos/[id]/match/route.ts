@@ -343,7 +343,10 @@ export async function GET(req: Request, { params }: Params) {
     Math.abs(Number(tx.monto)),
     puntuados
       .filter((c) => c.rfc !== "—" && c.remainingBalance > 0)
-      .map((c) => ({ id: c.id, rfc: c.rfc, saldo: c.remainingBalance })),
+      .map((c) => ({ id: c.id, rfc: c.rfc, nombre: c.cliente, saldo: c.remainingBalance })),
+    // La contraparte que el movimiento ya trae acota la búsqueda: sin esto,
+    // sumar exacto por casualidad basta para ofrecer las facturas de otro.
+    { rfc: tx.contraparteRfc, nombre: tx.contraparteNombre },
   );
   const pagoJunto = sugerido
     ? {
