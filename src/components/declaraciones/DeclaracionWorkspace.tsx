@@ -45,18 +45,18 @@ interface CierreData {
     evidencia?: EvidenciaPresentacion;
   };
   diot: { aplica: boolean; proveedores: number; vencimiento: string; estado: Estado; acuseUrl: string | null; fechaPresentacion: string | null; evidencia?: EvidenciaPresentacion } | null;
-  // ISN: impuesto ESTATAL. No entra en el total federal — se paga a la tesorería
-  // del estado, y una empresa con sucursales lo debe a varios a la vez.
+  // ISN: impuesto ESTATAL, y UNA OBLIGACIÓN POR ESTADO. Una empresa con nómina
+  // en varios le debe a varias tesorerías, cada una con su fecha y su portal.
   isn?: {
-    aplica: boolean; periodo: string; vencimiento: string; estado: Estado; total: number;
-    porEntidad: { entidad: string; numEmpleados: number; baseMensual: number; tasa: number | null; isn: number | null; nota?: string; fundamento?: { ley: string; articulo: string } }[];
-    sinTasa: string[];
-    aproximadas: { entidad: string; nota: string }[];
-    empleadosSinEntidad: number;
-    fuente: "payroll" | "estimado";
-    todasSinVerificar: boolean;
-    fechaPresentacion: string | null;
-    evidencia?: EvidenciaPresentacion;
+    aplica: boolean; periodo: string; totalConocido: number; sinTasa: string[];
+    empleadosSinEntidad: number; fuente: "payroll" | "estimado";
+    entidades: {
+      entidad: string; numEmpleados: number; baseMensual: number; tasa: number | null;
+      importe: number | null; fechaLimite: string; estado: Estado;
+      vencimientoVerificado: boolean; tasaVerificada: boolean;
+      nota?: string; fundamento?: { ley: string; articulo: string };
+      fechaPresentacion: string | null; evidencia?: EvidenciaPresentacion;
+    }[];
   } | null;
 }
 interface AcuseFaltante { tipo: "DECLARACION_ANUAL" | "IVA_MENSUAL" | "ISR_PROVISIONAL"; periodo: string; etiqueta: string; motivo: string; critico?: boolean; }
@@ -106,7 +106,7 @@ export function DeclaracionWorkspace() {
   const [acuseError, setAcuseError] = useState("");
   const [diotAcuse, setDiotAcuse] = useState("");
   const [savingDiot, setSavingDiot] = useState(false);
-  const [savingIsn, setSavingIsn] = useState(false);
+  const [savingIsn, setSavingIsn] = useState<string | null>(null);
 
   // Auditor findings (company-wide) — drive the Revisión tab + its count badge.
   const [flags, setFlags] = useState<HallazgoDTO[] | null>(null);
@@ -205,14 +205,16 @@ export function DeclaracionWorkspace() {
     finally { setSaving(false); }
   }
 
-  async function fileIsn(filing: boolean) {
+  // Por ESTADO: `savingIsn` guarda cuál se está marcando, no un booleano — si
+  // no, marcar Oaxaca dejaría el botón de Nuevo León en «guardando».
+  async function fileIsn(entidad: string, filing: boolean) {
     if (!activeCompany || !data) return;
-    setSavingIsn(true);
+    setSavingIsn(entidad);
     try {
-      await post({ action: filing ? "file-isn" : "unfile-isn", fechaPresentacion: fecha || null });
+      await post({ action: filing ? "file-isn" : "unfile-isn", entidad, fechaPresentacion: fecha || null });
       await load();
-    } catch { setError("No se pudo guardar el ISN"); }
-    finally { setSavingIsn(false); }
+    } catch { setError(`No se pudo guardar el ISN de ${entidad}`); }
+    finally { setSavingIsn(null); }
   }
 
   async function fileDiot(filing: boolean) {
@@ -636,7 +638,7 @@ function Presentar({
   onUpload: (f: File) => void; onFile: (filing: boolean) => void;
   companyId: string; month: number; year: number;
   diotAcuse: string; setDiotAcuse: (s: string) => void; savingDiot: boolean; onFileDiot: (filing: boolean) => void;
-  savingIsn: boolean; onFileIsn: (filing: boolean) => void;
+  savingIsn: string | null; onFileIsn: (entidad: string, filing: boolean) => void;
 }) {
   const f = data.federal;
   return (
@@ -657,90 +659,98 @@ function Presentar({
             <span className="block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">
               ISN · impuesto sobre nóminas
             </span>
-            <EstadoBadge estado={data.isn.estado} />
+            {data.isn.entidades.length > 1 && (
+              <span className="text-[12px] text-cos-ink-soft">{data.isn.entidades.length} estados</span>
+            )}
           </div>
-          {/* Que quede claro a QUIÉN se le paga: no es una declaración del SAT. */}
           <p className="mt-2 text-[12.5px] text-cos-ink-soft">
-            Se paga a la tesorería {data.isn.porEntidad.length === 1 ? "del estado" : "de cada estado"} donde se presta el
-            servicio · vence {fmtFecha(data.isn.vencimiento)}
+            {data.isn.entidades.length > 1
+              ? "Se declara y se paga POR SEPARADO en cada estado donde hay nómina, ante su tesorería y en su fecha."
+              : "Se paga a la tesorería del estado, no al SAT."}
           </p>
 
-          <div className="mt-3 divide-y divide-cos-line-soft border-y border-cos-line-soft">
-            {data.isn.porEntidad.map((e) => (
-              <div key={e.entidad} className="flex items-baseline justify-between gap-3 py-2">
-                <div className="min-w-0">
-                  <span className="text-[13.5px] font-medium text-cos-ink">{e.entidad}</span>
-                  <span className="ml-2 text-[12px] text-cos-ink-faint">
-                    {e.numEmpleados} {e.numEmpleados === 1 ? "persona" : "personas"} ·{" "}
-                    {((e.tasa ?? 0) * 100).toFixed(2)}%
-                    {e.fundamento ? ` · ${e.fundamento.ley} Art. ${e.fundamento.articulo}` : ""}
-                  </span>
-                  {e.nota && <p className="text-[11.5px] text-cos-amber-ink">{e.nota}</p>}
+          {/* Una tarjeta por ESTADO: cada obligación se marca por su cuenta. */}
+          <div className="mt-3 space-y-2.5">
+            {data.isn.entidades.map((e) => (
+              <div key={e.entidad} className="rounded-md border border-cos-line-soft p-3.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[14.5px] font-semibold text-cos-ink">{e.entidad}</span>
+                      <EstadoBadge estado={e.estado} />
+                    </div>
+                    <p className="mt-0.5 text-[12px] text-cos-ink-faint">
+                      {e.numEmpleados} {e.numEmpleados === 1 ? "persona" : "personas"} ·{" "}
+                      base <Money value={e.baseMensual} size={12} weight={400} /> ·{" "}
+                      {e.tasa !== null ? `${(e.tasa * 100).toFixed(2)}%` : "sin tasa cargada"}
+                    </p>
+                    <p className="mt-0.5 text-[11.5px] text-cos-ink-faint">
+                      Vence {fmtFecha(e.fechaLimite)}
+                      {!e.vencimientoVerificado && " (fecha general; la de este estado no está cotejada)"}
+                      {e.fundamento ? ` · ${e.fundamento.ley} Art. ${e.fundamento.articulo}` : ""}
+                    </p>
+                    {e.nota && <p className="mt-0.5 text-[11.5px] text-cos-amber-ink">{e.nota}</p>}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    {e.importe !== null ? (
+                      <Money value={e.importe} size={16} weight={700} />
+                    ) : (
+                      <span className="text-[12.5px] text-cos-amber-ink">sin importe</span>
+                    )}
+                  </div>
                 </div>
-                <Money value={e.isn ?? 0} size={14} weight={500} />
+
+                {e.estado === "FILED" ? (
+                  <div className="mt-2.5 flex items-center justify-between gap-3 rounded-md bg-cos-jade-tint px-3 py-2">
+                    <p className="flex items-center gap-1.5 text-[12.5px] font-medium text-cos-jade-ink">
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Presentado{" "}
+                      {e.fechaPresentacion ? `el ${fmtFecha(e.fechaPresentacion)}` : ""}
+                    </p>
+                    <button onClick={() => onFileIsn(e.entidad, false)} disabled={savingIsn !== null}
+                      className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1 text-[12px] hover:bg-cos-card disabled:opacity-50">
+                      {savingIsn === e.entidad ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />} Revertir
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => onFileIsn(e.entidad, true)} disabled={savingIsn !== null}
+                    className="mt-2.5 inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-3 py-1.5 text-[12.5px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
+                    {savingIsn === e.entidad ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                    Marcar presentado en {e.entidad}
+                  </button>
+                )}
               </div>
             ))}
           </div>
 
-          <div className="mt-2.5 flex items-baseline justify-between">
-            <span className="text-[13px] font-semibold text-cos-ink">
-              Total{data.isn.sinTasa.length > 0 ? " de los estados con tasa conocida" : ""}
-            </span>
-            <Money value={data.isn.total} size={16} weight={700} />
-          </div>
+          {data.isn.entidades.length > 1 && (
+            <div className="mt-3 flex items-baseline justify-between">
+              <span className="text-[13px] font-semibold text-cos-ink">
+                Total{data.isn.sinTasa.length > 0 ? " de los estados con tasa conocida" : " del mes"}
+              </span>
+              <Money value={data.isn.totalConocido} size={16} weight={700} />
+            </div>
+          )}
 
-          {/* Todo lo que hace que esta cifra NO sea exacta, dicho aquí y no en
-              una nota al pie: la base estimada, los estados sin tasa, los
-              progresivos, la gente sin entidad y las tasas sin cotejar. */}
-          {(data.isn.sinTasa.length > 0 ||
-            data.isn.empleadosSinEntidad > 0 ||
+          {/* Lo que hace que estas cifras no sean exactas, dicho arriba y no en
+              una nota al pie. */}
+          {(data.isn.empleadosSinEntidad > 0 ||
             data.isn.fuente === "estimado" ||
-            data.isn.aproximadas.length > 0 ||
-            data.isn.todasSinVerificar) && (
+            data.isn.entidades.some((e) => !e.tasaVerificada)) && (
             <div className="mt-3 space-y-1 rounded-md bg-cos-amber-tint p-3 text-[12px] text-cos-amber-ink">
               {data.isn.fuente === "estimado" && (
                 <p>La base sale del salario diario de la plantilla: no hay nómina timbrada de este mes.</p>
-              )}
-              {data.isn.sinTasa.length > 0 && (
-                <p>
-                  Sin tasa en el catálogo para {data.isn.sinTasa.join(", ")}: esa nómina NO está sumada arriba.
-                </p>
               )}
               {data.isn.empleadosSinEntidad > 0 && (
                 <p>
                   {data.isn.empleadosSinEntidad}{" "}
                   {data.isn.empleadosSinEntidad === 1 ? "persona sin estado" : "personas sin estado"} en su registro: su
-                  nómina no se pudo atribuir.
+                  nómina no está en ninguno de los renglones de arriba.
                 </p>
               )}
-              {data.isn.aproximadas.length > 0 && (
-                <p>Estimado con la tasa general en {data.isn.aproximadas.map((a) => a.entidad).join(", ")}.</p>
-              )}
-              {data.isn.todasSinVerificar && (
+              {data.isn.entidades.some((e) => !e.tasaVerificada) && (
                 <p>Tasas tomadas de la ley estatal, aún sin cotejar contra el texto publicado.</p>
               )}
             </div>
-          )}
-
-          {data.isn.estado === "FILED" ? (
-            <div className="mt-3 flex items-center justify-between gap-3 rounded-md bg-cos-jade-tint p-3">
-              <div>
-                <p className="flex items-center gap-1.5 text-[13px] font-medium text-cos-jade-ink">
-                  <CheckCircle2 className="h-4 w-4" /> Presentado{" "}
-                  {data.isn.fechaPresentacion ? `el ${fmtFecha(data.isn.fechaPresentacion)}` : ""}
-                </p>
-                <p className="mt-0.5 text-[11.5px] text-cos-jade-ink/80">{data.isn.evidencia?.etiqueta ?? "presentado"}</p>
-              </div>
-              <button onClick={() => onFileIsn(false)} disabled={savingIsn}
-                className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1.5 text-[12.5px] hover:bg-cos-card disabled:opacity-50">
-                {savingIsn ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />} Revertir
-              </button>
-            </div>
-          ) : (
-            <button onClick={() => onFileIsn(true)} disabled={savingIsn}
-              className="mt-3 inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-3 py-2 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
-              {savingIsn ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Marcar presentado
-            </button>
           )}
         </Card>
       )}

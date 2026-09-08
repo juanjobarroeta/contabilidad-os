@@ -95,6 +95,7 @@ export async function GET(req: Request) {
         select: {
           id: true, tipo: true, status: true, lineaCaptura: true, acuseUrl: true,
           fechaPresentacion: true, fechaLimitePago: true, acuseData: true, acusePdfNombre: true,
+          isnEntidad: true,
         },
       }),
       nominaRetencionesMes(companyId, from, to),
@@ -176,30 +177,35 @@ export async function GET(req: Request) {
   // No lo cobra el SAT sino la tesorería del estado, así que no entra en
   // `federal` ni en su total: es su propio pago, a otra autoridad, con su propia
   // fecha. Lo causa tener nómina, no el régimen — como el IMSS.
-  const isnDecl = declOf("ISN_MENSUAL");
+  // Una fila por ESTADO: cada tesorería es su propia obligación, con su fecha y
+  // su marcado. `declaraciones` ya trae las filas ISN_MENSUAL del periodo.
+  const isnDecls = declaraciones.filter((d) => d.tipo === "ISN_MENSUAL");
   const isn = await (async () => {
+    if (!empresa) return null;
     const { empleados, fuente } = await cargarNominaParaIsn(
       companyId,
       new Date(Date.UTC(year, month - 1, 1)).toISOString(),
     );
-    if (!empresa) return null;
-    const ctx = construirContexto(empresa, `${year}-${String(month).padStart(2, "0")}-01`);
-    const p = periodoIsn(year, month, calcularIsnPorEntidad(empleados, ctx, fuente));
+    const ctx = construirContexto(empresa, `${periodo}-01`);
+    const p = periodoIsn(year, month, calcularIsnPorEntidad(empleados, ctx, fuente), ctx);
     if (!causaIsn(p)) return null;
     return {
       aplica: true,
       periodo: p.periodo,
-      vencimiento: p.fechaLimite.toISOString(),
-      estado: estadoFor(isnDecl?.status ?? null, p.fechaLimite),
-      total: p.total,
-      porEntidad: p.porEntidad,
+      totalConocido: p.totalConocido,
       sinTasa: p.sinTasa,
-      aproximadas: p.aproximadas,
       empleadosSinEntidad: p.empleadosSinEntidad,
       fuente: p.fuente,
-      todasSinVerificar: p.todasSinVerificar,
-      fechaPresentacion: isnDecl?.fechaPresentacion ?? null,
-      evidencia: evidenciaPresentacion(isnDecl ?? null),
+      entidades: p.obligaciones.map((o) => {
+        const decl = isnDecls.find((d) => d.isnEntidad === o.entidad);
+        return {
+          ...o,
+          fechaLimite: o.fechaLimite.toISOString(),
+          estado: estadoFor(decl?.status ?? null, o.fechaLimite),
+          fechaPresentacion: decl?.fechaPresentacion ?? null,
+          evidencia: evidenciaPresentacion(decl ?? null),
+        };
+      }),
     };
   })();
 
@@ -316,8 +322,8 @@ export async function POST(req: Request) {
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { companyId, periodo, action, lineaCaptura, acuseUrl, fechaPresentacion, fechaLimitePago, acuse } = body as {
-    companyId?: string; periodo?: string; action?: string;
+  const { companyId, periodo, action, lineaCaptura, acuseUrl, fechaPresentacion, fechaLimitePago, acuse, entidad: entidadBody } = body as {
+    companyId?: string; periodo?: string; action?: string; entidad?: string;
     lineaCaptura?: string | null; acuseUrl?: string | null;
     fechaPresentacion?: string | null; fechaLimitePago?: string | null;
     acuse?: AcuseFederal | null;
@@ -437,11 +443,24 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, action, diffs: acuseData?.diffs ?? [] });
   }
 
-  // ISN: se presenta ante la tesorería del ESTADO, no ante el SAT, así que
-  // tiene su propio marcado. Al presentarlo se congela el cálculo del mes con su
-  // desglose por entidad — la nómina puede cambiar después y lo declarado no.
+  // ISN: se presenta ante la tesorería de CADA ESTADO, no ante el SAT, así que
+  // se marca uno por uno — `entidad` dice cuál. Al presentarlo se congela el
+  // cálculo de ese estado: la nómina puede cambiar después y lo declarado no.
   if (action === "file-isn" || action === "unfile-isn") {
     const filing = action === "file-isn";
+    const entidad = (entidadBody ?? "").trim();
+    if (!entidad) {
+      return NextResponse.json(
+        { error: "Falta la entidad: el ISN se presenta por estado, uno a la vez." },
+        { status: 400 },
+      );
+    }
+
+    const existente = await prisma.taxDeclaration.findFirst({
+      where: { companyId, periodo, tipo: "ISN_MENSUAL", isnEntidad: entidad },
+      select: { id: true },
+    });
+
     let isnPatch: Record<string, unknown> = {};
     if (filing) {
       const empresa = await prisma.company.findUnique({
@@ -454,24 +473,45 @@ export async function POST(req: Request) {
         new Date(Date.UTC(year, month - 1, 1)).toISOString(),
       );
       const ctx = construirContexto(empresa, `${periodo}-01`);
-      const p = periodoIsn(year, month, calcularIsnPorEntidad(empleados, ctx, fuente));
+      const p = periodoIsn(year, month, calcularIsnPorEntidad(empleados, ctx, fuente), ctx);
+      const o = p.obligaciones.find((x) => x.entidad === entidad);
+      if (!o) {
+        return NextResponse.json(
+          { error: `No hay nómina en ${entidad} este periodo.` },
+          { status: 409 },
+        );
+      }
       isnPatch = {
-        isnPagar: p.total,
+        isnPagar: o.importe,
+        // Congelado: la base, la tasa y el fundamento con que se declaró, más
+        // las salvedades. Si mañana cambia la nómina, lo presentado no cambia.
         isnDetalle: {
-          porEntidad: p.porEntidad,
-          sinTasa: p.sinTasa,
-          aproximadas: p.aproximadas,
-          empleadosSinEntidad: p.empleadosSinEntidad,
+          entidad: o.entidad,
+          numEmpleados: o.numEmpleados,
+          baseMensual: o.baseMensual,
+          tasa: o.tasa,
+          fundamento: o.fundamento ?? null,
+          nota: o.nota ?? null,
+          tasaVerificada: o.tasaVerificada,
+          vencimientoVerificado: o.vencimientoVerificado,
           fuente: p.fuente,
         },
       };
     }
-    await upsertRow(prisma, companyId, periodo, "ISN_MENSUAL", {
-      status: filing ? "FILED" : "CALCULATED",
+
+    const data = {
+      status: filing ? ("FILED" as const) : ("CALCULATED" as const),
       ...isnPatch,
       ...(filing ? acusePatch : clearAcuse()),
-    });
-    return NextResponse.json({ ok: true, action });
+    };
+    if (existente) {
+      await prisma.taxDeclaration.update({ where: { id: existente.id }, data });
+    } else {
+      await prisma.taxDeclaration.create({
+        data: { companyId, periodo, tipo: "ISN_MENSUAL", isnEntidad: entidad, ...data },
+      });
+    }
+    return NextResponse.json({ ok: true, action, entidad });
   }
 
   if (action === "file-diot" || action === "unfile-diot") {
