@@ -448,3 +448,40 @@ describe("parseSpei · sublíneas de BBVA", () => {
     expect(parseSpei("SPEI ENVIADO HSBC").contraparteClabe).toBeUndefined();
   });
 });
+
+describe("BBVA · pago a cuenta de tercero: el nombre va EN MEDIO del renglón", () => {
+  // Renglones reales del estado de agosto de un hospital. Sin esta regla no se
+  // extraía nada de ellos: tienen espacios (no son clave de rastreo), tienen
+  // dígitos (no pasan el filtro de nombre limpio) y no son CLABE.
+  it("saca el nombre entre el folio del portal y la referencia", () => {
+    const r = parseSpei("N06 PAGO CUENTA DE TERCERO", undefined, [
+      "BNET 0486661343 Jose Armando Orteg Ref. 0013034979",
+    ]);
+    expect(r.contraparteNombre).toBe("JOSE ARMANDO ORTEG");
+  });
+
+  it("funciona con el nombre truncado por el banco", () => {
+    const r = parseSpei("N06 PAGO CUENTA DE TERCERO", undefined, [
+      "BNET 2656967051 Esther Mendez Pere Ref. 0045128178",
+    ]);
+    expect(r.contraparteNombre).toBe("ESTHER MENDEZ PERE");
+  });
+
+  it("sin nombre entre folio y referencia no inventa uno", () => {
+    const r = parseSpei("N06 PAGO CUENTA DE TERCERO", undefined, [
+      "BNET 0452714426 Ref. 0095506890",
+    ]);
+    expect(r.contraparteNombre).toBeUndefined();
+  });
+
+  it("no rompe el bloque SPEI clásico (CLABE + clave de rastreo + nombre)", () => {
+    const r = parseSpei("T17 SPEI ENVIADO SANTANDER", undefined, [
+      "0010826NOMINA 2DA QUINC JUL 26 Ref. 0032871616 014",
+      "00005579100364597367",
+      "BNET01002608030032871616",
+      "STEPHANIE ISABELLE MENESES",
+    ]);
+    expect(r.contraparteNombre).toBe("STEPHANIE ISABELLE MENESES");
+    expect(r.claveRastreo).toBe("BNET01002608030032871616");
+  });
+});
