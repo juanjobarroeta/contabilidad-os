@@ -23,6 +23,65 @@
 // hubo con qué cotejar — que no es lo mismo que decir que cuadró.
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Los saldos que el banco imprime en su resumen. */
+export interface SaldosEstado {
+  inicial: number | null;
+  final: number | null;
+}
+
+/**
+ * Lee los saldos inicial y final del texto del estado. PURA.
+ *
+ * El modelo a veces los deja en null (caso real: BBVA agosto 2026, el saldo
+ * final quedó sin leer y el lote se guardó sin con qué anclar la cuenta). El
+ * banco los imprime siempre y en un formato fijo, así que leerlos del texto es
+ * determinista y no cuesta una llamada:
+ *
+ *   BBVA: «Saldo de Liquidación Inicial 322,417.91» … «Saldo Final (+) 77,635.71»
+ */
+export function leerSaldos(texto: string): SaldosEstado {
+  const buscar = (re: RegExp): number | null => {
+    const m = texto.match(re);
+    return m ? num(m[1]) : null;
+  };
+  return {
+    inicial: buscar(/Saldo[^\n]{0,40}?Inicial\s*\(?\+?\)?\s*([\d,]+\.\d{2})/i),
+    final: buscar(/Saldo\s*(?:de\s*Liquidaci[oó]n\s*)?Final\s*\(?\+?\)?\s*([\d,]+\.\d{2})/i),
+  };
+}
+
+/** Un renglón que aparece repetido, idéntico, dentro del MISMO archivo. */
+export interface RepetidoExacto {
+  fecha: string;
+  descripcion: string;
+  monto: number;
+  veces: number;
+}
+
+/**
+ * Renglones idénticos (mismo día, importe, concepto y referencia) dentro del
+ * mismo estado.
+ *
+ * Se REPORTAN, nunca se borran solos: dos cobros iguales el mismo día son de lo
+ * más normal —un consultorio con dos pacientes del mismo paquete, una tienda
+ * con dos ventas iguales— y borrar uno auténtico es peor que dejar entrar uno
+ * de más. Quien decide es el conteo del banco: si además sobran movimientos,
+ * estos son los sospechosos; si el conteo cuadra, son reales y nadie los toca.
+ */
+export function duplicadosExactos(
+  movimientos: { fecha: Date; descripcion: string; monto: number; referencia?: string | null }[],
+): RepetidoExacto[] {
+  const vistos = new Map<string, RepetidoExacto>();
+  for (const m of movimientos) {
+    const fecha = m.fecha.toISOString().slice(0, 10);
+    const k = [fecha, m.monto.toFixed(2), m.descripcion.trim().toUpperCase(), (m.referencia ?? "").trim().toUpperCase()].join("|");
+    const prev = vistos.get(k);
+    if (prev) prev.veces++;
+    else vistos.set(k, { fecha, descripcion: m.descripcion, monto: m.monto, veces: 1 });
+  }
+  return [...vistos.values()].filter((x) => x.veces > 1);
+}
+
 /** Un lado del resumen del banco: cuántos movimientos y por cuánto. */
 export interface LadoControl {
   /** Conteo declarado por el banco. null cuando el formato no lo imprime. */
@@ -132,6 +191,25 @@ export function cotejarControles(
 
   revisar("depósitos", controles.depositos, observado.depositos);
   revisar("retiros", controles.retiros, observado.retiros);
+
+  // Cuando a los depósitos les FALTA y a los retiros les SOBRA, no falta ningún
+  // movimiento: hay renglones leídos del lado equivocado. Decirlo por su nombre
+  // le ahorra al usuario buscar movimientos que sí están (caso real: cuatro
+  // «N06 PAGO CUENTA DE TERCERO» de BBVA, un código que el banco usa en las dos
+  // columnas y que sólo la posición distingue).
+  if (controles.depositos && controles.retiros) {
+    const faltanDep = r2(controles.depositos.total - observado.depositos.total);
+    const sobranRet = r2(observado.retiros.total - controles.retiros.total);
+    if (faltanDep > TOLERANCIA && sobranRet > TOLERANCIA) {
+      const cuantos =
+        controles.depositos.conteo !== null ? controles.depositos.conteo - observado.depositos.conteo : null;
+      advertencias.push(
+        `Parece un problema de SIGNO, no de movimientos faltantes: ${
+          cuantos && cuantos > 0 ? `${cuantos} depósito${cuantos === 1 ? "" : "s"}` : "algunos depósitos"
+        } por ${fmt(faltanDep)} se leyeron como cargos. Hay códigos que el banco usa en las dos columnas.`,
+      );
+    }
+  }
 
   return { cuadra: advertencias.length === 0, advertencias, observado };
 }
