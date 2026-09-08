@@ -199,6 +199,19 @@ model Company {
   perdidaFiscalPendiente Decimal? @db.Decimal(18, 6) // Monto ACTUALIZADO del remanente pendiente de amortizar
   perdidaFiscalAnio      Int? // Ejercicio al que corresponde el remanente (última anual)
 
+  // IEPS — ¿esta empresa ACREDITA el IEPS que le trasladan sus proveedores?
+  // (Art. 4º LIEPS). No se deduce del régimen ni del CFDI: el acreditamiento
+  // sólo procede para ciertos incisos y para quien es contribuyente del MISMO
+  // bien. Un comerciante que revende chocolate paga IEPS y NO lo resta; un
+  // productor de bebidas sí. La diferencia es todo el importe del mes, así que
+  // la decide el contador y queda firmada, con quién y cuándo.
+  // null = SIN DECIDIR, que NO es lo mismo que false: mientras esté en null el
+  // cierre no enseña un total de IEPS, enseña que falta la decisión.
+  iepsAcredita     Boolean?
+  iepsAcreditaAt   DateTime?
+  iepsAcreditaPor  String? // userId de quien la tomó
+  iepsAcreditaNota String?
+
   // Apertura fiscal — momento en que el contador revisó y CONFIRMÓ el punto de
   // partida (saldo a favor de IVA inicial, pérdidas por amortizar, coeficiente,
   // pagos provisionales previos y obligaciones). Null = aún sin confirmar. Las
@@ -2004,9 +2017,15 @@ model TaxDeclaration {
   ivaPagar              Decimal? @db.Decimal(18, 6)
   ivaSaldoFavorAnterior Decimal? @db.Decimal(18, 6) // Carryover from previous months
 
-  // IEPS (definitivo mensual — capturado del acuse; el motor llega después)
+  // IEPS definitivo mensual (Art. 5º LIEPS). `iepsPagar` nació capturándose del
+  // acuse; ahora también lo calcula el cierre desde los CFDIs.
   iepsPagar      Decimal? @db.Decimal(18, 6)
   iepsSaldoFavor Decimal? @db.Decimal(18, 6)
+  // Congelado al presentar: trasladado, pagado, el desglose por tasa con su
+  // inciso probable y —lo que importa— QUÉ SE DECIDIÓ sobre el acreditamiento
+  // del Art. 4º. Si mañana el contador cambia esa decisión, lo ya declarado no
+  // cambia: sin esto no habría forma de saber con qué criterio se presentó.
+  iepsDetalle    Json?
 
   // Último parse COMPLETADO del acuse anual con Claude (aunque no extrajera
   // nada). Sin esta marca, el centinela isrIngresos==null re-parseaba el mismo
@@ -2037,6 +2056,17 @@ model TaxDeclaration {
   // NO se acredita contra el ISR provisional propio de la empresa, por eso vive
   // en su propio renglón con tipo RETENCIONES_ISR.
   retencionesIsr Decimal? @db.Decimal(18, 6) // ISR retenido a enterar en el periodo
+
+  // ISN del periodo: suma de las entidades con tasa conocida. El desglose por
+  // entidad (base, tasa, fundamento, y si la tasa es aproximada porque el estado
+  // es progresivo o tiene sobretasa) vive en `isnDetalle`.
+  // El ISN se declara y se PAGA POR ESTADO: una empresa con nómina en varios
+  // tiene una obligación por cada uno, ante una tesorería distinta y con su
+  // propia fecha. Por eso hay una fila por (periodo, entidad) y no una sola con
+  // el total: si no, no se puede decir «Oaxaca ya, Nuevo León pendiente».
+  isnEntidad String? // clave de la entidad ("OAX", "NLE"…). Null en todo lo demás.
+  isnPagar   Decimal? @db.Decimal(18, 6)
+  isnDetalle Json?
 
   // Cuotas IMSS (SIPARE) — monto pagado/por pagar del periodo. En filas
   // IMSS_MENSUAL: cuotas obrero-patronales del mes; en IMSS_BIMESTRAL: RCV +
@@ -2080,6 +2110,10 @@ model TaxDeclaration {
   // v1 es 0 o 1 movimiento MATCHED (un segundo intento se rechaza con 409);
   // la lista existe porque la FK vive del lado del movimiento.
   bankTransactions BankTransaction[]
+
+  // El ISN tiene una fila por estado dentro del mismo periodo, y la pantalla las
+  // busca por (empresa, tipo, periodo, entidad) cada vez que carga el mes.
+  @@index([companyId, tipo, periodo, isnEntidad])
 }
 
 // Pérdida fiscal pendiente de amortizar (Art. 57 LISR). Una por ejercicio de
@@ -2232,6 +2266,13 @@ enum TaxDeclarationType {
   // el bimestre ("2026-02" = ene-feb).
   IMSS_MENSUAL
   IMSS_BIMESTRAL
+  // ISN — Impuesto Sobre Nóminas, ESTATAL. No lo cobra el SAT sino la tesorería
+  // de cada estado, y una empresa con sucursales lo debe a VARIOS a la vez, cada
+  // uno a su tasa. La fila lleva el total de las entidades con tasa conocida y
+  // el desglose por entidad en `isnDetalle` — nunca se suma un estado cuya tasa
+  // no está en el catálogo, porque un total incompleto que parece completo es
+  // peor que un total que dice qué le falta.
+  ISN_MENSUAL
 }
 
 enum DeclarationStatus {

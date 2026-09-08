@@ -358,6 +358,29 @@ const ISN_2026: { e: Entidad; tasa: number; ley: string; art: string; nota?: str
     nota: "subió de 3% (2025); + impuesto adicional para la UAZ" },
 ];
 
+// ── Día de vencimiento del ISN, por estado ───────────────────────────────────
+// El ISN se paga a cada tesorería estatal y NO todas usan el mismo día. El 17
+// es el más extendido y es el default; aquí van SÓLO los estados cuyo día está
+// cotejado contra su ley o su portal. Un día inventado por estado es peor que
+// un default declarado: con el default el contador sabe que debe confirmarlo,
+// con un dato falso no.
+//
+// Se llenan por PR revisado, igual que las tasas — misma doctrina que
+// docs/fiscal-update-cadence.md.
+const ISN_DIA_VENCIMIENTO: { e: Entidad; dia: number; ley: string; art: string }[] = [];
+
+const REGLAS_ISN_VENCIMIENTO: FiscalRule[] = ISN_DIA_VENCIMIENTO.map((r) => ({
+  clave: "isn.dia_vencimiento",
+  tipo: "VALOR" as const,
+  valor: r.dia,
+  unidad: "dias" as const,
+  aplicabilidad: { regimenes: "*" as const, actividades: "*" as const, tipoPersona: "*" as const, entidad: [r.e] },
+  vigenciaDesde: "2026-01-01",
+  vigenciaHasta: null,
+  fundamento: { ley: r.ley, articulo: r.art },
+  verificado: true,
+}));
+
 const REGLAS_ISN: FiscalRule[] = ISN_2026.map((r) => ({
   clave: "isn.tasa",
   tipo: "RATE",
@@ -372,4 +395,4 @@ const REGLAS_ISN: FiscalRule[] = ISN_2026.map((r) => ({
   nota: r.nota,
 }));
 
-export const CATALOGO: FiscalRule[] = [...REGLAS_FEDERALES, ...REGLAS_ISN];
+export const CATALOGO: FiscalRule[] = [...REGLAS_FEDERALES, ...REGLAS_ISN, ...REGLAS_ISN_VENCIMIENTO];

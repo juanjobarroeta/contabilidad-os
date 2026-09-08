@@ -10,7 +10,7 @@ import { Card, Money, Loading, Alert, RetryButton } from "@/components/ui";
 import {
   ChevronLeft, ChevronRight, Upload, Download, Loader2, RotateCcw,
   CheckCircle2, AlertTriangle, CalendarDays, Printer, ChevronRight as ChevronR, FileWarning,
-  AlertCircle, FileText, RefreshCw,
+  AlertCircle, FileText, RefreshCw, HelpCircle, Scale,
 } from "lucide-react";
 import Link from "next/link";
 import { IvaPanel, IsrPanel, RetencionesPanel } from "@/components/papeles/panels";
@@ -45,6 +45,42 @@ interface CierreData {
     evidencia?: EvidenciaPresentacion;
   };
   diot: { aplica: boolean; proveedores: number; vencimiento: string; estado: Estado; acuseUrl: string | null; fechaPresentacion: string | null; evidencia?: EvidenciaPresentacion } | null;
+  // ISN: impuesto ESTATAL, y UNA OBLIGACIÓN POR ESTADO. Una empresa con nómina
+  // en varios le debe a varias tesorerías, cada una con su fecha y su portal.
+  isn?: {
+    aplica: boolean; periodo: string; totalConocido: number; sinTasa: string[];
+    empleadosSinEntidad: number; fuente: "payroll" | "estimado";
+    entidades: {
+      entidad: string; numEmpleados: number; baseMensual: number; tasa: number | null;
+      importe: number | null; fechaLimite: string; estado: Estado;
+      vencimientoVerificado: boolean; tasaVerificada: boolean;
+      nota?: string; fundamento?: { ley: string; articulo: string };
+      fechaPresentacion: string | null; evidencia?: EvidenciaPresentacion;
+    }[];
+  } | null;
+  // IEPS: su propia declaración de pago definitivo (Art. 5º LIEPS), el mismo
+  // día 17 pero con su acuse. `monto` es null a propósito cuando falta decidir
+  // el acreditamiento del Art. 4º: ahí el importe del mes NO está determinado.
+  ieps?: {
+    aplica: boolean; periodo: string; origen: "cfdi" | "csf" | "cfdi+csf";
+    trasladado: number; pagado: number;
+    pagadoAcreditable: number; pagadoNoAcreditable: number; pagadoSinClasificar: number;
+    retenido: number; renglones: number;
+    porTasa: {
+      tasa: number | null; trasladado: number; pagado: number; renglones: number;
+      inciso: { certeza: "unico" | "ambiguo" | "desconocido"; etiqueta: string; acreditablePorInciso: boolean | null };
+    }[];
+    acreditamiento: {
+      decision: "acredita" | "no_acredita" | "sin_decidir";
+      decididoAt: string | null; nota: string | null; hayQueDecidir: boolean;
+    };
+    monto: number | null; acreditado: number; saldoFavor: number; motivo: string; completo: boolean;
+    porClase: { clase: string; etiqueta: string; causado: number; pagado: number; acreditado: number; saldoFavor: number }[];
+    sinObligacionRegistrada: boolean;
+    vencimiento: string; estado: Estado;
+    lineaCaptura: string | null; acuseUrl: string | null; fechaPresentacion: string | null;
+    evidencia?: EvidenciaPresentacion; baseFecha: "CFDI";
+  } | null;
 }
 interface AcuseFaltante { tipo: "DECLARACION_ANUAL" | "IVA_MENSUAL" | "ISR_PROVISIONAL"; periodo: string; etiqueta: string; motivo: string; critico?: boolean; }
 interface HallazgoDTO {
@@ -93,6 +129,8 @@ export function DeclaracionWorkspace() {
   const [acuseError, setAcuseError] = useState("");
   const [diotAcuse, setDiotAcuse] = useState("");
   const [savingDiot, setSavingDiot] = useState(false);
+  const [savingIsn, setSavingIsn] = useState<string | null>(null);
+  const [savingIeps, setSavingIeps] = useState(false);
 
   // Auditor findings (company-wide) — drive the Revisión tab + its count badge.
   const [flags, setFlags] = useState<HallazgoDTO[] | null>(null);
@@ -174,7 +212,13 @@ export function DeclaracionWorkspace() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ companyId: activeCompany!.id, periodo: data!.periodo, ...bodyExtra }),
     });
-    if (!res.ok) throw new Error();
+    // El mensaje del servidor importa: el IEPS rechaza presentar con 409 y
+    // explica por qué («falta decidir el Art. 4º»). Tragárselo dejaría al
+    // usuario con un «no se pudo» que no dice qué hacer.
+    if (!res.ok) {
+      const msg = await res.json().then((d) => d?.error).catch(() => null);
+      throw new Error(typeof msg === "string" && msg ? msg : "");
+    }
   }
 
   async function fileFederal(filing: boolean) {
@@ -189,6 +233,44 @@ export function DeclaracionWorkspace() {
       await load();
     } catch { setError("No se pudo guardar la declaración"); }
     finally { setSaving(false); }
+  }
+
+  // Por ESTADO: `savingIsn` guarda cuál se está marcando, no un booleano — si
+  // no, marcar Oaxaca dejaría el botón de Nuevo León en «guardando».
+  async function fileIsn(entidad: string, filing: boolean) {
+    if (!activeCompany || !data) return;
+    setSavingIsn(entidad);
+    try {
+      await post({ action: filing ? "file-isn" : "unfile-isn", entidad, fechaPresentacion: fecha || null });
+      await load();
+    } catch { setError(`No se pudo guardar el ISN de ${entidad}`); }
+    finally { setSavingIsn(null); }
+  }
+
+  // El IEPS no se puede marcar presentado mientras el Art. 4º esté sin
+  // contestar: el servidor responde 409 con el motivo y aquí se muestra tal cual.
+  async function fileIeps(filing: boolean) {
+    if (!activeCompany || !data) return;
+    setSavingIeps(true);
+    try {
+      await post({ action: filing ? "file-ieps" : "unfile-ieps", fechaPresentacion: fecha || null });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error && e.message ? e.message : "No se pudo guardar el IEPS");
+    } finally { setSavingIeps(false); }
+  }
+
+  // La decisión del Art. 4º es de la EMPRESA, no del mes: se guarda una vez y
+  // rige todos los periodos que todavía no se han presentado.
+  async function decidirIeps(acredita: boolean) {
+    if (!activeCompany || !data) return;
+    setSavingIeps(true);
+    try {
+      await post({ action: "decidir-ieps", acredita });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error && e.message ? e.message : "No se pudo guardar la decisión");
+    } finally { setSavingIeps(false); }
   }
 
   async function fileDiot(filing: boolean) {
@@ -308,6 +390,8 @@ export function DeclaracionWorkspace() {
               onUpload={handleAcuseUpload} onFile={fileFederal}
               companyId={activeCompany.id} month={month} year={year}
               diotAcuse={diotAcuse} setDiotAcuse={setDiotAcuse} savingDiot={savingDiot} onFileDiot={fileDiot}
+              savingIsn={savingIsn} onFileIsn={fileIsn}
+              savingIeps={savingIeps} onFileIeps={fileIeps} onDecidirIeps={decidirIeps}
             />
           )}
         </div>
@@ -604,13 +688,16 @@ function FlagCard({ h, busy, onResolve, onIgnore }: { h: HallazgoDTO; busy: bool
 
 function Presentar({
   data, fecha, setFecha, saving, acuseParsed, acuseUploading, acuseError, onUpload, onFile,
-  companyId, month, year, diotAcuse, setDiotAcuse, savingDiot, onFileDiot,
+  companyId, month, year, diotAcuse, setDiotAcuse, savingDiot, onFileDiot, savingIsn, onFileIsn,
+  savingIeps, onFileIeps, onDecidirIeps,
 }: {
   data: CierreData; fecha: string; setFecha: (s: string) => void; saving: boolean;
   acuseParsed: AcuseMensualParsed | null; acuseUploading: boolean; acuseError: string;
   onUpload: (f: File) => void; onFile: (filing: boolean) => void;
   companyId: string; month: number; year: number;
   diotAcuse: string; setDiotAcuse: (s: string) => void; savingDiot: boolean; onFileDiot: (filing: boolean) => void;
+  savingIsn: string | null; onFileIsn: (entidad: string, filing: boolean) => void;
+  savingIeps: boolean; onFileIeps: (filing: boolean) => void; onDecidirIeps: (acredita: boolean) => void;
 }) {
   const f = data.federal;
   return (
@@ -625,6 +712,114 @@ function Presentar({
         acuseParsed={acuseParsed} acuseUploading={acuseUploading} acuseError={acuseError}
         onUpload={onUpload} onFile={onFile}
       />
+      {data.isn?.aplica && (
+        <Card id="isn" className="scroll-mt-24 rounded-card border-cos-line p-5 shadow-card">
+          <div className="flex items-center justify-between">
+            <span className="block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">
+              ISN · impuesto sobre nóminas
+            </span>
+            {data.isn.entidades.length > 1 && (
+              <span className="text-[12px] text-cos-ink-soft">{data.isn.entidades.length} estados</span>
+            )}
+          </div>
+          <p className="mt-2 text-[12.5px] text-cos-ink-soft">
+            {data.isn.entidades.length > 1
+              ? "Se declara y se paga POR SEPARADO en cada estado donde hay nómina, ante su tesorería y en su fecha."
+              : "Se paga a la tesorería del estado, no al SAT."}
+          </p>
+
+          {/* Una tarjeta por ESTADO: cada obligación se marca por su cuenta. */}
+          <div className="mt-3 space-y-2.5">
+            {data.isn.entidades.map((e) => (
+              <div key={e.entidad} className="rounded-md border border-cos-line-soft p-3.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[14.5px] font-semibold text-cos-ink">{e.entidad}</span>
+                      <EstadoBadge estado={e.estado} />
+                    </div>
+                    <p className="mt-0.5 text-[12px] text-cos-ink-faint">
+                      {e.numEmpleados} {e.numEmpleados === 1 ? "persona" : "personas"} ·{" "}
+                      base <Money value={e.baseMensual} size={12} weight={400} /> ·{" "}
+                      {e.tasa !== null ? `${(e.tasa * 100).toFixed(2)}%` : "sin tasa cargada"}
+                    </p>
+                    <p className="mt-0.5 text-[11.5px] text-cos-ink-faint">
+                      Vence {fmtFecha(e.fechaLimite)}
+                      {!e.vencimientoVerificado && " (fecha general; la de este estado no está cotejada)"}
+                      {e.fundamento ? ` · ${e.fundamento.ley} Art. ${e.fundamento.articulo}` : ""}
+                    </p>
+                    {e.nota && <p className="mt-0.5 text-[11.5px] text-cos-amber-ink">{e.nota}</p>}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    {e.importe !== null ? (
+                      <Money value={e.importe} size={16} weight={700} />
+                    ) : (
+                      <span className="text-[12.5px] text-cos-amber-ink">sin importe</span>
+                    )}
+                  </div>
+                </div>
+
+                {e.estado === "FILED" ? (
+                  <div className="mt-2.5 flex items-center justify-between gap-3 rounded-md bg-cos-jade-tint px-3 py-2">
+                    <p className="flex items-center gap-1.5 text-[12.5px] font-medium text-cos-jade-ink">
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Presentado{" "}
+                      {e.fechaPresentacion ? `el ${fmtFecha(e.fechaPresentacion)}` : ""}
+                    </p>
+                    <button onClick={() => onFileIsn(e.entidad, false)} disabled={savingIsn !== null}
+                      className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1 text-[12px] hover:bg-cos-card disabled:opacity-50">
+                      {savingIsn === e.entidad ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />} Revertir
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => onFileIsn(e.entidad, true)} disabled={savingIsn !== null}
+                    className="mt-2.5 inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-3 py-1.5 text-[12.5px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
+                    {savingIsn === e.entidad ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                    Marcar presentado en {e.entidad}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {data.isn.entidades.length > 1 && (
+            <div className="mt-3 flex items-baseline justify-between">
+              <span className="text-[13px] font-semibold text-cos-ink">
+                Total{data.isn.sinTasa.length > 0 ? " de los estados con tasa conocida" : " del mes"}
+              </span>
+              <Money value={data.isn.totalConocido} size={16} weight={700} />
+            </div>
+          )}
+
+          {/* Lo que hace que estas cifras no sean exactas, dicho arriba y no en
+              una nota al pie. */}
+          {(data.isn.empleadosSinEntidad > 0 ||
+            data.isn.fuente === "estimado" ||
+            data.isn.entidades.some((e) => !e.tasaVerificada)) && (
+            <div className="mt-3 space-y-1 rounded-md bg-cos-amber-tint p-3 text-[12px] text-cos-amber-ink">
+              {data.isn.fuente === "estimado" && (
+                <p>La base sale del salario diario de la plantilla: no hay nómina timbrada de este mes.</p>
+              )}
+              {data.isn.empleadosSinEntidad > 0 && (
+                <p>
+                  {data.isn.empleadosSinEntidad}{" "}
+                  {data.isn.empleadosSinEntidad === 1 ? "persona sin estado" : "personas sin estado"} en su registro: su
+                  nómina no está en ninguno de los renglones de arriba.
+                </p>
+              )}
+              {data.isn.entidades.some((e) => !e.tasaVerificada) && (
+                <p>Tasas tomadas de la ley estatal, aún sin cotejar contra el texto publicado.</p>
+              )}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {data.ieps?.aplica && (
+        <IepsPresentar
+          ieps={data.ieps} saving={savingIeps} onFile={onFileIeps} onDecidir={onDecidirIeps}
+        />
+      )}
+
       {data.diot?.aplica && (
         <Card className="rounded-card border-cos-line p-5 shadow-card">
           <div className="flex items-center justify-between">
@@ -663,6 +858,196 @@ function Presentar({
         </Card>
       )}
     </div>
+  );
+}
+
+// ── IEPS ──────────────────────────────────────────────────────────────────────
+// Lo que esta tarjeta tiene que lograr: que nadie vea un total de IEPS que la
+// app se inventó. El acreditamiento del Art. 4º cambia el importe COMPLETO y no
+// se puede deducir del CFDI, así que mientras esté sin contestar la tarjeta
+// enseña los dos lados y dice qué falta — no un número.
+function IepsPresentar({
+  ieps, saving, onFile, onDecidir,
+}: {
+  ieps: NonNullable<CierreData["ieps"]>;
+  saving: boolean;
+  onFile: (filing: boolean) => void;
+  onDecidir: (acredita: boolean) => void;
+}) {
+  const pct = (t: number | null) =>
+    t === null ? "cuota" : `${(t * 100).toFixed(2).replace(/\.?0+$/, "")} %`;
+
+  return (
+    <Card id="ieps" className="scroll-mt-24 rounded-card border-cos-line p-5 shadow-card">
+      <div className="flex items-center justify-between">
+        <span className="block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">
+          IEPS · pago definitivo mensual
+        </span>
+        <EstadoBadge estado={ieps.estado} />
+      </div>
+      <p className="mt-2 text-[12.5px] text-cos-ink-soft">
+        Declaración propia ante el SAT (Art. 5º LIEPS) · vence {fmtFecha(ieps.vencimiento)}
+        {ieps.origen === "csf" && " · en el padrón; sin movimientos este mes se presenta en ceros"}
+      </p>
+
+      {/* Traslada IEPS y no lo tiene en el padrón: no lo arregla esta pantalla,
+          pero callarlo sería dejar vencer una declaración que sí existe. */}
+      {ieps.sinObligacionRegistrada && (
+        <p className="mt-2 flex items-start gap-1.5 rounded-md bg-cos-amber-tint p-2.5 text-[12px] text-cos-amber-ink">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          Esta empresa trasladó IEPS en sus comprobantes pero no tiene la obligación registrada en el padrón.
+          La declaración se debe presentar igual; revisa la Constancia de Situación Fiscal.
+        </p>
+      )}
+
+      {/* Los dos lados, por tasa, con el inciso del que puede venir. La tasa
+          sola no basta: el acreditamiento del Art. 4º se limita POR INCISO. */}
+      {ieps.porTasa.length > 0 && (
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full min-w-[420px] text-[12.5px]">
+            <thead>
+              <tr className="text-left text-cos-ink-faint">
+                <th className="pb-1.5 font-medium">Tasa</th>
+                <th className="pb-1.5 font-medium">Concepto probable</th>
+                <th className="pb-1.5 text-right font-medium">Trasladado</th>
+                <th className="pb-1.5 text-right font-medium">Pagado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ieps.porTasa.map((t) => (
+                <tr key={String(t.tasa)} className="border-t border-cos-line-soft">
+                  <td className="py-1.5 font-medium text-cos-ink">{pct(t.tasa)}</td>
+                  <td className="py-1.5 pr-3 text-cos-ink-soft">
+                    {t.inciso.etiqueta}
+                    {t.inciso.certeza === "ambiguo" && (
+                      <span className="ml-1 text-cos-amber-ink">· no se puede saber cuál desde el CFDI</span>
+                    )}
+                  </td>
+                  <td className="py-1.5 text-right tabular-nums">{t.trasladado.toLocaleString("es-MX", { style: "currency", currency: "MXN" })}</td>
+                  <td className="py-1.5 text-right tabular-nums">{t.pagado.toLocaleString("es-MX", { style: "currency", currency: "MXN" })}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* El acreditamiento es POR CLASE (Art. 4º fr. IV): restar plaguicidas
+          contra alimentos daría un pago menor al debido. Sólo se enseña cuando
+          hay más de una clase o algo quedó a favor — si no, es ruido. */}
+      {ieps.porClase.length > 0 && (ieps.porClase.length > 1 || ieps.saldoFavor > 0) && (
+        <div className="mt-3 rounded-md border border-cos-line-soft p-3">
+          <p className="text-[12px] font-medium text-cos-ink">Acreditamiento por clase (Art. 4º fr. IV)</p>
+          <ul className="mt-1.5 space-y-1">
+            {ieps.porClase.map((c) => (
+              <li key={c.clase} className="flex flex-wrap items-baseline justify-between gap-2 text-[12px]">
+                <span className="min-w-0 text-cos-ink-soft">{c.etiqueta}</span>
+                <span className="tabular-nums text-cos-ink">
+                  causó {c.causado.toLocaleString("es-MX", { style: "currency", currency: "MXN" })} · acreditó{" "}
+                  {c.acreditado.toLocaleString("es-MX", { style: "currency", currency: "MXN" })}
+                  {c.saldoFavor > 0 && (
+                    <span className="text-cos-amber-ink">
+                      {" "}· a favor {c.saldoFavor.toLocaleString("es-MX", { style: "currency", currency: "MXN" })}
+                    </span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {ieps.saldoFavor > 0 && (
+            <p className="mt-1.5 text-[11.5px] text-cos-ink-faint">
+              Lo que sobra en una clase no baja el impuesto de otra: queda a favor de la suya (Art. 5º LIEPS).
+            </p>
+          )}
+        </div>
+      )}
+
+      {ieps.retenido > 0 && (
+        <p className="mt-2 text-[11.5px] text-cos-ink-faint">
+          Además, {ieps.retenido.toLocaleString("es-MX", { style: "currency", currency: "MXN" })} de IEPS retenido
+          (Art. 5º-A): se entera aparte y no forma parte de este cálculo.
+        </p>
+      )}
+
+      {/* LA DECISIÓN. Sólo se pregunta si hay IEPS pagado a proveedores: sin
+          eso la respuesta no mueve ningún número y preguntar sería trabajo
+          inventado. */}
+      {ieps.acreditamiento.hayQueDecidir ? (
+        <div className="mt-3 rounded-md border border-cos-line bg-cos-paper p-3.5">
+          <p className="flex items-center gap-1.5 text-[13px] font-medium text-cos-ink">
+            <HelpCircle className="h-4 w-4" /> Falta una decisión tuya: ¿esta empresa acredita el IEPS que le trasladan?
+          </p>
+          <p className="mt-1 text-[12px] text-cos-ink-soft">
+            El Art. 4º LIEPS sólo permite acreditarlo a quien es contribuyente del mismo bien, y sólo por ciertos
+            incisos. Un comerciante que revende no acredita; un productor o importador sí. La diferencia este mes son{" "}
+            {ieps.pagadoAcreditable.toLocaleString("es-MX", { style: "currency", currency: "MXN" })}.
+          </p>
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            <button onClick={() => onDecidir(true)} disabled={saving}
+              className="inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-3 py-2 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Scale className="h-4 w-4" />} Sí acredita
+            </button>
+            <button onClick={() => onDecidir(false)} disabled={saving}
+              className="inline-flex items-center gap-1.5 rounded-control border border-cos-line px-3 py-2 text-[13px] hover:bg-cos-card disabled:opacity-50">
+              No acredita
+            </button>
+          </div>
+        </div>
+      ) : (
+        ieps.acreditamiento.decision !== "sin_decidir" && (
+          <p className="mt-2 text-[11.5px] text-cos-ink-faint">
+            Criterio del despacho:{" "}
+            {ieps.acreditamiento.decision === "acredita" ? "sí acredita" : "no acredita"} el IEPS trasladado
+            {ieps.acreditamiento.decididoAt ? ` (decidido el ${fmtFecha(ieps.acreditamiento.decididoAt)})` : ""}.{" "}
+            <button onClick={() => onDecidir(ieps.acreditamiento.decision !== "acredita")} disabled={saving}
+              className="underline hover:text-cos-ink">Cambiar</button>
+          </p>
+        )
+      )}
+
+      {/* El número — o su ausencia. Un total inventado sería peor que ninguno. */}
+      <div className="mt-3 flex items-center justify-between gap-3 border-t border-cos-line-soft pt-3">
+        <div className="min-w-0">
+          <span className="text-[12.5px] text-cos-ink-soft">
+            {ieps.monto === null ? "Sin determinar" : ieps.completo ? "IEPS del mes" : "IEPS del mes (incompleto)"}
+          </span>
+          <p className="mt-0.5 text-[11.5px] text-cos-ink-faint">{ieps.motivo}</p>
+        </div>
+        {ieps.monto === null ? (
+          <span className="shrink-0 text-[14px] font-semibold text-cos-ink-faint">—</span>
+        ) : (
+          <Money value={ieps.monto} size={16} weight={700} />
+        )}
+      </div>
+
+      {ieps.estado === "FILED" ? (
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-md bg-cos-jade-tint p-3">
+          <div>
+            <p className="flex items-center gap-1.5 text-[13px] font-medium text-cos-jade-ink">
+              <CheckCircle2 className="h-4 w-4" /> Presentada{" "}
+              {ieps.fechaPresentacion ? `el ${fmtFecha(ieps.fechaPresentacion)}` : ""}
+            </p>
+            <p className="mt-0.5 text-[11.5px] text-cos-jade-ink/80">{ieps.evidencia?.etiqueta ?? "presentada"}</p>
+          </div>
+          {/* Con el acuse del SAT guardado no hay nada que revertir. */}
+          {!ieps.evidencia?.acuseDescargable && (
+            <button onClick={() => onFile(false)} disabled={saving}
+              className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1.5 text-[12.5px] hover:bg-cos-card disabled:opacity-50">
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />} Revertir
+            </button>
+          )}
+        </div>
+      ) : (
+        <button onClick={() => onFile(true)} disabled={saving || ieps.monto === null}
+          className="mt-3 inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-3 py-2 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Marcar presentada
+        </button>
+      )}
+
+      <p className="mt-2 text-[11px] text-cos-ink-faint">
+        Calculado por fecha de CFDI, no por flujo de efectivo ({ieps.renglones} renglones de impuesto).
+      </p>
+    </Card>
   );
 }
 

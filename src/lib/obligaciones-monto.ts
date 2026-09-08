@@ -30,6 +30,7 @@ export interface DeclaracionParaMonto {
   isrPagar?: number | null;
   retencionesIsr?: number | null;
   iepsPagar?: number | null;
+  isnPagar?: number | null;
   imssCuotas?: number | null;
 }
 
@@ -87,6 +88,8 @@ export function montoDeObligacion(
       return de(decl.retencionesIsr);
     case "IEPS_MENSUAL":
       return de(decl.iepsPagar);
+    case "ISN_MENSUAL":
+      return de(decl.isnPagar);
     case "IMSS":
       return de(decl.imssCuotas);
     // Informativas: no hay nada que pagar, y eso NO es un cálculo pendiente.

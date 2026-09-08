@@ -3,7 +3,8 @@ import { requireMembership, requireModule, withAuthz } from "@/lib/authz";
 import { computeTaxPosition } from "@/lib/impuestos";
 import { checklistDeclaracion } from "@/lib/fiscal/checklist-declaracion";
 import { retencionesDelPeriodo } from "@/lib/fiscal/retenciones";
-import { iepsDelPeriodo } from "@/lib/salameria/ieps";
+import { leerRenglonesIeps } from "@/lib/fiscal/ieps/leer";
+import { aPagarIeps, periodoIeps, type DecisionAcreditamiento } from "@/lib/fiscal/ieps/periodo";
 import { prisma } from "@/lib/prisma";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -49,23 +50,32 @@ export const GET = withAuthz(async (req: Request) => {
 
   // El checklist ya corre el motor por dentro para sus banderas; la corrida
   // extra trae el desglose completo. Paralelo para no sumar latencia.
-  const [pos, checklist, retenciones, ieps] = await Promise.all([
+  const [pos, checklist, retenciones, renglonesIeps, empresaIeps] = await Promise.all([
     computeTaxPosition(companyId, year, month),
     checklistDeclaracion(companyId, year, month, hoy),
     retencionesDelPeriodo(companyId, year, month),
-    // El motor del hub no calcula IEPS todavía; esto suma lo que los CFDIs ya
-    // dicen para que la pantalla no lo omita en silencio. Ver lib/salameria/ieps.ts.
-    iepsDelPeriodo(prisma, companyId, year, month),
+    // El MISMO motor de IEPS que usa el cierre mensual (lib/fiscal/ieps). Antes
+    // el satélite tenía su propia copia: dos criterios para un mismo impuesto es
+    // exactamente la falla que ya nos costó una vez (350 cuentas contra 4).
+    leerRenglonesIeps(prisma, companyId, year, month),
+    prisma.company.findUnique({ where: { id: companyId }, select: { iepsAcredita: true } }),
   ]);
+
+  const p = periodoIeps(year, month, renglonesIeps);
+  const decisionIeps: DecisionAcreditamiento =
+    empresaIeps?.iepsAcredita == null ? "sin_decidir" : empresaIeps.iepsAcredita ? "acredita" : "no_acredita";
+  const resIeps = aPagarIeps(p, decisionIeps);
+  const ieps = { ...p, acreditamiento: decisionIeps, ...resIeps, hay: p.renglones > 0 };
 
   // Lo que realmente sale del banco el día 17: impuesto propio (IVA + ISR
   // provisional) MÁS las retenciones, que no son de la empresa pero las entera
   // ella.
   //
-  // OJO: el IEPS NO se suma aquí. Se conoce el trasladado y el pagado, pero no
-  // cuánto es acreditable (Art. 4 LIEPS limita el acreditamiento por inciso), y
-  // meter un neto sin esa regla daría un total con aire de exacto que puede
-  // estar equivocado por decenas de miles. Va aparte y etiquetado.
+  // OJO: el IEPS NO se suma aquí. Es una declaración APARTE (Art. 5º LIEPS,
+  // con su propio acuse y su propia línea de captura), y además su importe sólo
+  // queda determinado cuando el contador contesta el acreditamiento del Art. 4º
+  // — mientras siga sin contestar, `ieps.monto` es null y sumarlo daría un total
+  // con aire de exacto equivocado por decenas de miles.
   const totalSat =
     Math.round(
       (Math.max(pos.iva.pagar, 0) +
@@ -85,7 +95,8 @@ export const GET = withAuthz(async (req: Request) => {
     isr: pos.isr,
     retenciones,
     totalSat,
-    /** Derivado de CFDIs, NO posición fiscal. `totalSat` no lo incluye. */
+    /** Derivado de CFDIs, NO posición fiscal. `totalSat` no lo incluye, y su
+     *  `monto` es null mientras falte la decisión del Art. 4º. */
     ieps,
     iepsEnTotal: false,
     efos: pos.efos ?? null,
