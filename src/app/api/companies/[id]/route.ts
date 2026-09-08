@@ -8,6 +8,7 @@ import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { encryptSecret } from "@/lib/crypto";
 import { fielStatus, parseCertExpiry } from "@/lib/fiel";
 import { validarCredencialSat } from "@/lib/sat-fiel";
+import { inspectSatCredentialTriplet } from "@/lib/sat-credential-triplet";
 import { borrarCredencialesEmpresa, borrarEmpresaDefinitivo } from "@/lib/empresas/baja";
 import { liberarSlotSyntage } from "@/lib/fiscal/cumplimiento/syntage/deprovision";
 import { registrarBitacora } from "@/lib/audit";
@@ -109,12 +110,21 @@ export async function PATCH(req: Request, { params }: Params) {
     nombreComercial, email, telefono, actividadEconomica,
   } = body;
 
+  const estadoFiel = inspectSatCredentialTriplet(body, "FIEL");
+  const estadoCsd = inspectSatCredentialTriplet(body, "CSD");
+  if (estadoFiel === "INVALID" || estadoCsd === "INVALID") {
+    return NextResponse.json(
+      { error: "Cada credencial SAT debe incluir juntos el certificado, la llave privada y su contraseña." },
+      { status: 400 },
+    );
+  }
+
   try {
   // Validar la credencial ANTES de guardar (tipo e.firma vs sello, vigencia,
   // RFC, llave↔certificado y contraseña). Caso real: un CSD guardado como
   // e.firma pasaba el guardado con badge verde y reventaba después en la
   // descarga masiva con un mensaje genérico.
-  if (fielCer && fielKey && fielPassword) {
+  if (estadoFiel === "COMPLETE") {
     const empresa = await prisma.company.findUnique({ where: { id: companyId }, select: { rfc: true } });
     const v = validarCredencialSat({
       cerBase64: fielCer, keyBase64: fielKey, password: fielPassword,
@@ -128,7 +138,7 @@ export async function PATCH(req: Request, { params }: Params) {
       );
     }
   }
-  if (csdCer && csdKey && csdPassword) {
+  if (estadoCsd === "COMPLETE") {
     const empresa = await prisma.company.findUnique({ where: { id: companyId }, select: { rfc: true } });
     const v = validarCredencialSat({
       cerBase64: csdCer, keyBase64: csdKey, password: csdPassword,
@@ -139,13 +149,17 @@ export async function PATCH(req: Request, { params }: Params) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data: Record<string, any> = {};
   // Encrypt credential material at rest (AES-256-GCM via lib/crypto).
-  if (fielCer) data.fielCer = encryptSecret(fielCer);
-  if (fielKey) data.fielKey = encryptSecret(fielKey);
-  if (fielPassword) data.fielPassword = encryptSecret(fielPassword);
-  if (fielCer) data.fielVigencia = parseCertExpiry(fielCer); // capture e.firma expiry
-  if (csdCer) data.csdCer = encryptSecret(csdCer);
-  if (csdKey) data.csdKey = encryptSecret(csdKey);
-  if (csdPassword) data.csdPassword = encryptSecret(csdPassword);
+  if (estadoFiel === "COMPLETE") {
+    data.fielCer = encryptSecret(fielCer);
+    data.fielKey = encryptSecret(fielKey);
+    data.fielPassword = encryptSecret(fielPassword);
+    data.fielVigencia = parseCertExpiry(fielCer); // capture e.firma expiry
+  }
+  if (estadoCsd === "COMPLETE") {
+    data.csdCer = encryptSecret(csdCer);
+    data.csdKey = encryptSecret(csdKey);
+    data.csdPassword = encryptSecret(csdPassword);
+  }
   if (registroPatronal !== undefined) {
     // Validar ANTES de guardar: un cliente llegó a guardar su CORREO como
     // registro patronal y nada lo detuvo hasta el timbrado de nómina. Vacío
@@ -188,7 +202,7 @@ export async function PATCH(req: Request, { params }: Params) {
 
   // El guardado y, si cambia la e.firma, la evidencia de autorización de uso
   // van en la MISMA transacción: no queda e.firma guardada sin su autorización.
-  const cambiaEfirma = Boolean(fielCer && fielKey && fielPassword);
+  const cambiaEfirma = estadoFiel === "COMPLETE";
   const actorId = session.user.id;
   const actorEmail = session.user.email ?? null;
   await prisma.$transaction(async (tx) => {

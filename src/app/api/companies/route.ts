@@ -13,6 +13,7 @@ import { seedCompanyObligaciones } from "@/lib/obligaciones-seed";
 import { encryptNullable } from "@/lib/crypto";
 import { parseCertExpiry } from "@/lib/fiel";
 import { validarCredencialSat } from "@/lib/sat-fiel";
+import { inspectSatCredentialTriplet } from "@/lib/sat-credential-triplet";
 import { registrarAceptaciones } from "@/lib/legal/aceptaciones";
 
 // GET /api/companies — sesión web O token de servicio (Authorization: Bearer),
@@ -225,6 +226,14 @@ export async function POST(req: Request) {
     grupoId?: string | null;
     modulos?: string[];
   };
+  const estadoFiel = inspectSatCredentialTriplet(body, "FIEL");
+  const estadoCsd = inspectSatCredentialTriplet(body, "CSD");
+  if (estadoFiel === "INVALID" || estadoCsd === "INVALID") {
+    return NextResponse.json(
+      { error: "Cada credencial SAT debe incluir juntos el certificado, la llave privada y su contraseña." },
+      { status: 400 },
+    );
+  }
 
   if (!rfc || !razonSocial || !regimenFiscal || !codigoPostal) {
     return NextResponse.json({ error: "Faltan campos requeridos" }, { status: 400 });
@@ -357,9 +366,9 @@ export async function POST(req: Request) {
   // vigencia, RFC, llave↔certificado y contraseña). Caso real: un CSD subido
   // como e.firma en el onboarding pasaba con badge verde y reventaba después
   // en la descarga masiva con un mensaje genérico.
-  if (fielCer && fielKey && fielPassword) {
+  if (estadoFiel === "COMPLETE") {
     const v = validarCredencialSat({
-      cerBase64: fielCer, keyBase64: fielKey, password: fielPassword,
+      cerBase64: fielCer!, keyBase64: fielKey!, password: fielPassword!,
       rfcEsperado: rfcNorm, esperado: "FIEL",
     });
     if (!v.ok) return NextResponse.json({ error: `e.firma: ${v.error}` }, { status: 422 });
@@ -370,14 +379,14 @@ export async function POST(req: Request) {
       );
     }
   }
-  if (csdCer && csdKey && csdPassword) {
+  if (estadoCsd === "COMPLETE") {
     const v = validarCredencialSat({
-      cerBase64: csdCer, keyBase64: csdKey, password: csdPassword,
+      cerBase64: csdCer!, keyBase64: csdKey!, password: csdPassword!,
       rfcEsperado: rfcNorm, esperado: "CSD",
     });
     if (!v.ok) return NextResponse.json({ error: `CSD: ${v.error}` }, { status: 422 });
   }
-  const guardaEfirma = Boolean(fielCer && fielKey && fielPassword);
+  const guardaEfirma = estadoFiel === "COMPLETE";
 
   // Encrypt credential material before persisting. In production
   // encryptSecret/encryptNullable throw if CREDENTIALS_ENCRYPTION_KEY is
@@ -622,7 +631,7 @@ export async function POST(req: Request) {
   // para el aprovisionamiento manual del operador (cron ?companyId=).
   // Best-effort: only triggers extractions (sync persists results later).
   let syntage = null;
-  if (fielCer && fielKey && fielPassword) {
+  if (guardaEfirma) {
     try {
       syntage = await provisionCompany(company.id, undefined, { force: false });
     } catch (e) {
