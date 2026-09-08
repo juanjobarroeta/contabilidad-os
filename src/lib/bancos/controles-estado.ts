@@ -44,9 +44,17 @@ export function leerSaldos(texto: string): SaldosEstado {
     const m = texto.match(re);
     return m ? num(m[1]) : null;
   };
+  // Cada banco lo dice a su manera y el extractor mete tabuladores y «$»:
+  //   BBVA:    «Saldo de Liquidación Inicial 322,417.91» … «Saldo Final (+) 77,635.71»
+  //   Banorte: «Saldo inicial del periodo \t$ 395,814.44» … «Saldo actual \t$ 9,766.31»
+  const SEP = "[\\s\\t]*\\$?[\\s\\t]*";
   return {
-    inicial: buscar(/Saldo[^\n]{0,40}?Inicial\s*\(?\+?\)?\s*([\d,]+\.\d{2})/i),
-    final: buscar(/Saldo\s*(?:de\s*Liquidaci[oó]n\s*)?Final\s*\(?\+?\)?\s*([\d,]+\.\d{2})/i),
+    inicial: buscar(new RegExp(`Saldo[^\\n]{0,40}?Inicial(?:\\s*del\\s*periodo)?\\s*\\(?\\+?\\)?${SEP}([\\d,]+\\.\\d{2})`, "i")),
+    final:
+      buscar(new RegExp(`Saldo\\s*(?:de\\s*Liquidaci[oó]n\\s*)?Final\\s*\\(?\\+?\\)?${SEP}([\\d,]+\\.\\d{2})`, "i")) ??
+      // Banorte no dice «final»: dice «Saldo actual» (y luego repite el
+      // disponible, que puede diferir por retenciones — se toma el actual).
+      buscar(new RegExp(`Saldo\\s*actual${SEP}([\\d,]+\\.\\d{2})`, "i")),
   };
 }
 
@@ -97,6 +105,7 @@ export interface ControlesEstado {
 }
 
 const num = (s: string): number => Number(s.replace(/,/g, ""));
+const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 /** Lee los totales de control del texto del estado. PURA. */
 export function leerControles(texto: string): ControlesEstado {
@@ -119,9 +128,26 @@ export function leerControles(texto: string): ControlesEstado {
   const banDep = texto.match(/\+\s*Total de dep[oó]sitos\s*[\s\t]*\$?\s*([\d,]+\.\d{2})/i);
   const banRet = texto.match(/-\s*Total de retiros\s*[\s\t]*\$?\s*([\d,]+\.\d{2})/i);
   if (banDep || banRet) {
+    // OJO: Banorte deja FUERA de «Total de retiros» las comisiones, su IVA y
+    // los intereses cobrados —los declara en renglones aparte— pero en el
+    // detalle SÍ son movimientos, cada uno bajando el saldo corrido. Comparar
+    // los cargos extraídos contra el renglón pelón acusaba un faltante que no
+    // existe (caso real: $42,326.64 de comisiones + IVA en agosto 2026) y
+    // enseñaba al usuario a confirmar por encima de las advertencias — que es
+    // exactamente como se coló el error de signo de BBVA. Se suman aquí para
+    // que el cotejo compare universos iguales.
+    const extra = (re: RegExp): number => {
+      const m = texto.match(re);
+      return m ? num(m[1]) : 0;
+    };
+    const comisiones = extra(/-\s*Total de comisiones[^$\n]*\$?\s*([\d,]+\.\d{2})/i);
+    const ivaComisiones = extra(/-\s*IVA sobre comisiones[^$\n]*\$?\s*([\d,]+\.\d{2})/i);
+    const intereses = extra(/-\s*Intereses Cobrados[^$\n]*\$?\s*([\d,]+\.\d{2})/i);
     return {
       depositos: banDep ? { conteo: null, total: num(banDep[1]) } : null,
-      retiros: banRet ? { conteo: null, total: num(banRet[1]) } : null,
+      retiros: banRet
+        ? { conteo: null, total: round2(num(banRet[1]) + comisiones + ivaComisiones + intereses) }
+        : null,
       fuente: "banorte",
     };
   }
