@@ -59,9 +59,16 @@ SCHEMA:
   "saldoInicial": number | null,
   "saldoFinal": number | null,
   "movimientos": [
-    { "fecha": "YYYY-MM-DD", "descripcion": string, "monto": number, "referencia": string | null, "saldo": number | null }
+    { "fecha": "YYYY-MM-DD", "descripcion": string, "monto": number, "referencia": string | null, "saldo": number | null, "sublineas": string[] }
   ]
-}`;
+}
+
+SOBRE "sublineas": varios bancos (BBVA sobre todo) parten cada movimiento en
+varias líneas: debajo del renglón principal imprimen, SUELTAS y sin etiqueta, la
+CLABE de la contraparte, la clave de rastreo y su nombre. Copia esas líneas de
+continuación TAL CUAL, una por elemento, sin resumirlas, sin reordenarlas y sin
+corregirlas. Si un movimiento no tiene líneas debajo, devuelve [].
+NO metas esas líneas dentro de "descripcion": ahí va sólo el renglón principal.`;
 
 const USER_PROMPT = "Extrae los movimientos y saldos de este estado de cuenta siguiendo el schema exacto. Solo JSON.";
 
@@ -98,6 +105,8 @@ type RawExtraction = {
     monto: number;
     referencia: string | null;
     saldo: number | null;
+    /** Líneas de continuación del movimiento, tal cual las imprime el banco. */
+    sublineas?: string[] | null;
   }[];
 };
 
@@ -138,18 +147,24 @@ export async function extractStatementFromDocument(
         pdf: await recortarPaginas(buf, desde, hasta),
       })),
     );
-    // Si qpdf no pudo recortar, se cae al documento completo antes que fallar:
-    // peor extracción es mejor que ninguna, y los controles lo delatarán.
-    if (recortes.some((r) => !r.pdf)) {
-      warnings.push("No se pudo partir el PDF por páginas; se extrajo completo.");
-      raws = [await extraerDeDocumento(buf, mediaType, costCtx, null)];
-    } else {
-      raws = await Promise.all(
-        recortes.map((r) =>
-          extraerDeDocumento(r.pdf!, "application/pdf", costCtx, [r.desde, r.hasta]),
-        ),
+    // Si qpdf no pudo recortar, SE SIGUE LOTEANDO: se manda el documento
+    // completo en cada llamada y se le pide sólo un rango de páginas. Cuesta
+    // más (el PDF viaja N veces) pero conserva lo único que importa aquí —
+    // que ninguna respuesta tenga que caber 168 movimientos. Caer al documento
+    // completo en UNA llamada sería volver justo al bug que esto arregla.
+    const sinRecorte = recortes.some((r) => !r.pdf);
+    if (sinRecorte) {
+      warnings.push(
+        "No se pudo partir el PDF por páginas; se leyó por rangos sobre el documento completo.",
       );
     }
+    raws = await Promise.all(
+      recortes.map((r) =>
+        r.pdf
+          ? extraerDeDocumento(r.pdf, "application/pdf", costCtx, [r.desde, r.hasta])
+          : extraerDeDocumento(buf, mediaType, costCtx, [r.desde, r.hasta]),
+      ),
+    );
   } else {
     raws = [await extraerDeDocumento(buf, mediaType, costCtx, null)];
   }
@@ -173,12 +188,19 @@ export async function extractStatementFromDocument(
     .filter((m) => m && m.fecha && typeof m.monto === "number")
     .map((m) => {
       const d = new Date(`${m.fecha}T12:00:00`);
+      // Las sublíneas NO se pegan a `descripcion`: esa cadena entra en la
+      // clave de deduplicación, y cambiarla haría que reimportar el mismo
+      // estado se viera como movimientos nuevos. Viajan aparte.
+      const sublineas = (m.sublineas ?? [])
+        .filter((x): x is string => typeof x === "string" && x.trim() !== "")
+        .map((x) => x.trim());
       return {
         fecha: d,
         descripcion: (m.descripcion ?? "").trim() || "Movimiento",
         monto: m.monto,
         referencia: m.referencia ?? undefined,
         saldo: typeof m.saldo === "number" ? m.saldo : undefined,
+        ...(sublineas.length > 0 ? { sublineas } : {}),
       };
     })
     .filter((t) => !isNaN(t.fecha.getTime()));
@@ -232,8 +254,10 @@ export async function extractStatementFromDocument(
   };
 }
 
-/** Una llamada de extracción. `rango` acota a un lote de páginas del original
- *  (sólo para redactar el prompt: el PDF que se manda YA viene recortado). */
+/** Una llamada de extracción acotada a un lote de páginas. El PDF que se manda
+ *  puede venir YA recortado (camino normal) o completo, cuando qpdf no está
+ *  disponible: en los dos casos el prompt pide sólo ese rango, así que ninguna
+ *  respuesta tiene que cargar con todo el estado de cuenta. */
 async function extraerDeDocumento(
   buf: Buffer,
   mediaType: "application/pdf" | "image/jpeg" | "image/png" | "image/webp",
@@ -261,7 +285,7 @@ async function extraerDeDocumento(
             {
               type: "text",
               text: rango
-                ? `${USER_PROMPT} Este archivo es un FRAGMENTO del estado de cuenta (páginas ${rango[0]} a ${rango[1]} del original): extrae únicamente los movimientos que aparezcan aquí, y deja en null los saldos que no vengan en estas páginas.`
+                ? `${USER_PROMPT} Extrae ÚNICAMENTE los movimientos de las páginas ${rango[0]} a ${rango[1]} del documento, contadas desde la primera página del archivo que recibes. Ignora por completo cualquier movimiento fuera de ese rango: otra llamada se encarga de ellos, y repetirlos los duplicaría. Deja en null los saldos que no vengan en esas páginas.`
                 : USER_PROMPT,
             },
           ],

@@ -239,7 +239,11 @@ function limpiarValor(v: string): string {
  * clave de rastreo y que se descartaba por "ilegible" — lo es para una persona,
  * no para Banxico.
  */
-export function parseSpei(descripcion: string, columnaCriptica?: string): DatosSpei {
+export function parseSpei(
+  descripcion: string,
+  columnaCriptica?: string,
+  sublineas?: string[],
+): DatosSpei {
   const out: DatosSpei = {};
   const texto = (descripcion ?? "").trim();
 
@@ -294,7 +298,82 @@ export function parseSpei(descripcion: string, columnaCriptica?: string): DatosS
   const finPrefijo = hits.length > 0 ? hits[0].ini : texto.length;
   posicionales(texto.slice(0, finPrefijo).trim(), out);
 
+  // 5. SUBLÍNEAS SIN ETIQUETA. Lo último, y sólo rellena huecos: cualquier
+  //    etiqueta explícita le gana. Es lo que BBVA imprime DEBAJO del renglón.
+  if (sublineas?.length) leerSublineas(sublineas, out);
+
   return out;
+}
+
+// ── Sublíneas sin etiqueta (BBVA) ────────────────────────────────────────────
+//
+// BBVA no etiqueta NADA y además parte el movimiento en varias líneas: el
+// renglón lleva fecha, código, concepto y monto, y debajo van —sueltas, una por
+// línea— la CLABE de la contraparte, la clave de rastreo y su nombre:
+//
+//   03/AGO 03/AGO T17 SPEI ENVIADO HSBC 22,040.00
+//   0030826CARTUCHOS ESTERILIZACION EN PE Ref. 0033122692 021
+//   00021180040705338981            ← CLABE (con dos ceros de relleno al frente)
+//   BNET01002608030033122692        ← clave de rastreo
+//   CASONATO STEELCO SPA SA DE CV   ← beneficiario
+//
+// Los tres datos que más falta hacen, y se venían tirando enteros: el motor de
+// etiquetas no tenía dónde morder y estas líneas ni siquiera llegaban a él.
+//
+// CÓMO SE DISTINGUE SIN ADIVINAR. Cada uno tiene una forma que el otro no puede
+// fingir: la CLABE trae DÍGITO DE CONTROL (una mal leída se cae sola — y se
+// cayó: una línea huérfana de un salto de página no valida y no se emite), la
+// clave de rastreo es alfanumérica con letras Y dígitos, y el nombre no tiene
+// dígitos. Nada se toma por posición.
+//
+// Y EL NOMBRE LLEVA CANDADO EXTRA: sólo se acepta si en el mismo bloque salió
+// una CLABE válida o una clave de rastreo. Sin esa prueba de que el bloque es
+// el detalle de un SPEI, un pie de página ("Información Financiera MONEDA
+// NACIONAL") pasaría por nombre de contraparte.
+
+/** Sólo letras, espacios y los signos de una razón social. Ningún dígito. */
+const RE_NOMBRE_LIMPIO = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ][A-Za-zÁÉÍÓÚÜÑáéíóúüñ .,&'/-]{5,59}$/;
+
+/** Un bloque de líneas sueltas de BBVA → los campos que se puedan probar. PURA. */
+export function leerSublineas(lineas: string[], out: DatosSpei): void {
+  const candidatosNombre: string[] = [];
+  let hayPrueba = false;
+
+  for (const cruda of lineas) {
+    const l = (cruda ?? "").trim();
+    if (!l) continue;
+
+    // CLABE: BBVA la imprime con ceros de relleno al frente ("00" + 18). Se
+    // prueban los últimos 18 dígitos y manda el dígito de control: si no
+    // cuadra, no se emite nada. Vale más no tener CLABE que tener otra cuenta.
+    if (/^\d{18,22}$/.test(l)) {
+      const clabe = l.slice(-18);
+      if (clabeValida(clabe)) {
+        out.contraparteClabe ??= clabe;
+        out.bancoContraparteCodigo ??= clabe.slice(0, 3);
+        hayPrueba = true;
+      }
+      continue;
+    }
+
+    // Clave de rastreo: un solo token alfanumérico, con letras Y dígitos. La
+    // letra es lo que la separa de un folio o de la CLABE.
+    if (!/\s/.test(l) && /[A-Za-z]/.test(l) && pareceClaveRastreo(l)) {
+      out.claveRastreo ??= l.toUpperCase();
+      hayPrueba = true;
+      continue;
+    }
+
+    // Nombre: sin un solo dígito y con al menos dos palabras. Se guarda y se
+    // decide al final, cuando ya se sabe si el bloque probó ser un SPEI.
+    if (RE_NOMBRE_LIMPIO.test(l) && l.trim().split(/\s+/).length >= 2) {
+      candidatosNombre.push(l.trim().toUpperCase());
+    }
+  }
+
+  if (hayPrueba && candidatosNombre.length > 0) {
+    out.contraparteNombre ??= candidatosNombre[0];
+  }
 }
 
 /**

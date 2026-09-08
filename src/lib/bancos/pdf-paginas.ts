@@ -71,11 +71,21 @@ export async function recortarPaginas(
   desde: number,
   hasta: number,
 ): Promise<Buffer | null> {
-  const { code, out, stderr } = await runQpdf(
-    ["in.pdf", "--pages", ".", `${desde}-${hasta}`, "--", "out.pdf"],
-    buf,
-  );
-  if ((code === 0 || code === 3) && out) return out;
-  console.error(`[pdf-paginas] recorte ${desde}-${hasta} falló:`, stderr.trim().slice(0, 200));
-  return null;
+  // NUNCA lanza. El corte es una OPTIMIZACIÓN, no un requisito: si qpdf no está
+  // disponible se extrae el documento completo, como antes. Que esto tirara una
+  // excepción convirtió una mejora en una caída — el camino de qpdf sólo se
+  // había ejercitado con PDFs protegidos (casi nunca), y al ponerlo en cada
+  // subida su primer tropiezo llegó al usuario como «e is not a function».
+  try {
+    const { code, out, stderr } = await runQpdf(
+      ["in.pdf", "--pages", ".", `${desde}-${hasta}`, "--", "out.pdf"],
+      buf,
+    );
+    if ((code === 0 || code === 3) && out) return out;
+    console.error(`[pdf-paginas] recorte ${desde}-${hasta} falló:`, stderr.trim().slice(0, 200));
+    return null;
+  } catch (e) {
+    console.error(`[pdf-paginas] recorte ${desde}-${hasta} lanzó:`, e);
+    return null;
+  }
 }

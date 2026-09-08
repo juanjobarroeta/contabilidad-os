@@ -19,6 +19,13 @@ export interface ParsedTransaction {
    *  juzgar: quien decide si es una clave de rastreo es `parseSpei`, que sabe
    *  distinguirla de un folio. Aquí sólo se deja de tirarla. */
   claveRastreoRaw?: string;
+  /** Las líneas de CONTINUACIÓN del movimiento, tal cual las imprime el banco.
+   *  BBVA parte cada SPEI en varias: debajo del renglón van sueltas la CLABE de
+   *  la contraparte, la clave de rastreo y su nombre. NO se pegan a
+   *  `descripcion` a propósito — esa cadena entra en la clave de deduplicación
+   *  (`claveDeDuplicado`), y cambiarla haría que un reimporte del mismo estado
+   *  se viera como movimientos nuevos. Viajan aparte y las lee `parseSpei`. */
+  sublineas?: string[];
 }
 
 /** Fila del archivo que NO se convirtió en transacción, con el motivo.

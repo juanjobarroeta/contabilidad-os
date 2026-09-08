@@ -36,8 +36,29 @@ export type QpdfRun = { code: number; out: Buffer | null; stderr: string };
 /** Ejecuta el CLI de qpdf (WASM) sobre un buffer, en un FS virtual efímero.
  *  Cada llamada instancia un módulo nuevo — callMain solo corre una vez. */
 export async function runQpdf(args: string[], input: Buffer): Promise<QpdfRun> {
+  try {
+    return await correrQpdf(args, input);
+  } catch (e) {
+    // NUNCA lanza: quien llama decide qué hacer sin qpdf. Antes una excepción
+    // aquí subía hasta el usuario como un error minificado sin sentido.
+    console.error("[qpdf] falló el arranque del módulo WASM:", e);
+    return { code: 2, out: null, stderr: e instanceof Error ? e.message : "error desconocido" };
+  }
+}
+
+async function correrQpdf(args: string[], input: Buffer): Promise<QpdfRun> {
+  // Interop: según cómo resuelva el runtime (CJS vs `require` de un ESM en Node
+  // 22, que devuelve el namespace), esto llega como función o como objeto con
+  // `default`. Llamar al objeto tira «X is not a function» — que es exactamente
+  // lo que reventó en producción cuando este camino, antes reservado a los PDFs
+  // con contraseña, pasó a correr en CADA subida.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const createModule: any = req("@jspawn/qpdf-wasm/qpdf.js");
+  const mod0: any = req("@jspawn/qpdf-wasm/qpdf.js");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const createModule: any = typeof mod0 === "function" ? mod0 : mod0?.default;
+  if (typeof createModule !== "function") {
+    return { code: 2, out: null, stderr: "qpdf-wasm no exportó una función de arranque" };
+  }
   let stderr = "";
   const mod = await createModule({
     noInitialRun: true,
