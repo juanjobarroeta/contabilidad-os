@@ -38,7 +38,8 @@ export type FamiliaConcepto =
   | "RENT" // renta / arrendamiento pagado → COE_CODES.RENTAS
   | "NON_DEDUCTIBLE" // gasto no deducible → COE_CODES.GASTOS_NO_DEDUCIBLES
   | "LOAN_RECEIVED" // préstamo que NOS dieron / su devolución → COE_CODES.PRESTAMOS_RECIBIDOS
-  | "LOAN_GIVEN"; // préstamo que DIMOS / su cobro → COE_CODES.PRESTAMOS_OTORGADOS
+  | "LOAN_GIVEN" // préstamo que DIMOS / su cobro → COE_CODES.PRESTAMOS_OTORGADOS
+  | "IVA_COMISION"; // IVA de una comisión bancaria → IVA acreditable, NO gasto
 
 export interface SugerenciaCategoria {
   /** Familia interna (coincide con la etiqueta de notes que lee postMonth). */
@@ -67,6 +68,7 @@ export const FAMILIA_META: Record<FamiliaConcepto, { cuenta: string; etiqueta: s
   NON_DEDUCTIBLE: { cuenta: COE_CODES.GASTOS_NO_DEDUCIBLES, etiqueta: "Gasto no deducible" },
   LOAN_RECEIVED: { cuenta: COE_CODES.PRESTAMOS_RECIBIDOS, etiqueta: "Préstamo recibido" },
   LOAN_GIVEN: { cuenta: COE_CODES.PRESTAMOS_OTORGADOS, etiqueta: "Préstamo otorgado" },
+  IVA_COMISION: { cuenta: COE_CODES.IVA_ACREDITABLE_PEND, etiqueta: "IVA de comisión bancaria" },
 };
 
 /**
@@ -119,6 +121,24 @@ interface Regla {
 }
 
 const REGLAS: Regla[] = [
+  // ── IVA de comisiones ───────────────────────────────────────────────────────
+  // VA ANTES que la regla de comisiones: el renglón dice «IVA COMISION …» y con
+  // el orden inverso caería en gasto. El banco cobra el IVA como movimiento
+  // aparte y NO es un costo — es impuesto acreditable. En una cuenta con
+  // terminal son 77 renglones al mes ($5,838 en un solo hospital) que estaban
+  // inflando comisiones bancarias y perdiéndose del IVA por acreditar.
+  //
+  // «IVA COM.» abreviado incluido: BBVA/Banorte escriben «IVA COM. TRANS.
+  // AMEX», que no empata con «comisión» y por eso 12 renglones seguían
+  // apareciendo en la mesa como si fueran un gasto por identificar.
+  {
+    patrones: ["IVA COMISION", "IVA COM.", "IVA COM ", "IVA POR COMISION", "IVA DE COMISION"],
+    soloSigno: "DEBITO",
+    familia: "IVA_COMISION",
+    cuenta: COE_CODES.IVA_ACREDITABLE_PEND,
+    etiqueta: "IVA de comisión bancaria",
+    confianza: "alta",
+  },
   // ── Comisiones / gastos bancarios ──────────────────────────────────────────
   {
     patrones: [

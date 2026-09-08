@@ -42,6 +42,7 @@ const FAMILIA_A_CUENTA: Record<FamiliaConcepto, { cuenta: string; etiqueta: stri
   NON_DEDUCTIBLE: { cuenta: COE_CODES.GASTOS_NO_DEDUCIBLES, etiqueta: "Gasto no deducible" },
   LOAN_RECEIVED: { cuenta: COE_CODES.PRESTAMOS_RECIBIDOS, etiqueta: "Préstamo recibido" },
   LOAN_GIVEN: { cuenta: COE_CODES.PRESTAMOS_OTORGADOS, etiqueta: "Préstamo otorgado" },
+  IVA_COMISION: { cuenta: COE_CODES.IVA_ACREDITABLE_PEND, etiqueta: "IVA de comisión bancaria" },
 };
 
 const FAMILIAS_VALIDAS = Object.keys(FAMILIA_A_CUENTA) as FamiliaConcepto[];
@@ -59,6 +60,7 @@ Familias válidas:
 - NON_DEDUCTIBLE: gasto claramente no deducible.
 - LOAN_RECEIVED: préstamo recibido o su devolución (el concepto habla de un préstamo y NO es cobro de uno que dimos).
 - LOAN_GIVEN: préstamo que otorgamos o su cobro.
+- IVA_COMISION: el IVA de una comisión bancaria, cobrado como movimiento aparte.
 
 Reglas:
 - Si tienes cualquier duda razonable, responde NINGUNA.
