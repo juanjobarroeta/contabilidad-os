@@ -2,7 +2,16 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
-import { calcularVencimiento, defaultConfigForTipo, ObligacionConfig } from "@/lib/obligaciones";
+import {
+  calcularVencimiento,
+  defaultConfigForTipo,
+  fechaCalendarioIso,
+  ObligacionConfig,
+} from "@/lib/obligaciones";
+import {
+  diasEntreFechasCalendario,
+  fechaFiscalEnMexico,
+} from "@/lib/fiscal/periodo-operativo";
 import { seedCompanyObligaciones } from "@/lib/obligaciones-seed";
 
 // ── GET /api/obligaciones?companyId=xxx&year=2026 ─────────────────────────────
@@ -13,7 +22,7 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const companyId = searchParams.get("companyId");
-  const year = parseInt(searchParams.get("year") ?? String(new Date().getFullYear()));
+  const year = parseInt(searchParams.get("year") ?? String(fechaFiscalEnMexico().year));
 
   if (!companyId || isNaN(year)) {
     return NextResponse.json({ error: "companyId y year son requeridos" }, { status: 400 });
@@ -80,6 +89,8 @@ export async function GET(req: Request) {
   const companyCreatedAt = companyRecord?.createdAt ?? new Date();
 
   const now = new Date();
+  const nowKey = fechaFiscalEnMexico(now).key;
+  const companyCreatedKey = fechaFiscalEnMexico(companyCreatedAt).key;
 
   // Build calendar per obligation
   const calendar = dbObligaciones.map(ob => {
@@ -100,6 +111,7 @@ export async function GET(req: Request) {
       fuente: ob.fuente,
       periodos: periodos.map(periodo => {
         const vencimiento = calcularVencimiento(obConfig, periodo);
+        const vencimientoKey = fechaCalendarioIso(vencimiento);
         // Map our TaxDeclarationType to obligation tipo
         const declTipo = mapObligacionToDeclType(ob.tipo);
         const declStatus = declTipo ? declMap.get(`${declTipo}::${periodo}`) : undefined;
@@ -107,19 +119,19 @@ export async function GET(req: Request) {
         let estado: "FILED" | "PENDING" | "OVERDUE" | "UPCOMING" | "NOT_APPLICABLE";
         if (declStatus === "FILED" || declStatus === "PAID") {
           estado = "FILED";
-        } else if (vencimiento < companyCreatedAt && !declStatus) {
+        } else if (vencimientoKey < companyCreatedKey && !declStatus) {
           // Period ended before the company was onboarded — don't show as
           // overdue. Pero SÓLO sin declaración guardada: si ya existe una
           // (borrador/calculada), el periodo claramente sí le aplica.
           estado = "NOT_APPLICABLE";
-        } else if (vencimiento < now) {
+        } else if (vencimientoKey < nowKey) {
           // Calculada ≠ presentada: tener el borrador no detiene el plazo del
           // SAT. Antes «CALCULATED» forzaba PENDING aunque estuviera vencida y
           // esta pantalla decía «Vencidas 0» mientras la cartera decía
           // «Vencida» de la misma empresa. declaracionStatus viaja aparte para
           // que la celda pueda decir «calculada» además de vencida.
           estado = "OVERDUE";
-        } else if (vencimiento.getTime() - now.getTime() < 30 * 24 * 60 * 60 * 1000) {
+        } else if (diasEntreFechasCalendario(nowKey, vencimientoKey) < 30) {
           estado = "UPCOMING";
         } else {
           estado = "PENDING";
@@ -128,7 +140,7 @@ export async function GET(req: Request) {
         return {
           periodo,
           label: periodoLabel(periodo, ob.periodicidad),
-          vencimiento: vencimiento.toISOString(),
+          vencimiento: `${vencimientoKey}T00:00:00.000Z`,
           estado,
           declaracionStatus: declStatus ?? null,
         };

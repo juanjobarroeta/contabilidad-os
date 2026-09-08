@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, empresasAccesiblesIds, requireUser } from "@/lib/authz";
 import { armarCola, type SenalesEmpresa } from "@/lib/inicio/cola";
+import { calcularVencimiento, fechaCalendarioIso } from "@/lib/obligaciones";
+import {
+  diasEntreFechasCalendario,
+  fechaFiscalEnMexico,
+  periodoMensualPorDefecto,
+} from "@/lib/fiscal/periodo-operativo";
 
 // GET /api/inicio/cola — el lente despacho del nuevo Inicio (rediseño Piloto).
 //
@@ -27,15 +33,20 @@ export async function GET(req: Request) {
     if (ids.length === 0) return NextResponse.json({ filas: [], resumen: null, agenda: [] });
 
     const now = new Date();
-    // Periodo fiscal en juego = mes anterior; vence el 17 de este mes.
-    const periodoDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const year = periodoDate.getFullYear();
-    const month = periodoDate.getMonth() + 1;
-    const periodo = `${year}-${String(month).padStart(2, "0")}`;
-    const vencimiento = new Date(now.getFullYear(), now.getMonth(), 17, 23, 59, 59);
-    const vencido = now > vencimiento;
+    const hoyFiscal = fechaFiscalEnMexico(now);
+    const period = periodoMensualPorDefecto(now);
+    const { year, month } = period;
+    const periodo = period.key;
+    const federalConfig = {
+      tipo: "FEDERAL_MENSUAL",
+      descripcion: "IVA + ISR mensual",
+      periodicidad: "MENSUAL" as const,
+      diaVencimiento: 17,
+    };
+    const vencimiento = calcularVencimiento(federalConfig, periodo);
+    const vencido = hoyFiscal.key > fechaCalendarioIso(vencimiento);
     const periodoLabel = MESES[month - 1];
-    const venceLabel = `17 ${MESES_CORTO[now.getMonth()]}`;
+    const venceLabel = `${vencimiento.getDate()} ${MESES_CORTO[vencimiento.getMonth()]}`;
 
     const companies = await prisma.company.findMany({
       where: { id: { in: ids }, isActive: true },
@@ -149,21 +160,27 @@ export async function GET(req: Request) {
       };
     });
 
-    const { filas, resumen } = armarCola(senales, { diaDelMes: now.getDate() });
+    const { filas, resumen } = armarCola(senales, { diaDelMes: hoyFiscal.day });
 
     // Agenda fiscal — próximos 30 días, fechas clave con alcance de cartera.
     const empresasActivas = companies.length;
-    const en30 = (d: Date) => d > now && d.getTime() - now.getTime() < 30 * 86400000;
+    const en30 = (d: Date) => {
+      const diff = diasEntreFechasCalendario(hoyFiscal.key, fechaCalendarioIso(d));
+      return diff >= 0 && diff < 30;
+    };
     const fecha = (dia: number, mesOffset: number) =>
-      new Date(now.getFullYear(), now.getMonth() + mesOffset, dia);
+      new Date(hoyFiscal.year, hoyFiscal.month - 1 + mesOffset, dia);
+    const siguienteDate = new Date(year, month, 1);
+    const siguientePeriodo = `${siguienteDate.getFullYear()}-${String(siguienteDate.getMonth() + 1).padStart(2, "0")}`;
+    const siguienteVencimiento = calcularVencimiento(federalConfig, siguientePeriodo);
     const candidatos = [
       { f: fecha(5, 0), label: "REP del mes", detalle: "complementos de cobros PPD" },
       { f: fecha(5, 1), label: "REP del mes", detalle: "complementos de cobros PPD" },
-      { f: fecha(17, 0), label: `IVA + ISR ${periodoLabel}`, detalle: `${empresasActivas} empresa${empresasActivas === 1 ? "" : "s"}` },
-      { f: fecha(17, 1), label: `IVA + ISR ${MESES[now.getMonth()]}`, detalle: `${empresasActivas} empresa${empresasActivas === 1 ? "" : "s"}` },
-      { f: fecha(17, 0), label: "SIPARE", detalle: "cuotas IMSS del mes" },
-      { f: fecha(17, 1), label: "SIPARE", detalle: "cuotas IMSS del mes" },
-      { f: new Date(now.getFullYear(), now.getMonth() + 1, 0), label: "DIOT", detalle: "informativa · 54 campos, se genera sola" },
+      { f: vencimiento, label: `IVA + ISR ${periodoLabel}`, detalle: `${empresasActivas} empresa${empresasActivas === 1 ? "" : "s"}` },
+      { f: siguienteVencimiento, label: `IVA + ISR ${MESES[siguienteDate.getMonth()]}`, detalle: `${empresasActivas} empresa${empresasActivas === 1 ? "" : "s"}` },
+      { f: vencimiento, label: "SIPARE", detalle: "cuotas IMSS del mes" },
+      { f: siguienteVencimiento, label: "SIPARE", detalle: "cuotas IMSS del mes" },
+      { f: new Date(hoyFiscal.year, hoyFiscal.month, 0), label: "DIOT", detalle: "informativa · 54 campos, se genera sola" },
     ];
     const vistos = new Set<string>();
     const agenda = candidatos
@@ -171,7 +188,7 @@ export async function GET(req: Request) {
       .filter((c) => (vistos.has(c.label) ? false : (vistos.add(c.label), true)))
       .sort((a, b) => a.f.getTime() - b.f.getTime())
       .map((c) => ({
-        fecha: c.f.toISOString().slice(0, 10),
+        fecha: fechaCalendarioIso(c.f),
         fechaFmt: `${String(c.f.getDate()).padStart(2, "0")} ${MESES_CORTO[c.f.getMonth()].toUpperCase()}`,
         label: c.label,
         detalle: c.detalle,

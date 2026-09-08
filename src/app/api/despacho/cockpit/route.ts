@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { empresasAccesiblesIds } from "@/lib/authz";
 import { coberturaConCotejo } from "@/lib/fiscal/cobertura-con-cotejo";
 import { resumenObligacionesPorEmpresa } from "@/lib/obligaciones-resumen";
+import { calcularVencimiento, fechaCalendarioIso } from "@/lib/obligaciones";
+import { fechaFiscalEnMexico, periodoMensualPorDefecto } from "@/lib/fiscal/periodo-operativo";
 
 // GET /api/despacho/cockpit
 // Panel del despacho: una fila por empresa accesible con el estado del periodo
@@ -19,17 +21,20 @@ export async function GET(req: Request) {
   if (ids.length === 0) return NextResponse.json({ companies: [], cobertura: null });
 
   const now = new Date();
-  // Periodo en curso a declarar = MES ANTERIOR (se declara el mes siguiente,
-  // vence el 17). En enero, el periodo es diciembre del año previo.
-  const periodoDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const year = periodoDate.getFullYear();
-  const month = periodoDate.getMonth() + 1;
-  const periodo = `${year}-${String(month).padStart(2, "0")}`;
-  // Vence el día 17 del mes siguiente al periodo (= este mes). Fecha CALENDARIO
-  // en UTC: construirla en hora local del servidor rodaba al 18 cuando el
-  // servidor no corre en UTC (formatDate pinta en UTC) y la cartera decía
-  // «vence 18 ago» junto a un pie que decía «vence el 17».
-  const vencimiento = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 17));
+  const hoyFiscal = fechaFiscalEnMexico(now);
+  const period = periodoMensualPorDefecto(now);
+  const { year, month } = period;
+  const periodo = period.key;
+  const vencimiento = calcularVencimiento(
+    {
+      tipo: "FEDERAL_MENSUAL",
+      descripcion: "Declaración mensual",
+      periodicidad: "MENSUAL",
+      diaVencimiento: 17,
+    },
+    periodo,
+  );
+  const vencimientoKey = fechaCalendarioIso(vencimiento);
 
   const companies = await prisma.company.findMany({
     where: { id: { in: ids }, isActive: true },
@@ -128,14 +133,11 @@ export async function GET(req: Request) {
   // Obligaciones vencidas / por vencer del AÑO en curso, por empresa (mismo
   // criterio que el calendario de Cumplimiento). Así el cockpit muestra QUÉ
   // empresas están atrasadas, no sólo el estado de la declaración del periodo.
-  const obligBy = await resumenObligacionesPorEmpresa(companyIds, now.getFullYear(), now);
+  const obligBy = await resumenObligacionesPorEmpresa(companyIds, hoyFiscal.year, now);
 
   const FILED = ["FILED", "PAID"];
-  // Vencida a partir de la MEDIANOCHE del 18 en Ciudad de México (UTC−6 fijo
-  // desde 2022): comparar contra las 23:59 UTC del 17 marcaba «vencida» seis
-  // horas antes de que terminara el día 17 para el contribuyente.
-  const vencido =
-    now.getTime() >= Date.UTC(now.getFullYear(), now.getMonth(), 18, 6, 0, 0);
+  // A deadline remains timely for the entire Mexico City calendar day.
+  const vencido = hoyFiscal.key > vencimientoKey;
 
   const rows = companies.map((c) => {
     const ds = declsBy.get(c.id) ?? [];
@@ -189,7 +191,7 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     periodo,
-    vencimiento: vencimiento.toISOString(),
+    vencimiento: `${vencimientoKey}T00:00:00.000Z`,
     vencido,
     companies: rows,
     resumen: {

@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
-import { calcularVencimiento, type ObligacionConfig } from "./obligaciones";
+import { calcularVencimiento, fechaCalendarioIso, type ObligacionConfig } from "./obligaciones";
+import { diasEntreFechasCalendario, fechaFiscalEnMexico } from "./fiscal/periodo-operativo";
 
 // Cuenta, EN LOTE, las obligaciones vencidas / por vencer de varias empresas —
 // mismo criterio que el calendario de /api/obligaciones, pero agregado para el
@@ -26,8 +27,6 @@ export interface ResumenObligaciones {
   porVencer: number;
 }
 
-const VENTANA_MS = 30 * 24 * 60 * 60 * 1000;
-
 export async function resumenObligacionesPorEmpresa(
   companyIds: string[],
   year: number,
@@ -36,6 +35,7 @@ export async function resumenObligacionesPorEmpresa(
   const out = new Map<string, ResumenObligaciones>();
   for (const id of companyIds) out.set(id, { vencidas: 0, porVencer: 0 });
   if (companyIds.length === 0) return out;
+  const asOfKey = fechaFiscalEnMexico(asOf).key;
 
   const [obligaciones, declaraciones, companies] = await Promise.all([
     prisma.companyObligation.findMany({ where: { companyId: { in: companyIds }, activa: true } }),
@@ -70,18 +70,20 @@ export async function resumenObligacionesPorEmpresa(
       mesVencimiento: ob.mesVencimiento ?? undefined,
     };
     const declTipo = MAP_DECL[ob.tipo] ?? null;
-    const created = createdAt.get(ob.companyId) ?? new Date(0);
+    const createdKey = fechaFiscalEnMexico(createdAt.get(ob.companyId) ?? new Date(0)).key;
     const declMap = declByCo.get(ob.companyId);
     const r = out.get(ob.companyId);
     if (!declMap || !r) continue;
 
     for (const periodo of buildPeriodos(ob.periodicidad, year)) {
       const venc = calcularVencimiento(cfg, periodo);
+      const vencKey = fechaCalendarioIso(venc);
       const st = declTipo ? declMap.get(`${declTipo}::${periodo}`) : undefined;
       if (st === "FILED" || st === "PAID" || st === "CALCULATED") continue; // presentada / en proceso
-      if (venc < created) continue; // periodo previo al alta de la empresa
-      if (venc < asOf) r.vencidas++;
-      else if (venc.getTime() - asOf.getTime() < VENTANA_MS) r.porVencer++;
+      if (vencKey < createdKey) continue; // periodo previo al alta de la empresa
+      const dias = diasEntreFechasCalendario(asOfKey, vencKey);
+      if (dias < 0) r.vencidas++;
+      else if (dias < 30) r.porVencer++;
     }
   }
   return out;

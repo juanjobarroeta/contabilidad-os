@@ -182,7 +182,14 @@ describe.skipIf(skip)("authz.ts contra Postgres real (P0-2b)", () => {
     it("token válido + su empresa: pasa con el rol correcto", async () => {
       const r = await requireMembership(E.a, undefined, await reqDe(U.ana));
       expect(r.membership.role).toBe("OWNER");
+      expect(r.membership.accessViaDespacho).toBe(false);
       expect(r.user.id).toBe(U.ana);
+    });
+
+    it("expone la autoridad efectiva del despacho aun con membresía directa", async () => {
+      const r = await requireMembership(E.b, undefined, await reqDe(U.elena));
+      expect(r.membership.role).toBe("ADMIN");
+      expect(r.membership.accessViaDespacho).toBe(true);
     });
 
     it("token válido + empresa AJENA: 403", async () => {

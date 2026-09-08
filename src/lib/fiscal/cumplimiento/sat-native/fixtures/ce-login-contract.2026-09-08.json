@@ -1,0 +1,126 @@
+{
+  "observedAt": "2026-09-08",
+  "entry": {
+    "origin": "https://wwwmat.sat.gob.mx",
+    "pathname": "/operacion/16203/consulta-tus-acuses-generados-en-la-aplicacion-contabilidad-electronica"
+  },
+  "portalBridge": {
+    "origin": "https://wwwmat.sat.gob.mx",
+    "pathname": "/nesp/app/plogin",
+    "application": "PTSC",
+    "context": "mat/ptsc/totp/aviso/uri"
+  },
+  "ssoInitiation": {
+    "origin": "https://login.siat.sat.gob.mx",
+    "pathname": "/nidp/idff/sso",
+    "providerId": "https://wwwmat.sat.gob.mx:443/nesp/idff/metadata",
+    "authnContext": "mat/ptsc/totp/aviso/uri",
+    "protocolProfile": "http://projectliberty.org/profiles/brws-art"
+  },
+  "passwordLogin": {
+    "origin": "https://login.siat.sat.gob.mx",
+    "pathname": "/nidp/idff/sso",
+    "id": "mat-ptsc-totp_Aviso",
+    "option": "credential",
+    "sidValues": ["0", "0"],
+    "optionalQueryKeys": ["target"],
+    "efirmaTransitionControlId": "buttonFiel"
+  },
+  "efirmaLogin": {
+    "origin": "https://login.siat.sat.gob.mx",
+    "pathname": "/nidp/idff/sso",
+    "id": "fiel_Aviso",
+    "option": "credential",
+    "sidValues": ["0", "0"],
+    "optionalQueryKeys": [],
+    "visibleForm": {
+      "fileInputIds": ["fileCertificate", "filePrivateKey"],
+      "passwordInput": {
+        "id": "privateKeyPassword",
+        "name": "privateKeyPassword"
+      },
+      "identityInput": {
+        "id": "rfc",
+        "name": "rfc"
+      },
+      "submitControl": {
+        "id": "submit",
+        "name": "submit"
+      }
+    },
+    "hiddenForm": {
+      "id": "certform",
+      "actionMode": "CURRENT_DOCUMENT",
+      "challengeInputId": "tokenuuid",
+      "challengeEncoding": "BASE64_UUID",
+      "fieldNames": [
+        "token",
+        "credentialsRequired",
+        "guid",
+        "ks",
+        "seeder",
+        "arc",
+        "tan",
+        "placer",
+        "secuence",
+        "urlApplet",
+        "jcaptcha",
+        "fert"
+      ],
+      "staticFieldValues": {
+        "credentialsRequired": "CERT",
+        "ks": "null",
+        "urlApplet": "https://login.siat.sat.gob.mx/nidp/app/login?id=fiel_Aviso"
+      },
+      "emptyFieldNames": [
+        "token",
+        "seeder",
+        "arc",
+        "tan",
+        "placer",
+        "secuence",
+        "jcaptcha",
+        "fert"
+      ],
+      "guidValue": "SAME_AS_CHALLENGE"
+    },
+    "signatureContract": {
+      "algorithm": "RSA_PKCS1_V1_5_SHA1",
+      "challenge": "tokenuuid|rfc|portalSerial",
+      "portalSerial": "SECOND_HEX_NIBBLE_PER_DER_SERIAL_BYTE",
+      "tokenEncoding": "BASE64(BASE64_UTF8_CHALLENGE#BASE64_UTF8_SIGNATURE_BASE64)",
+      "publicLibrarySha256": "6389bd828f9c64f1b62776c5d89ef30f80ac6fa7859fe41cb41495f9f312afc6"
+    }
+  },
+  "loginAssetPaths": [
+    "/nidp/gobmx/assets/styles/main.css",
+    "/nidp/css/apf-theme.css",
+    "/nidp/gobmx/assets/scripts/webfont.js",
+    "/nidp/gobmx/assets/scripts/plugins.js",
+    "/nidp/gobmx/assets/scripts/main.js",
+    "/nidp/x509SAT/js/sat/libs.min.js",
+    "/nidp/x509SAT/js/sjcl/sjcl.js",
+    "/nidp/x509SAT/js/sjcl/sha1.js",
+    "/nidp/x509SAT/js/jsrsasign/ext/jsbn.js",
+    "/nidp/x509SAT/js/jsrsasign/ext/jsbn2.js",
+    "/nidp/x509SAT/js/jsrsasign/ext/rsa.js",
+    "/nidp/x509SAT/js/jsrsasign/ext/rsa2.js",
+    "/nidp/x509SAT/js/jsrsasign/ext/base64.js",
+    "/nidp/x509SAT/js/jsrsasign/crypto-1.1.min.js",
+    "/nidp/x509SAT/js/jsrsasign/asn1hex-1.1.min.js",
+    "/nidp/x509SAT/js/jsrsasign/rsasign-1.2.min.js",
+    "/nidp/x509SAT/js/jsrsasign/x509-1.1.min.js",
+    "/nidp/x509SAT/js/cryptoJS/rollups/pbkdf2.js",
+    "/nidp/x509SAT/js/cryptoJS/rollups/tripledes.js",
+    "/nidp/x509SAT/js/cryptoJS/rollups/aes.js",
+    "/nidp/x509SAT/js/cryptoJS/rollups/rc2.js",
+    "/nidp/x509SAT/js/asn1/asn1.js",
+    "/nidp/x509SAT/js/asn1/base64.js",
+    "/nidp/x509SAT/js/asn1/hex.js",
+    "/nidp/x509SAT/js/jquery/jquery-1.6.4.min.js",
+    "/nidp/gobmx/assets/scripts/jquery.min.js",
+    "/nidp/gobmx/assets/scripts/gobmx.js",
+    "/nidp/gobmx/assets/scripts/respond.min.js",
+    "/nidp/gobmx/assets/scripts/ie8.js"
+  ]
+}

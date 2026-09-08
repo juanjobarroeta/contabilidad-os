@@ -1,11 +1,43 @@
 import { describe, it, expect } from "vitest";
 import {
   conciliarBancos,
+  evaluarCoberturaBancaria,
   resumenConciliacion,
   type AsientoBancosParaConciliar,
   type ConciliarArgs,
   type MovimientoParaConciliar,
 } from "./conciliacion";
+
+describe("evaluarCoberturaBancaria", () => {
+  it("clasifica 0 / 0 como NO_DATA, sin porcentaje ni compuerta abierta", () => {
+    expect(evaluarCoberturaBancaria(0, 0)).toEqual({
+      estado: "NO_DATA", totalMovimientos: 0, movimientosSinConciliar: 0,
+      movimientosConciliados: 0, porcentajeConciliado: null, compuertaAbierta: false,
+      sinActividadConfirmada: false,
+    });
+  });
+
+  it("opens the gate through an explicit no-activity state without inventing 100%", () => {
+    expect(evaluarCoberturaBancaria(0, 0, true)).toEqual({
+      estado: "NO_ACTIVITY_CONFIRMED",
+      totalMovimientos: 0,
+      movimientosSinConciliar: 0,
+      movimientosConciliados: 0,
+      porcentajeConciliado: null,
+      compuertaAbierta: true,
+      sinActividadConfirmada: true,
+    });
+  });
+
+  it("sólo abre con movimientos y ninguno pendiente", () => {
+    expect(evaluarCoberturaBancaria(10, 3)).toMatchObject({
+      estado: "PENDING", movimientosConciliados: 7, porcentajeConciliado: 70, compuertaAbierta: false,
+    });
+    expect(evaluarCoberturaBancaria(10, 0)).toMatchObject({
+      estado: "RECONCILED", porcentajeConciliado: 100, compuertaAbierta: true,
+    });
+  });
+});
 
 const mov = (over: Partial<MovimientoParaConciliar> = {}): MovimientoParaConciliar => ({
   id: "t1",
@@ -152,6 +184,35 @@ describe("conciliarBancos — saldos faltantes", () => {
     expect(r.conciliado).toBe(false);
   });
 
+  it("cero movimientos y saldos en cero es NO_DATA, no conciliado", () => {
+    const r = conciliarBancos({
+      saldos: [{ cuentaBancariaId: "b1", etiqueta: "BBVA", saldoInicial: 0, saldoFinal: 0 }],
+      movimientos: [], asientos: [], saldoInicialLibros: 0, mesPosteado: true,
+    });
+    expect(r.coberturaBancaria.estado).toBe("NO_DATA");
+    expect(r.coberturaBancaria.porcentajeConciliado).toBeNull();
+    expect(r.conciliado).toBe(false);
+    expect(resumenConciliacion(r)).toContain("No hay movimientos bancarios");
+  });
+
+  it("distingue una confirmación humana de una conciliación matemática", () => {
+    const r = conciliarBancos({
+      saldos: [],
+      movimientos: [],
+      asientos: [],
+      saldoInicialLibros: 0,
+      mesPosteado: true,
+      sinActividadBancariaConfirmada: true,
+    });
+    expect(r.coberturaBancaria).toMatchObject({
+      estado: "NO_ACTIVITY_CONFIRMED",
+      porcentajeConciliado: null,
+      compuertaAbierta: true,
+    });
+    expect(r.conciliado).toBe(false);
+    expect(resumenConciliacion(r)).toContain("declaración humana auditable");
+  });
+
   it("el saldo en libros SÍ se reporta aunque falte el del estado", () => {
     const args = mesLimpio();
     args.saldos[0].saldoFinal = null;
@@ -231,7 +292,7 @@ describe("conciliarBancos — mes sin postear", () => {
       saldoInicialLibros: 0,
       mesPosteado: false,
     });
-    expect(resumenConciliacion(r)).toContain("Falta capturar el saldo");
+    expect(resumenConciliacion(r)).toContain("No hay movimientos bancarios");
   });
 });
 

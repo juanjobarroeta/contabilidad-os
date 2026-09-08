@@ -444,15 +444,22 @@ async function ejecutar(
         select: { id: true },
       });
       if (!cuenta) return { ok: false, error: "La cuenta bancaria ya no existe." };
-      const { firmarConciliacion } = await import("@/lib/bancos/conciliacion-repo");
-      await firmarConciliacion({
-        companyId: pa.companyId,
-        bankAccountId,
-        year,
-        month,
-        userId: confirmingUserId,
-        conciliado: true,
-      });
+      const { ConciliacionSinDatosError, firmarConciliacion } = await import("@/lib/bancos/conciliacion-repo");
+      try {
+        await firmarConciliacion({
+          companyId: pa.companyId,
+          bankAccountId,
+          year,
+          month,
+          userId: confirmingUserId,
+          conciliado: true,
+        });
+      } catch (error) {
+        if (error instanceof ConciliacionSinDatosError) {
+          return { ok: false, error: "La cuenta ya no tiene movimientos en ese periodo; no se creó la firma." };
+        }
+        throw error;
+      }
       registrarBitacora({
         companyId: pa.companyId,
         userId: confirmingUserId,

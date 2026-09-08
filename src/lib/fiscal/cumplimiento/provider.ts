@@ -26,3 +26,8 @@ export class ComplianceProviderNoDisponible extends Error {
     this.name = "ComplianceProviderNoDisponible";
   }
 }
+
+export * from "./sat-native/errors";
+export * from "./sat-native/pilot";
+export * from "./sat-native/provider";
+export * from "./sat-native/types";

@@ -16,6 +16,7 @@ function base(): ReadinessInputs {
     now: new Date("2026-06-29T00:00:00Z"),
     bankTxCount: 30,
     bankUnmatchedCount: 0,
+    sinActividadBancariaConfirmada: false,
     totalCargos: 100000,
     totalAbonos: 100000,
     posted: true,

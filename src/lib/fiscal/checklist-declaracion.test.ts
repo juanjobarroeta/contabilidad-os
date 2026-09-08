@@ -18,12 +18,14 @@ function baseInputs(overrides: Partial<ChecklistInputs> = {}): ChecklistInputs {
   return {
     year: 2026,
     month: 5,
-    hoy: new Date(2026, 5, 10), // 10 de junio de 2026 — antes del vencimiento (17 jun)
+    hoy: new Date("2026-06-10T18:00:00Z"), // 10 de junio en Ciudad de México
     fechaLimite: fechaLimiteDeclaracion(2026, 5),
     aperturaConfirmada: true,
     satEmitidosCompleto: true,
     satRecibidosCompleto: true,
     advertenciasCadena: [],
+    movimientosBancarios: 8,
+    sinActividadBancariaConfirmada: false,
     movimientosSinConciliar: 0,
     repPorEmitir: { total: 0, vencidos: 0, montoPendiente: 0 },
     repProveedores: { total: 0, vencidos: 0 },
@@ -122,6 +124,30 @@ describe("decidirChecklist — cadena de declaraciones", () => {
 });
 
 describe("decidirChecklist — conciliación bancaria", () => {
+  it("0 / 0 es NO_DATA y nunca se presenta como conciliado", () => {
+    const con = item(
+      decidirChecklist(baseInputs({ movimientosBancarios: 0, movimientosSinConciliar: 0 })),
+      "conciliacion-bancaria"
+    );
+    expect(con.estado).toBe("atencion");
+    expect(con.detalle).toContain("No hay datos bancarios");
+    expect(con.detalle).toContain("0 de 0");
+  });
+
+  it("an explicit no-activity confirmation opens the checklist without reporting 100%", () => {
+    const con = item(
+      decidirChecklist(baseInputs({
+        movimientosBancarios: 0,
+        movimientosSinConciliar: 0,
+        sinActividadBancariaConfirmada: true,
+      })),
+      "conciliacion-bancaria",
+    );
+    expect(con.estado).toBe("listo");
+    expect(con.detalle).toContain("decisión humana auditable");
+    expect(con.detalle).not.toContain("100%");
+  });
+
   it("movimientos sin conciliar → pendiente con el conteo y link a /bancos", () => {
     const con = item(decidirChecklist(baseInputs({ movimientosSinConciliar: 7 })), "conciliacion-bancaria");
     expect(con.estado).toBe("pendiente");
@@ -274,7 +300,7 @@ describe("decidirChecklist — cuotas IMSS (SIPARE)", () => {
     const im = item(
       decidirChecklist(
         baseInputs({
-          hoy: new Date(2026, 5, 20), // 20 jun > 17 jun
+          hoy: new Date("2026-06-20T18:00:00Z"), // 20 jun > 17 jun
           imss: { aplica: true, estimadoMensual: 9000, pagadaMensual: false, bimestre: null },
         })
       ),
@@ -297,7 +323,7 @@ describe("decidirChecklist — cuotas IMSS (SIPARE)", () => {
         baseInputs({
           month: 6,
           fechaLimite: fechaLimiteDeclaracion(2026, 6),
-          hoy: new Date(2026, 6, 10),
+          hoy: new Date("2026-07-10T18:00:00Z"),
           imss: {
             aplica: true,
             estimadoMensual: 15200.4,
@@ -321,7 +347,7 @@ describe("decidirChecklist — cuotas IMSS (SIPARE)", () => {
         baseInputs({
           month: 6,
           fechaLimite: fechaLimiteDeclaracion(2026, 6),
-          hoy: new Date(2026, 6, 10),
+          hoy: new Date("2026-07-10T18:00:00Z"),
           imss: {
             aplica: true,
             estimadoMensual: 15200.4,
@@ -400,7 +426,7 @@ describe("decidirChecklist — fecha límite y declaración", () => {
   it("vencida y no presentada → atención con días de atraso", () => {
     const fl = item(
       decidirChecklist(
-        baseInputs({ declaracionPresentada: false, hoy: new Date(2026, 5, 20) }) // 20 jun > 17 jun
+        baseInputs({ declaracionPresentada: false, hoy: new Date("2026-06-20T18:00:00Z") }) // 20 jun > 17 jun
       ),
       "fecha-limite"
     );
@@ -410,7 +436,7 @@ describe("decidirChecklist — fecha límite y declaración", () => {
 
   it("presentada → fecha límite en listo aunque el día ya pasó", () => {
     const fl = item(
-      decidirChecklist(baseInputs({ hoy: new Date(2026, 6, 1) })),
+      decidirChecklist(baseInputs({ hoy: new Date("2026-07-01T18:00:00Z") })),
       "fecha-limite"
     );
     expect(fl.estado).toBe("listo");
@@ -441,16 +467,22 @@ describe("fechaLimiteDeclaracion — día 17 del mes siguiente, hábil", () => {
 });
 
 describe("diasParaFechaLimite", () => {
+  it("usa el día fiscal de México cerca de la medianoche UTC", () => {
+    expect(
+      diasParaFechaLimite(new Date(2026, 8, 17), new Date("2026-09-18T04:30:00Z"))
+    ).toBe(0);
+  });
+
   it("mismo día → 0 (vence hoy, no vencida)", () => {
-    expect(diasParaFechaLimite(new Date(2026, 5, 17), new Date(2026, 5, 17, 23, 30))).toBe(0);
+    expect(diasParaFechaLimite(new Date(2026, 5, 17), new Date("2026-06-18T04:30:00Z"))).toBe(0);
   });
 
   it("días positivos antes y negativos después, ignorando la hora", () => {
-    expect(diasParaFechaLimite(new Date(2026, 5, 17), new Date(2026, 5, 10, 1))).toBe(7);
-    expect(diasParaFechaLimite(new Date(2026, 5, 17), new Date(2026, 5, 20, 23))).toBe(-3);
+    expect(diasParaFechaLimite(new Date(2026, 5, 17), new Date("2026-06-10T07:00:00Z"))).toBe(7);
+    expect(diasParaFechaLimite(new Date(2026, 5, 17), new Date("2026-06-21T05:00:00Z"))).toBe(-3);
   });
 
   it("cruce de ejercicio: del 30 dic 2025 al 19 ene 2026 hay 20 días", () => {
-    expect(diasParaFechaLimite(fechaLimiteDeclaracion(2025, 12), new Date(2025, 11, 30))).toBe(20);
+    expect(diasParaFechaLimite(fechaLimiteDeclaracion(2025, 12), new Date("2025-12-30T18:00:00Z"))).toBe(20);
   });
 });

@@ -7,6 +7,7 @@ import { computeTaxPosition } from "@/lib/impuestos";
 import { leerRenglonesIeps } from "@/lib/fiscal/ieps/leer";
 import { aPagarIeps, periodoIeps, type DecisionAcreditamiento } from "@/lib/fiscal/ieps/periodo";
 import { checklistDeclaracion } from "@/lib/fiscal/checklist-declaracion";
+import { fechaFiscalEnMexico, periodoMensualPorDefecto } from "@/lib/fiscal/periodo-operativo";
 import { getSatSyncStatus } from "@/lib/sat-status";
 import { signFileToken, publicBaseUrl } from "@/lib/facturas/file-token";
 import { previewTimbrar } from "@/lib/facturas/preview-timbrar";
@@ -142,10 +143,9 @@ export async function executeToolCall(
     case "query_declaracion_checklist": {
       // El periodo que se declara es, por defecto, el mes VENCIDO (anterior al
       // actual): en junio se declara mayo. El modelo puede pedir otro periodo.
-      const now = new Date();
-      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const year = typeof input.year === "number" ? input.year : prev.getFullYear();
-      const month = typeof input.month === "number" ? input.month : prev.getMonth() + 1;
+      const defaultPeriod = periodoMensualPorDefecto();
+      const year = typeof input.year === "number" ? input.year : defaultPeriod.year;
+      const month = typeof input.month === "number" ? input.month : defaultPeriod.month;
       const checklist = await checklistDeclaracion(companyId, year, month);
       return JSON.stringify({
         ...checklist,
@@ -175,8 +175,9 @@ export async function executeToolCall(
         year = input.year;
         month = input.month;
       } else {
-        const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        const prevPeriodo = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
+        const prev = periodoMensualPorDefecto(now);
+        const current = fechaFiscalEnMexico(now);
+        const prevPeriodo = prev.key;
         const presentado = await prisma.taxDeclaration.findFirst({
           where: {
             companyId,
@@ -186,8 +187,8 @@ export async function executeToolCall(
           },
           select: { id: true },
         });
-        year = presentado ? now.getFullYear() : prev.getFullYear();
-        month = presentado ? now.getMonth() + 1 : prev.getMonth() + 1;
+        year = presentado ? current.year : prev.year;
+        month = presentado ? current.month : prev.month;
       }
       const [pos, renglonesIeps, empresaIeps] = await Promise.all([
         computeTaxPosition(companyId, year, month),
@@ -456,10 +457,8 @@ function periodoCierre(input: ToolInput, context: ToolContext): { year: number; 
     return { year: input.year, month: input.month };
   }
   if (context.cierre) return { year: context.cierre.year, month: context.cierre.month };
-  const prev = new Date();
-  prev.setDate(1);
-  prev.setMonth(prev.getMonth() - 1);
-  return { year: prev.getFullYear(), month: prev.getMonth() + 1 };
+  const { year, month } = periodoMensualPorDefecto();
+  return { year, month };
 }
 
 async function queryCierreEstado(input: ToolInput, companyId: string, context: ToolContext): Promise<string> {

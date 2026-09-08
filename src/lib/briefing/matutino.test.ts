@@ -84,4 +84,10 @@ describe("proximoVencimientoMensual", () => {
   it("régimen desconocido → null", () => {
     expect(proximoVencimientoMensual("ZZZ", new Date(2026, 5, 10))).toBeNull();
   });
+  it("uses the Mexico calendar near Railway midnight", () => {
+    // Still August 31 in Mexico, so September 17 is 17 calendar days away.
+    const r = proximoVencimientoMensual("601", new Date("2026-09-01T00:30:00Z"));
+    expect(r?.periodo).toBe("2026-08");
+    expect(r?.diasRestantes).toBe(17);
+  });
 });

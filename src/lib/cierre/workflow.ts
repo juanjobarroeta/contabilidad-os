@@ -22,6 +22,7 @@
 
 import type { ReadinessResult } from "../contabilidad/ce-readiness";
 import type { ChecklistDeclaracion, ChecklistItem } from "../fiscal/checklist-declaracion";
+import { fechaFiscalEnMexico } from "../fiscal/periodo-operativo";
 import { hashEvidencia } from "./evidencia";
 import { ORDEN_PASOS, esClavePaso, type ClavePasoCierre } from "./claves";
 
@@ -348,6 +349,8 @@ export interface ExtrasCierre {
   cuentasSinEstado: number;
   /** Cuentas con conciliación del mes firmada (ConciliacionBancaria.conciliadoAt). */
   cuentasFirmadas: number;
+  /** El contador confirmó que todo el periodo careció de actividad bancaria. */
+  sinActividadBancariaConfirmada: boolean;
   /** Empleados activos sin recibo timbrado en el mes. */
   empleadosActivos: number;
   empleadosSinRecibo: number;
@@ -563,6 +566,9 @@ function senalExtra(clave: string, x: ExtrasCierre, ctx: ContextoEmpresa): Senal
           }
         : { clave, estado: "ok", resumen: "Sin movimientos IDSE pendientes" };
     case "x:cuentas_sin_estado":
+      if (x.sinActividadBancariaConfirmada) {
+        return { clave, estado: "ok", resumen: "Periodo confirmado sin actividad bancaria" };
+      }
       if (x.cuentasBanco === 0) return null;
       return x.cuentasSinEstado > 0
         ? {
@@ -573,6 +579,9 @@ function senalExtra(clave: string, x: ExtrasCierre, ctx: ContextoEmpresa): Senal
           }
         : { clave, estado: "ok", resumen: `${plural(x.cuentasBanco, "cuenta con movimientos del mes", "cuentas con movimientos del mes")}` };
     case "x:firmas_conciliacion":
+      if (x.sinActividadBancariaConfirmada) {
+        return { clave, estado: "ok", resumen: "Sin conciliaciones que firmar: periodo confirmado sin actividad bancaria" };
+      }
       if (x.cuentasBanco === 0) return null;
       return x.cuentasFirmadas < x.cuentasBanco
         ? {
@@ -812,8 +821,9 @@ export function periodosEnJuego(
   abiertos: ReadonlyArray<{ year: number; month: number }>,
   max = 3
 ): { year: number; month: number }[] {
-  const y = hoy.getFullYear();
-  const m = hoy.getMonth() + 1;
+  const fechaMx = fechaFiscalEnMexico(hoy);
+  const y = fechaMx.year;
+  const m = fechaMx.month;
   const enCurso = { year: y, month: m };
   const anterior = m === 1 ? { year: y - 1, month: 12 } : { year: y, month: m - 1 };
   const clave = (p: { year: number; month: number }) => p.year * 100 + p.month;

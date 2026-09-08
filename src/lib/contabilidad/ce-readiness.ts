@@ -64,6 +64,8 @@ export type ReadinessInputs = {
   // y cuántas siguen sin conciliar (UNMATCHED).
   bankTxCount: number;
   bankUnmatchedCount: number;
+  // Confirmación humana del cierre para un periodo legítimamente sin banco.
+  sinActividadBancariaConfirmada: boolean;
 
   // Cuadre del libro: suma de cargos y abonos sobre la balanza del periodo.
   totalCargos: number;
@@ -156,7 +158,17 @@ export function evaluarChecks(input: ReadinessInputs): ReadinessResult {
   }
 
   // 2. Datos bancarios del periodo (fuente-agnóstico).
-  if (input.requiereBalance) {
+  if (input.bankTxCount === 0 && input.sinActividadBancariaConfirmada) {
+    checks.push({
+      clave: "banco",
+      estado: "ok",
+      titulo: "Periodo confirmado sin actividad bancaria",
+      detalle:
+        "Un contador confirmó explícitamente que no hubo actividad bancaria en este periodo. " +
+        "La decisión está atribuida y puede revocarse desde la conciliación.",
+      cta: { label: "Revisar confirmación", href: "/contabilidad/conciliacion" },
+    });
+  } else if (input.requiereBalance) {
     if (input.bankTxCount === 0) {
       checks.push({
         clave: "banco",
@@ -323,7 +335,7 @@ export async function evaluarReadinessCE(
   const start = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
   const end = new Date(Date.UTC(year, month, 1, 0, 0, 0, 0));
 
-  const [company, period, cfdiCount, bankTxCount, bankUnmatchedCount, cuentasActivas] = await Promise.all([
+  const [company, period, cfdiCount, bankTxCount, bankUnmatchedCount, cuentasActivas, cierre] = await Promise.all([
     prisma.company.findUnique({
       where: { id: companyId },
       select: { regimenFiscal: true, lastAutoSyncAt: true, createdAt: true },
@@ -349,6 +361,10 @@ export async function evaluarReadinessCE(
     prisma.chartAccount.findMany({
       where: { companyId, isActive: true },
       select: { codAgrup: true, subcuenta: true, cuentaSAT: true },
+    }),
+    prisma.cierrePeriodo.findUnique({
+      where: { companyId_year_month: { companyId, year, month } },
+      select: { sinActividadBancariaAt: true },
     }),
   ]);
 
@@ -386,6 +402,7 @@ export async function evaluarReadinessCE(
     now,
     bankTxCount,
     bankUnmatchedCount,
+    sinActividadBancariaConfirmada: cierre?.sinActividadBancariaAt != null,
     totalCargos,
     totalAbonos,
     posted,

@@ -14,7 +14,12 @@ import {
   type DocumentoLegal,
 } from "./documentos";
 
-export type ContextoAceptacion = "signup" | "gate" | "onboarding" | "configuracion";
+export type ContextoAceptacion =
+  | "signup"
+  | "gate"
+  | "onboarding"
+  | "configuracion"
+  | "credencial_existente";
 
 type Cliente = Prisma.TransactionClient | typeof prisma;
 

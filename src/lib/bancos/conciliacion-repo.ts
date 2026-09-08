@@ -32,6 +32,27 @@ function rangoMes(year: number, month: number) {
   };
 }
 
+export class ConciliacionSinDatosError extends Error {
+  constructor() {
+    super("No hay movimientos bancarios del periodo para firmar");
+    this.name = "ConciliacionSinDatosError";
+  }
+}
+
+export class ConfirmacionSinActividadConDatosError extends Error {
+  constructor() {
+    super("El periodo ya tiene movimientos bancarios; no se puede declarar sin actividad");
+    this.name = "ConfirmacionSinActividadConDatosError";
+  }
+}
+
+export class ConfirmacionSinActividadNotaError extends Error {
+  constructor() {
+    super("Explica en al menos 10 caracteres por qué el periodo no tuvo actividad bancaria");
+    this.name = "ConfirmacionSinActividadNotaError";
+  }
+}
+
 export interface CuentaConciliada {
   bankAccountId: string;
   etiqueta: string;
@@ -73,6 +94,11 @@ export interface ConciliacionMes extends ConciliacionResultado {
   resumen: string;
   /** No hay cuenta contable de Bancos en el catálogo: nada que conciliar. */
   sinCuentaBancos: boolean;
+  confirmacionSinActividad: {
+    confirmadaAt: string;
+    confirmadaByUserId: string;
+    nota: string;
+  } | null;
 }
 
 /**
@@ -89,7 +115,7 @@ export async function conciliacionDelMes(
 ): Promise<ConciliacionMes> {
   const { inicio, fin } = rangoMes(year, month);
 
-  const [cuentasBancos, cuentasBancarias, txs, conciliaciones] = await Promise.all([
+  const [cuentasBancos, cuentasBancarias, txs, conciliaciones, cierre] = await Promise.all([
     // TODA la familia de Bancos: el motor postea en subcuentas por banco
     // (102.01.NN) — leer sólo la cuenta padre deja el libro en cero y marca
     // todos los movimientos como sin registrar.
@@ -118,11 +144,37 @@ export async function conciliacionDelMes(
       orderBy: { fecha: "asc" },
     }),
     prisma.conciliacionBancaria.findMany({ where: { companyId, year, month } }),
+    prisma.cierrePeriodo.findUnique({
+      where: { companyId_year_month: { companyId, year, month } },
+      select: {
+        sinActividadBancariaAt: true,
+        sinActividadBancariaByUserId: true,
+        sinActividadBancariaNota: true,
+      },
+    }),
   ]);
+
+  const confirmacionSinActividad =
+    cierre?.sinActividadBancariaAt &&
+    cierre.sinActividadBancariaByUserId &&
+    cierre.sinActividadBancariaNota
+      ? {
+          confirmadaAt: cierre.sinActividadBancariaAt.toISOString(),
+          confirmadaByUserId: cierre.sinActividadBancariaByUserId,
+          nota: cierre.sinActividadBancariaNota,
+        }
+      : null;
+  const sinActividadBancariaConfirmada = txs.length === 0 && confirmacionSinActividad != null;
 
   const idsBancos = cuentasBancos.map((c) => c.id);
   if (idsBancos.length === 0) {
-    const vacio = conciliarBancos({ saldos: [], movimientos: [], asientos: [], saldoInicialLibros: 0 });
+    const vacio = conciliarBancos({
+      saldos: [],
+      movimientos: [],
+      asientos: [],
+      saldoInicialLibros: 0,
+      sinActividadBancariaConfirmada,
+    });
     return {
       ...vacio,
       year,
@@ -130,8 +182,11 @@ export async function conciliacionDelMes(
       cuentas: [],
       auxiliar: [],
       movimientosBanco: [],
-      resumen: "El catálogo no tiene cuenta de Bancos: no hay contra qué conciliar.",
+      resumen: confirmacionSinActividad
+        ? resumenConciliacion(vacio)
+        : "El catálogo no tiene cuenta de Bancos: no hay contra qué conciliar.",
       sinCuentaBancos: true,
+      confirmacionSinActividad,
     };
   }
 
@@ -302,7 +357,14 @@ export async function conciliacionDelMes(
     folioPoliza: folios.get(clavePorId.get(a.id) ?? "") ?? "—",
   }));
 
-  const resultado = conciliarBancos({ saldos, movimientos, asientos, saldoInicialLibros, mesPosteado });
+  const resultado = conciliarBancos({
+    saldos,
+    movimientos,
+    asientos,
+    saldoInicialLibros,
+    mesPosteado,
+    sinActividadBancariaConfirmada,
+  });
   return {
     ...resultado,
     year,
@@ -312,7 +374,46 @@ export async function conciliacionDelMes(
     movimientosBanco: movimientos,
     resumen: resumenConciliacion(resultado),
     sinCuentaBancos: false,
+    confirmacionSinActividad,
   };
+}
+
+/** Confirma o revoca la declaración humana de un periodo sin actividad bancaria. */
+export async function confirmarSinActividadBancaria(args: {
+  companyId: string;
+  year: number;
+  month: number;
+  userId: string;
+  confirmada: boolean;
+  nota?: string | null;
+}) {
+  const { companyId, year, month } = args;
+  const nota = args.nota?.trim() || null;
+  if (args.confirmada) {
+    if (!nota || nota.length < 10) throw new ConfirmacionSinActividadNotaError();
+    const { inicio, fin } = rangoMes(year, month);
+    const movimientos = await prisma.bankTransaction.count({
+      where: { companyId, fecha: { gte: inicio, lt: fin } },
+    });
+    if (movimientos > 0) throw new ConfirmacionSinActividadConDatosError();
+  }
+
+  const data = args.confirmada
+    ? {
+        sinActividadBancariaAt: new Date(),
+        sinActividadBancariaByUserId: args.userId,
+        sinActividadBancariaNota: nota,
+      }
+    : {
+        sinActividadBancariaAt: null,
+        sinActividadBancariaByUserId: null,
+        sinActividadBancariaNota: null,
+      };
+  return prisma.cierrePeriodo.upsert({
+    where: { companyId_year_month: { companyId, year, month } },
+    update: data,
+    create: { companyId, year, month, ...data },
+  });
 }
 
 /** Captura o corrige el saldo del estado de cuenta de una cuenta y mes. */
@@ -357,6 +458,13 @@ export async function firmarConciliacion(args: {
   conciliado: boolean;
 }) {
   const { companyId, bankAccountId, year, month } = args;
+  if (args.conciliado) {
+    const { inicio, fin } = rangoMes(year, month);
+    const movimientos = await prisma.bankTransaction.count({
+      where: { companyId, bankAccountId, fecha: { gte: inicio, lt: fin } },
+    });
+    if (movimientos === 0) throw new ConciliacionSinDatosError();
+  }
   return prisma.conciliacionBancaria.upsert({
     where: { bankAccountId_year_month: { bankAccountId, year, month } },
     update: {

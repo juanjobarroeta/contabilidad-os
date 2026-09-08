@@ -5236,6 +5236,12 @@ model CierrePeriodo {
   cerradoAt       DateTime?
   cerradoByUserId String?
 
+  /// Confirmación humana y auditable de que el periodo no tuvo actividad
+  /// bancaria. Abre la compuerta sin fingir un porcentaje de conciliación.
+  sinActividadBancariaAt       DateTime?
+  sinActividadBancariaByUserId String?
+  sinActividadBancariaNota     String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -5347,6 +5353,46 @@ model AuditLog {
 
   @@index([companyId, createdAt])
   @@index([accion, createdAt])
+}
+
+// Single-flight lease for the isolated native SAT evidence pilot. This table
+// deliberately stores no RFC, cookie, portal URL, certificate, key, password,
+// token, or response body. A run may take over only after `expiresAt`; release
+// is compare-and-set by companyId + runId so a stale worker cannot release a
+// newer worker's lease.
+model SatNativePilotLease {
+  companyId      String   @id
+  runId          String
+  operatorUserId String
+  purpose        String
+  acknowledgement String
+  executionScope String
+  status         String
+  acquiredAt     DateTime @default(now())
+  expiresAt      DateTime
+  releasedAt     DateTime?
+  outcomeCode    String?
+  updatedAt      DateTime @updatedAt
+
+  @@index([expiresAt])
+}
+
+// Append-only run identity for the native SAT evidence pilot. The primary key
+// makes an operator-issued run UUID impossible to replay even after its company
+// lease has been released or replaced. It contains operational metadata only.
+model SatNativePilotRun {
+  runId          String   @id
+  companyId      String
+  operatorUserId String
+  purpose        String
+  acknowledgement String
+  executionScope String
+  status         String
+  startedAt      DateTime @default(now())
+  finishedAt     DateTime?
+  outcomeCode    String?
+
+  @@index([companyId, startedAt])
 }
 
 // Documentos legales que el usuario acepta de forma expresa (clickwrap).

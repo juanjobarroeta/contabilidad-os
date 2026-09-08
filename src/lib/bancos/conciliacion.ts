@@ -35,6 +35,56 @@ export const TOLERANCIA_CONCILIACION = 0.5;
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
+/** `0 / 0` means there is no bank evidence, not 100% reconciliation. */
+export type EstadoCoberturaBancaria =
+  | "NO_DATA"
+  | "NO_ACTIVITY_CONFIRMED"
+  | "PENDING"
+  | "RECONCILED";
+
+export interface CoberturaBancaria {
+  estado: EstadoCoberturaBancaria;
+  totalMovimientos: number;
+  movimientosSinConciliar: number;
+  movimientosConciliados: number;
+  porcentajeConciliado: number | null;
+  compuertaAbierta: boolean;
+  sinActividadConfirmada: boolean;
+}
+
+/** Pure decision shared by the checklist, close workflow, and UI. */
+export function evaluarCoberturaBancaria(
+  totalMovimientos: number,
+  movimientosSinConciliar: number,
+  sinActividadConfirmada = false,
+): CoberturaBancaria {
+  const total = Math.max(0, Math.trunc(Number.isFinite(totalMovimientos) ? totalMovimientos : 0));
+  const pendientes = Math.max(
+    0,
+    Math.min(total, Math.trunc(Number.isFinite(movimientosSinConciliar) ? movimientosSinConciliar : 0)),
+  );
+  if (total === 0) {
+    return {
+      estado: sinActividadConfirmada ? "NO_ACTIVITY_CONFIRMED" : "NO_DATA",
+      totalMovimientos: 0, movimientosSinConciliar: 0,
+      movimientosConciliados: 0,
+      porcentajeConciliado: null,
+      compuertaAbierta: sinActividadConfirmada,
+      sinActividadConfirmada,
+    };
+  }
+  const conciliados = total - pendientes;
+  return {
+    estado: pendientes === 0 ? "RECONCILED" : "PENDING",
+    totalMovimientos: total,
+    movimientosSinConciliar: pendientes,
+    movimientosConciliados: conciliados,
+    porcentajeConciliado: (conciliados / total) * 100,
+    compuertaAbierta: pendientes === 0,
+    sinActividadConfirmada: false,
+  };
+}
+
 /** Movimiento del estado de cuenta, con el signo del banco. */
 export interface MovimientoParaConciliar {
   id: string;
@@ -81,6 +131,8 @@ export interface SaldoEstadoCuenta {
 }
 
 export interface ConciliacionResultado {
+  /** Coverage is separate from the mathematical bank-to-ledger balance. */
+  coberturaBancaria: CoberturaBancaria;
   /**
    * ¿El mes está posteado al libro? Sin esto el papel MIENTE por omisión: un mes
    * sin cerrar reporta TODOS sus movimientos como "no registrados", que
@@ -133,6 +185,8 @@ export interface ConciliarArgs {
   saldoInicialLibros: number;
   /** ¿El periodo contable está POSTED/CLOSED? */
   mesPosteado?: boolean;
+  /** Confirmación humana persistida cuando el periodo legítimamente no tuvo movimientos. */
+  sinActividadBancariaConfirmada?: boolean;
   tolerancia?: number;
 }
 
@@ -185,13 +239,22 @@ export function conciliarBancos(args: ConciliarArgs): ConciliacionResultado {
   const diferenciaHeredada =
     saldoInicialEstado == null ? null : r2(saldoInicialLibros - saldoInicialEstado);
 
-  const conciliado = diferencia != null && Math.abs(diferencia) <= tolerancia;
+  const coberturaBancaria = evaluarCoberturaBancaria(
+    args.movimientos.length,
+    args.movimientos.filter((m) => !m.conciliado).length,
+    args.sinActividadBancariaConfirmada,
+  );
+  const conciliado =
+    coberturaBancaria.totalMovimientos > 0 &&
+    diferencia != null &&
+    Math.abs(diferencia) <= tolerancia;
   const explicadaPorArrastre =
     diferencia != null &&
     diferenciaHeredada != null &&
     Math.abs(diferencia - diferenciaHeredada) <= tolerancia;
 
   return {
+    coberturaBancaria,
     mesPosteado: args.mesPosteado ?? false,
     saldoEstadoCuenta,
     saldoInicialEstado,
@@ -215,6 +278,12 @@ export function conciliarBancos(args: ConciliarArgs): ConciliacionResultado {
  * Se usa igual en la pantalla y en la exportación, para que no diverjan.
  */
 export function resumenConciliacion(r: ConciliacionResultado): string {
+  if (r.coberturaBancaria.estado === "NO_ACTIVITY_CONFIRMED") {
+    return "El periodo fue confirmado sin actividad bancaria. La compuerta está abierta por declaración humana auditable, no por un porcentaje de conciliación.";
+  }
+  if (r.coberturaBancaria.estado === "NO_DATA") {
+    return "No hay movimientos bancarios del periodo. Sin datos no se puede afirmar que el banco esté conciliado; importa el estado de cuenta o confirma explícitamente que no hubo actividad.";
+  }
   // Un mes sin cerrar no tiene "partidas en conciliación": tiene trabajo
   // pendiente. Decirlo primero evita que 27 movimientos normales se lean como
   // 27 excepciones que hay que investigar.

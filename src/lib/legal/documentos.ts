@@ -41,7 +41,7 @@ export const DOCUMENTOS_CUENTA: readonly DocumentoLegal[] = [
  */
 export const MANDATO_EFIRMA: DocumentoLegal = {
   documento: "MANDATO_EFIRMA",
-  version: "2026-09-03",
+  version: "2026-09-08",
   titulo: "Autorización de uso de la e.firma",
   url: "/legal/mandato-efirma",
 };

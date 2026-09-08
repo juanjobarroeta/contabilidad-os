@@ -4,7 +4,9 @@ import {
   detectComplementosPendientes,
   detectComplementosRecibidosPendientes,
 } from "../complementos";
-import { calcularVencimiento } from "../obligaciones";
+import { calcularVencimiento, fechaCalendarioIso } from "../obligaciones";
+import { evaluarCoberturaBancaria } from "../bancos/conciliacion";
+import { diasEntreFechasCalendario, fechaFiscalEnMexico } from "./periodo-operativo";
 import { bimestreDe } from "./imss-pagos";
 import { formatCurrency } from "../utils";
 
@@ -100,6 +102,10 @@ export interface ChecklistInputs {
   satRecibidosCompleto: boolean;
   /** Avisos de computeTaxPosition: meses con CFDI sin declaración guardada. */
   advertenciasCadena: string[];
+  /** Todos los movimientos bancarios con fecha dentro del mes. */
+  movimientosBancarios: number;
+  /** Confirmación atribuida del cierre para un periodo sin movimientos. */
+  sinActividadBancariaConfirmada: boolean;
   /** Movimientos bancarios UNMATCHED con fecha dentro del mes. */
   movimientosSinConciliar: number;
   /** REP que NOSOTROS debemos emitir por cobros PPD del mes. */
@@ -133,7 +139,8 @@ const MESES_ES = [
 ];
 
 function fmtFechaLarga(d: Date): string {
-  return `${d.getDate()} de ${MESES_ES[d.getMonth()]} de ${d.getFullYear()}`;
+  const [year, month, day] = fechaCalendarioIso(d).split("-").map(Number);
+  return `${day} de ${MESES_ES[month - 1]} de ${year}`;
 }
 
 /**
@@ -153,9 +160,10 @@ export function fechaLimiteDeclaracion(year: number, month: number): Date {
 
 /** Días (en fechas calendario, sin horas) de `hoy` a `fechaLimite`; negativo = vencida. */
 export function diasParaFechaLimite(fechaLimite: Date, hoy: Date): number {
-  const a = new Date(fechaLimite.getFullYear(), fechaLimite.getMonth(), fechaLimite.getDate());
-  const b = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
-  return Math.round((a.getTime() - b.getTime()) / 86_400_000);
+  return diasEntreFechasCalendario(
+    fechaFiscalEnMexico(hoy).key,
+    fechaCalendarioIso(fechaLimite),
+  );
 }
 
 /**
@@ -214,12 +222,26 @@ export function decidirChecklist(i: ChecklistInputs): ChecklistItem[] {
 
   // 3. Conciliación bancaria del mes.
   const sc = i.movimientosSinConciliar;
+  const coberturaBanco = evaluarCoberturaBancaria(
+    i.movimientosBancarios,
+    sc,
+    i.sinActividadBancariaConfirmada,
+  );
   items.push({
     clave: "conciliacion-bancaria",
     titulo: "Conciliación bancaria",
-    estado: sc === 0 ? "listo" : "pendiente",
+    estado:
+      coberturaBanco.estado === "NO_DATA"
+        ? "atencion"
+        : coberturaBanco.compuertaAbierta
+          ? "listo"
+          : "pendiente",
     detalle:
-      sc === 0
+      coberturaBanco.estado === "NO_ACTIVITY_CONFIRMED"
+        ? "Periodo confirmado sin actividad bancaria. La compuerta se abrió por una decisión humana auditable, no por 0 de 0."
+        : coberturaBanco.estado === "NO_DATA"
+        ? "No hay datos bancarios del periodo. Sube el estado de cuenta o confirma explícitamente que no hubo actividad; 0 de 0 no es una conciliación."
+        : sc === 0
         ? "Todos los movimientos bancarios del mes están conciliados."
         : `${sc} movimiento(s) bancario(s) del mes sin conciliar. Concílialos para sustentar el flujo de efectivo del periodo.`,
     accionUrl: "/bancos",
@@ -432,6 +454,8 @@ export async function checklistDeclaracion(
   const [
     pos,
     satFinished,
+    movimientosBancarios,
+    cierre,
     movimientosSinConciliar,
     repEmitir,
     repProveedores,
@@ -449,6 +473,13 @@ export async function checklistDeclaracion(
     prisma.satSyncRequest.findMany({
       where: { companyId, year, month, status: "FINISHED" },
       select: { tipo: true },
+    }),
+    prisma.bankTransaction.count({
+      where: { companyId, fecha: { gte: from, lt: to } },
+    }),
+    prisma.cierrePeriodo.findUnique({
+      where: { companyId_year_month: { companyId, year, month } },
+      select: { sinActividadBancariaAt: true },
     }),
     prisma.bankTransaction.count({
       where: { companyId, status: "UNMATCHED", fecha: { gte: from, lt: to } },
@@ -546,6 +577,8 @@ export async function checklistDeclaracion(
     satEmitidosCompleto: tiposFinished.has("EMITIDOS"),
     satRecibidosCompleto: tiposFinished.has("RECIBIDOS"),
     advertenciasCadena: pos.advertencias,
+    movimientosBancarios,
+    sinActividadBancariaConfirmada: cierre?.sinActividadBancariaAt != null,
     movimientosSinConciliar,
     repPorEmitir: {
       total: repEmitirMes.length,
@@ -580,7 +613,7 @@ export async function checklistDeclaracion(
     periodo,
     year,
     month,
-    fechaLimite: fechaLimite.toISOString().slice(0, 10),
+    fechaLimite: fechaCalendarioIso(fechaLimite),
     diasRestantes,
     vencida: diasRestantes < 0,
     items,

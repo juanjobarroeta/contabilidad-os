@@ -10,6 +10,7 @@ import {
 import { ClientInvitesPanel } from "./ClientInvitesPanel";
 import { BitacoraPanel } from "./BitacoraPanel";
 import { ZonaPeligroEmpresa } from "./ZonaPeligroEmpresa";
+import { MandatoEfirmaExistente } from "@/components/legal/MandatoEfirmaExistente";
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -437,6 +438,11 @@ export default function EmpresaEditPage() {
         <p className="text-xs text-cos-ink-soft mb-3">
           La Firma Electrónica Avanzada te permite autenticarte ante el SAT para descargar CFDIs emitidos y recibidos.
         </p>
+        {hasFiel && (
+          <div className="mb-3">
+            <MandatoEfirmaExistente key={id} companyId={id} />
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium mb-1">Certificado <code>.cer</code></label>
