@@ -1,0 +1,54 @@
+# Default-deny context for Dockerfile.sat-native-pilot. Every parent directory
+# is reopened explicitly because Docker cannot re-include a file below an
+# ignored directory.
+**
+!Dockerfile.sat-native-pilot
+!Dockerfile.sat-native-pilot.dockerignore
+!tsconfig.json
+
+!workers/
+!workers/sat-native-pilot/
+!workers/sat-native-pilot/package.json
+!workers/sat-native-pilot/package-lock.json
+!workers/sat-native-pilot-build/
+!workers/sat-native-pilot-build/package.json
+!workers/sat-native-pilot-build/package-lock.json
+
+!prisma/
+!prisma/schema.prisma
+
+!scripts/
+!scripts/sat-native-ce-pilot-worker.ts
+!scripts/sat-native-ce-preflight.ts
+!scripts/sat-native-ce-login-probe.ts
+
+!src/
+!src/lib/
+!src/lib/crypto.ts
+!src/lib/prisma.ts
+!src/lib/prisma-decimal.ts
+!src/lib/legal/
+!src/lib/legal/documentos.ts
+!src/lib/fiscal/
+!src/lib/fiscal/cumplimiento/
+!src/lib/fiscal/cumplimiento/sat-native/
+!src/lib/fiscal/cumplimiento/sat-native/ce-login-probe.ts
+!src/lib/fiscal/cumplimiento/sat-native/credential-broker.ts
+!src/lib/fiscal/cumplimiento/sat-native/errors.ts
+!src/lib/fiscal/cumplimiento/sat-native/preflight.ts
+!src/lib/fiscal/cumplimiento/sat-native/routes.ts
+!src/lib/fiscal/cumplimiento/sat-native/transport.ts
+!src/lib/fiscal/cumplimiento/sat-native/types.ts
+!src/lib/fiscal/cumplimiento/sat-native/worker-action.ts
+!src/lib/fiscal/cumplimiento/sat-native/fixtures/
+!src/lib/fiscal/cumplimiento/sat-native/fixtures/ce-login-contract.2026-09-08.json
+
+# Defense in depth if a future allowlist entry is broadened.
+**/*.[cC][eE][rR]
+**/*.[kK][eE][yY]
+**/*.[pP][eE][mM]
+**/*.[dD][eE][rR]
+**/*.[pP][fF][xX]
+**/*.[pP]12
+**/.env
+**/.env.*

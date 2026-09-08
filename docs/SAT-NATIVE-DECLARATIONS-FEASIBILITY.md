@@ -145,6 +145,15 @@ At a conservative ten minutes per full job, 20 workers can process about 120 job
 
 Do not run SAT retrieval inside a Next.js request handler. Create a separate Railway worker service with an asynchronous database/queue contract, a pinned Node/OpenSSL runtime, bounded concurrency, and isolated per-job HTTP sessions. The existing `railway.json` starts only the Next.js server, so the deployed service is not ready to execute this driver.
 
+The supervised one-shot pilot is packaged separately in
+`Dockerfile.sat-native-pilot` with an inert-by-default worker entrypoint. New
+Railway services can no longer opt into the repository's deprecated
+`railway.json`, so the pilot service must select that Dockerfile directly and
+use restart policy `Never`. The exact production gates, credential-free remote
+preflight, signed-run selectors, verification queries, and rollback are in
+[`docs/runbooks/SAT-NATIVE-PILOT-RAILWAY.md`](./runbooks/SAT-NATIVE-PILOT-RAILWAY.md).
+This packaging does not authorize a deployment or credential use.
+
 The worker must be restart-safe: claim a sync run, write checkpoints after list/download steps, and resume idempotently after a Railway restart. Keep credential values out of the queue. Load them only inside the worker's purpose-scoped signer and destroy all cookies and transient form state immediately after the job. A browser-as-a-service would send the e.firma to another vendor and would defeat part of the reason for replacing Syntage.
 
 ## Security and legal gates
@@ -204,8 +213,17 @@ The historical ZIONX login in
 `docs/sat-portal-captura.md` used a different RFC and realm; it is evidence,
 not proof for SMP or the current Buzón CE entry. No live SMP login has been
 attempted. Immediately before the first attempt, the operator must explicitly
-confirm transmission of that company's `.cer`, `.key`, and e.firma password
-to the allowlisted SAT login origin for the stated read-only evidence purpose.
+confirm the in-memory decryption and use of that company's `.cer`, `.key`, and
+e.firma password and transmission of only the derived signed authentication
+payload to the allowlisted SAT login origin for the stated read-only evidence
+purpose.
+
+The local one-shot worker defaults to `DISABLED`, rejects every unknown action,
+and emits only fixed/redacted JSON on unexpected failures. Its
+`PUBLIC_PREFLIGHT` action has no credential path. `FIRST_SIGNED_POST` remains
+guarded independently by the environment policy, current mandate, platform
+operator, non-replayable run UUID, database lease, fixed acknowledgement, and
+fixed execution scope.
 
 ### Stage B — provider and declarations MVP, 2–3 weeks
 

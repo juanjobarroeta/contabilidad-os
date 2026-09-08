@@ -41,6 +41,8 @@ Target: 2–3 weeks. No general-availability sales before this gate passes.
 | FISC-002 | Multi-regime composition model | NOT_STARTED | Calculations use all active regimes and CSF obligations, not only `Company.regimenFiscal`; independent income baskets cannot contaminate one another |
 | OPS-001 | Health/readiness and Railway checks | NOT_STARTED | `/api/health` and `/api/ready` exist; Railway checks readiness; migration and database failures stop promotion |
 | SEC-001 | Browser security baseline | NOT_STARTED | HSTS, CSP/frame protection, content-type, referrer, and permissions headers are verified in production; `x-powered-by` removed |
+| SEC-DEP-001 | Production dependency remediation | NOT_STARTED | The root production audit snapshot on 2026-09-08 reports 3 critical, 16 high, and 2 moderate advisories; upgrades or reviewed exceptions reduce critical/high exposure to zero without fiscal regressions |
+| FISC-DATA-001 | Official fiscal-reference provenance | IN_PROGRESS | INPC covers through July 2026 but remains flagged unverified; every rate, tariff, holiday, and index seed records official source, publication date, verification evidence, and fail-closed freshness behavior |
 | QA-001 | Fiscal golden-case harness | NOT_STARTED | Versioned fixtures cover period rollovers, due dates, no-data states, supported regimes, mixed regimes, and unsupported regimes |
 
 ### Phase 0 release gate
@@ -48,6 +50,8 @@ Target: 2–3 weeks. No general-availability sales before this gate passes.
 - Zero known cross-screen state contradictions.
 - Zero silent regime fallback paths.
 - Zero tax dates serialized as instants and rendered in a different calendar day.
+- Zero unreviewed critical/high production dependency advisories.
+- Every fiscal reference used in a calculation is current and officially verified, or the calculation fails closed.
 - Production readiness check passing for seven consecutive days.
 - A licensed Mexican tax professional signs off the golden cases. Software tests are not a substitute for this review.
 
@@ -62,7 +66,7 @@ Target: 2–3 weeks. No general-availability sales before this gate passes.
 | REL-001E Consumer parity | IN_PROGRESS | Inventory notifications, firm cockpit, exports, and any remaining raw deadline calculations; add an API contract test before staging |
 | REL-003A Fail-closed empty-bank state | VERIFY | Reconciliation, declaration checklist, and workbench now classify zero bank movements as `NO_DATA`; no-data periods cannot become mathematically reconciled or open the normal signing path |
 | REL-003B Intentional no-bank workflow | VERIFY | Writer-only confirmation persists timestamp, user, and a required explanation; it is revocable, rejected when movements exist, and automatically stops opening the gate if movements later arrive. UI and downstream gates label it as a human decision and never as 100% reconciliation |
-| SAT-001 Native Buzón CE evidence pilot | IN_PROGRESS | The live credential-free CE preflight passes through the full SSO bootstrap; the session-aware form contract, exact signer envelope, pre-send TLS gate, redacted first-signed-POST probe, route allowlist, bounded transport, non-replayable run identity, durable single-flight lease, awaited credential-use audits, and interactive-session-only existing-credential mandate workflow are implemented. The mandate blocks platform support, bearer tokens, viewers, and vertical-only staff. No customer credential has been transmitted. Exit requires deployment approval, an authorized customer acceptance, a supervised SMP login, authenticated RFC marker, fixed-period metadata inventory, and proof of whether SAT exposes original CE XML or receipts only |
+| SAT-001 Native Buzón CE evidence pilot | IN_PROGRESS | The live credential-free CE preflight passes through the full SSO bootstrap; the session-aware form contract, exact signer envelope, pre-send TLS gate, redacted first-signed-POST probe, route allowlist, bounded transport, non-replayable run identity, durable single-flight lease, awaited credential-use audits, interactive-session-only existing-credential mandate workflow, and inert one-shot Railway worker/runbook are implemented. The mandate blocks platform support, bearer tokens, viewers, and vertical-only staff. No customer credential has been transmitted. Exit requires deployment approval, an authorized customer acceptance, a supervised SMP login, authenticated RFC marker, fixed-period metadata inventory, and proof of whether SAT exposes original CE XML or receipts only |
 
 Current acceptance fixture: on 2026-09-08 in `America/Mexico_City`, the default monthly period is `2026-08` and the base federal deadline is `2026-09-17`.
 
@@ -145,13 +149,14 @@ Work is pulled in this order unless a production incident preempts it:
 
 1. REL-001 fiscal period/date consistency.
 2. REL-003 empty-bank semantics.
-3. REL-002 close state machine.
-4. FISC-001 capability registry and fail-closed guard.
-5. FISC-002 multi-regime composition.
-6. REG-626-PM, because the current generic PM path is materially different.
-7. REG-626-PF cash basis, then REG-601, REG-612, REG-606, REG-625.
-8. FISC-003 obligations and DIOT-001.
-9. SEC-001/OPS-001, followed by the remainder of the plan.
+3. SEC-DEP-001 critical/high dependency triage and FISC-DATA-001 provenance.
+4. REL-002 close state machine.
+5. FISC-001 capability registry and fail-closed guard.
+6. FISC-002 multi-regime composition.
+7. REG-626-PM, because the current generic PM path is materially different.
+8. REG-626-PF cash basis, then REG-601, REG-612, REG-606, REG-625.
+9. FISC-003 obligations and DIOT-001.
+10. SEC-001/OPS-001, followed by the remainder of the plan.
 
 ## Per-item delivery protocol
 
