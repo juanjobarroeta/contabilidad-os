@@ -42,9 +42,26 @@ export async function GET(req: Request) {
       _count: true,
     });
     const statMap = Object.fromEntries(stats.map(s => [s.status, s._count]));
+    // Último estado de cuenta con saldo final declarado: es el ANCLA de la
+    // cuenta — el saldo que el banco firma. Se expone junto con si ese lote
+    // cuadró, para poder decir «tu banco dice X» y si hay que revisarlo.
+    const ultimoEstado = await prisma.importBatch.findFirst({
+      where: { bankAccountId: acc.id, saldoFinal: { not: null } },
+      orderBy: { createdAt: "desc" },
+      select: { periodo: true, saldoFinal: true, cuadro: true, createdAt: true, archivoNombre: true },
+    });
     return {
       ...acc,
       lastTransaction: acc.transactions[0] ?? null,
+      estadoCuenta: ultimoEstado
+        ? {
+            periodo: ultimoEstado.periodo,
+            saldoFinal: Number(ultimoEstado.saldoFinal),
+            cuadro: ultimoEstado.cuadro,
+            subidoEl: ultimoEstado.createdAt,
+            archivo: ultimoEstado.archivoNombre,
+          }
+        : null,
       stats: {
         total: acc._count.transactions,
         unmatched: statMap.UNMATCHED ?? 0,

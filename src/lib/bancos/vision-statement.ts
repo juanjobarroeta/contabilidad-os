@@ -3,7 +3,13 @@ import type { ParsedTransaction } from "@/lib/bank-parser";
 import { meteredCreate } from "@/lib/costos/anthropic";
 import type { CostCtx } from "@/lib/costos/record";
 import { leerPdf, PAGINAS_POR_LOTE, rangosDeLotes, recortarPaginas } from "./pdf-paginas";
-import { cotejarControles, leerControles, type CotejoControles } from "./controles-estado";
+import {
+  cotejarControles,
+  duplicadosExactos,
+  leerControles,
+  leerSaldos,
+  type CotejoControles,
+} from "./controles-estado";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Extracción de un estado de cuenta (PDF o foto) con visión.
@@ -125,6 +131,10 @@ export async function extractStatementFromDocument(
   // para saber cuántas páginas tiene y leer los totales de control del banco.
   const leido = mediaType === "application/pdf" ? await leerPdf(buf) : null;
   const controles = leido ? leerControles(leido.texto) : null;
+  // Los saldos, del TEXTO: el banco los imprime siempre y el modelo a veces los
+  // deja en null — y sin ellos el lote se guarda sin ancla contra la cual medir
+  // la cuenta después (caso real: BBVA agosto 2026, saldo final nulo).
+  const saldosTexto = leido ? leerSaldos(leido.texto) : null;
   const paginas = leido?.paginas ?? 0;
 
   // Un documento corto (o una foto, o un PDF escaneado sin texto) va en una
@@ -184,8 +194,21 @@ export async function extractStatementFromDocument(
     movimientos: raws.flatMap((r) => r.movimientos ?? []),
   };
 
+  // Un renglón en CERO no es un movimiento: es una línea de continuación
+  // (el nombre del beneficiario, la referencia) que el modelo promovió a
+  // movimiento. Se descartan — entraban a la mesa de conciliación como trabajo
+  // fantasma que nadie podía casar contra nada.
+  const enCero = (raw.movimientos ?? []).filter(
+    (m) => m && typeof m.monto === "number" && Math.abs(m.monto) < 0.005,
+  ).length;
+  if (enCero > 0) {
+    warnings.push(
+      `${enCero} renglón(es) sin importe se descartaron (líneas de continuación, no movimientos).`,
+    );
+  }
+
   const transactions: ParsedTransaction[] = (raw.movimientos ?? [])
-    .filter((m) => m && m.fecha && typeof m.monto === "number")
+    .filter((m) => m && m.fecha && typeof m.monto === "number" && Math.abs(m.monto) >= 0.005)
     .map((m) => {
       const d = new Date(`${m.fecha}T12:00:00`);
       // Las sublíneas NO se pegan a `descripcion`: esa cadena entra en la
@@ -215,18 +238,51 @@ export async function extractStatementFromDocument(
   const cotejo = controles ? cotejarControles(controles, transactions) : null;
   if (cotejo?.advertencias.length) warnings.push(...cotejo.advertencias);
 
+  // ── Renglones repetidos ───────────────────────────────────────────────────
+  // Sólo se mencionan cuando el conteo del banco dice que además SOBRAN
+  // movimientos: dos cobros iguales el mismo día son normales y, con los
+  // totales cuadrando, avisar de ellos sería ruido.
+  if (cotejo?.cuadra === false) {
+    const repetidos = duplicadosExactos(transactions);
+    if (repetidos.length > 0) {
+      const muestra = repetidos
+        .slice(0, 3)
+        .map((r) => `${r.fecha} ${fmt(Math.abs(r.monto))} ${r.descripcion.slice(0, 40)} (×${r.veces})`)
+        .join("; ");
+      warnings.push(
+        `Renglones repetidos con el mismo día, importe y concepto: ${muestra}. ` +
+          "Pueden ser reales (dos cobros iguales el mismo día) o una doble lectura — compáralos con el estado antes de confirmar.",
+      );
+    }
+  }
+
   // ── Candado 2: saldo inicial + Σ movimientos ≈ saldo final ────────────────
+  // El texto del banco manda sobre lo que leyó el modelo: es determinista. Si
+  // ambos existen y difieren, se dice — nunca se elige en silencio.
+  const saldoInicial = saldosTexto?.inicial ?? raw.saldoInicial ?? null;
+  const saldoFinal = saldosTexto?.final ?? raw.saldoFinal ?? null;
+  for (const [etiqueta, delTexto, delModelo] of [
+    ["inicial", saldosTexto?.inicial, raw.saldoInicial],
+    ["final", saldosTexto?.final, raw.saldoFinal],
+  ] as const) {
+    if (delTexto != null && delModelo != null && Math.abs(delTexto - delModelo) > BALANCE_TOLERANCE) {
+      warnings.push(
+        `El saldo ${etiqueta} impreso (${fmt(delTexto)}) no coincide con el que leyó el asistente (${fmt(delModelo)}); se usa el impreso.`,
+      );
+    }
+  }
+
   const sumaMovimientos = round2(transactions.reduce((s, t) => s + t.monto, 0));
   let cuadra: boolean | null = null;
   let esperadoFinal: number | null = null;
   let diferencia: number | null = null;
-  if (raw.saldoInicial != null && raw.saldoFinal != null) {
-    esperadoFinal = round2(raw.saldoInicial + sumaMovimientos);
-    diferencia = round2(esperadoFinal - raw.saldoFinal);
+  if (saldoInicial != null && saldoFinal != null) {
+    esperadoFinal = round2(saldoInicial + sumaMovimientos);
+    diferencia = round2(esperadoFinal - saldoFinal);
     cuadra = Math.abs(diferencia) <= BALANCE_TOLERANCE;
     if (!cuadra) {
       warnings.push(
-        `Los saldos no cuadran: inicial ${fmt(raw.saldoInicial)} + movimientos ${fmt(sumaMovimientos)} = ${fmt(esperadoFinal)}, pero el estado dice ${fmt(raw.saldoFinal)} (diferencia ${fmt(diferencia)}). Revisa antes de importar — pueden faltar o sobrar movimientos.`
+        `Los saldos no cuadran: inicial ${fmt(saldoInicial)} + movimientos ${fmt(sumaMovimientos)} = ${fmt(esperadoFinal)}, pero el estado dice ${fmt(saldoFinal)} (diferencia ${fmt(diferencia)}). Revisa antes de importar — pueden faltar o sobrar movimientos.`
       );
     }
   } else if (!cotejo || cotejo.cuadra === null) {
@@ -241,8 +297,8 @@ export async function extractStatementFromDocument(
     periodo: raw.periodo ?? null,
     transactions,
     balanceCheck: {
-      saldoInicial: raw.saldoInicial ?? null,
-      saldoFinal: raw.saldoFinal ?? null,
+      saldoInicial,
+      saldoFinal,
       sumaMovimientos,
       esperadoFinal,
       cuadra,

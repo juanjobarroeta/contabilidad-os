@@ -39,6 +39,14 @@ interface BankAccount {
   titular?: string | null; moneda: string;
   stats: { total: number; unmatched: number; matched: number; ignored: number };
   lastTransaction: { fecha: string; saldo?: number } | null;
+  /** Último estado de cuenta cargado con saldo final: el ancla que firma el banco. */
+  estadoCuenta: {
+    periodo: string | null;
+    saldoFinal: number;
+    cuadro: boolean | null;
+    subidoEl: string;
+    archivo: string | null;
+  } | null;
 }
 interface BankTx {
   id: string;
@@ -937,6 +945,25 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
                       <span className="text-[12px] text-cos-ink-faint">Se toma del estado de cuenta que cargues.</span>
                     </>
                   )}
+                {/* El saldo que FIRMA el banco en su estado, con el veredicto
+                    del cotejo: es contra este número que se mide la cuenta. */}
+                {account.estadoCuenta && (
+                  <span className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] text-cos-ink-soft">
+                    Según tu estado de cuenta
+                    {account.estadoCuenta.periodo ? ` (${account.estadoCuenta.periodo})` : ""}:
+                    <Money value={account.estadoCuenta.saldoFinal} size={12} weight={600} />
+                    {account.estadoCuenta.cuadro === false && (
+                      <span className="rounded-full bg-cos-amber-tint px-1.5 py-0.5 text-[11px] font-medium text-cos-amber-ink">
+                        la última carga no cuadró
+                      </span>
+                    )}
+                    {account.estadoCuenta.cuadro === true && (
+                      <span className="rounded-full bg-cos-jade-tint px-1.5 py-0.5 text-[11px] font-medium text-cos-jade-ink">
+                        cuadrado
+                      </span>
+                    )}
+                  </span>
+                )}
               </div>
               <div className="flex flex-wrap gap-2.5">
                 <label className={"flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-control border border-cos-line bg-cos-card px-4 py-2.5 text-[14px] font-semibold text-cos-ink hover:bg-cos-paper " + (busy ? "pointer-events-none opacity-50" : "")}>
