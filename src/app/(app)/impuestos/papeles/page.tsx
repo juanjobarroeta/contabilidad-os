@@ -6,6 +6,7 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import { ArrowLeft, Printer, FileText, Calculator, BookOpen, ShieldCheck } from "lucide-react";
 import { IvaPanel, IsrPanel, RetencionesPanel } from "@/components/papeles/panels";
 import { VerificacionSatPanel } from "@/components/papeles/VerificacionSatPanel";
+import { periodoMensualPorDefecto } from "@/lib/fiscal/periodo-operativo";
 
 type TabId = "iva" | "isr" | "retenciones" | "verificacion";
 
@@ -16,10 +17,10 @@ const MONTHS = [
 
 export default function PapelesPage() {
   const { activeCompany } = useCompany();
-  const now = new Date();
+  const defaultPeriod = periodoMensualPorDefecto();
   const [tab, setTab] = useState<TabId>("iva");
-  const [month, setMonth] = useState(now.getMonth() + 1);
-  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(defaultPeriod.month);
+  const [year, setYear] = useState(defaultPeriod.year);
   // "Verificación SAT" es una herramienta INTERNA del operador (auditar el motor),
   // no para el contador/cliente: la pestaña sólo se muestra al operador. El
   // endpoint además está gated server-side, así que esconderla no es la seguridad.

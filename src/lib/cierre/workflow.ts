@@ -22,6 +22,7 @@
 
 import type { ReadinessResult } from "../contabilidad/ce-readiness";
 import type { ChecklistDeclaracion, ChecklistItem } from "../fiscal/checklist-declaracion";
+import { fechaFiscalEnMexico } from "../fiscal/periodo-operativo";
 import { hashEvidencia } from "./evidencia";
 import { ORDEN_PASOS, esClavePaso, type ClavePasoCierre } from "./claves";
 
@@ -812,8 +813,9 @@ export function periodosEnJuego(
   abiertos: ReadonlyArray<{ year: number; month: number }>,
   max = 3
 ): { year: number; month: number }[] {
-  const y = hoy.getFullYear();
-  const m = hoy.getMonth() + 1;
+  const fechaMx = fechaFiscalEnMexico(hoy);
+  const y = fechaMx.year;
+  const m = fechaMx.month;
   const enCurso = { year: y, month: m };
   const anterior = m === 1 ? { year: y - 1, month: 12 } : { year: y, month: m - 1 };
   const clave = (p: { year: number; month: number }) => p.year * 100 + p.month;

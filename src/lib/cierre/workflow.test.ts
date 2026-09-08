@@ -317,6 +317,14 @@ describe("periodosEnJuego", () => {
       { year: 2026, month: 9 },
     ]);
   });
+
+  it("usa el calendario de México cerca de la medianoche de Railway", () => {
+    // En UTC ya es 1 de septiembre; en Ciudad de México todavía es 31 de agosto.
+    expect(periodosEnJuego(new Date("2026-09-01T00:30:00Z"), [])).toEqual([
+      { year: 2026, month: 7 },
+      { year: 2026, month: 8 },
+    ]);
+  });
 });
 
 // El fallo que Juan vio en producción: el copiloto le pidió el coeficiente de

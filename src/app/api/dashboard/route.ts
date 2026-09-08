@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { TaxDeclarationType } from "@prisma/client";
-import { getObligacionesPorRegimen } from "@/lib/obligaciones";
+import {
+  calcularVencimiento,
+  fechaCalendarioIso,
+  getObligacionesPorRegimen,
+  type ObligacionConfig,
+} from "@/lib/obligaciones";
 import { conCalculoEnVivo, montoDeObligacion } from "@/lib/obligaciones-monto";
 import { detectComplementosPendientes } from "@/lib/complementos";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
@@ -10,6 +15,10 @@ import { computeTaxPosition } from "@/lib/impuestos";
 import { getAsimiladosResumen } from "@/lib/fiscal/asimilados";
 import { fielStatus } from "@/lib/fiel";
 import { computeEstadoDatos } from "@/lib/estado-datos";
+import {
+  fechaFiscalEnMexico,
+  periodoMensualPorDefecto,
+} from "@/lib/fiscal/periodo-operativo";
 
 // GET /api/dashboard?companyId=xxx
 export async function GET(req: Request) {
@@ -25,9 +34,10 @@ export async function GET(req: Request) {
   const member = await getEffectiveCompanyMembership(session.user.id, companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
-  const now   = new Date();
-  const year  = now.getFullYear();
-  const month = now.getMonth() + 1; // 1-based
+  const now = new Date();
+  const hoyFiscal = fechaFiscalEnMexico(now);
+  const year = hoyFiscal.year;
+  const month = hoyFiscal.month;
 
   // Current month boundaries
   const monthFrom = new Date(year, month - 1, 1);
@@ -38,10 +48,10 @@ export async function GET(req: Request) {
   // MES ANTERIOR (su IVA/ISR/DIOT vencen el 17). El mes anterior deja de estar
   // "en juego" cuando su declaración ya se presentó; sólo entonces la tarjeta
   // de impuestos avanza al mes en curso (como avance acumulado).
-  const prevDate    = new Date(year, month - 2, 1);
-  const prevYear    = prevDate.getFullYear();
-  const prevMonth   = prevDate.getMonth() + 1;
-  const prevPeriodo = `${prevYear}-${String(prevMonth).padStart(2, "0")}`;
+  const previous = periodoMensualPorDefecto(now);
+  const prevYear = previous.year;
+  const prevMonth = previous.month;
+  const prevPeriodo = previous.key;
 
   // ── Build last-6-months ranges ────────────────────────────────────────────
   const months6: { year: number; month: number; from: Date; to: Date; label: string }[] = [];
@@ -199,8 +209,8 @@ export async function GET(req: Request) {
   const ivaEstimado    = ivaTrasladado - ivaAcreditable;
 
   // ── Upcoming obligations (next 45 days) ────────────────────────────────────
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // Calendar surrogate for Mexico City. Due dates are dates, not instants.
+  const today = new Date(year, month - 1, hoyFiscal.day);
   const inXDays = new Date(today);
   inXDays.setDate(inXDays.getDate() + 45);
 
@@ -241,30 +251,41 @@ export async function GET(req: Request) {
     dueDate: string;
     dueDateFmt: string;
     periodo: string;
-    /** Declaration period key to match filings against (YYYY-MM monthly/bimestral; ejercicio year for anual). */
+    /** Declaration period key: YYYY-MM, YYYY-Bn, or exercise year for annual. */
     periodoKey: string;
     daysUntil: number;
     status: "OVERDUE" | "SOON" | "UPCOMING";
   }[] = [];
 
   for (const ob of obligations) {
+    const obConfig: ObligacionConfig = {
+      tipo: ob.tipo,
+      descripcion: ob.descripcion,
+      periodicidad: ob.periodicidad as ObligacionConfig["periodicidad"],
+      diaVencimiento: ob.diaVencimiento,
+      mesVencimiento: ob.mesVencimiento ?? undefined,
+    };
+
     if (ob.periodicidad === "ANUAL") {
-      const dueYear = ob.mesVencimiento && ob.mesVencimiento < month ? year + 1 : year;
-      const dueM    = ob.mesVencimiento ?? 3;
-      const due     = new Date(dueYear, dueM - 1, ob.diaVencimiento);
-      if (due >= today && due <= inXDays) {
-        const diff = Math.round((due.getTime() - today.getTime()) / 86400000);
-        upcomingObs.push({
-          tipo:         ob.tipo,
-          descripcion:  ob.descripcion,
-          periodicidad: ob.periodicidad,
-          dueDate:      due.toISOString().substring(0, 10),
-          dueDateFmt:   `${ob.diaVencimiento} ${MONTH_NAMES[dueM - 1]} ${dueYear}`,
-          periodo:      `${dueYear}`,
-          periodoKey:   `${dueYear - 1}`, // anual: ejercicio declarado (año anterior al vencimiento)
-          daysUntil:    diff,
-          status:       diff === 0 ? "OVERDUE" : diff <= 7 ? "SOON" : "UPCOMING",
-        });
+      // Evaluate both adjacent exercises. A weekend/holiday can move a March
+      // deadline into April, so choosing solely from the current month loses
+      // the obligation exactly on its shifted due date.
+      for (const ejercicio of [year - 1, year]) {
+        const due = calcularVencimiento(obConfig, String(ejercicio));
+        if (due >= today && due <= inXDays) {
+          const diff = Math.round((due.getTime() - today.getTime()) / 86400000);
+          upcomingObs.push({
+            tipo:         ob.tipo,
+            descripcion:  ob.descripcion,
+            periodicidad: ob.periodicidad,
+            dueDate:      fechaCalendarioIso(due),
+            dueDateFmt:   `${due.getDate()} ${MONTH_NAMES[due.getMonth()]} ${due.getFullYear()}`,
+            periodo:      `Ejercicio ${ejercicio}`,
+            periodoKey:   `${ejercicio}`,
+            daysUntil:    diff,
+            status:       diff < 0 ? "OVERDUE" : diff <= 7 ? "SOON" : "UPCOMING",
+          });
+        }
       }
     } else {
       // MENSUAL / BIMESTRAL — del mes ANTERIOR al siguiente. El offset -1 es
@@ -278,9 +299,15 @@ export async function GET(req: Request) {
         const d     = new Date(year, month - 1 + offset, 1);
         const y2    = d.getFullYear();
         const m2    = d.getMonth() + 1;
-        const dueM  = m2 + 1 > 12 ? 1 : m2 + 1;          // following month
-        const dueY  = m2 + 1 > 12 ? y2 + 1 : y2;
-        const due   = new Date(dueY, dueM - 1, ob.diaVencimiento);
+
+        // A bimonthly obligation exists once per completed bimester. The old
+        // loop generated it for both months and looked for a non-existent
+        // YYYY-MM filing key.
+        if (ob.periodicidad === "BIMESTRAL" && m2 % 2 !== 0) continue;
+        const periodoKey = ob.periodicidad === "BIMESTRAL"
+          ? `${y2}-B${m2 / 2}`
+          : `${y2}-${String(m2).padStart(2, "0")}`;
+        const due = calcularVencimiento(obConfig, periodoKey);
 
         if (due >= lookbackFrom && due <= inXDays) {
           const periodoStr = ob.periodicidad === "BIMESTRAL"
@@ -292,10 +319,10 @@ export async function GET(req: Request) {
             tipo:         ob.tipo,
             descripcion:  ob.descripcion,
             periodicidad: ob.periodicidad,
-            dueDate:      due.toISOString().substring(0, 10),
-            dueDateFmt:   `${ob.diaVencimiento} ${MONTH_NAMES[dueM - 1]} ${dueY}`,
+            dueDate:      fechaCalendarioIso(due),
+            dueDateFmt:   `${due.getDate()} ${MONTH_NAMES[due.getMonth()]} ${due.getFullYear()}`,
             periodo:      periodoStr,
-            periodoKey:   `${y2}-${String(m2).padStart(2, "0")}`, // periodo declarado (mes que cubre la obligación)
+            periodoKey,
             daysUntil:    diff,
             status:       diff < 0 ? "OVERDUE" : diff <= 7 ? "SOON" : "UPCOMING",
           });
@@ -442,9 +469,17 @@ export async function GET(req: Request) {
     ? fielStatus({ fielCer: company.fielCer, fielVigencia: company.fielVigencia })
     : null;
 
-  // Vence el 17 del mes SIGUIENTE al período en juego (Art. 5.1 RMF; sin los
-  // días extra por sexto dígito — criterio conservador).
-  const taxDue = new Date(fiscalYear, fiscalMonth, 17);
+  // Same due-date service used by Compliance and the declaration workspace.
+  // RFC-digit facilities remain opt-in until taxpayer eligibility is stored.
+  const taxDue = calcularVencimiento(
+    {
+      tipo: "IVA_MENSUAL",
+      descripcion: "Declaración mensual",
+      periodicidad: "MENSUAL",
+      diaVencimiento: 17,
+    },
+    periodoFiscalKey,
+  );
   const isrPagarMes = taxPosition.isr.isrPagar;
   const totalPagarMes = taxPosition.iva.pagar + (isrPagarMes ?? 0);
   const MES_LARGO = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -486,7 +521,7 @@ export async function GET(req: Request) {
       periodo: `${fiscalYear}-${String(fiscalMonth).padStart(2, "0")}`,
       periodoFmt: `${MES_LARGO[fiscalMonth - 1]} ${fiscalYear}`,
       modo: fiscalEnCurso ? "en_curso" : "por_presentar",
-      vence: taxDue.toISOString().substring(0, 10),
+      vence: fechaCalendarioIso(taxDue),
       venceFmt: `${taxDue.getDate()} ${MES_ABBR[taxDue.getMonth()]} ${taxDue.getFullYear()}`,
       diasRestantes: Math.round((taxDue.getTime() - today.getTime()) / 86400000),
       tarifaVerificada: taxPosition.isr.tarifaVerificada,

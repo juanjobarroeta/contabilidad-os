@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { AuthzError, requireMembership, requireWriter } from "@/lib/authz";
 import { registrarBitacora } from "@/lib/audit";
 import {
+  ConciliacionSinDatosError,
   conciliacionDelMes,
   firmarConciliacion,
   guardarSaldoEstado,
@@ -105,6 +106,9 @@ export async function POST(req: Request) {
     return NextResponse.json(await conciliacionDelMes(companyId, year, month));
   } catch (e) {
     if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    if (e instanceof ConciliacionSinDatosError) {
+      return NextResponse.json({ error: e.message, code: "BANK_NO_DATA" }, { status: 409 });
+    }
     throw e;
   }
 }

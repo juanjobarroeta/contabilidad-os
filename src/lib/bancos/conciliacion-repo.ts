@@ -32,6 +32,13 @@ function rangoMes(year: number, month: number) {
   };
 }
 
+export class ConciliacionSinDatosError extends Error {
+  constructor() {
+    super("No hay movimientos bancarios del periodo para firmar");
+    this.name = "ConciliacionSinDatosError";
+  }
+}
+
 export interface CuentaConciliada {
   bankAccountId: string;
   etiqueta: string;
@@ -357,6 +364,13 @@ export async function firmarConciliacion(args: {
   conciliado: boolean;
 }) {
   const { companyId, bankAccountId, year, month } = args;
+  if (args.conciliado) {
+    const { inicio, fin } = rangoMes(year, month);
+    const movimientos = await prisma.bankTransaction.count({
+      where: { companyId, bankAccountId, fecha: { gte: inicio, lt: fin } },
+    });
+    if (movimientos === 0) throw new ConciliacionSinDatosError();
+  }
   return prisma.conciliacionBancaria.upsert({
     where: { bankAccountId_year_month: { bankAccountId, year, month } },
     update: {

@@ -73,6 +73,11 @@ interface Conciliacion {
   diferenciaHeredada: number | null;
   conciliado: boolean;
   explicadaPorArrastre: boolean;
+  coberturaBancaria: {
+    estado: "NO_DATA" | "PENDING" | "RECONCILED";
+    porcentajeConciliado: number | null;
+    compuertaAbierta: boolean;
+  };
   cuentas: CuentaConciliada[];
   auxiliar: RenglonAuxiliar[];
   movimientosBanco: MovimientoBanco[];
@@ -151,7 +156,7 @@ export function ConciliacionBancariaPanel({
     return <p className="py-8 text-center text-sm text-cos-ink-soft">{data.resumen}</p>;
   }
 
-  const estado = data.conciliado
+  const estado = data.coberturaBancaria.estado !== "NO_DATA" && data.conciliado
     ? { tono: "bg-cos-jade-tint text-cos-jade-ink", Icon: ShieldCheck }
     : { tono: "bg-cos-amber-tint text-cos-amber-ink", Icon: AlertTriangle };
 
@@ -268,10 +273,11 @@ export function ConciliacionBancariaPanel({
                   </button>
                   <button
                     onClick={() => accion(c.bankAccountId, { accion: "firmar", conciliado: !c.conciliadoAt })}
-                    disabled={busy === c.bankAccountId}
+                    disabled={busy === c.bankAccountId || (c.movimientos === 0 && !c.conciliadoAt)}
+                    title={c.movimientos === 0 && !c.conciliadoAt ? "Importa el estado de cuenta antes de firmar" : undefined}
                     className="rounded-control border border-cos-line px-3 py-1.5 text-[12.5px] font-medium text-cos-brand-ink hover:bg-cos-brand-tint disabled:opacity-50"
                   >
-                    {c.conciliadoAt ? "Quitar firma" : "Dar por conciliada"}
+                    {c.conciliadoAt ? "Quitar firma" : c.movimientos === 0 ? "Sin datos para firmar" : "Dar por conciliada"}
                   </button>
                 </div>
               </div>

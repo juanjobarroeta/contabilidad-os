@@ -18,44 +18,109 @@ export interface RegimenInfo {
   obligaciones: ObligacionConfig[];
 }
 
-// ── SAT Mexican official holidays (fixed-date only; movable ones shift to Monday by law) ──
-const HOLIDAYS: [number, number][] = [
+// ── Non-business days in CFF Article 12 ─────────────────────────────────────
+const FIXED_HOLIDAYS: [number, number][] = [
   [1, 1],   // Año Nuevo
-  [2, 5],   // Constitución (movable Monday — for simplicity we skip the shift)
-  [3, 21],  // Natalicio Juárez (movable Monday)
   [5, 1],   // Día del Trabajo
+  [5, 5],   // Batalla de Puebla
   [9, 16],  // Independencia
-  [11, 20], // Revolución (movable Monday)
   [12, 25], // Navidad
 ];
 
-function isWeekendOrHoliday(date: Date): boolean {
+function isNthMonday(date: Date, month: number, nth: number): boolean {
+  const day = date.getDate();
+  return (
+    date.getMonth() + 1 === month &&
+    date.getDay() === 1 &&
+    day >= (nth - 1) * 7 + 1 &&
+    day <= nth * 7
+  );
+}
+
+/** Calendar non-business day for federal tax deadlines under CFF Article 12. */
+export function esDiaInhabilCff(date: Date): boolean {
   const day = date.getDay(); // 0=Sun, 6=Sat
   if (day === 0 || day === 6) return true;
   const m = date.getMonth() + 1;
   const d = date.getDate();
-  return HOLIDAYS.some(([hm, hd]) => hm === m && hd === d);
+  if (FIXED_HOLIDAYS.some(([hm, hd]) => hm === m && hd === d)) return true;
+
+  // The statute names the observed Mondays, not February 5, March 21, and
+  // November 20 themselves.
+  if (isNthMonday(date, 2, 1)) return true;
+  if (isNthMonday(date, 3, 3)) return true;
+  if (isNthMonday(date, 11, 3)) return true;
+
+  // Current CFF text also lists December 1 every six years for transfer of the
+  // Federal Executive. 2018 is the reference transfer year.
+  return m === 12 && d === 1 && (date.getFullYear() - 2018) % 6 === 0;
 }
 
 /** Returns the next business day on or after `date` */
 export function nextBusinessDay(date: Date): Date {
   const d = new Date(date);
-  while (isWeekendOrHoliday(d)) {
+  while (esDiaInhabilCff(d)) {
     d.setDate(d.getDate() + 1);
   }
   return d;
+}
+
+/** Add business days strictly after a calendar date. */
+export function addBusinessDays(date: Date, days: number): Date {
+  const d = new Date(date);
+  let remaining = Math.max(0, Math.trunc(days));
+  while (remaining > 0) {
+    d.setDate(d.getDate() + 1);
+    if (!esDiaInhabilCff(d)) remaining -= 1;
+  }
+  return d;
+}
+
+/**
+ * RMF/SAT deadline facility derived from the sixth numeric RFC digit.
+ * Returns null for an invalid RFC. Applicability is taxpayer/obligation
+ * specific; callers must opt in instead of applying this value globally.
+ */
+export function diasHabilesExtraPorRfc(rfc: string): number | null {
+  const match = rfc.trim().toUpperCase().match(/^[A-ZÑ&]{3,4}(\d{6})[A-Z0-9]{3}$/);
+  if (!match) return null;
+  const sixthDigit = Number(match[1][5]);
+  if (sixthDigit === 1 || sixthDigit === 2) return 1;
+  if (sixthDigit === 3 || sixthDigit === 4) return 2;
+  if (sixthDigit === 5 || sixthDigit === 6) return 3;
+  if (sixthDigit === 7 || sixthDigit === 8) return 4;
+  return 5; // 9 or 0
+}
+
+export interface VencimientoOptions {
+  /** Explicit only after the obligation/taxpayer has been found eligible. */
+  diasHabilesAdicionales?: number;
+}
+
+/** Serialize a calendar deadline without converting it to an instant/timezone. */
+export function fechaCalendarioIso(date: Date): string {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
 }
 
 /**
  * Calculate the due date for a given obligation and period.
  * periodo: "2026-04" for monthly, "2026-B2" for bimonthly, "2026" for annual
  */
-export function calcularVencimiento(ob: ObligacionConfig, periodo: string): Date {
+export function calcularVencimiento(
+  ob: ObligacionConfig,
+  periodo: string,
+  options: VencimientoOptions = {},
+): Date {
+  let raw: Date;
   if (ob.periodicidad === "ANUAL") {
     const y = parseInt(periodo);
     // Annual ISR: March 31 (PM) or April 30 (PF) of the FOLLOWING year
     const mes = ob.mesVencimiento ?? 3;
-    const raw = new Date(y + 1, mes - 1, ob.diaVencimiento);
+    raw = new Date(y + 1, mes - 1, ob.diaVencimiento);
     return nextBusinessDay(raw);
   }
 
@@ -66,18 +131,22 @@ export function calcularVencimiento(ob: ObligacionConfig, periodo: string): Date
     const month = bNum * 2; // last month of the bimester (Feb=2, Apr=4, ...)
     const nextMonth = month === 12 ? 1 : month + 1;
     const nextYear = month === 12 ? parseInt(yearStr) + 1 : parseInt(yearStr);
-    const raw = new Date(nextYear, nextMonth - 1, ob.diaVencimiento);
-    return nextBusinessDay(raw);
+    raw = new Date(nextYear, nextMonth - 1, ob.diaVencimiento);
+  } else {
+    // MENSUAL: periodo = "2026-04" → due on day 17 of May 2026
+    const [yearStr, monthStr] = periodo.split("-");
+    const year = parseInt(yearStr);
+    const month = parseInt(monthStr); // 1-12
+    const nextMonth = month === 12 ? 1 : month + 1;
+    const nextYear = month === 12 ? year + 1 : year;
+    raw = new Date(nextYear, nextMonth - 1, ob.diaVencimiento);
   }
 
-  // MENSUAL: periodo = "2026-04" → due on day 17 of May 2026
-  const [yearStr, monthStr] = periodo.split("-");
-  const year = parseInt(yearStr);
-  const month = parseInt(monthStr); // 1-12
-  const nextMonth = month === 12 ? 1 : month + 1;
-  const nextYear = month === 12 ? year + 1 : year;
-  const raw = new Date(nextYear, nextMonth - 1, ob.diaVencimiento);
-  return nextBusinessDay(raw);
+  const extraDays = Math.max(0, Math.trunc(options.diasHabilesAdicionales ?? 0));
+  // The facility says "day 17 plus N business days". If the 17th is a
+  // weekend, Monday is the first extra business day—not the adjusted base plus
+  // another day. Without the facility, normal CFF next-business-day applies.
+  return extraDays > 0 ? addBusinessDays(raw, extraDays) : nextBusinessDay(raw);
 }
 
 // ── Régimen → obligations map ─────────────────────────────────────────────────

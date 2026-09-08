@@ -11,6 +11,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { useCompany } from "@/components/layout/CompanyProvider";
+import { periodoMensualPorDefecto } from "@/lib/fiscal/periodo-operativo";
 
 export const MESES = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -25,11 +26,11 @@ interface PeriodContextValue {
   label: string;
 }
 
-const now = new Date();
+const contextDefaultPeriod = periodoMensualPorDefecto();
 
 const PeriodContext = createContext<PeriodContextValue>({
-  year: now.getFullYear(),
-  month: now.getMonth() + 1,
+  year: contextDefaultPeriod.year,
+  month: contextDefaultPeriod.month,
   setPeriod: () => {},
   label: "",
 });
@@ -38,8 +39,9 @@ const storageKey = (companyId: string) => `cos-periodo:${companyId}`;
 
 export function PeriodProvider({ children }: { children: ReactNode }) {
   const { activeCompany } = useCompany();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [initialPeriod] = useState(() => periodoMensualPorDefecto());
+  const [year, setYear] = useState(initialPeriod.year);
+  const [month, setMonth] = useState(initialPeriod.month);
 
   // Hidratar desde URL o localStorage una vez que conocemos la empresa.
   useEffect(() => {

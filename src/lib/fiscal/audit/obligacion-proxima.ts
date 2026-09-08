@@ -7,11 +7,17 @@
 // una TaxDeclaration en FILED/PAID para ese obligación+periodo, avisa cuando el
 // vencimiento ya está cerca (≤7 días) o ya pasó.
 //
-// Nota / gap conocido: la fecha legal del día 17 ignora las prórrogas por dígito
-// de RFC (RCFF Art. 5 / regla del "sexto dígito"). Usamos el 17 fijo por ahora.
+// RFC-digit extensions are applied only after eligibility is known; the base
+// deadline comes from the shared CFF-aware deadline service.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { prisma } from "@/lib/prisma";
+import { calcularVencimiento, fechaCalendarioIso } from "@/lib/obligaciones";
+import {
+  diasEntreFechasCalendario,
+  fechaFiscalEnMexico,
+  periodoMensualPorDefecto,
+} from "@/lib/fiscal/periodo-operativo";
 import type { Hallazgo } from "./types";
 
 /** Día legal de vencimiento para obligaciones mensuales (IVA/ISR/DIOT). */
@@ -81,34 +87,21 @@ export async function cargarObligacionProxima(
  * y junio —ya histórico— lo cubre declaraciones.faltantes.
  */
 function periodoEnJuego(hoy: Date, dia: number): { periodo: string; venc: Date; mesIdx: number } {
-  // Mes anterior al de hoy (1-based), ajustando el cruce de año.
-  let anio = hoy.getFullYear();
-  let mes = hoy.getMonth(); // getMonth() es 0-based ⇒ mes natural anterior en 1-based.
-  if (mes === 0) {
-    mes = 12;
-    anio -= 1;
-  }
-  // Vencimiento = día `dia` del mes natural siguiente al periodo (= mes de hoy).
-  const venc = vencimientoDe(anio, mes, dia);
+  const period = periodoMensualPorDefecto(hoy);
+  const venc = calcularVencimiento(
+    {
+      tipo: "FEDERAL_MENSUAL",
+      descripcion: "Declaración mensual",
+      periodicidad: "MENSUAL",
+      diaVencimiento: dia,
+    },
+    period.key,
+  );
   return {
-    periodo: `${anio}-${String(mes).padStart(2, "0")}`,
+    periodo: period.key,
     venc,
-    mesIdx: mes - 1,
+    mesIdx: period.month - 1,
   };
-}
-
-/** Fecha de vencimiento del periodo `anio-mes` (1-based): día `dia` del mes natural siguiente. */
-function vencimientoDe(anio: number, mes: number, dia: number): Date {
-  // mes es 1-based; el mes siguiente en índice 0-based del Date es justamente `mes`.
-  return new Date(anio, mes, dia);
-}
-
-function finDelDia(d: Date): number {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).getTime();
-}
-
-function inicioDelDia(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
 function fundamentoDe(tipo: string) {
@@ -133,7 +126,7 @@ function etiquetaTipo(tipo: string): string {
  */
 export function auditarObligacionProxima(data: ObligacionProximaData, hoy: Date = new Date()): Hallazgo[] {
   const out: Hallazgo[] = [];
-  const hoyInicio = inicioDelDia(hoy);
+  const hoyKey = fechaFiscalEnMexico(hoy).key;
 
   for (const ob of data.obligaciones) {
     const dia = ob.diaVencimiento || DIA_VENCIMIENTO;
@@ -141,12 +134,8 @@ export function auditarObligacionProxima(data: ObligacionProximaData, hoy: Date 
 
     if (data.presentadas.has(`${ob.tipo}:${periodo}`)) continue;
 
-    const vencFin = finDelDia(venc);
-    const vencInicio = inicioDelDia(venc).getTime();
-    const msPorDia = 24 * 60 * 60 * 1000;
-    const diasParaVenc = Math.round((vencInicio - hoyInicio.getTime()) / msPorDia);
-
-    const vencido = hoy.getTime() > vencFin;
+    const diasParaVenc = diasEntreFechasCalendario(hoyKey, fechaCalendarioIso(venc));
+    const vencido = diasParaVenc < 0;
     const enVentana = !vencido && diasParaVenc <= DIAS_AVISO;
     if (!vencido && !enVentana) continue;
 
@@ -157,7 +146,7 @@ export function auditarObligacionProxima(data: ObligacionProximaData, hoy: Date 
       out.push({
         checkClave: "obligacion.vencimiento.proximo",
         severidad: "error",
-        mensaje: `Tu Declaración de ${etq} de ${mesNombre} venció el ${dia} y aún no la presentas. Cada día genera actualización y recargos.`,
+        mensaje: `Tu Declaración de ${etq} de ${mesNombre} venció el ${venc.getDate()} y aún no la presentas. Cada día genera actualización y recargos.`,
         referencias: [`${ob.tipo}:${periodo}`],
         fundamento: fundamentoDe(ob.tipo),
         sugerencia: `Presenta de inmediato la declaración de ${etq} de ${mesNombre} en el portal del SAT para detener actualización y recargos (CFF Art. 17-A y 21).`,
@@ -166,10 +155,10 @@ export function auditarObligacionProxima(data: ObligacionProximaData, hoy: Date 
       out.push({
         checkClave: "obligacion.vencimiento.proximo",
         severidad: "warn",
-        mensaje: `Tu Declaración de ${etq} de ${mesNombre} vence el ${dia} — aún no la presentas.`,
+        mensaje: `Tu Declaración de ${etq} de ${mesNombre} vence el ${venc.getDate()} — aún no la presentas.`,
         referencias: [`${ob.tipo}:${periodo}`],
         fundamento: fundamentoDe(ob.tipo),
-        sugerencia: `Calcula y presenta la declaración de ${etq} de ${mesNombre} antes del ${dia} para evitar actualización y recargos.`,
+        sugerencia: `Calcula y presenta la declaración de ${etq} de ${mesNombre} antes del ${venc.getDate()} para evitar actualización y recargos.`,
       });
     }
   }

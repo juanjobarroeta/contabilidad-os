@@ -16,6 +16,7 @@ import Link from "next/link";
 import { IvaPanel, IsrPanel, RetencionesPanel } from "@/components/papeles/panels";
 import { FaltantesUploader } from "@/components/declaraciones/FaltantesUploader";
 import { ChecklistDelMes } from "@/components/declaraciones/ChecklistDelMes";
+import { periodoMensualPorDefecto } from "@/lib/fiscal/periodo-operativo";
 
 // ── Types (mirror /api/impuestos/cierre and /api/papeles/iva) ──────────────────
 type Estado = "FILED" | "PENDING" | "OVERDUE" | "UPCOMING";
@@ -110,9 +111,9 @@ const TABS: { id: Tab; label: string }[] = [
 
 export function DeclaracionWorkspace() {
   const { activeCompany } = useCompany();
-  const now = new Date();
-  const [month, setMonth] = useState(now.getMonth() + 1);
-  const [year, setYear] = useState(now.getFullYear());
+  const defaultPeriod = periodoMensualPorDefecto();
+  const [month, setMonth] = useState(defaultPeriod.month);
+  const [year, setYear] = useState(defaultPeriod.year);
   const [tab, setTab] = useState<Tab>("resumen");
   // Roving focus for the tablist (APG keyboard pattern: ←/→/Home/End).
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);

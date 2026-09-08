@@ -21,6 +21,7 @@ import { Alert, Loading, RetryButton } from "@/components/ui/feedback";
 import { Money } from "@/components/ui/Money";
 import { cn } from "@/lib/utils";
 import type { ReadinessResult } from "@/lib/contabilidad/ce-readiness";
+import { periodoMensualPorDefecto } from "@/lib/fiscal/periodo-operativo";
 
 // ── Espejos mínimos de /api/dashboard y /api/nomina/hub ─────────────────────
 interface Obligacion {
@@ -103,10 +104,10 @@ export function PilotoDelCierre() {
     setLoading(true);
     setError(null);
     try {
-      const now = new Date();
+      const periodo = periodoMensualPorDefecto();
       const [d, r, n] = await Promise.all([
         fetch(`/api/dashboard?companyId=${companyId}`),
-        fetch(`/api/contabilidad/ce-readiness?companyId=${companyId}&year=${now.getFullYear()}&month=${now.getMonth() + 1}`),
+        fetch(`/api/contabilidad/ce-readiness?companyId=${companyId}&year=${periodo.year}&month=${periodo.month}`),
         fetch(`/api/nomina/hub?companyId=${companyId}`),
       ]);
       if (!d.ok) throw new Error(`dashboard HTTP ${d.status}`);
@@ -134,6 +135,7 @@ export function PilotoDelCierre() {
     );
   }
   if (loading || !dash) return <Loading label="Cargando el mes…" />;
+  const periodoVencido = periodoMensualPorDefecto();
 
   // ── Paso 1 · SAT ──
   const ed = dash.estadoDatos;
@@ -143,7 +145,12 @@ export function PilotoDelCierre() {
   const sinClasificar = check(readiness, "sin_clasificar");
   const banco = check(readiness, "banco");
   const bancoRojo = [sinClasificar, banco].some((c) => c?.estado === "error");
-  const bancoEstado: EstadoPaso = bancoRojo ? "bloquea" : dash.totalUnmatched > 0 ? "atencion" : "listo";
+  const bancoSinDatos = banco != null && banco.estado !== "ok" && dash.totalUnmatched === 0;
+  const bancoEstado: EstadoPaso = bancoRojo
+    ? "bloquea"
+    : bancoSinDatos || dash.totalUnmatched > 0
+      ? "atencion"
+      : "listo";
 
   // ── Paso 3 · Nómina ──
   const sinTimbrar = nomina ? nomina.mes.recibos - nomina.mes.timbrados : 0;
@@ -205,19 +212,26 @@ export function PilotoDelCierre() {
       num: 2,
       titulo: "Bancos",
       sub:
-        dash.totalUnmatched > 0
+        bancoSinDatos
+          ? banco?.titulo ?? "Sin datos bancarios del periodo"
+          : dash.totalUnmatched > 0
           ? `${dash.totalUnmatched} movimiento${dash.totalUnmatched === 1 ? "" : "s"} por clasificar`
           : "Banco conciliado y clasificado",
       estado: bancoEstado,
       cuerpo:
-        dash.totalUnmatched > 0 ? (
+        bancoSinDatos || dash.totalUnmatched > 0 ? (
           <p className="text-[13.5px] text-cos-ink-soft">
-            {sinClasificar?.detalle ?? banco?.detalle ?? "La mesa los agrupa por parecido."}
+            {bancoSinDatos
+              ? banco?.detalle ?? "Importa el estado de cuenta antes de confirmar el cierre."
+              : sinClasificar?.detalle ?? banco?.detalle ?? "La mesa los agrupa por parecido."}
           </p>
         ) : (
           <p className="text-[13.5px] text-cos-jade-ink">Todo conciliado o clasificado.</p>
         ),
-      cta: { label: dash.totalUnmatched > 0 ? `Revisar en la mesa` : "Abrir bancos", href: "/bancos" },
+      cta: {
+        label: bancoSinDatos ? "Cargar estado de cuenta" : dash.totalUnmatched > 0 ? "Revisar en la mesa" : "Abrir bancos",
+        href: "/bancos",
+      },
     },
     {
       num: 3,
@@ -322,7 +336,7 @@ export function PilotoDelCierre() {
         // anterior — obligacion-proxima sólo evalúa ése), no en el mes en
         // curso: «Presentar ahora» debe llevar a lo que venció (pág. 11).
         href: vencidas.length > 0
-          ? `/impuestos?month=${((m0) => (m0 === 0 ? 12 : m0))(new Date().getMonth())}&year=${new Date().getMonth() === 0 ? new Date().getFullYear() - 1 : new Date().getFullYear()}`
+          ? `/impuestos?month=${periodoVencido.month}&year=${periodoVencido.year}`
           : "/impuestos",
       },
     },

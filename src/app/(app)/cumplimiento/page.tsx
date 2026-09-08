@@ -27,7 +27,14 @@ const ESTADO: Record<Estado, { chip: ChipStatus | null; cell: string; text: stri
 const LBL = "block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint";
 
 function fmtShort(iso: string) {
-  return new Date(iso).toLocaleDateString("es-MX", { day: "numeric", month: "short" });
+  // Deadlines are calendar dates, not user-local instants. The API serializes
+  // them at UTC midnight on Railway; pinning the formatter to UTC prevents
+  // 2026-09-17 from appearing as 16 Sep in Mexico.
+  return new Date(iso).toLocaleDateString("es-MX", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
 }
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {

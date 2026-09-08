@@ -4,7 +4,16 @@
 // que no cargan bajo vitest).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { getObligacionesPorRegimen, calcularVencimiento } from "@/lib/obligaciones";
+import {
+  getObligacionesPorRegimen,
+  calcularVencimiento,
+  fechaCalendarioIso,
+} from "@/lib/obligaciones";
+import {
+  diasEntreFechasCalendario,
+  fechaFiscalEnMexico,
+  periodoMensualPorDefecto,
+} from "@/lib/fiscal/periodo-operativo";
 
 /** Ventana (días) para avisar de un vencimiento próximo en el briefing. */
 export const DIAS_DEADLINE_AVISO = 7;
@@ -29,10 +38,6 @@ export interface BriefingPush {
   url: string;
 }
 
-function periodoDe(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
 /** Días de `desde` a `hasta` redondeando hacia arriba (hasta − desde). */
 export function diasEntre(hasta: Date, desde: Date): number {
   return Math.ceil((hasta.getTime() - desde.getTime()) / 86_400_000);
@@ -51,11 +56,18 @@ export function proximoVencimientoMensual(
   if (mensuales.length === 0) return null;
   const rep = mensuales[0]; // todas las mensuales comparten día 17
 
-  const mesAnterior = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
-  const mesActual = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  const hoyFiscal = fechaFiscalEnMexico(hoy);
+  const mesAnterior = periodoMensualPorDefecto(hoy).key;
+  const mesActual = `${hoyFiscal.year}-${String(hoyFiscal.month).padStart(2, "0")}`;
 
-  const candidatos = [periodoDe(mesAnterior), periodoDe(mesActual)]
-    .map((p) => ({ periodo: p, diasRestantes: diasEntre(calcularVencimiento(rep, p), hoy) }))
+  const candidatos = [mesAnterior, mesActual]
+    .map((p) => ({
+      periodo: p,
+      diasRestantes: diasEntreFechasCalendario(
+        hoyFiscal.key,
+        fechaCalendarioIso(calcularVencimiento(rep, p)),
+      ),
+    }))
     .filter((c) => c.diasRestantes >= 0)
     .sort((a, b) => a.diasRestantes - b.diasRestantes);
 

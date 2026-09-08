@@ -24,6 +24,7 @@ import { Money } from "@/components/ui/Money";
 import { StatTile, StatStrip } from "@/components/ui";
 import { Alert, RetryButton } from "@/components/ui/feedback";
 import { CATEGORIAS_MESA, type SugerenciaMovimiento } from "@/lib/bancos/inferir-movimiento";
+import { evaluarCoberturaBancaria } from "@/lib/bancos/conciliacion";
 import { cn } from "@/lib/utils";
 
 // ── Tipos espejo de las APIs ──────────────────────────────────────────────────
@@ -58,7 +59,7 @@ interface CuentaDetalle {
 interface ConciliacionMes {
   /** TODOS los movimientos del mes (el feed ya manda el objeto completo); la
    *  cuenta permite calcular el % conciliado POR CUENTA sin otra consulta. */
-  movimientosBanco: { id: string; cuentaBancariaId: string }[];
+  movimientosBanco: { id: string; cuentaBancariaId: string; conciliado?: boolean }[];
   movimientosNoRegistrados: Movimiento[];
   totalNoRegistrados: number;
   cuentas: Cuenta[];
@@ -417,26 +418,29 @@ export function ConciliacionWorkbench({
   const montoPorContabilizar = pendientes
     .filter((m) => m.conciliado)
     .reduce((s, m) => s + Math.abs(m.monto), 0);
-  const pct = total > 0 ? ((total - sinConciliar) / total) * 100 : 100;
+  const cobertura = evaluarCoberturaBancaria(total, sinConciliar);
+  const sinConciliarGlobal = data.movimientosBanco.filter((m) => !m.conciliado).length;
+  const coberturaGlobal = evaluarCoberturaBancaria(data.movimientosBanco.length, sinConciliarGlobal);
+  const sinDatos = cobertura.estado === "NO_DATA";
 
   return (
     <div className="mb-6">
       <StatStrip className="sm:grid-cols-3">
         <StatTile
           label="Conciliado"
-          tone={sinConciliar === 0 ? "jade" : "ink"}
-          value={`${pct.toFixed(1)} %`}
-          sub={`${total - sinConciliar} de ${total} movimientos del mes`}
+          tone={!sinDatos && sinConciliar === 0 ? "jade" : "ink"}
+          value={cobertura.porcentajeConciliado == null ? "Sin datos" : `${cobertura.porcentajeConciliado.toFixed(1)} %`}
+          sub={sinDatos ? "No hay movimientos para este periodo" : `${cobertura.movimientosConciliados} de ${total} movimientos del mes`}
         />
         <StatTile
           label="Sin conciliar"
-          tone={sinConciliar === 0 ? "jade" : sinConciliar > 20 ? "red" : "amber"}
+          tone={!sinDatos && sinConciliar === 0 ? "jade" : sinConciliar > 20 ? "red" : sinConciliar > 0 ? "amber" : "ink"}
           value={sinConciliar}
           sub={esperanPosteo > 0 ? `+ ${esperanPosteo} conciliado${esperanPosteo === 1 ? "" : "s"} por contabilizar` : undefined}
         />
         <StatTile
           label="Por conciliar"
-          tone={sinConciliar === 0 ? "jade" : "ink"}
+          tone={!sinDatos && sinConciliar === 0 ? "jade" : "ink"}
           value={<Money value={abonos + cargos} size={20} />}
           sub={
             abonos > 0 && cargos > 0 ? (
@@ -509,9 +513,13 @@ export function ConciliacionWorkbench({
         <div className="rounded-card border border-cos-line bg-cos-card px-5 py-4 text-sm text-cos-ink-soft">
           {/* «Compuerta abierta» sólo cuando el MES entero está limpio: con una
               cuenta filtrada en cero pero otras pendientes, decirlo mentiría. */}
-          {sinGlobal === 0
-            ? "Todos los movimientos del mes están conciliados — la compuerta del cierre está abierta."
-            : `Esta cuenta está al corriente; ${sinGlobal === 1 ? "queda 1 movimiento" : `quedan ${sinGlobal} movimientos`} en otras cuentas.`}
+          {coberturaGlobal.estado === "NO_DATA"
+            ? "No hay movimientos bancarios en este periodo. Importa el estado de cuenta; sin datos la compuerta del cierre permanece cerrada."
+            : sinDatos
+              ? "Esta cuenta no tiene movimientos en el periodo; revisa su estado de cuenta antes de confirmar el cierre."
+              : sinGlobal === 0
+                ? "Todos los movimientos del mes están conciliados — la compuerta del cierre está abierta."
+                : `Esta cuenta está al corriente; ${sinGlobal === 1 ? "queda 1 movimiento" : `quedan ${sinGlobal} movimientos`} en otras cuentas.`}
         </div>
       ) : (
         <div className="rounded-card border border-cos-line bg-cos-card">

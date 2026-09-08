@@ -10,10 +10,16 @@
 // siendo manual — esto sólo proyecta + avisa para que el usuario revise/apruebe.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { getObligacionesPorRegimen, nextBusinessDay } from "@/lib/obligaciones";
-
-/** Día legal de vencimiento de las obligaciones mensuales (IVA/ISR/DIOT). */
-const DIA_VENCIMIENTO = 17;
+import {
+  calcularVencimiento,
+  fechaCalendarioIso,
+  getObligacionesPorRegimen,
+} from "@/lib/obligaciones";
+import {
+  diasEntreFechasCalendario,
+  fechaFiscalEnMexico,
+  periodoMensualPorDefecto,
+} from "@/lib/fiscal/periodo-operativo";
 
 /** Marcas (en días naturales antes del vencimiento) en las que se proyecta. */
 export const MARCA_T7 = 7;
@@ -23,12 +29,6 @@ const MESES = [
   "enero", "febrero", "marzo", "abril", "mayo", "junio",
   "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 ];
-
-const MS_POR_DIA = 24 * 60 * 60 * 1000;
-
-function inicioDelDia(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-}
 
 export interface VencimientoMensual {
   /** Periodo en juego (mes que se está por declarar), formato "YYYY-MM". */
@@ -60,31 +60,25 @@ export function diasParaVencimientoMensual(
   hoy: Date = new Date(),
 ): VencimientoMensual | null {
   const obligaciones = getObligacionesPorRegimen(regimen);
-  const tieneMensual = obligaciones.some((o) => o.periodicidad === "MENSUAL");
-  if (!tieneMensual) return null;
+  const mensuales = obligaciones.filter((o) => o.periodicidad === "MENSUAL");
+  if (mensuales.length === 0) return null;
 
-  // Mes natural anterior al de hoy (1-based), ajustando el cruce de año.
-  let year = hoy.getFullYear();
-  let month = hoy.getMonth(); // getMonth() es 0-based ⇒ mes natural anterior en 1-based.
-  if (month === 0) {
-    month = 12;
-    year -= 1;
-  }
-
-  // Vencimiento = día 17 del mes natural siguiente al periodo (= mes de hoy),
-  // corrido al siguiente día hábil.
-  const vencRaw = new Date(hoy.getFullYear(), hoy.getMonth(), DIA_VENCIMIENTO);
-  const vencimiento = nextBusinessDay(vencRaw);
-
-  const dias = Math.round(
-    (inicioDelDia(vencimiento).getTime() - inicioDelDia(hoy).getTime()) / MS_POR_DIA,
+  const period = periodoMensualPorDefecto(hoy);
+  // Use the earliest active monthly deadline. Today all federal monthly rows
+  // share day 17, but this remains correct if a CSF-derived rule differs later.
+  const vencimiento = mensuales
+    .map((ob) => calcularVencimiento(ob, period.key))
+    .sort((a, b) => a.getTime() - b.getTime())[0];
+  const dias = diasEntreFechasCalendario(
+    fechaFiscalEnMexico(hoy).key,
+    fechaCalendarioIso(vencimiento),
   );
 
   return {
-    periodo: `${year}-${String(month).padStart(2, "0")}`,
-    year,
-    month,
-    mesNombre: MESES[month - 1],
+    periodo: period.key,
+    year: period.year,
+    month: period.month,
+    mesNombre: MESES[period.month - 1],
     vencimiento,
     dias,
   };
