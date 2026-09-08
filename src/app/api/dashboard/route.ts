@@ -340,6 +340,7 @@ export async function GET(req: Request) {
         isrPagar: declRow.isrPagar === null ? null : Number(declRow.isrPagar),
         retencionesIsr: declRow.retencionesIsr === null ? null : Number(declRow.retencionesIsr),
         iepsPagar: declRow.iepsPagar === null ? null : Number(declRow.iepsPagar),
+        isnPagar: declRow.isnPagar === null ? null : Number(declRow.isnPagar),
         imssCuotas: declRow.imssCuotas === null ? null : Number(declRow.imssCuotas),
       };
       // Si esta obligación es del período fiscal EN JUEGO, el tablero ya lo

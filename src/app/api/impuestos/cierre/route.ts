@@ -9,6 +9,10 @@ import { formatCurrency } from "@/lib/utils";
 import { calcularVencimiento, type ObligacionConfig } from "@/lib/obligaciones";
 import { Prisma, type TaxDeclarationType } from "@prisma/client";
 import { evidenciaPresentacion } from "@/lib/fiscal/presentacion";
+import { cargarNominaParaIsn } from "@/lib/fiscal/audit/service";
+import { calcularIsnPorEntidad } from "@/lib/fiscal/isn";
+import { causaIsn, periodoIsn } from "@/lib/fiscal/isn/periodo";
+import { construirContexto } from "@/lib/fiscal/rules";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Cierre mensual — the "ready to file" workspace for a single period.
@@ -75,13 +79,19 @@ export async function GET(req: Request) {
   const from = new Date(year, month - 1, 1);
   const to = new Date(year, month, 1);
 
-  const [pos, complementos, obligaciones, declaraciones, nominaRet, egresosConIvaCount, cfdiCount, nominaRunsCount, asimilados] =
+  const [empresa, pos, complementos, obligaciones, declaraciones, nominaRet, egresosConIvaCount, cfdiCount, nominaRunsCount, asimilados] =
     await Promise.all([
+      // La empresa: el ISN resuelve la tasa de cada estado con el contexto
+      // fiscal (régimen, tipo de persona, sector), no con una tasa a mano.
+      prisma.company.findUnique({
+        where: { id: companyId },
+        select: { rfc: true, regimenFiscal: true, actividadEconomica: true, codigoPostal: true },
+      }),
       computeTaxPosition(companyId, year, month),
       detectComplementosPendientes(companyId),
       prisma.companyObligation.findMany({ where: { companyId, activa: true } }),
       prisma.taxDeclaration.findMany({
-        where: { companyId, periodo, tipo: { in: ["IVA_MENSUAL", "ISR_PROVISIONAL", "RETENCIONES_ISR", "DIOT"] } },
+        where: { companyId, periodo, tipo: { in: ["IVA_MENSUAL", "ISR_PROVISIONAL", "RETENCIONES_ISR", "DIOT", "ISN_MENSUAL"] } },
         select: {
           id: true, tipo: true, status: true, lineaCaptura: true, acuseUrl: true,
           fechaPresentacion: true, fechaLimitePago: true, acuseData: true, acusePdfNombre: true,
@@ -161,6 +171,37 @@ export async function GET(req: Request) {
   const federalDecl = declOf("IVA_MENSUAL") ?? declOf("ISR_PROVISIONAL") ?? declOf("RETENCIONES_ISR");
   const federalVencimiento = calcularVencimiento(FEDERAL_CONFIG, periodo);
   const federalEstado = estadoFor(federalDecl?.status ?? null, federalVencimiento);
+
+  // ── ISN: unidad ESTATAL ─────────────────────────────────────────────────────
+  // No lo cobra el SAT sino la tesorería del estado, así que no entra en
+  // `federal` ni en su total: es su propio pago, a otra autoridad, con su propia
+  // fecha. Lo causa tener nómina, no el régimen — como el IMSS.
+  const isnDecl = declOf("ISN_MENSUAL");
+  const isn = await (async () => {
+    const { empleados, fuente } = await cargarNominaParaIsn(
+      companyId,
+      new Date(Date.UTC(year, month - 1, 1)).toISOString(),
+    );
+    if (!empresa) return null;
+    const ctx = construirContexto(empresa, `${year}-${String(month).padStart(2, "0")}-01`);
+    const p = periodoIsn(year, month, calcularIsnPorEntidad(empleados, ctx, fuente));
+    if (!causaIsn(p)) return null;
+    return {
+      aplica: true,
+      periodo: p.periodo,
+      vencimiento: p.fechaLimite.toISOString(),
+      estado: estadoFor(isnDecl?.status ?? null, p.fechaLimite),
+      total: p.total,
+      porEntidad: p.porEntidad,
+      sinTasa: p.sinTasa,
+      aproximadas: p.aproximadas,
+      empleadosSinEntidad: p.empleadosSinEntidad,
+      fuente: p.fuente,
+      todasSinVerificar: p.todasSinVerificar,
+      fechaPresentacion: isnDecl?.fechaPresentacion ?? null,
+      evidencia: evidenciaPresentacion(isnDecl ?? null),
+    };
+  })();
 
   // ── DIOT unit ───────────────────────────────────────────────────────────────
   const diotDecl = declOf("DIOT");
@@ -249,6 +290,7 @@ export async function GET(req: Request) {
       calculado: !!declOf("IVA_MENSUAL") || !!declOf("ISR_PROVISIONAL"),
     },
     diot,
+    isn,
     readiness,
     resumen: {
       totalAPagar,
@@ -311,11 +353,13 @@ export async function POST(req: Request) {
   // destruiría evidencia que no volvemos a pedir (el sync no re-crea filas que
   // ya existen) y dejaría el periodo mintiendo. No se puede des-presentar lo
   // que el SAT ya nos dijo que se presentó.
-  if (action === "unfile-federal" || action === "unfile-diot") {
+  if (action === "unfile-federal" || action === "unfile-diot" || action === "unfile-isn") {
     const tipos =
       action === "unfile-diot"
         ? (["DIOT"] as const)
-        : (["IVA_MENSUAL", "ISR_PROVISIONAL", "RETENCIONES_ISR"] as const);
+        : action === "unfile-isn"
+          ? (["ISN_MENSUAL"] as const)
+          : (["IVA_MENSUAL", "ISR_PROVISIONAL", "RETENCIONES_ISR"] as const);
     const conAcuse = await prisma.taxDeclaration.findFirst({
       where: { companyId, periodo, tipo: { in: [...tipos] }, acusePdfNombre: { not: null } },
       select: { acusePdfNombre: true },
@@ -391,6 +435,43 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ ok: true, action, diffs: acuseData?.diffs ?? [] });
+  }
+
+  // ISN: se presenta ante la tesorería del ESTADO, no ante el SAT, así que
+  // tiene su propio marcado. Al presentarlo se congela el cálculo del mes con su
+  // desglose por entidad — la nómina puede cambiar después y lo declarado no.
+  if (action === "file-isn" || action === "unfile-isn") {
+    const filing = action === "file-isn";
+    let isnPatch: Record<string, unknown> = {};
+    if (filing) {
+      const empresa = await prisma.company.findUnique({
+        where: { id: companyId },
+        select: { rfc: true, regimenFiscal: true, actividadEconomica: true, codigoPostal: true },
+      });
+      if (!empresa) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
+      const { empleados, fuente } = await cargarNominaParaIsn(
+        companyId,
+        new Date(Date.UTC(year, month - 1, 1)).toISOString(),
+      );
+      const ctx = construirContexto(empresa, `${periodo}-01`);
+      const p = periodoIsn(year, month, calcularIsnPorEntidad(empleados, ctx, fuente));
+      isnPatch = {
+        isnPagar: p.total,
+        isnDetalle: {
+          porEntidad: p.porEntidad,
+          sinTasa: p.sinTasa,
+          aproximadas: p.aproximadas,
+          empleadosSinEntidad: p.empleadosSinEntidad,
+          fuente: p.fuente,
+        },
+      };
+    }
+    await upsertRow(prisma, companyId, periodo, "ISN_MENSUAL", {
+      status: filing ? "FILED" : "CALCULATED",
+      ...isnPatch,
+      ...(filing ? acusePatch : clearAcuse()),
+    });
+    return NextResponse.json({ ok: true, action });
   }
 
   if (action === "file-diot" || action === "unfile-diot") {

@@ -45,6 +45,19 @@ interface CierreData {
     evidencia?: EvidenciaPresentacion;
   };
   diot: { aplica: boolean; proveedores: number; vencimiento: string; estado: Estado; acuseUrl: string | null; fechaPresentacion: string | null; evidencia?: EvidenciaPresentacion } | null;
+  // ISN: impuesto ESTATAL. No entra en el total federal — se paga a la tesorería
+  // del estado, y una empresa con sucursales lo debe a varios a la vez.
+  isn?: {
+    aplica: boolean; periodo: string; vencimiento: string; estado: Estado; total: number;
+    porEntidad: { entidad: string; numEmpleados: number; baseMensual: number; tasa: number | null; isn: number | null; nota?: string; fundamento?: { ley: string; articulo: string } }[];
+    sinTasa: string[];
+    aproximadas: { entidad: string; nota: string }[];
+    empleadosSinEntidad: number;
+    fuente: "payroll" | "estimado";
+    todasSinVerificar: boolean;
+    fechaPresentacion: string | null;
+    evidencia?: EvidenciaPresentacion;
+  } | null;
 }
 interface AcuseFaltante { tipo: "DECLARACION_ANUAL" | "IVA_MENSUAL" | "ISR_PROVISIONAL"; periodo: string; etiqueta: string; motivo: string; critico?: boolean; }
 interface HallazgoDTO {
@@ -93,6 +106,7 @@ export function DeclaracionWorkspace() {
   const [acuseError, setAcuseError] = useState("");
   const [diotAcuse, setDiotAcuse] = useState("");
   const [savingDiot, setSavingDiot] = useState(false);
+  const [savingIsn, setSavingIsn] = useState(false);
 
   // Auditor findings (company-wide) — drive the Revisión tab + its count badge.
   const [flags, setFlags] = useState<HallazgoDTO[] | null>(null);
@@ -189,6 +203,16 @@ export function DeclaracionWorkspace() {
       await load();
     } catch { setError("No se pudo guardar la declaración"); }
     finally { setSaving(false); }
+  }
+
+  async function fileIsn(filing: boolean) {
+    if (!activeCompany || !data) return;
+    setSavingIsn(true);
+    try {
+      await post({ action: filing ? "file-isn" : "unfile-isn", fechaPresentacion: fecha || null });
+      await load();
+    } catch { setError("No se pudo guardar el ISN"); }
+    finally { setSavingIsn(false); }
   }
 
   async function fileDiot(filing: boolean) {
@@ -308,6 +332,7 @@ export function DeclaracionWorkspace() {
               onUpload={handleAcuseUpload} onFile={fileFederal}
               companyId={activeCompany.id} month={month} year={year}
               diotAcuse={diotAcuse} setDiotAcuse={setDiotAcuse} savingDiot={savingDiot} onFileDiot={fileDiot}
+              savingIsn={savingIsn} onFileIsn={fileIsn}
             />
           )}
         </div>
@@ -604,13 +629,14 @@ function FlagCard({ h, busy, onResolve, onIgnore }: { h: HallazgoDTO; busy: bool
 
 function Presentar({
   data, fecha, setFecha, saving, acuseParsed, acuseUploading, acuseError, onUpload, onFile,
-  companyId, month, year, diotAcuse, setDiotAcuse, savingDiot, onFileDiot,
+  companyId, month, year, diotAcuse, setDiotAcuse, savingDiot, onFileDiot, savingIsn, onFileIsn,
 }: {
   data: CierreData; fecha: string; setFecha: (s: string) => void; saving: boolean;
   acuseParsed: AcuseMensualParsed | null; acuseUploading: boolean; acuseError: string;
   onUpload: (f: File) => void; onFile: (filing: boolean) => void;
   companyId: string; month: number; year: number;
   diotAcuse: string; setDiotAcuse: (s: string) => void; savingDiot: boolean; onFileDiot: (filing: boolean) => void;
+  savingIsn: boolean; onFileIsn: (filing: boolean) => void;
 }) {
   const f = data.federal;
   return (
@@ -625,6 +651,100 @@ function Presentar({
         acuseParsed={acuseParsed} acuseUploading={acuseUploading} acuseError={acuseError}
         onUpload={onUpload} onFile={onFile}
       />
+      {data.isn?.aplica && (
+        <Card id="isn" className="scroll-mt-24 rounded-card border-cos-line p-5 shadow-card">
+          <div className="flex items-center justify-between">
+            <span className="block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">
+              ISN · impuesto sobre nóminas
+            </span>
+            <EstadoBadge estado={data.isn.estado} />
+          </div>
+          {/* Que quede claro a QUIÉN se le paga: no es una declaración del SAT. */}
+          <p className="mt-2 text-[12.5px] text-cos-ink-soft">
+            Se paga a la tesorería {data.isn.porEntidad.length === 1 ? "del estado" : "de cada estado"} donde se presta el
+            servicio · vence {fmtFecha(data.isn.vencimiento)}
+          </p>
+
+          <div className="mt-3 divide-y divide-cos-line-soft border-y border-cos-line-soft">
+            {data.isn.porEntidad.map((e) => (
+              <div key={e.entidad} className="flex items-baseline justify-between gap-3 py-2">
+                <div className="min-w-0">
+                  <span className="text-[13.5px] font-medium text-cos-ink">{e.entidad}</span>
+                  <span className="ml-2 text-[12px] text-cos-ink-faint">
+                    {e.numEmpleados} {e.numEmpleados === 1 ? "persona" : "personas"} ·{" "}
+                    {((e.tasa ?? 0) * 100).toFixed(2)}%
+                    {e.fundamento ? ` · ${e.fundamento.ley} Art. ${e.fundamento.articulo}` : ""}
+                  </span>
+                  {e.nota && <p className="text-[11.5px] text-cos-amber-ink">{e.nota}</p>}
+                </div>
+                <Money value={e.isn ?? 0} size={14} weight={500} />
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-2.5 flex items-baseline justify-between">
+            <span className="text-[13px] font-semibold text-cos-ink">
+              Total{data.isn.sinTasa.length > 0 ? " de los estados con tasa conocida" : ""}
+            </span>
+            <Money value={data.isn.total} size={16} weight={700} />
+          </div>
+
+          {/* Todo lo que hace que esta cifra NO sea exacta, dicho aquí y no en
+              una nota al pie: la base estimada, los estados sin tasa, los
+              progresivos, la gente sin entidad y las tasas sin cotejar. */}
+          {(data.isn.sinTasa.length > 0 ||
+            data.isn.empleadosSinEntidad > 0 ||
+            data.isn.fuente === "estimado" ||
+            data.isn.aproximadas.length > 0 ||
+            data.isn.todasSinVerificar) && (
+            <div className="mt-3 space-y-1 rounded-md bg-cos-amber-tint p-3 text-[12px] text-cos-amber-ink">
+              {data.isn.fuente === "estimado" && (
+                <p>La base sale del salario diario de la plantilla: no hay nómina timbrada de este mes.</p>
+              )}
+              {data.isn.sinTasa.length > 0 && (
+                <p>
+                  Sin tasa en el catálogo para {data.isn.sinTasa.join(", ")}: esa nómina NO está sumada arriba.
+                </p>
+              )}
+              {data.isn.empleadosSinEntidad > 0 && (
+                <p>
+                  {data.isn.empleadosSinEntidad}{" "}
+                  {data.isn.empleadosSinEntidad === 1 ? "persona sin estado" : "personas sin estado"} en su registro: su
+                  nómina no se pudo atribuir.
+                </p>
+              )}
+              {data.isn.aproximadas.length > 0 && (
+                <p>Estimado con la tasa general en {data.isn.aproximadas.map((a) => a.entidad).join(", ")}.</p>
+              )}
+              {data.isn.todasSinVerificar && (
+                <p>Tasas tomadas de la ley estatal, aún sin cotejar contra el texto publicado.</p>
+              )}
+            </div>
+          )}
+
+          {data.isn.estado === "FILED" ? (
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-md bg-cos-jade-tint p-3">
+              <div>
+                <p className="flex items-center gap-1.5 text-[13px] font-medium text-cos-jade-ink">
+                  <CheckCircle2 className="h-4 w-4" /> Presentado{" "}
+                  {data.isn.fechaPresentacion ? `el ${fmtFecha(data.isn.fechaPresentacion)}` : ""}
+                </p>
+                <p className="mt-0.5 text-[11.5px] text-cos-jade-ink/80">{data.isn.evidencia?.etiqueta ?? "presentado"}</p>
+              </div>
+              <button onClick={() => onFileIsn(false)} disabled={savingIsn}
+                className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1.5 text-[12.5px] hover:bg-cos-card disabled:opacity-50">
+                {savingIsn ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />} Revertir
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => onFileIsn(true)} disabled={savingIsn}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-3 py-2 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
+              {savingIsn ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Marcar presentado
+            </button>
+          )}
+        </Card>
+      )}
+
       {data.diot?.aplica && (
         <Card className="rounded-card border-cos-line p-5 shadow-card">
           <div className="flex items-center justify-between">

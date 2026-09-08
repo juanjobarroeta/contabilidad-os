@@ -335,6 +335,10 @@ export const TIPO_DESC: Record<string, string> = {
   // ambas con vencimiento el día 17 (defaultConfigForTipo ya las resuelve).
   IMSS_MENSUAL: "Cuotas IMSS mensuales (SIPARE)",
   IMSS_BIMESTRAL: "RCV e Infonavit bimestral (SIPARE)",
+  // ISN — ESTATAL, no lo cobra el SAT. Como el IMSS, no deriva del régimen del
+  // SAT sino de tener nómina: lo causa quien paga remuneraciones, en el estado
+  // donde se presta el servicio. Día 17 en la mayoría de los estados.
+  ISN_MENSUAL: "ISN (impuesto sobre nóminas)",
 };
 
 /** Best-effort config for an obligation tipo not present in the régimen map. */
