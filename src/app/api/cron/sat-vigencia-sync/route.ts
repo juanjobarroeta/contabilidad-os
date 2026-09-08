@@ -204,15 +204,32 @@ async function handle(req: Request) {
   // 400), así que casi todo el presupuesto queda libre y el archivo se drena en
   // horas y no en días. Cuando el barrido normal tenga trabajo, él manda: es lo
   // que puede cambiar hoy, mientras que el archivo es una deuda que no crece.
+  //
+  // UN SOLO CRITERIO para el barrido y para el conteo que se reporta: cuando la
+  // misma pregunta se escribe dos veces, los dos números acaban discrepando.
+  const whereArchivo: Prisma.InvoiceWhereInput = {
+    ...(onlyCompanyId ? { companyId: onlyCompanyId } : {}),
+    uuid: { not: null },
+    status: "CANCELLED",
+    tipo: { in: ["INGRESO", "EGRESO", "PAGO"] },
+    OR: [
+      // Nunca preguntada.
+      { cancelEstadoSat: null },
+      // Ya preguntada Y CONTRADICE: la tenemos cancelada y el SAT la reporta
+      // vigente o con el trámite abierto. Sin esta rama, una contradicción
+      // detectada por la versión que sólo DELATABA quedaba fuera del backlog
+      // para siempre —apuntar la respuesta la excluía del `cancelEstadoSat:
+      // null`—, así que la corrección nunca llegaba a la factura que la motivó.
+      // Es la puerta de un solo sentido, reabierta por la propia contabilidad
+      // del barrido. Se cierra sola: al devolverla a vigente deja de estar
+      // CANCELLED y sale del backlog.
+      { cancelEstadoSat: { startsWith: "Vigente", mode: "insensitive" } },
+      { cancelEstadoSat: { contains: "en proceso", mode: "insensitive" } },
+    ],
+  };
   const cupoArchivo = Math.max(10, limit - invoices.length);
   const canceladasSinVerificar = await prisma.invoice.findMany({
-    where: {
-      ...(onlyCompanyId ? { companyId: onlyCompanyId } : {}),
-      uuid: { not: null },
-      status: "CANCELLED",
-      cancelEstadoSat: null,
-      tipo: { in: ["INGRESO", "EGRESO", "PAGO"] },
-    },
+    where: whereArchivo,
     select: SELECT_CANDIDATA,
     // Las de mayor monto primero: son las que más distorsionan un mes, y así el
     // daño grande sale en las primeras corridas y no dentro de dos semanas.
@@ -419,15 +436,7 @@ async function handle(req: Request) {
   const pendientes = await prisma.invoice.count({ where });
   // El backlog del archivo ya cancelado: finito y se drena solo. Cuando llegue
   // a 0, cada factura que tenemos por cancelada fue cotejada con el SAT una vez.
-  const archivoPendiente = await prisma.invoice.count({
-    where: {
-      ...(onlyCompanyId ? { companyId: onlyCompanyId } : {}),
-      uuid: { not: null },
-      status: "CANCELLED",
-      cancelEstadoSat: null,
-      tipo: { in: ["INGRESO", "EGRESO", "PAGO"] },
-    },
-  });
+  const archivoPendiente = await prisma.invoice.count({ where: whereArchivo });
   const empresasTotales = onlyCompanyId
     ? 1
     : await prisma.company.count({ where: { isActive: true } });
