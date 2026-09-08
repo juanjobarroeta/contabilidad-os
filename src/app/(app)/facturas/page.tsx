@@ -107,7 +107,9 @@ function avisoCancelacion(inv: Invoice): { texto: string; alarma: boolean } | nu
   }
   if (inv.cancelSolicitadaAt) {
     return {
-      texto: "Cancelación solicitada · sigue vigente hasta que el receptor acepte",
+      texto:
+        "En proceso de cancelación: el receptor tiene 72 horas para aceptarla. " +
+        "Hasta entonces el comprobante SIGUE VIGENTE y CUENTA como ingreso en su mes.",
       alarma: false,
     };
   }
@@ -122,6 +124,8 @@ function keyOf(inv: Invoice): FilterKey | "traslado" {
 function estadoOf(inv: Invoice): string {
   if (inv.status === "CANCELLED") return "Cancelada";
   if (inv.status === "DRAFT") return "Borrador";
+  // Pedida pero sin resolver: existe, y por eso no se llama «cancelada».
+  if (inv.cancelSolicitadaAt) return "En proceso de cancelación";
   return inv.tipo === "EGRESO" ? "Recibida" : "Emitida";
 }
 function fmtFecha(iso: string): string {
@@ -720,7 +724,9 @@ export default function FacturasPage() {
                   {/* Una cancelación SOLICITADA no es una cancelación: el
                       comprobante sigue vigente y sigue contando en el mes. */}
                   {inv.status !== "CANCELLED" && inv.cancelSolicitadaAt && (
-                    <span className="mt-1 block text-[11px] font-medium text-cos-amber-ink">En proceso</span>
+                    <span className="mt-1 block text-[11px] font-medium text-cos-amber-ink">
+                      En proceso de cancelación
+                    </span>
                   )}
                 </span>
                 {/* La contraparte sale del Customer cuando existe; si no (público

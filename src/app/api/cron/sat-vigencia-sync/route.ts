@@ -9,6 +9,7 @@ import {
 } from "@/lib/fiscal/vigencia-cfdi";
 import { contradiceAlSat, estadoDeCancelacion } from "@/lib/facturas/cancelacion-estado";
 import { revertirDerivadosDeCancelada } from "@/lib/automotriz/revertir-cancelada";
+import { registrarBitacora } from "@/lib/audit";
 import {
   cupoPorEmpresa,
   empresasDelTurno,
@@ -198,7 +199,12 @@ async function handle(req: Request) {
   // `cancelEstadoSat`; con eso el backlog es finito, se drena solo y después no
   // cuesta nada. Un comprobante que el SAT ya dio por cancelado no vuelve a
   // estar vigente, así que no hay nada que re-preguntar.
-  const cupoArchivo = Math.max(10, Math.floor(limit / 5));
+  // El archivo se lleva lo que el barrido normal NO usó. En estado de régimen
+  // el barrido está al día (la corrida real: 80 candidatas de un `limit` de
+  // 400), así que casi todo el presupuesto queda libre y el archivo se drena en
+  // horas y no en días. Cuando el barrido normal tenga trabajo, él manda: es lo
+  // que puede cambiar hoy, mientras que el archivo es una deuda que no crece.
+  const cupoArchivo = Math.max(10, limit - invoices.length);
   const canceladasSinVerificar = await prisma.invoice.findMany({
     where: {
       ...(onlyCompanyId ? { companyId: onlyCompanyId } : {}),
@@ -328,6 +334,50 @@ async function handle(req: Request) {
   };
   await Promise.all(Array.from({ length: CARRILES }, (_, k) => carril(k)));
 
+  // ── DEVOLVER A VIGENTE LO QUE EL SAT DICE QUE ESTÁ VIGENTE ───────────────
+  // Marcarla en rojo no bastaba: mientras la fila siga CANCELLED, TODOS los
+  // motores fiscales la excluyen (`status: { not: "CANCELLED" }`), así que la
+  // pantalla decía la verdad en palabras y mentía en las cifras — al mes le
+  // seguía faltando ese ingreso y su IVA. La autoridad sobre si un CFDI existe
+  // es el SAT, y aquí tenemos su respuesta explícita: se le hace caso.
+  //
+  // Sólo con un «Vigente» afirmativo. Un "No Encontrado" o una respuesta que no
+  // entendamos NO revive nada (`contradiceAlSat` ya excluye `desconocido`).
+  const revigencias: Array<Record<string, unknown>> = [];
+  for (const c of contradicciones) {
+    try {
+      await prisma.invoice.update({
+        where: { id: c.id },
+        data: {
+          status: "STAMPED",
+          canceladaAt: null,
+          // Trámite abierto → se conserva como SOLICITUD: la pantalla dirá «en
+          // proceso de cancelación» y el comprobante seguirá contando, que es
+          // exactamente lo que dice el SAT.
+          cancelSolicitadaAt: c.sat === "en_proceso" ? new Date() : null,
+        },
+      });
+      registrarBitacora({
+        companyId: c.companyId,
+        accion: "factura.revigencia",
+        entidad: "Invoice",
+        entidadId: c.id,
+        detalle: {
+          uuid: c.uuid,
+          total: c.total,
+          motivo: "El SAT reporta el comprobante VIGENTE; estaba marcado como cancelado.",
+          satDice: c.sat,
+        },
+      });
+      revigencias.push({ uuid: c.uuid, total: c.total, sat: c.sat });
+    } catch (e) {
+      errores.push({
+        uuid: c.uuid,
+        error: `no se pudo devolver a vigente: ${e instanceof Error ? e.message : String(e)}`,
+      });
+    }
+  }
+
   const reversiones: Array<Record<string, unknown>> = [];
   if (cancelados.length > 0) {
     await prisma.invoice.updateMany({
@@ -398,7 +448,12 @@ async function handle(req: Request) {
     checked,
     skipped,
     pendientes,
-    completado: pendientes === 0,
+    // El scheduler usa esta bandera para decidir cuándo volver: con `true` se va
+    // a su cadencia lenta (2 h). Mirar sólo el barrido normal la hacía mentir —
+    // decía «terminé» con miles de canceladas sin cotejar, y el archivo se
+    // drenaba a 100 cada 2 h (días) en vez de quedarse en el piso de 5 min
+    // hasta acabar. Aquí queda trabajo mientras quede CUALQUIERA de los dos.
+    completado: pendientes === 0 && archivoPendiente === 0,
     desde: desde.toISOString().slice(0, 10),
     recheckDays,
     cancelados: cancelados.map((c) => c.uuid),
@@ -407,6 +462,10 @@ async function handle(req: Request) {
     // filas de operación que restaurar el estatus no deshace— pero salen aquí y
     // salen en la pantalla de facturas, en rojo.
     contradicciones,
+    // Las que se devolvieron a vigente por orden del SAT: vuelven a contar en
+    // el IVA y el ISR de su mes. Lo que la cancelación hubiera revertido en la
+    // capa de operación (unidades, costos, kardex) NO se re-crea solo.
+    revigencias,
     // Facturas canceladas que todavía no se han cotejado con el SAT ni una vez.
     archivoPendiente,
     // Lo que se deshizo en la capa de operación, para poder cuadrar el antes
@@ -417,7 +476,9 @@ async function handle(req: Request) {
     nota:
       pendientes === 0
         ? `Barrido completo del periodo desde ${desde.toISOString().slice(0, 10)}. Se re-verifica al cumplir ${recheckDays} días.`
-        : `Faltan ${pendientes} por verificar desde ${desde.toISOString().slice(0, 10)}. Re-ejecuta hasta pendientes = 0.`,
+        : archivoPendiente > 0 && pendientes === 0
+          ? `Barrido del periodo completo; faltan ${archivoPendiente} canceladas por cotejar con el SAT (una vez cada una).`
+          : `Faltan ${pendientes} por verificar desde ${desde.toISOString().slice(0, 10)}. Re-ejecuta hasta pendientes = 0.`,
   };
   console.log(
     "[cron/sat-vigencia-sync] done:",
