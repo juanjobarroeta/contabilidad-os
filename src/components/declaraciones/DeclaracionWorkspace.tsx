@@ -74,7 +74,8 @@ interface CierreData {
       decision: "acredita" | "no_acredita" | "sin_decidir";
       decididoAt: string | null; nota: string | null; hayQueDecidir: boolean;
     };
-    monto: number | null; acreditado: number; completo: boolean; motivo: string;
+    monto: number | null; acreditado: number; saldoFavor: number; motivo: string; completo: boolean;
+    porClase: { clase: string; etiqueta: string; causado: number; pagado: number; acreditado: number; saldoFavor: number }[];
     sinObligacionRegistrada: boolean;
     vencimiento: string; estado: Estado;
     lineaCaptura: string | null; acuseUrl: string | null; fechaPresentacion: string | null;
@@ -928,6 +929,36 @@ function IepsPresentar({
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* El acreditamiento es POR CLASE (Art. 4º fr. IV): restar plaguicidas
+          contra alimentos daría un pago menor al debido. Sólo se enseña cuando
+          hay más de una clase o algo quedó a favor — si no, es ruido. */}
+      {ieps.porClase.length > 0 && (ieps.porClase.length > 1 || ieps.saldoFavor > 0) && (
+        <div className="mt-3 rounded-md border border-cos-line-soft p-3">
+          <p className="text-[12px] font-medium text-cos-ink">Acreditamiento por clase (Art. 4º fr. IV)</p>
+          <ul className="mt-1.5 space-y-1">
+            {ieps.porClase.map((c) => (
+              <li key={c.clase} className="flex flex-wrap items-baseline justify-between gap-2 text-[12px]">
+                <span className="min-w-0 text-cos-ink-soft">{c.etiqueta}</span>
+                <span className="tabular-nums text-cos-ink">
+                  causó {c.causado.toLocaleString("es-MX", { style: "currency", currency: "MXN" })} · acreditó{" "}
+                  {c.acreditado.toLocaleString("es-MX", { style: "currency", currency: "MXN" })}
+                  {c.saldoFavor > 0 && (
+                    <span className="text-cos-amber-ink">
+                      {" "}· a favor {c.saldoFavor.toLocaleString("es-MX", { style: "currency", currency: "MXN" })}
+                    </span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {ieps.saldoFavor > 0 && (
+            <p className="mt-1.5 text-[11.5px] text-cos-ink-faint">
+              Lo que sobra en una clase no baja el impuesto de otra: queda a favor de la suya (Art. 5º LIEPS).
+            </p>
+          )}
         </div>
       )}
 

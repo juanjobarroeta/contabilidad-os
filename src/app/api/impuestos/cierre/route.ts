@@ -284,6 +284,10 @@ export async function GET(req: Request) {
       },
       monto: res.monto,
       acreditado: res.acreditado,
+      // Sobrante acreditable de su clase. NO baja el impuesto de otra (Art. 4º
+      // fr. IV) ni se compensa fuera de ella (Art. 5º): viaja aparte del monto.
+      saldoFavor: res.saldoFavor,
+      porClase: res.porClase,
       completo: res.completo,
       motivo: res.motivo,
       // Traslada IEPS y no tiene la obligación en el padrón: eso no lo arregla
@@ -675,6 +679,7 @@ export async function POST(req: Request) {
       }
       iepsPatch = {
         iepsPagar: res.monto,
+        iepsSaldoFavor: res.saldoFavor > 0 ? res.saldoFavor : null,
         iepsDetalle: {
           trasladado: p.trasladado,
           pagado: p.pagado,
@@ -684,6 +689,8 @@ export async function POST(req: Request) {
           retenido: p.retenido,
           acreditamiento: decision,
           acreditado: res.acreditado,
+          saldoFavor: res.saldoFavor,
+          porClase: res.porClase,
           completo: res.completo,
           baseFecha: p.baseFecha,
           porTasa: p.porTasa.map((t) => ({

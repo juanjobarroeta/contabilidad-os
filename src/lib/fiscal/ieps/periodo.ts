@@ -27,7 +27,7 @@
 //    `baseFecha: "CFDI"` para que nadie confunda esta cifra con la declaración.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { leerInciso, type LecturaInciso } from "./incisos";
+import { leerInciso, tasaTexto, type LecturaInciso } from "./incisos";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -46,6 +46,12 @@ export interface TasaIeps {
   tasa: number | null;
   /** De qué inciso del Art. 2º puede venir, y si eso es único o ambiguo. */
   inciso: LecturaInciso;
+  /**
+   * La CLASE del Art. 4º fr. IV — el impuesto acreditable y el impuesto a
+   * cargo tienen que ser del mismo inciso. Cuando el inciso se identifica sin
+   * ambigüedad se usa su clave; si no, la propia tasa, que nunca acredita.
+   */
+  clase: string;
   trasladado: number;
   pagado: number;
   renglones: number;
@@ -96,13 +102,18 @@ export function periodoIeps(year: number, month: number, renglones: RenglonIeps[
     }
 
     const clave = r.tasa === null ? "cuota" : String(r.tasa);
-    const fila = porTasa.get(clave) ?? {
-      tasa: r.tasa,
-      inciso: leerInciso(r.tasa),
-      trasladado: 0,
-      pagado: 0,
-      renglones: 0,
-    };
+    let fila = porTasa.get(clave);
+    if (!fila) {
+      const inciso = leerInciso(r.tasa);
+      fila = {
+        tasa: r.tasa,
+        inciso,
+        clase: inciso.certeza === "unico" ? inciso.candidatos[0].clave : `tasa:${clave}`,
+        trasladado: 0,
+        pagado: 0,
+        renglones: 0,
+      };
+    }
 
     if (r.sentido === "INGRESO") {
       trasladado += r.importe;
@@ -139,11 +150,30 @@ export function periodoIeps(year: number, month: number, renglones: RenglonIeps[
   };
 }
 
+export interface AcreditamientoClase {
+  /** El inciso (o la tasa, si no se pudo identificar) que agrupa esta clase. */
+  clase: string;
+  etiqueta: string;
+  causado: number;
+  pagado: number;
+  /** Lo que se resta de ESTA clase. Nunca más que lo causado en ella. */
+  acreditado: number;
+  /** El sobrante: sólo se compensa contra IEPS de la misma clase (Art. 5º). */
+  saldoFavor: number;
+}
+
 export interface ResultadoIeps {
   /** Lo que se enteraría. **null** = falta la decisión del Art. 4º para saberlo. */
   monto: number | null;
-  /** Cuánto se restó del trasladado. 0 cuando no se acredita. */
+  /** Cuánto se restó del trasladado, sumando todas las clases. */
   acreditado: number;
+  /**
+   * IEPS acreditable que sobró en su clase. NO se resta de otra: el Art. 4º
+   * fr. IV exige misma clase y el saldo a favor del Art. 5º también.
+   */
+  saldoFavor: number;
+  /** El detalle por clase, que es como realmente se determina el impuesto. */
+  porClase: AcreditamientoClase[];
   /** false = el monto existe pero le falta una parte por clasificar. */
   completo: boolean;
   /** Por qué el monto es el que es (o por qué no hay monto). Va a la pantalla. */
@@ -156,13 +186,27 @@ export interface ResultadoIeps {
  * Devuelve `monto: null` cuando hay IEPS pagado a proveedores y nadie ha
  * decidido si esta empresa lo acredita: la diferencia entre acreditar y no
  * acreditar es todo el importe, y elegir por default sería inventar la cifra.
+ *
+ * EL ACREDITAMIENTO ES POR CLASE, no una resta global. El Art. 4º fr. IV exige
+ * que el impuesto acreditable y el impuesto a cargo sean «bienes de la misma
+ * clase», entendiendo por tales los agrupados en cada inciso del Art. 2º fr. I.
+ * Restar el IEPS de plaguicidas contra el de alimentos daría un pago menor al
+ * debido. Lo que sobra en su clase no se pasa a otra: queda como saldo a favor
+ * de ESA clase (Art. 5º).
+ *
+ * Salvedad que no podemos ver: el Art. 4º fr. IV separa además la cerveza y las
+ * bebidas refrescantes del resto de las bebidas con contenido alcohólico. El
+ * CFDI no distingue una de otra dentro del inciso A), así que ahí la clase es
+ * más ancha de lo que dice la ley.
  */
 export function aPagarIeps(p: PeriodoIeps, decision: DecisionAcreditamiento): ResultadoIeps {
+  const vacio = { acreditado: 0, saldoFavor: 0, porClase: [] as AcreditamientoClase[] };
+
   if (p.pagado === 0) {
     // No hay nada que acreditar: la decisión no cambia el número.
     return {
+      ...vacio,
       monto: p.trasladado,
-      acreditado: 0,
       completo: true,
       motivo: "Sin IEPS pagado a proveedores este mes: no hay nada que acreditar.",
     };
@@ -170,26 +214,63 @@ export function aPagarIeps(p: PeriodoIeps, decision: DecisionAcreditamiento): Re
 
   if (decision === "sin_decidir") {
     return {
+      ...vacio,
       monto: null,
-      acreditado: 0,
       completo: false,
       motivo:
         "Falta decidir si esta empresa acredita el IEPS que le trasladan (Art. 4º LIEPS). " +
-        "El acreditamiento sólo procede para ciertos incisos y para quien es contribuyente del mismo bien.",
+        "El acreditamiento sólo procede para ciertos incisos y para quien causa el mismo impuesto.",
     };
   }
 
   if (decision === "no_acredita") {
     return {
+      ...vacio,
       monto: r2(p.trasladado),
-      acreditado: 0,
       completo: true,
       motivo: "Sin acreditamiento (Art. 4º LIEPS): se entera todo el IEPS trasladado.",
     };
   }
 
-  const acreditado = r2(p.pagadoAcreditable);
-  const partes: string[] = [`Se acredita el IEPS de los incisos que admite el Art. 4º.`];
+  // Acredita: clase por clase, cada una contra lo suyo.
+  const clases = new Map<string, AcreditamientoClase>();
+  for (const f of p.porTasa) {
+    if (f.inciso.acreditablePorInciso !== true) {
+      // No acreditable, o no se sabe: la clase existe sólo por lo causado.
+      if (f.trasladado === 0) continue;
+    }
+    const acr =
+      f.inciso.acreditablePorInciso === true ? Math.min(f.pagado, f.trasladado) : 0;
+    const previa = clases.get(f.clase);
+    const fila: AcreditamientoClase = previa ?? {
+      clase: f.clase,
+      etiqueta: f.inciso.certeza === "unico" ? f.inciso.etiqueta : `Tasa ${tasaTexto(f.tasa)}`,
+      causado: 0,
+      pagado: 0,
+      acreditado: 0,
+      saldoFavor: 0,
+    };
+    fila.causado += f.trasladado;
+    fila.pagado += f.pagado;
+    fila.acreditado += acr;
+    if (f.inciso.acreditablePorInciso === true) fila.saldoFavor += f.pagado - acr;
+    clases.set(f.clase, fila);
+  }
+
+  const porClase = [...clases.values()]
+    .map((c) => ({
+      ...c,
+      causado: r2(c.causado),
+      pagado: r2(c.pagado),
+      acreditado: r2(c.acreditado),
+      saldoFavor: r2(c.saldoFavor),
+    }))
+    .sort((a, b) => b.causado - a.causado || a.clase.localeCompare(b.clase));
+
+  const acreditado = r2(porClase.reduce((s, c) => s + c.acreditado, 0));
+  const saldoFavor = r2(porClase.reduce((s, c) => s + c.saldoFavor, 0));
+
+  const partes = ["Se acredita por clase: cada inciso contra el impuesto que causó (Art. 4º fr. IV)."];
   if (p.pagadoNoAcreditable > 0) {
     partes.push(`${p.pagadoNoAcreditable.toFixed(2)} no es acreditable por su inciso y no se resta.`);
   }
@@ -198,9 +279,15 @@ export function aPagarIeps(p: PeriodoIeps, decision: DecisionAcreditamiento): Re
       `${p.pagadoSinClasificar.toFixed(2)} no se pudo clasificar por su tasa: el monto está incompleto.`,
     );
   }
+  if (saldoFavor > 0) {
+    partes.push(`${saldoFavor.toFixed(2)} queda como saldo a favor de su propia clase, no se resta de otra.`);
+  }
+
   return {
     monto: r2(p.trasladado - acreditado),
     acreditado,
+    saldoFavor,
+    porClase,
     completo: p.pagadoSinClasificar === 0,
     motivo: partes.join(" "),
   };

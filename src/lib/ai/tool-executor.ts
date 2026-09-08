@@ -212,6 +212,9 @@ export async function executeToolCall(
               retenido: pIeps.retenido,
               acreditamiento: decisionIeps,
               monto: resIeps.monto,
+              // El acreditamiento es POR CLASE (Art. 4º fr. IV): lo que sobra
+              // en un inciso no baja el impuesto de otro.
+              saldo_a_favor_por_clase: resIeps.saldoFavor,
               motivo: resIeps.motivo,
               porTasa: pIeps.porTasa.map((t) => ({ tasa: t.tasa, inciso: t.inciso.etiqueta, trasladado: t.trasladado, pagado: t.pagado })),
             }
