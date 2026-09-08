@@ -208,3 +208,38 @@ describe("tokenIdentificante", () => {
     expect(tokenIdentificante("IPP BG SC")).toBeNull();
   });
 });
+
+describe("mismoNombre — el banco trunca y el CFDI escribe distinto", () => {
+  it("una letra de diferencia en el apellido (caso real: MENESES / MENESSES)", () => {
+    // El banco: «STEPHANIE ISABELLE MENESES». El CFDI: «STEPHANIE ISABELLE
+    // MENESSES MARQUEZ». Sin esto, su pago competía empatado con otros 15
+    // empleados del mismo neto y se quedaba sin conciliar.
+    expect(mismoNombre("STEPHANIE ISABELLE MENESES", "STEPHANIE ISABELLE MENESSES MARQUEZ")).toBe(true);
+  });
+
+  it("apellido truncado por el ancho del renglón (Esther Mendez Pere → PEREZ)", () => {
+    expect(mismoNombre("Esther Mendez Pere", "ESTHER MENDEZ PEREZ")).toBe(true);
+    expect(mismoNombre("Jose Armando Orteg", "JOSE ARMANDO ORTEGA")).toBe(true);
+  });
+
+  it("orden distinto de nombre y apellidos", () => {
+    expect(mismoNombre("MENESSES MARQUEZ STEPHANIE ISABELLE", "STEPHANIE ISABELLE MENESSES")).toBe(true);
+  });
+
+  it("NO casa a dos personas que comparten nombre y primer apellido", () => {
+    expect(mismoNombre("ROSA GARCIA VEGA", "ROSA GARCIA LOPEZ")).toBe(false);
+    expect(mismoNombre("LUIS EDGAR HUERTA ALVAREZ", "LUIS EDGAR HUERTA MORALES")).toBe(false);
+  });
+
+  it("sigue rechazando lo que no se parece", () => {
+    expect(mismoNombre("LUIS EDGAR HUERTA ALVAREZ", "STEPHANIE ISABELLE MENESSES MARQUEZ")).toBe(false);
+    expect(mismoNombre("GRUPO", "GRUPO TEXTIL ORIENTE")).toBe(false); // < 6 caracteres
+  });
+
+  it("la contención literal de siempre se conserva", () => {
+    // Regla previa, intacta: un nombre contenido en el otro empata. La
+    // comparación por palabras es un CAMINO ADICIONAL, no un reemplazo.
+    expect(mismoNombre("MARTINEZ", "MARTINEZ LOPEZ JUAN")).toBe(true);
+    expect(mismoNombre("GRUPO TEXTIL ORIENTE SA DE CV", "GRUPO TEXTIL ORIENTE")).toBe(true);
+  });
+});
