@@ -614,10 +614,16 @@ Motor: `src/lib/contabilidad/hospital.ts` (patrón taller.ts) parte el ingreso d
 `ivaContexto`; los honorarios facturados por el hospital van a HONORARIOS_POR_CUENTA_DE_TERCEROS (pasivo), no a ingreso. Fuente HOSPITAL
 (`src/lib/accounting/postings.ts`, postBalancedEntry): salida de farmacia a un episodio = COSTO_FARMACIA / INVENTARIO_FARMACIA al costo del lote;
 alta del episodio = retenciones de ISR 10 % e IVA 2/3 de los honorarios de cada médico persona física con RFC, sólo cuando el hospital es persona moral
-(HONORARIOS_POR_CUENTA_DE_TERCEROS contra 216.04/216.10; el saldo del pasivo es lo neto a pagar); depósito RECIBIDO = CAJA (efectivo) o FONDOS_EN_TRANSITO (tarjeta, transferencia, cheque) contra ANTICIPOS_PACIENTES;
-APLICADO = ANTICIPOS_PACIENTES contra CLIENTES; DEVUELTO = al revés. El módulo NUNCA carga BANCOS: el dinero llega al banco días
-después (el adquirente liquida en lote y neto de comisión) y quien baja FONDOS_EN_TRANSITO a BANCOS es el movimiento bancario
-conciliado; si el cobro entrara directo a BANCOS, la misma cantidad se cargaría dos veces. Lo que ya asentó (asientoAt) no se repite; unpostMonth del hub conserva la fuente HOSPITAL.
+(HONORARIOS_POR_CUENTA_DE_TERCEROS contra 216.04/216.10; el saldo del pasivo es lo neto a pagar); depósito RECIBIDO = CAJA (efectivo) o FONDOS_EN_TRANSITO
+(tarjeta, transferencia, cheque) contra ANTICIPOS_PACIENTES; APLICADO = ANTICIPOS_PACIENTES contra CLIENTES; DEVUELTO = al revés.
+El módulo NUNCA carga BANCOS: el dinero llega al banco días después (el adquirente liquida en lote y neto de comisión) y quien
+baja FONDOS_EN_TRANSITO a BANCOS es el movimiento bancario conciliado; si el cobro entrara directo a BANCOS, la misma cantidad
+se cargaría dos veces. Acordado con el módulo de conciliación: al conciliar ese depósito el abono se PARTE — 107.05 por lo que
+alcance a cubrir de los cobros pendientes, en FIFO por fecha de cobro, y 105.01 clientes por el resto (lo cobrado antes de
+operar caja ya tenía su derecho de cobro creado por el CFDI). Nunca por regla fija: 107.05 se acredita exactamente cuando
+alguien lo cargó, y el tope del FIFO impide que la cuenta se vaya a saldo acreedor. Cuando exista el módulo de caja se expondrá
+`fondosEnTransitoPendientes(companyId, hasta)` (saldo y cobros que lo componen, por fecha) para que la conciliación no replique
+la regla de qué cuenta como pendiente. Lo que ya asentó (asientoAt) no se repite; unpostMonth del hub conserva la fuente HOSPITAL.
 
 ### P4 expedientes históricos desde CFDIs y convenio 360
 
