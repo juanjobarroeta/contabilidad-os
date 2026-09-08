@@ -2091,6 +2091,10 @@ model TaxDeclaration {
   // v1 es 0 o 1 movimiento MATCHED (un segundo intento se rechaza con 409);
   // la lista existe porque la FK vive del lado del movimiento.
   bankTransactions BankTransaction[]
+
+  // El ISN tiene una fila por estado dentro del mismo periodo, y la pantalla las
+  // busca por (empresa, tipo, periodo, entidad) cada vez que carga el mes.
+  @@index([companyId, tipo, periodo, isnEntidad])
 }
 
 // Pérdida fiscal pendiente de amortizar (Art. 57 LISR). Una por ejercicio de
