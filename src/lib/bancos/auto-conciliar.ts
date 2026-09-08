@@ -338,8 +338,19 @@ export async function autoConciliarCuenta(
     const isCreditTx = tx.monto > 0;
 
     // CRÉDITOS (entra dinero) → facturas INGRESO (clientes nos pagan)
-    // DÉBITOS  (sale dinero)  → facturas EGRESO  (pagamos a proveedores)
-    const invoiceType = isCreditTx ? "INGRESO" : "EGRESO";
+    // DÉBITOS  (sale dinero)  → facturas EGRESO  (pagamos a proveedores) y
+    //                           también RECIBOS DE NÓMINA.
+    //
+    // El recibo de nómina es tipo NOMINA, no EGRESO, y con el filtro anterior
+    // JAMÁS entraba al pool: la dispersión de la quincena quedaba sin conciliar
+    // aunque su recibo estuviera ahí, con el mismo RFC y el mismo día. La mesa
+    // sí los ofrecía (se corrigió en su propia consulta), así que el usuario
+    // veía la coincidencia «alta» y tenía que aplicarla a mano una por una.
+    // postMonth ya sabe qué hacer con el match NOMINA: liquida Acreedores
+    // diversos, que es donde el recibo provisionó.
+    const tiposCandidatos: ("INGRESO" | "EGRESO" | "NOMINA")[] = isCreditTx
+      ? ["INGRESO"]
+      : ["EGRESO", "NOMINA"];
 
     const windowStart = new Date(tx.fecha.getTime() - WINDOW_DAYS * 86400000);
     const windowEnd = new Date(tx.fecha.getTime() + WINDOW_DAYS * 86400000);
@@ -347,7 +358,7 @@ export async function autoConciliarCuenta(
     const candidates = await prisma.invoice.findMany({
       where: {
         companyId,
-        tipo: invoiceType,
+        tipo: { in: tiposCandidatos },
         status: "STAMPED",
         fecha: { gte: windowStart, lte: windowEnd },
         total: { gte: absAmount * (1 - TOLERANCE), lte: absAmount * (1 + TOLERANCE) },
