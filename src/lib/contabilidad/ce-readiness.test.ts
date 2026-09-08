@@ -24,6 +24,7 @@ function base(): ReadinessInputs {
     now: NOW,
     bankTxCount: 30,
     bankUnmatchedCount: 0,
+    sinActividadBancariaConfirmada: false,
     totalCargos: 100000,
     totalAbonos: 100000,
     posted: true,
@@ -108,6 +109,21 @@ describe("evaluarChecks — banco (fuente-agnóstico)", () => {
     });
     expect(find(r, "banco")?.estado).toBe("warn");
     expect(r.status).not.toBe("incompleta");
+  });
+
+  it("an explicit no-activity confirmation opens the bank check without claiming reconciliation", () => {
+    const r = evaluarChecks({
+      ...base(),
+      bankTxCount: 0,
+      bankUnmatchedCount: 0,
+      sinActividadBancariaConfirmada: true,
+    });
+    const banco = find(r, "banco");
+    expect(banco).toMatchObject({
+      estado: "ok",
+      titulo: "Periodo confirmado sin actividad bancaria",
+    });
+    expect(banco?.detalle).toContain("confirmó explícitamente");
   });
 
   it("hay banco → ok, sin importar la fuente", () => {

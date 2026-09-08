@@ -104,6 +104,8 @@ export interface ChecklistInputs {
   advertenciasCadena: string[];
   /** Todos los movimientos bancarios con fecha dentro del mes. */
   movimientosBancarios: number;
+  /** Confirmación atribuida del cierre para un periodo sin movimientos. */
+  sinActividadBancariaConfirmada: boolean;
   /** Movimientos bancarios UNMATCHED con fecha dentro del mes. */
   movimientosSinConciliar: number;
   /** REP que NOSOTROS debemos emitir por cobros PPD del mes. */
@@ -220,13 +222,24 @@ export function decidirChecklist(i: ChecklistInputs): ChecklistItem[] {
 
   // 3. Conciliación bancaria del mes.
   const sc = i.movimientosSinConciliar;
-  const coberturaBanco = evaluarCoberturaBancaria(i.movimientosBancarios, sc);
+  const coberturaBanco = evaluarCoberturaBancaria(
+    i.movimientosBancarios,
+    sc,
+    i.sinActividadBancariaConfirmada,
+  );
   items.push({
     clave: "conciliacion-bancaria",
     titulo: "Conciliación bancaria",
-    estado: coberturaBanco.estado === "NO_DATA" ? "atencion" : sc === 0 ? "listo" : "pendiente",
-    detalle:
+    estado:
       coberturaBanco.estado === "NO_DATA"
+        ? "atencion"
+        : coberturaBanco.compuertaAbierta
+          ? "listo"
+          : "pendiente",
+    detalle:
+      coberturaBanco.estado === "NO_ACTIVITY_CONFIRMED"
+        ? "Periodo confirmado sin actividad bancaria. La compuerta se abrió por una decisión humana auditable, no por 0 de 0."
+        : coberturaBanco.estado === "NO_DATA"
         ? "No hay datos bancarios del periodo. Sube el estado de cuenta o confirma explícitamente que no hubo actividad; 0 de 0 no es una conciliación."
         : sc === 0
         ? "Todos los movimientos bancarios del mes están conciliados."
@@ -442,6 +455,7 @@ export async function checklistDeclaracion(
     pos,
     satFinished,
     movimientosBancarios,
+    cierre,
     movimientosSinConciliar,
     repEmitir,
     repProveedores,
@@ -462,6 +476,10 @@ export async function checklistDeclaracion(
     }),
     prisma.bankTransaction.count({
       where: { companyId, fecha: { gte: from, lt: to } },
+    }),
+    prisma.cierrePeriodo.findUnique({
+      where: { companyId_year_month: { companyId, year, month } },
+      select: { sinActividadBancariaAt: true },
     }),
     prisma.bankTransaction.count({
       where: { companyId, status: "UNMATCHED", fecha: { gte: from, lt: to } },
@@ -560,6 +578,7 @@ export async function checklistDeclaracion(
     satRecibidosCompleto: tiposFinished.has("RECIBIDOS"),
     advertenciasCadena: pos.advertencias,
     movimientosBancarios,
+    sinActividadBancariaConfirmada: cierre?.sinActividadBancariaAt != null,
     movimientosSinConciliar,
     repPorEmitir: {
       total: repEmitirMes.length,

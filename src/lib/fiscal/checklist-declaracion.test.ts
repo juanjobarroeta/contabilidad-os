@@ -25,6 +25,7 @@ function baseInputs(overrides: Partial<ChecklistInputs> = {}): ChecklistInputs {
     satRecibidosCompleto: true,
     advertenciasCadena: [],
     movimientosBancarios: 8,
+    sinActividadBancariaConfirmada: false,
     movimientosSinConciliar: 0,
     repPorEmitir: { total: 0, vencidos: 0, montoPendiente: 0 },
     repProveedores: { total: 0, vencidos: 0 },
@@ -131,6 +132,20 @@ describe("decidirChecklist — conciliación bancaria", () => {
     expect(con.estado).toBe("atencion");
     expect(con.detalle).toContain("No hay datos bancarios");
     expect(con.detalle).toContain("0 de 0");
+  });
+
+  it("an explicit no-activity confirmation opens the checklist without reporting 100%", () => {
+    const con = item(
+      decidirChecklist(baseInputs({
+        movimientosBancarios: 0,
+        movimientosSinConciliar: 0,
+        sinActividadBancariaConfirmada: true,
+      })),
+      "conciliacion-bancaria",
+    );
+    expect(con.estado).toBe("listo");
+    expect(con.detalle).toContain("decisión humana auditable");
+    expect(con.detalle).not.toContain("100%");
   });
 
   it("movimientos sin conciliar → pendiente con el conteo y link a /bancos", () => {

@@ -35,7 +35,7 @@ Target: 2–3 weeks. No general-availability sales before this gate passes.
 |---|---|---|---|
 | REL-001 | Unified fiscal period and due-date service | IN_PROGRESS | Dashboard, Taxes, Close, Compliance, notifications, and cockpit return the same active period and date; timezone, weekends, CFF holidays, and applicable RFC extensions have golden tests |
 | REL-002 | Unified close state machine | NOT_STARTED | A period cannot be ready, posted, closed, or downloadable while a hard blocker exists; every module reads the same state |
-| REL-003 | Correct empty-bank semantics | IN_PROGRESS | `0 / 0` is `NO_DATA`, never 100% reconciled; the close gate remains blocked until the period is intentionally marked no-bank or data exists |
+| REL-003 | Correct empty-bank semantics | VERIFY | `0 / 0` is `NO_DATA`, never 100% reconciled; the close gate remains blocked until the period is intentionally marked no-bank or data exists |
 | REL-004 | Actionable integration errors | NOT_STARTED | SAT/Syntage/Belvo/PAC errors have a stable code, user explanation, retryability, correlation ID, and operator detail |
 | FISC-001 | Regime capability registry | NOT_STARTED | All 19 current codes and the PF/PM split for 626 have explicit capability flags; unknown/unsupported calculations return `NOT_SUPPORTED` instead of a generic formula |
 | FISC-002 | Multi-regime composition model | NOT_STARTED | Calculations use all active regimes and CSF obligations, not only `Company.regimenFiscal`; independent income baskets cannot contaminate one another |
@@ -61,7 +61,7 @@ Target: 2–3 weeks. No general-availability sales before this gate passes.
 | REL-001D CFF/RFC deadline rules | IN_PROGRESS | Weekends, fixed/movable Article 12 days, and sixth-numeric-digit calculations are tested; eligibility exclusions under Decree Article 5.1 still need taxpayer facts and UI provenance before activation |
 | REL-001E Consumer parity | IN_PROGRESS | Inventory notifications, firm cockpit, exports, and any remaining raw deadline calculations; add an API contract test before staging |
 | REL-003A Fail-closed empty-bank state | VERIFY | Reconciliation, declaration checklist, and workbench now classify zero bank movements as `NO_DATA`; no-data periods cannot become mathematically reconciled or open the normal signing path |
-| REL-003B Intentional no-bank workflow | NOT_STARTED | Add an audited, role-restricted declaration that the period legitimately had no bank activity or does not use a bank account; this is required before REL-003 can pass its gate |
+| REL-003B Intentional no-bank workflow | VERIFY | Writer-only confirmation persists timestamp, user, and a required explanation; it is revocable, rejected when movements exist, and automatically stops opening the gate if movements later arrive. UI and downstream gates label it as a human decision and never as 100% reconciliation |
 
 Current acceptance fixture: on 2026-09-08 in `America/Mexico_City`, the default monthly period is `2026-08` and the base federal deadline is `2026-09-17`.
 

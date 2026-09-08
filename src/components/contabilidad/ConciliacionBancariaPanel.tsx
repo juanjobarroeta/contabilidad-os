@@ -74,10 +74,15 @@ interface Conciliacion {
   conciliado: boolean;
   explicadaPorArrastre: boolean;
   coberturaBancaria: {
-    estado: "NO_DATA" | "PENDING" | "RECONCILED";
+    estado: "NO_DATA" | "NO_ACTIVITY_CONFIRMED" | "PENDING" | "RECONCILED";
     porcentajeConciliado: number | null;
     compuertaAbierta: boolean;
   };
+  confirmacionSinActividad: {
+    confirmadaAt: string;
+    confirmadaByUserId: string;
+    nota: string;
+  } | null;
   cuentas: CuentaConciliada[];
   auxiliar: RenglonAuxiliar[];
   movimientosBanco: MovimientoBanco[];
@@ -99,6 +104,7 @@ export function ConciliacionBancariaPanel({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [edit, setEdit] = useState<Record<string, { final: string; inicial: string }>>({});
+  const [notaSinActividad, setNotaSinActividad] = useState("");
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -108,6 +114,7 @@ export function ConciliacionBancariaPanel({
       const j = await res.json();
       if (!res.ok) throw new Error(j.error ?? "No se pudo cargar la conciliación");
       setData(j);
+      setNotaSinActividad(j.confirmacionSinActividad?.nota ?? "");
       setEdit({});
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
@@ -130,7 +137,35 @@ export function ConciliacionBancariaPanel({
       const j = await res.json();
       if (!res.ok) throw new Error(j.error ?? "No se pudo guardar");
       setData(j);
+      setNotaSinActividad(j.confirmacionSinActividad?.nota ?? "");
       setEdit({});
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function accionSinActividad(confirmada: boolean) {
+    setBusy("__sin_actividad__");
+    setError("");
+    try {
+      const res = await fetch("/api/bancos/conciliacion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId,
+          year,
+          month,
+          accion: "sin_actividad",
+          confirmada,
+          nota: notaSinActividad,
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error ?? "No se pudo guardar la confirmación");
+      setData(j);
+      setNotaSinActividad(j.confirmacionSinActividad?.nota ?? "");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
     } finally {
@@ -152,13 +187,67 @@ export function ConciliacionBancariaPanel({
       </Alert>
     );
   }
-  if (data.sinCuentaBancos) {
-    return <p className="py-8 text-center text-sm text-cos-ink-soft">{data.resumen}</p>;
-  }
-
-  const estado = data.coberturaBancaria.estado !== "NO_DATA" && data.conciliado
+  const estado = data.coberturaBancaria.compuertaAbierta
     ? { tono: "bg-cos-jade-tint text-cos-jade-ink", Icon: ShieldCheck }
     : { tono: "bg-cos-amber-tint text-cos-amber-ink", Icon: AlertTriangle };
+  const confirmacionVigente = data.coberturaBancaria.estado === "NO_ACTIVITY_CONFIRMED";
+  const confirmacionObsoleta = data.confirmacionSinActividad != null && !confirmacionVigente;
+  const controlSinActividad = data.coberturaBancaria.estado === "NO_DATA" || data.confirmacionSinActividad ? (
+    <div className={`rounded-card border px-4 py-4 ${confirmacionVigente ? "border-cos-jade-ink/25 bg-cos-jade-tint" : "border-cos-amber-ink/25 bg-cos-amber-tint"}`}>
+      {data.confirmacionSinActividad ? (
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className={`text-[13.5px] font-semibold ${confirmacionVigente ? "text-cos-jade-ink" : "text-cos-amber-ink"}`}>
+              {confirmacionVigente ? "Periodo confirmado sin actividad bancaria" : "La confirmación dejó de ser vigente"}
+            </p>
+            <p className="mt-1 text-[12.5px] text-cos-ink-soft">{data.confirmacionSinActividad.nota}</p>
+            {confirmacionObsoleta && (
+              <p className="mt-1 text-[12px] text-cos-amber-ink">Ya existen movimientos bancarios; la compuerta vuelve a depender de su conciliación.</p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => accionSinActividad(false)}
+            disabled={busy === "__sin_actividad__"}
+            className="rounded-control border border-cos-line bg-cos-card px-3 py-1.5 text-[12.5px] font-medium text-cos-ink hover:bg-cos-paper disabled:opacity-50"
+          >
+            {busy === "__sin_actividad__" ? "Guardando…" : "Revocar confirmación"}
+          </button>
+        </div>
+      ) : (
+        <div>
+          <p className="text-[13.5px] font-semibold text-cos-amber-ink">No hay evidencia bancaria para este periodo</p>
+          <p className="mt-1 text-[12.5px] text-cos-ink-soft">
+            Importa el estado de cuenta. Sólo si realmente no hubo actividad, deja una explicación y confírmalo; quedará atribuido en la bitácora.
+          </p>
+          <textarea
+            value={notaSinActividad}
+            onChange={(event) => setNotaSinActividad(event.target.value)}
+            placeholder="Ej. La empresa no utilizó cuentas bancarias durante este periodo."
+            className="mt-3 min-h-[72px] w-full rounded-control border border-cos-line bg-cos-card px-3 py-2 text-[13px] text-cos-ink outline-none focus:border-cos-brand"
+          />
+          <button
+            type="button"
+            onClick={() => accionSinActividad(true)}
+            disabled={busy === "__sin_actividad__" || notaSinActividad.trim().length < 10}
+            className="mt-2 rounded-control border border-cos-amber-ink/30 bg-cos-card px-3 py-1.5 text-[12.5px] font-medium text-cos-amber-ink hover:bg-cos-paper disabled:opacity-50"
+          >
+            {busy === "__sin_actividad__" ? "Guardando…" : "Confirmar que no hubo actividad"}
+          </button>
+        </div>
+      )}
+    </div>
+  ) : null;
+
+  if (data.sinCuentaBancos) {
+    return (
+      <div className="space-y-4">
+        {error && <Alert tone="danger" action={<RetryButton onClick={cargar} />}>{error}</Alert>}
+        <p className="py-4 text-center text-sm text-cos-ink-soft">{data.resumen}</p>
+        {controlSinActividad}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -170,6 +259,8 @@ export function ConciliacionBancariaPanel({
         <estado.Icon className="mt-0.5 h-4 w-4 shrink-0" />
         <span>{data.resumen}</span>
       </div>
+
+      {controlSinActividad}
 
       {/* El papel de trabajo: del banco a los libros */}
       <div className="overflow-hidden rounded-card border border-cos-line bg-cos-card">

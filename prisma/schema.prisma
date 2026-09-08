@@ -5236,6 +5236,12 @@ model CierrePeriodo {
   cerradoAt       DateTime?
   cerradoByUserId String?
 
+  /// Confirmación humana y auditable de que el periodo no tuvo actividad
+  /// bancaria. Abre la compuerta sin fingir un porcentaje de conciliación.
+  sinActividadBancariaAt       DateTime?
+  sinActividadBancariaByUserId String?
+  sinActividadBancariaNota     String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

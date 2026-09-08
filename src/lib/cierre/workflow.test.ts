@@ -146,6 +146,7 @@ function extras(over: Partial<ExtrasCierre> = {}): ExtrasCierre {
     cuentasBanco: 2,
     cuentasSinEstado: 0,
     cuentasFirmadas: 2,
+    sinActividadBancariaConfirmada: false,
     empleadosActivos: 5,
     empleadosSinRecibo: 0,
     idsePendientes: 0,
@@ -225,6 +226,21 @@ describe("decidirPasos — el número que importa y la propagación", () => {
     expect(estadoDe(h, "declaracion").estadoCalculado).toBe("espera");
     expect(estadoDe(h, "nomina").estadoCalculado).toBe("listo");
     expect(estadoDe(h, "entregables").estadoCalculado).toBe("espera");
+  });
+
+  it("a no-activity confirmation satisfies the account and signature evidence checks", () => {
+    const h = hechos({
+      readiness: readiness(),
+      extras: extras({
+        cuentasBanco: 2,
+        cuentasSinEstado: 2,
+        cuentasFirmadas: 0,
+        sinActividadBancariaConfirmada: true,
+      }),
+    });
+    const banco = estadoDe(h, "banco");
+    expect(banco.senales.find((s) => s.clave === "x:cuentas_sin_estado")).toMatchObject({ estado: "ok" });
+    expect(banco.senales.find((s) => s.clave === "x:firmas_conciliacion")).toMatchObject({ estado: "ok" });
   });
 
   it("cuentas sin estado de cuenta: error en PM (bloquea), aviso en régimen sin balance", () => {

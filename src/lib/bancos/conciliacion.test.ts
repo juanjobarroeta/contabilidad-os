@@ -13,6 +13,19 @@ describe("evaluarCoberturaBancaria", () => {
     expect(evaluarCoberturaBancaria(0, 0)).toEqual({
       estado: "NO_DATA", totalMovimientos: 0, movimientosSinConciliar: 0,
       movimientosConciliados: 0, porcentajeConciliado: null, compuertaAbierta: false,
+      sinActividadConfirmada: false,
+    });
+  });
+
+  it("opens the gate through an explicit no-activity state without inventing 100%", () => {
+    expect(evaluarCoberturaBancaria(0, 0, true)).toEqual({
+      estado: "NO_ACTIVITY_CONFIRMED",
+      totalMovimientos: 0,
+      movimientosSinConciliar: 0,
+      movimientosConciliados: 0,
+      porcentajeConciliado: null,
+      compuertaAbierta: true,
+      sinActividadConfirmada: true,
     });
   });
 
@@ -180,6 +193,24 @@ describe("conciliarBancos — saldos faltantes", () => {
     expect(r.coberturaBancaria.porcentajeConciliado).toBeNull();
     expect(r.conciliado).toBe(false);
     expect(resumenConciliacion(r)).toContain("No hay movimientos bancarios");
+  });
+
+  it("distingue una confirmación humana de una conciliación matemática", () => {
+    const r = conciliarBancos({
+      saldos: [],
+      movimientos: [],
+      asientos: [],
+      saldoInicialLibros: 0,
+      mesPosteado: true,
+      sinActividadBancariaConfirmada: true,
+    });
+    expect(r.coberturaBancaria).toMatchObject({
+      estado: "NO_ACTIVITY_CONFIRMED",
+      porcentajeConciliado: null,
+      compuertaAbierta: true,
+    });
+    expect(r.conciliado).toBe(false);
+    expect(resumenConciliacion(r)).toContain("declaración humana auditable");
   });
 
   it("el saldo en libros SÍ se reporta aunque falte el del estado", () => {

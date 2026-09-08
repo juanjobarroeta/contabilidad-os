@@ -139,6 +139,7 @@ export async function cargarHechosCierre(
     hallazgosEfos,
     federal,
     diotObligacion,
+    cierreBanco,
     apertura,
   ] = await Promise.all([
     prisma.company.findUnique({ where: { id: companyId }, select: { regimenFiscal: true } }),
@@ -190,6 +191,10 @@ export async function cargarHechosCierre(
       select: { status: true, _count: { select: { bankTransactions: true } } },
     }),
     prisma.companyObligation.count({ where: { companyId, activa: true, tipo: "DIOT" } }),
+    prisma.cierrePeriodo.findUnique({
+      where: { companyId_year_month: { companyId, year, month } },
+      select: { sinActividadBancariaAt: true },
+    }),
     // El punto de partida CON la procedencia de cada dato: distingue un cero
     // capturado de un «no hay dato». Sin esto el copiloto afirmaba «saldo a
     // favor inicial $0» sin saber si alguien lo había revisado.
@@ -226,6 +231,8 @@ export async function cargarHechosCierre(
     cuentasBanco: cuentas.length,
     cuentasSinEstado,
     cuentasFirmadas: Math.min(firmas, cuentas.length),
+    sinActividadBancariaConfirmada:
+      movimientosPorCuenta.length === 0 && cierreBanco?.sinActividadBancariaAt != null,
     empleadosActivos,
     empleadosSinRecibo,
     idsePendientes,

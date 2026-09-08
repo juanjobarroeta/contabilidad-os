@@ -63,6 +63,7 @@ interface ConciliacionMes {
   movimientosNoRegistrados: Movimiento[];
   totalNoRegistrados: number;
   cuentas: Cuenta[];
+  confirmacionSinActividad?: { confirmadaAt: string; nota: string } | null;
   sinCuentaBancos: boolean;
 }
 interface Candidato {
@@ -418,29 +419,36 @@ export function ConciliacionWorkbench({
   const montoPorContabilizar = pendientes
     .filter((m) => m.conciliado)
     .reduce((s, m) => s + Math.abs(m.monto), 0);
-  const cobertura = evaluarCoberturaBancaria(total, sinConciliar);
+  const sinActividadConfirmada =
+    data.movimientosBanco.length === 0 && data.confirmacionSinActividad != null;
+  const cobertura = evaluarCoberturaBancaria(total, sinConciliar, sinActividadConfirmada);
   const sinConciliarGlobal = data.movimientosBanco.filter((m) => !m.conciliado).length;
-  const coberturaGlobal = evaluarCoberturaBancaria(data.movimientosBanco.length, sinConciliarGlobal);
+  const coberturaGlobal = evaluarCoberturaBancaria(
+    data.movimientosBanco.length,
+    sinConciliarGlobal,
+    sinActividadConfirmada,
+  );
   const sinDatos = cobertura.estado === "NO_DATA";
+  const sinActividad = cobertura.estado === "NO_ACTIVITY_CONFIRMED";
 
   return (
     <div className="mb-6">
       <StatStrip className="sm:grid-cols-3">
         <StatTile
           label="Conciliado"
-          tone={!sinDatos && sinConciliar === 0 ? "jade" : "ink"}
-          value={cobertura.porcentajeConciliado == null ? "Sin datos" : `${cobertura.porcentajeConciliado.toFixed(1)} %`}
-          sub={sinDatos ? "No hay movimientos para este periodo" : `${cobertura.movimientosConciliados} de ${total} movimientos del mes`}
+          tone={cobertura.compuertaAbierta ? "jade" : "ink"}
+          value={sinActividad ? "Sin actividad" : cobertura.porcentajeConciliado == null ? "Sin datos" : `${cobertura.porcentajeConciliado.toFixed(1)} %`}
+          sub={sinActividad ? "Confirmado por el contador" : sinDatos ? "No hay movimientos para este periodo" : `${cobertura.movimientosConciliados} de ${total} movimientos del mes`}
         />
         <StatTile
           label="Sin conciliar"
-          tone={!sinDatos && sinConciliar === 0 ? "jade" : sinConciliar > 20 ? "red" : sinConciliar > 0 ? "amber" : "ink"}
+          tone={cobertura.compuertaAbierta ? "jade" : sinConciliar > 20 ? "red" : sinConciliar > 0 ? "amber" : "ink"}
           value={sinConciliar}
           sub={esperanPosteo > 0 ? `+ ${esperanPosteo} conciliado${esperanPosteo === 1 ? "" : "s"} por contabilizar` : undefined}
         />
         <StatTile
           label="Por conciliar"
-          tone={!sinDatos && sinConciliar === 0 ? "jade" : "ink"}
+          tone={cobertura.compuertaAbierta ? "jade" : "ink"}
           value={<Money value={abonos + cargos} size={20} />}
           sub={
             abonos > 0 && cargos > 0 ? (
@@ -513,7 +521,9 @@ export function ConciliacionWorkbench({
         <div className="rounded-card border border-cos-line bg-cos-card px-5 py-4 text-sm text-cos-ink-soft">
           {/* «Compuerta abierta» sólo cuando el MES entero está limpio: con una
               cuenta filtrada en cero pero otras pendientes, decirlo mentiría. */}
-          {coberturaGlobal.estado === "NO_DATA"
+          {coberturaGlobal.estado === "NO_ACTIVITY_CONFIRMED"
+            ? "Periodo confirmado sin actividad bancaria — la compuerta está abierta por una decisión humana auditable, no por un 100% calculado."
+            : coberturaGlobal.estado === "NO_DATA"
             ? "No hay movimientos bancarios en este periodo. Importa el estado de cuenta; sin datos la compuerta del cierre permanece cerrada."
             : sinDatos
               ? "Esta cuenta no tiene movimientos en el periodo; revisa su estado de cuenta antes de confirmar el cierre."

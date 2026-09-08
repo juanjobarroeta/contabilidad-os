@@ -349,6 +349,8 @@ export interface ExtrasCierre {
   cuentasSinEstado: number;
   /** Cuentas con conciliación del mes firmada (ConciliacionBancaria.conciliadoAt). */
   cuentasFirmadas: number;
+  /** El contador confirmó que todo el periodo careció de actividad bancaria. */
+  sinActividadBancariaConfirmada: boolean;
   /** Empleados activos sin recibo timbrado en el mes. */
   empleadosActivos: number;
   empleadosSinRecibo: number;
@@ -564,6 +566,9 @@ function senalExtra(clave: string, x: ExtrasCierre, ctx: ContextoEmpresa): Senal
           }
         : { clave, estado: "ok", resumen: "Sin movimientos IDSE pendientes" };
     case "x:cuentas_sin_estado":
+      if (x.sinActividadBancariaConfirmada) {
+        return { clave, estado: "ok", resumen: "Periodo confirmado sin actividad bancaria" };
+      }
       if (x.cuentasBanco === 0) return null;
       return x.cuentasSinEstado > 0
         ? {
@@ -574,6 +579,9 @@ function senalExtra(clave: string, x: ExtrasCierre, ctx: ContextoEmpresa): Senal
           }
         : { clave, estado: "ok", resumen: `${plural(x.cuentasBanco, "cuenta con movimientos del mes", "cuentas con movimientos del mes")}` };
     case "x:firmas_conciliacion":
+      if (x.sinActividadBancariaConfirmada) {
+        return { clave, estado: "ok", resumen: "Sin conciliaciones que firmar: periodo confirmado sin actividad bancaria" };
+      }
       if (x.cuentasBanco === 0) return null;
       return x.cuentasFirmadas < x.cuentasBanco
         ? {
