@@ -138,18 +138,24 @@ export async function extractStatementFromDocument(
         pdf: await recortarPaginas(buf, desde, hasta),
       })),
     );
-    // Si qpdf no pudo recortar, se cae al documento completo antes que fallar:
-    // peor extracción es mejor que ninguna, y los controles lo delatarán.
-    if (recortes.some((r) => !r.pdf)) {
-      warnings.push("No se pudo partir el PDF por páginas; se extrajo completo.");
-      raws = [await extraerDeDocumento(buf, mediaType, costCtx, null)];
-    } else {
-      raws = await Promise.all(
-        recortes.map((r) =>
-          extraerDeDocumento(r.pdf!, "application/pdf", costCtx, [r.desde, r.hasta]),
-        ),
+    // Si qpdf no pudo recortar, SE SIGUE LOTEANDO: se manda el documento
+    // completo en cada llamada y se le pide sólo un rango de páginas. Cuesta
+    // más (el PDF viaja N veces) pero conserva lo único que importa aquí —
+    // que ninguna respuesta tenga que caber 168 movimientos. Caer al documento
+    // completo en UNA llamada sería volver justo al bug que esto arregla.
+    const sinRecorte = recortes.some((r) => !r.pdf);
+    if (sinRecorte) {
+      warnings.push(
+        "No se pudo partir el PDF por páginas; se leyó por rangos sobre el documento completo.",
       );
     }
+    raws = await Promise.all(
+      recortes.map((r) =>
+        r.pdf
+          ? extraerDeDocumento(r.pdf, "application/pdf", costCtx, [r.desde, r.hasta])
+          : extraerDeDocumento(buf, mediaType, costCtx, [r.desde, r.hasta]),
+      ),
+    );
   } else {
     raws = [await extraerDeDocumento(buf, mediaType, costCtx, null)];
   }
@@ -232,8 +238,10 @@ export async function extractStatementFromDocument(
   };
 }
 
-/** Una llamada de extracción. `rango` acota a un lote de páginas del original
- *  (sólo para redactar el prompt: el PDF que se manda YA viene recortado). */
+/** Una llamada de extracción acotada a un lote de páginas. El PDF que se manda
+ *  puede venir YA recortado (camino normal) o completo, cuando qpdf no está
+ *  disponible: en los dos casos el prompt pide sólo ese rango, así que ninguna
+ *  respuesta tiene que cargar con todo el estado de cuenta. */
 async function extraerDeDocumento(
   buf: Buffer,
   mediaType: "application/pdf" | "image/jpeg" | "image/png" | "image/webp",
@@ -261,7 +269,7 @@ async function extraerDeDocumento(
             {
               type: "text",
               text: rango
-                ? `${USER_PROMPT} Este archivo es un FRAGMENTO del estado de cuenta (páginas ${rango[0]} a ${rango[1]} del original): extrae únicamente los movimientos que aparezcan aquí, y deja en null los saldos que no vengan en estas páginas.`
+                ? `${USER_PROMPT} Extrae ÚNICAMENTE los movimientos de las páginas ${rango[0]} a ${rango[1]} del documento, contadas desde la primera página del archivo que recibes. Ignora por completo cualquier movimiento fuera de ese rango: otra llamada se encarga de ellos, y repetirlos los duplicaría. Deja en null los saldos que no vengan en esas páginas.`
                 : USER_PROMPT,
             },
           ],
