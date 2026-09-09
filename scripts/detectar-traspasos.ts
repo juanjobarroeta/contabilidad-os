@@ -15,6 +15,7 @@ async function main() {
   const r = await detectarTraspasosEmpresa(companyId, { aplicar });
   console.log(`\npares de traspaso: ${r.pares}   ${fmt(r.monto)}`);
   console.log(`movimientos ${aplicar ? "etiquetados" : "que se etiquetarían"}: ${r.etiquetados}`);
+  console.log(`  de esos, por RFC propio (sin necesitar espejo): ${r.porRfcPropio}`);
   for (const d of r.detalle) {
     console.log(`  ${d.fecha}  ${fmt(d.monto).padStart(14)}  ${d.salida.padEnd(34)} → ${d.entrada}`);
   }
