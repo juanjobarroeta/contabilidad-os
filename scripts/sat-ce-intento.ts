@@ -25,9 +25,13 @@ import { decryptSecret } from "../src/lib/crypto";
 import { extraerReto, firmarReto, cuerpoDeLogin, type FirmanteFiel } from "../src/lib/sat-portal/auth";
 
 const RFC = process.env.RFC ?? "AMA170817NK1";
+// La PUERTA REAL es /consultas/login/16203/: esa página arma el lanzador con el
+// url= POBLADO (=/operacion/16203/…) y de ahí pasa por el Access Gateway
+// (accesoC) → nesp → login.siat. Entrar directo a /operacion/16203/ se saltaba
+// ese armado y el lanzador quedaba con url= vacío (error.seg.0001).
 const CE_URL =
   process.env.CE_URL ??
-  "https://wwwmat.sat.gob.mx/operacion/16203/consulta-tus-acuses-generados-en-la-aplicacion-contabilidad-electronica";
+  "https://wwwmat.sat.gob.mx/consultas/login/16203/consulta-tus-acuses-generados-en-la-aplicacion-contabilidad-electronica";
 // El contrato e.firma de login.siat para PTSC (capturado del botón "e.firma").
 const FIEL_CONTRATO =
   "https://login.siat.sat.gob.mx/nidp/idff/sso?id=fiel_Aviso&sid=0&option=credential";
@@ -72,18 +76,70 @@ function pedir(url: string, cookie: string, method = "GET", body?: string, refer
 function host(u: string): string {
   return new URL(u).host;
 }
-function guardar(jars: Map<string, Map<string, string>>, h: string, setCookie: string[]) {
-  const jar = jars.get(h) ?? new Map<string, string>();
-  for (const c of setCookie) {
-    const par = c.split(";")[0];
-    const i = par.indexOf("=");
-    if (i > 0) jar.set(par.slice(0, i).trim(), par.slice(i + 1).trim());
-  }
-  jars.set(h, jar);
+
+// ── Frasco de cookies con DOMINIO y RUTA ──────────────────────────────────────
+// Las cookies de afinidad del F5 (IPCZQX…, F5-CONTENCION…) vienen con
+// Domain=.sat.gob.mx: DEBEN mandarse a wwwmat Y a login.siat. Un frasco por-host
+// las aislaba y rompía la pegajosidad del balanceador → la sesión federada se
+// perdía al volver a accesoC (bucle de re-login). Aquí se respeta domain/path.
+interface Cookie {
+  name: string;
+  value: string;
+  domain: string;
+  hostOnly: boolean;
+  path: string;
 }
-function cookieDe(jars: Map<string, Map<string, string>>, h: string): string {
-  const jar = jars.get(h);
-  return jar ? [...jar.entries()].map(([k, v]) => `${k}=${v}`).join("; ") : "";
+type Jar = Cookie[];
+
+function rutaPorDefecto(pathname: string): string {
+  if (!pathname.startsWith("/")) return "/";
+  const i = pathname.lastIndexOf("/");
+  return i <= 0 ? "/" : pathname.slice(0, i);
+}
+
+function guardar(jar: Jar, urlStr: string, setCookie: string[]) {
+  const u = new URL(urlStr);
+  for (const sc of setCookie) {
+    const partes = sc.split(";");
+    const par = partes[0];
+    const i = par.indexOf("=");
+    if (i <= 0) continue;
+    const name = par.slice(0, i).trim();
+    const value = par.slice(i + 1).trim();
+    let domain = u.host.toLowerCase();
+    let hostOnly = true;
+    let path = rutaPorDefecto(u.pathname);
+    for (const attr of partes.slice(1)) {
+      const eq = attr.indexOf("=");
+      const k = (eq > 0 ? attr.slice(0, eq) : attr).trim().toLowerCase();
+      const v = eq > 0 ? attr.slice(eq + 1).trim() : "";
+      if (k === "domain" && v) {
+        domain = v.replace(/^\./, "").toLowerCase();
+        hostOnly = false;
+      } else if (k === "path" && v) {
+        path = v;
+      }
+    }
+    const idx = jar.findIndex((c) => c.name === name && c.domain === domain && c.path === path);
+    if (idx >= 0) jar.splice(idx, 1); // upsert por (domain, path, name)
+    jar.push({ name, value, domain, hostOnly, path });
+  }
+}
+
+function dominioCoincide(h: string, c: Cookie): boolean {
+  return c.hostOnly ? h === c.domain : h === c.domain || h.endsWith("." + c.domain);
+}
+function rutaCoincide(pathname: string, cookiePath: string): boolean {
+  if (pathname === cookiePath) return true;
+  if (!pathname.startsWith(cookiePath)) return false;
+  return cookiePath.endsWith("/") || pathname[cookiePath.length] === "/";
+}
+function cookieDe(jar: Jar, urlStr: string): string {
+  const u = new URL(urlStr);
+  return jar
+    .filter((c) => dominioCoincide(u.host.toLowerCase(), c) && rutaCoincide(u.pathname, c.path))
+    .map((c) => `${c.name}=${c.value}`)
+    .join("; ");
 }
 
 /** ¿La página es un form que se auto-envía (aviso NetIQ, o POST de SAMLResponse)? */
@@ -130,7 +186,7 @@ async function main() {
   };
   console.log(`FIEL ${RFC} · serie ${serial} · vence ${fert}`);
 
-  const jars = new Map<string, Map<string, string>>();
+  const jar: Jar = [];
   let url = CE_URL;
   let method = "GET";
   let body: string | undefined;
@@ -138,19 +194,21 @@ async function main() {
   let fielSwitched = false;
   let logins = 0;
 
-  const visto = new Set<string>();
+  const visto = new Map<string, number>();
   for (let hop = 0; hop < 25; hop++) {
     const h = host(url);
-    // Guarda-bucle: si ya procesamos este (método+url), aterrizamos aquí (la app
-    // de CE que se re-postea a sí misma) — se reporta y se corta.
+    // Guarda-bucle: la 2ª visita a accesoC es LEGÍTIMA (ya federados, ahora sirve
+    // el buzón en vez de rebotar al login). Sólo cortamos en la 3ª — ésa sí es
+    // bucle real (una app que se re-postea a sí misma sin avanzar).
     const clave = `${method} ${url}`;
-    if (visto.has(clave)) {
-      console.log(`\n■ Aterrizaje (se repite ${clave.slice(0, 60)}…): es la página final. Body → ce-hop${hop - 1}.html`);
+    const n = (visto.get(clave) ?? 0) + 1;
+    visto.set(clave, n);
+    if (n >= 3) {
+      console.log(`\n■ Bucle real (${clave.slice(0, 56)}… ×${n}). Body → ce-hop${hop - 1}.html`);
       return;
     }
-    visto.add(clave);
-    const r = await pedir(url, cookieDe(jars, h), method, body, referer);
-    guardar(jars, h, r.setCookie);
+    const r = await pedir(url, cookieDe(jar, url), method, body, referer);
+    guardar(jar, url, r.setCookie);
     referer = url;
 
     // Volcar cada salto para diagnóstico offline (sin re-pegarle al SAT).
@@ -164,11 +222,21 @@ async function main() {
     const auto = formAutoSubmit(r.body, url);
     const jsLoc =
       /(?:window|top|self|document)\.location(?:\.href)?\s*=\s*["']([^"']+)["']/i.exec(r.body)?.[1] ||
-      /location\.replace\(\s*["']([^"']+)["']/i.exec(r.body)?.[1];
+      /location\.replace\(\s*["']([^"']+)["']/i.exec(r.body)?.[1] ||
+      // La página /consultas/login/… hace `window.location=goto`, con `goto`
+      // asignado a la URL del lanzador (url= poblado). Resolver la variable.
+      (/(?:window|top|self)\.location\s*=\s*goto\b/i.test(r.body)
+        ? /\bgoto\s*=\s*["']([^"']+)["']/i.exec(r.body)?.[1]
+        : undefined);
     const ceMark = /consulta.*acuse|acuses?\s+generad|balanza\s+de\s+comprobaci|cat[aá]logo\s+de\s+cuentas|env[ií]o.*contabilidad/i.test(r.body);
     const flags = [certform && "certform", auto && "auto-submit", jsLoc && "js-redirect", err && `⚠${err}`, ceMark && "★CE-marker"]
       .filter(Boolean).join(" ");
     console.log(`[${hop}] ${r.status} ${method} ${h}${new URL(url).pathname.slice(0, 42)}  ${flags}`);
+    if (process.env.COOKIES) {
+      const setc = r.setCookie.map((c) => c.split("=")[0].trim()).join(",") || "-";
+      const enviadas = cookieDe(jar, url).split("; ").map((s) => s.split("=")[0]).filter(Boolean).join(",") || "-";
+      console.log(`      envié{${enviadas}}  set:[${setc}]` + (r.location ? `  →${new URL(r.location, url).host}${new URL(r.location, url).pathname.slice(0, 34)}` : ""));
+    }
     method = "GET";
     body = undefined;
 
@@ -212,7 +280,9 @@ async function main() {
     const fs = await import("node:fs");
     const out = `${process.env.CLAUDE_JOB_DIR ?? "/tmp"}/tmp/ce-final.html`;
     try { fs.writeFileSync(out, r.body); } catch { /* best-effort */ }
-    if (ceMark) {
+    if (r.status === 503 || /Servicio no disponible|please try later|Access Gateway/i.test(r.body)) {
+      console.log(`\n⏳ 503 Access Gateway ("intente más tarde") en ${h}${new URL(url).pathname.slice(0, 30)}. SAT throttling — espaciar y reintentar. Body → ${out}`);
+    } else if (ceMark) {
       console.log(`\n✅ ¡CE! URL final: ${url}\n  (menciona acuses/balanza/catálogo). Body → ${out}`);
     } else if (err) {
       console.log(`\n❌ ${err}: login entró pero la app pierde el target. Body → ${out}`);
