@@ -1637,9 +1637,9 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
                                     {!excede && restante > Math.abs(m.monto) * 0.01 && (
                                       <p className="mt-1.5 text-[12px] text-cos-amber-ink">La diferencia quedará sin asignar; se registrará una advertencia.</p>
                                     )}
-                                    <button onClick={() => conciliarMultiple(m.id)} disabled={multiBusy || multiSel.length < 2 || excede}
+                                    <button onClick={() => conciliarMultiple(m.id)} disabled={multiBusy || multiSel.length < 1 || excede}
                                       className="mt-2.5 w-full rounded-control bg-cos-brand px-3 py-2 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
-                                      {multiBusy ? "Conciliando…" : `Conciliar ${multiSel.length} facturas`}
+                                      {multiBusy ? "Conciliando…" : `Conciliar ${multiSel.length} factura${multiSel.length === 1 ? "" : "s"}`}
                                     </button>
                                     {multiSel.length < 2 && (
                                       <p className="mt-1 text-center text-[11.5px] text-cos-ink-faint">Agregue al menos dos facturas; para una sola utilice «Conciliar».</p>

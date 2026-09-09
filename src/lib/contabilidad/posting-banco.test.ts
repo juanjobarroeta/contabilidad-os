@@ -168,3 +168,39 @@ describe("reclasificacionIvaFlujo — Art. 1-B, proporcional al pago", () => {
     expect(reclasificacionIvaFlujo(0, ingreso, true)).toBeNull();
   });
 });
+
+// ─── Asignación parcial: lo que sobra es anticipo, no cobro ──────────────────
+import { repartoMovimiento } from "./posting";
+
+describe("repartoMovimiento — el sobrante no se diluye en Clientes", () => {
+  it("porciones que cubren todo el movimiento: nada sobra", () => {
+    expect(repartoMovimiento(10000, null, [6000, 4000])).toEqual({ asignado: 10000, sobrante: 0 });
+  });
+
+  it("caso terminal: un depósito cubre una fracción de varias cuentas", () => {
+    // «De los cincuenta mil que me cayeron hoy de tarjetas, tres mil a esta
+    // cuenta, tres mil a esta cuenta…» — el resto todavía no tiene factura que
+    // lo explique y no puede abonarse a cuentas por cobrar.
+    expect(repartoMovimiento(50000, null, [3000, 3000, 3000])).toEqual({
+      asignado: 9000, sobrante: 41000,
+    });
+  });
+
+  it("una sola factura parcial: ahora se puede expresar", () => {
+    expect(repartoMovimiento(10000, null, [6000])).toEqual({ asignado: 6000, sobrante: 4000 });
+  });
+
+  it("el match 1:1 explica el movimiento entero (el guard exige que empate)", () => {
+    expect(repartoMovimiento(10556, "inv-1", [])).toEqual({ asignado: 10556, sobrante: 0 });
+  });
+
+  it("redondea a centavos: sin sobrantes fantasma por flotantes", () => {
+    const r = repartoMovimiento(100.1, null, [33.37, 33.37, 33.36]);
+    expect(r.asignado).toBe(100.1);
+    expect(r.sobrante).toBe(0);
+  });
+
+  it("las porciones se toman en valor absoluto (los pagos vienen negativos)", () => {
+    expect(repartoMovimiento(5000, null, [-2000, -1000])).toEqual({ asignado: 3000, sobrante: 2000 });
+  });
+});

@@ -199,6 +199,27 @@ export function subcuentaBancoSpec(
   };
 }
 
+/**
+ * Cuánto del movimiento explica una factura y cuánto sobra. PURA.
+ *
+ * El match 1:1 explica el movimiento entero —el guard exige que el importe
+ * coincida con la factura—. Con porciones, sólo explican lo asignado: lo demás
+ * es dinero recibido (o pagado) sin comprobante que lo justifique, o sea un
+ * anticipo. Antes se abonaba TODO a Clientes y ese sobrante desaparecía dentro
+ * de los saldos por cobrar.
+ */
+export function repartoMovimiento(
+  absAmount: number,
+  invoiceId: string | null,
+  montosAsignados: number[],
+): { asignado: number; sobrante: number } {
+  const centavos = (n: number) => Math.round(n * 100) / 100;
+  const asignado = invoiceId
+    ? absAmount
+    : centavos(montosAsignados.reduce((sum, m) => sum + Math.abs(m), 0));
+  return { asignado, sobrante: centavos(absAmount - asignado) };
+}
+
 export type PlanTraspaso =
   | { modo: "cruzado"; contraparteBankAccountId: string }
   | { modo: "cubierto" }
@@ -1045,16 +1066,52 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
         ? [tx.invoiceId]
         : tx.conciliacionDetalles.map((d) => d.invoiceId).filter((x): x is string => !!x);
       const kind = kindComun(kindsLiquidacion, idsDelMatch);
+
+      // LO ASIGNADO Y LO QUE SOBRA, POR SEPARADO.
+      //
+      // Antes se abonaba el movimiento COMPLETO a Clientes aunque las porciones
+      // sólo explicaran una parte: un depósito de $50,000 con $3,000 asignados
+      // dejaba $47,000 abonados a una cuenta por cobrar que nadie debía, y la
+      // antigüedad de saldos quedaba mintiendo.
+      //
+      // Lo no asignado es, por definición, dinero recibido sin factura que lo
+      // explique — un ANTICIPO. Mandarlo a 206.01 (o 120.01 al pagar) lo deja
+      // visible y lo pone en la lista de anticipos sin CFDI, en vez de diluirlo
+      // entre los saldos de clientes. Es exactamente el caso de las
+      // liquidaciones de terminal: un depósito cubre varias cuentas de paciente
+      // y sólo una fracción de cada factura.
+      const { asignado, sobrante } = repartoMovimiento(
+        absAmount,
+        tx.invoiceId,
+        tx.conciliacionDetalles.map((d) => Number(d.montoAsignado)),
+      );
+
       if (isCredit) {
         // Cobro: abona LA MISMA CxC que el CFDI cargó (módulo o stub).
         const ctaCobro = kind && kind !== "NOMINA" ? (cuentasCxc[kind] ?? accClientes) : accClientes;
         drafts.push({ ...base, chartAccountId: ctaBanco(tx).id, monto: absAmount, tipo: "CARGO" });
-        drafts.push({ ...base, chartAccountId: ctaCobro.id, monto: absAmount, tipo: "ABONO" });
+        if (asignado > 0.005) {
+          drafts.push({ ...base, chartAccountId: ctaCobro.id, monto: asignado, tipo: "ABONO" });
+        }
+        if (sobrante > 0.005) {
+          drafts.push({ ...base, chartAccountId: accAnticiposClientes.id, monto: sobrante, tipo: "ABONO" });
+        }
       } else {
         // Pago: nómina liquida ACREEDORES (donde provisionó); lo demás, proveedores.
         const ctaPago = kind === "NOMINA" ? accAcreedoresDiv : accProveedores;
-        drafts.push({ ...base, chartAccountId: ctaPago.id, monto: absAmount, tipo: "CARGO" });
+        if (asignado > 0.005) {
+          drafts.push({ ...base, chartAccountId: ctaPago.id, monto: asignado, tipo: "CARGO" });
+        }
+        if (sobrante > 0.005) {
+          drafts.push({ ...base, chartAccountId: accAnticiposProveedores.id, monto: sobrante, tipo: "CARGO" });
+        }
         drafts.push({ ...base, chartAccountId: ctaBanco(tx).id, monto: absAmount, tipo: "ABONO" });
+      }
+      if (sobrante > 0.005) {
+        warnings.push(
+          `${tx.fecha.toISOString().slice(0, 10)} ${tx.descripcion.slice(0, 32)}: ` +
+            `$${sobrante.toFixed(2)} sin asignar a factura, registrados como anticipo.`,
+        );
       }
 
       // IVA al flujo (Art. 1-B): la porción de IVA del pago/cobro pasa de
