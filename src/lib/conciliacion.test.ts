@@ -178,9 +178,21 @@ describe("checkInvoiceMatchGuard — porciones asignadas (conciliación múltipl
     expect(r.ok).toBe(false);
   });
 
-  it("PPD legado sin porción: el primer match 1:1 no valida monto contra total (compatibilidad)", () => {
-    const r = checkInvoiceMatchGuard(ppd, [], { id: "tx_1", monto: 5000 });
+  it("PPD sin porción: una parcialidad MENOR al total sigue pasando", () => {
+    // Esta es la razón por la que el primer match 1:1 no valida monto exacto:
+    // una parcialidad es legítimamente menor que la factura.
+    const r = checkInvoiceMatchGuard(ppd, [], { id: "tx_1", monto: 300 });
     expect(r).toEqual({ ok: true });
+  });
+
+  it("PPD sin porción: pero un movimiento MAYOR al total ya no", () => {
+    // Antes pasaba «por compatibilidad», y por ahí se coló en producción un
+    // SPEI de $12,687.07 aplicado a una factura de $7,106.97: el asiento
+    // abonaba el movimiento completo contra una factura que no lo explicaba.
+    // Un pago mayor que la factura no es parcialidad de nada.
+    const r = checkInvoiceMatchGuard(ppd, [], { id: "tx_1", monto: 5000 });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/excede el total/i);
   });
 });
 
@@ -239,5 +251,33 @@ describe("checkSumaAsignada", () => {
   it("usa valor absoluto del movimiento (retiros, monto negativo)", () => {
     const r = checkSumaAsignada(-1000, [{ monto: 500 }, { monto: 500 }]);
     expect(r).toEqual({ ok: true, advertencia: null });
+  });
+});
+
+describe("el match 1:1 también valida el importe", () => {
+  const pue = { metodoPago: "PUE", total: 10556 };
+  const ppd = { metodoPago: "PPD", total: 7106.97 };
+
+  it("PUE: un depósito 23 veces más grande NO se concilia 1:1", () => {
+    // Caso real: $250,000 en efectivo conciliados con una factura de $10,556.
+    // El asiento abonaba los $250,000 completos a Clientes.
+    const r = checkInvoiceMatchGuard(pue, [], { id: "tx", monto: 250000 });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/una sola exhibición/i);
+  });
+
+  it("PUE: el pago que SÍ es el total pasa", () => {
+    expect(checkInvoiceMatchGuard(pue, [], { id: "tx", monto: -10556 }).ok).toBe(true);
+    expect(checkInvoiceMatchGuard(pue, [], { id: "tx", monto: 10600 }).ok).toBe(true); // dentro del 1%
+  });
+
+  it("PPD: una parcialidad MENOR sigue siendo válida", () => {
+    expect(checkInvoiceMatchGuard(ppd, [], { id: "tx", monto: -3000 }).ok).toBe(true);
+  });
+
+  it("PPD: un movimiento MAYOR que la factura no es parcialidad de nada", () => {
+    const r = checkInvoiceMatchGuard(ppd, [], { id: "tx", monto: -12687.07 });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/excede el total/i);
   });
 });
