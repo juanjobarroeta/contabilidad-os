@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { conciliarPorRepEmpresa } from "./rep-aplicar";
 import {
   campoMontoPorTipo,
   esTipoImpuestoConciliable,
@@ -36,6 +37,9 @@ const TOLERANCE = 0.01; // 1%
 // regla de ambigüedad. Por eso la identidad de la contraparte no se suma como
 // un puntito más: es lo que convierte "adivinar por monto" en "identificar por
 // parte y confirmar por monto".
+/** Conciliaciones resueltas por complemento de pago (evidencia, no inferencia). */
+export interface RepStats { conciliados: number; facturas: number; ambiguos: number }
+
 export const AUTO_MATCH_MIN_SCORE = 130;
 export const AUTO_MATCH_AMBIGUITY_GAP = 20;
 
@@ -484,7 +488,23 @@ export async function autoConciliarCuenta(
 // error en una cuenta no detiene las demás.
 export async function autoConciliarEmpresa(
   companyId: string,
-): Promise<{ matched: number; accounts: number; impuestosLc: ImpuestosLcStats }> {
+): Promise<{ matched: number; accounts: number; impuestosLc: ImpuestosLcStats; rep: RepStats }> {
+  // ── PRIMERO EL REP ────────────────────────────────────────────────────────
+  // El complemento de pago DICE qué facturas liquidó un pago y cuánto a cada
+  // una: es evidencia firmada por el emisor, no inferencia nuestra. Corre
+  // antes del scoring para que un pago que liquida 21 facturas no compita por
+  // parecerse a UNA — ningún ranking por monto puede resolver ese caso, y
+  // además el desglose es lo único que reparte bien el IVA al flujo.
+  const rep: RepStats = { conciliados: 0, facturas: 0, ambiguos: 0 };
+  try {
+    const r = await conciliarPorRepEmpresa(companyId, { aplicar: true });
+    rep.conciliados = r.conciliados;
+    rep.facturas = r.facturasAplicadas;
+    rep.ambiguos = r.ambiguos;
+  } catch (e) {
+    console.error(`[auto-conciliar] REP falló para ${companyId}:`, e);
+  }
+
   const accounts = await prisma.bankAccount.findMany({
     where: { companyId },
     select: { id: true },
@@ -505,5 +525,5 @@ export async function autoConciliarEmpresa(
     }
   }
 
-  return { matched, accounts: accounts.length, impuestosLc };
+  return { matched: matched + rep.conciliados, accounts: accounts.length, impuestosLc, rep };
 }
