@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
 import {
   autoConciliarCuenta,
+  bonoImporteUnico,
   clabesConocidasPorRfc,
   scoreCandidate,
   tokenIdentificante,
@@ -323,6 +324,10 @@ export async function GET(req: Request, { params }: Params) {
     contraparteClabe: tx.contraparteClabe,
   };
 
+  // Bono de importe único: mismo criterio que el motor, para que el badge de
+  // confianza de la mesa no contradiga lo que la auto-conciliación decide.
+  const bonoUnico = bonoImporteUnico(absAmount, candidates.map((c) => Number(c.total)));
+
   const puntuados = candidates.map(inv => {
     // MISMA fórmula que la auto-conciliación (antes era una copia que divergió:
     // esta ruta no conocía las señales de identidad). Identidad efectiva: el
@@ -351,6 +356,7 @@ export async function GET(req: Request, { params }: Params) {
     // monto a 1–5% todavía se ofrece al humano, sólo que con poco puntaje.
     const diff = Math.abs(Math.abs(total) - absAmount);
     if (diff / absAmount >= 0.01 && diff / absAmount < TOLERANCE) score += 20;
+    if (bonoUnico && diff < 0.01) score += bonoUnico;
     const alreadyMatched = inv.bankTransactions.length > 0 || inv.conciliacionDetalles.length > 0;
     // Neto firmado: un reembolso (cargo) resta de lo cobrado. Las porciones
     // asignadas (conciliación múltiple) suman por su monto asignado.

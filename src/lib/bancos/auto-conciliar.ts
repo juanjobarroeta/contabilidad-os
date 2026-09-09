@@ -52,6 +52,30 @@ export const PUNTOS_FOLIO = 90;
 export const PUNTOS_CLABE_CONOCIDA = 80;
 export const PUNTOS_RFC_EN_TEXTO = 25;
 export const PUNTOS_NOMBRE = 40;
+/**
+ * Bono por IMPORTE ÚNICO CON CENTAVOS. Un importe exacto al centavo que además
+ * es el ÚNICO exacto entre los candidatos se identifica solo: $19,439.75 no se
+ * repite por casualidad. Sin este bono ese caso puntúa 100 —monto exacto y
+ * nada más— y muere contra el umbral de 130 aunque el segundo candidato esté a
+ * 50 puntos de distancia; visto en producción, con la factura enfrente.
+ *
+ * Exige CENTAVOS a propósito. Los importes redondos coinciden todo el tiempo:
+ * en el mismo hospital hay 38 facturas de $3,770.00 —la tarifa de un estudio—
+ * y ahí la unicidad no existe ni debe inventarse.
+ */
+export const PUNTOS_IMPORTE_UNICO = 40;
+
+/**
+ * ¿Cuánto bono merece el importe? PURA.
+ *
+ * `totales` son los totales de TODOS los candidatos. Devuelve el bono sólo si
+ * el importe trae centavos y exactamente un candidato lo empata al centavo.
+ */
+export function bonoImporteUnico(absAmount: number, totales: number[]): number {
+  if (Math.round(absAmount * 100) % 100 === 0) return 0; // redondo: no identifica
+  const exactos = totales.filter((t) => Math.abs(t - absAmount) < 0.01).length;
+  return exactos === 1 ? PUNTOS_IMPORTE_UNICO : 0;
+}
 
 /**
  * Tokens tipo folio en el concepto de un movimiento. Conservador para no
@@ -440,6 +464,10 @@ export async function autoConciliarCuenta(
       contraparteClabe: tx.contraparteClabe,
     };
 
+    // El bono de importe único se calcula UNA vez sobre todo el pool y se
+    // acredita sólo al candidato que empata al centavo.
+    const bono = bonoImporteUnico(absAmount, candidates.map((c) => Number(c.total)));
+
     const scored = candidates
       .map((inv) => {
         // Identidad efectiva de la factura: el Customer si existe; si no, la
@@ -464,7 +492,7 @@ export async function autoConciliarCuenta(
             },
             senales,
             absAmount,
-          ),
+          ) + (bono && Math.abs(Number(inv.total) - absAmount) < 0.01 ? bono : 0),
         };
       })
       .sort((a, b) => b.score - a.score);

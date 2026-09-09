@@ -140,6 +140,14 @@ const RE_BANCO_SUELTO = new RegExp(`\\b(${BANCOS_MX.join("|")})\\b`, "i");
  */
 const RE_SPEI_POSICIONAL = /\bSPEI\s+(?:ENVIADO|RECIBIDO)\b\s*(.*)$/i;
 
+/**
+ * Razón social como descripción completa, con terminación societaria — incluso
+ * truncada por el ancho del renglón: «SEGUROS SURA SA DE C», «GRUPO X SA DE
+ * CV», «COMERCIAL Y SAPI DE CV», «DISTRIBUIDORA S DE RL».
+ */
+const RE_RAZON_SOCIAL_SOLA =
+  /^([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ&.,\s-]{4,}?)\s+(?:S\.?A\.?(?:P\.?I\.?)?(?:\s+DE\s+C\.?V?\.?)?|S\.?\s*DE\s*R\.?L\.?(?:\s+DE\s+C\.?V?\.?)?|S\.?C\.?)\s*$/i;
+
 /** BBVA: "PAGO CUENTA DE TERCERO BNET 0547714750 TECNOLOGIAS NARCIS". */
 const RE_PAGO_TERCERO = /PAGO\s+CUENTA\s+DE\s+TERCERO(?:\s+BNET)?\s+\d+\s+(.+)$/i;
 
@@ -426,6 +434,24 @@ function posicionales(texto: string, out: DatosSpei): void {
   if (tercero) {
     const nombre = tercero[1].trim();
     if (nombre.length >= 3) out.contraparteNombre ??= nombre.toUpperCase();
+    return;
+  }
+
+  // RAZÓN SOCIAL SUELTA, sin prefijo alguno: la descripción ENTERA es el
+  // nombre de la contraparte. Pasa con domiciliaciones y cargos recurrentes —
+  // «SEGUROS SURA SA DE C» es todo lo que imprime el banco.
+  //
+  // Se exige la terminación societaria (SA, SA DE CV, S DE RL, SAPI, SC),
+  // aunque venga cortada por el ancho del renglón, porque es lo que distingue
+  // un nombre de la jerga bancaria: «SERV BANCA INTERNET» o «RETIRO DEP.
+  // ELECTRONICO» no la traen y siguen sin identificarse, que es lo correcto.
+  //
+  // Importa más allá del puntaje: sin nombre, la sugerencia de «pago junto»
+  // no tiene identidad que contradecir y llegó a ofrecer seis facturas de una
+  // farmacia para pagar la póliza de una aseguradora.
+  const sola = RE_RAZON_SOCIAL_SOLA.exec(texto.trim());
+  if (sola) {
+    out.contraparteNombre ??= sola[1].trim().toUpperCase();
     return;
   }
 

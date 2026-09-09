@@ -8,7 +8,11 @@ import {
   PUNTOS_RFC_EXACTO,
   mismoNombre,
   tokenIdentificante,
-  foliosEnConcepto, folioNombrado, PUNTOS_FOLIO,
+  foliosEnConcepto,
+  folioNombrado,
+  PUNTOS_FOLIO,
+  bonoImporteUnico,
+  PUNTOS_IMPORTE_UNICO,
 } from "./auto-conciliar";
 
 const tx = { fecha: new Date("2026-06-10T00:00:00Z"), descripcion: "SPEI RECIBIDO" };
@@ -241,5 +245,29 @@ describe("mismoNombre — el banco trunca y el CFDI escribe distinto", () => {
     // comparación por palabras es un CAMINO ADICIONAL, no un reemplazo.
     expect(mismoNombre("MARTINEZ", "MARTINEZ LOPEZ JUAN")).toBe(true);
     expect(mismoNombre("GRUPO TEXTIL ORIENTE SA DE CV", "GRUPO TEXTIL ORIENTE")).toBe(true);
+  });
+});
+
+describe("bonoImporteUnico — un importe con centavos que no se repite", () => {
+  it("único y con centavos: bonifica", () => {
+    // Caso real: depósito de $19,439.75 con UNA factura por ese importe al
+    // centavo. Puntuaba 100 (monto exacto, fecha a +16d, sin identidad) y
+    // moría contra el umbral de 130 con el segundo candidato 50 puntos abajo.
+    expect(bonoImporteUnico(19439.75, [19439.75, 19303.42])).toBe(PUNTOS_IMPORTE_UNICO);
+    expect(100 + PUNTOS_IMPORTE_UNICO).toBeGreaterThanOrEqual(AUTO_MATCH_MIN_SCORE);
+  });
+
+  it("redondo NO bonifica, aunque sea único: los redondos coinciden solos", () => {
+    expect(bonoImporteUnico(40000, [40000, 39500])).toBe(0);
+    expect(bonoImporteUnico(3770, [3770])).toBe(0);
+  });
+
+  it("varios exactos no bonifica: ahí no hay unicidad que premiar", () => {
+    // 38 facturas de $3,770.00 en el mismo hospital — la tarifa de un estudio.
+    expect(bonoImporteUnico(3770.55, [3770.55, 3770.55, 3770.55])).toBe(0);
+  });
+
+  it("sin ningún exacto no bonifica", () => {
+    expect(bonoImporteUnico(19439.75, [19303.42, 19661.81])).toBe(0);
   });
 });
