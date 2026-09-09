@@ -93,61 +93,115 @@ export async function GET(req: Request, { params }: Params) {
   const tiposCandidatos: ("INGRESO" | "EGRESO" | "NOMINA")[] = isCreditTx
     ? ["INGRESO"]
     : ["EGRESO", "NOMINA"];
-  const WINDOW_DAYS = 30;
+  // 90 días, no 30. Reportado por quien concilia: «sé a qué corresponde el
+  // depósito y son más de una factura, pero no me aparecen» — las facturas
+  // eran MÁS VIEJAS que la ventana. Pagar a 60 o 90 días es lo normal aquí, y
+  // el que se atrasa no deja de deber. Ensanchar sólo agrega a la cola: la
+  // cercanía de fecha puntúa, así que una factura lejana nunca desplaza del
+  // top a una cercana — para subir necesita identidad, que es razón legítima.
+  const WINDOW_DAYS = 90;
   const TOLERANCE   = 0.05; // 5% for suggestions (wider than auto-match)
+  // Ventana ANCHA para los candidatos cuyo IMPORTE se parece al movimiento.
+  // Una factura por el mismo monto 4 meses después sigue siendo la explicación
+  // más probable de un depósito: en México pagar a 60 o 90 días es lo normal,
+  // y el que se atrasa no deja de deber. Lo que hace tolerable la distancia en
+  // fechas es la coincidencia de importe — por eso esta ventana cuelga del
+  // monto y no se le aplica al pool ancho, que se ahogaría en ruido.
+  const MONTO_WINDOW_DAYS = 180;
 
-  const candidates = await prisma.invoice.findMany({
-    where: {
-      companyId,
-      tipo:   { in: tiposCandidatos },
-      status: "STAMPED",
-      fecha:  {
-        gte: new Date(tx.fecha.getTime() - WINDOW_DAYS * 86400000),
-        lte: new Date(tx.fecha.getTime() + WINDOW_DAYS * 86400000),
-      },
-      AND: [
-        {
-          // El total del CFDI ya no tiene que ser el del movimiento. Con el
-          // filtro viejo (total a ±5%) los dos flujos que la mesa promete eran
-          // inalcanzables: un depósito agrupado (Stripe/PayPal pagan en lote y
-          // netos de comisión) se cuadra con VARIOS CFDIs menores que él, y un
-          // abono parcial paga un PPD MAYOR que él. Entra todo lo que cabe en
-          // el movimiento, más los PPD más grandes; el ranking por score y la
-          // tolerancia del scoring deciden el orden — el auto-match conserva
-          // su propio query estricto, aquí sólo se SUGIERE a un humano.
-          OR: [
-            { total: { lte: absAmount * (1 + TOLERANCE) } },
-            { metodoPago: "PPD", total: { gt: absAmount } },
-          ],
-        },
-        {
-          // Exclude PUE invoices already matched to another bank tx — either
-          // via the legacy 1:1 link or via assigned portions
-          // (ConciliacionDetalle). Keep PPD invoices visible — they can have
-          // multiple partial payments.
-          OR: [
-            { metodoPago: "PPD" },
-            {
-              bankTransactions: { none: { status: "MATCHED" } },
-              conciliacionDetalles: { none: {} },
-            },
-          ],
-        },
-      ],
+  const INCLUDE_FACTURA = {
+    customer: { select: { rfc: true, razonSocial: true } },
+    bankTransactions: {
+      where: { status: "MATCHED" as const },
+      select: { id: true, fecha: true, monto: true },
     },
-    include: {
-      customer: { select: { rfc: true, razonSocial: true } },
-      bankTransactions: {
-        where: { status: "MATCHED" },
-        select: { id: true, fecha: true, monto: true },
-      },
-      conciliacionDetalles: { select: { montoAsignado: true } },
-    },
-    // Acotado por si el filtro ancho trae mucho; el corte fino (top 15) se
-    // hace DESPUÉS de puntuar — cortar aquí por fecha tiraría a los mejores.
-    orderBy: { fecha: "desc" },
-    take: 300,
+    conciliacionDetalles: { select: { montoAsignado: true } },
+  };
+
+  const baseFactura = { companyId, tipo: { in: tiposCandidatos }, status: "STAMPED" as const };
+  // Excluye lo ya consumido: el vínculo 1:1 y las porciones asignadas. Las PPD
+  // se quedan visibles — admiten parcialidades.
+  const noConsumida: Prisma.InvoiceWhereInput = {
+    OR: [
+      { metodoPago: "PPD" },
+      { bankTransactions: { none: { status: "MATCHED" } }, conciliacionDetalles: { none: {} } },
+    ],
+  };
+  const enVentana = (dias: number) => ({
+    gte: new Date(tx.fecha.getTime() - dias * 86400000),
+    lte: new Date(tx.fecha.getTime() + dias * 86400000),
   });
+
+  // ── Importe parecido: ventana ancha y sin competir por el cupo ─────────────
+  // Estos son los candidatos a match 1:1, los más valiosos de la lista. Van en
+  // su propia consulta para que NUNCA los desplace el pool ancho (medido: el
+  // 41 % de los movimientos pendientes de un hospital genera más candidatos
+  // que el tope, y el recorte se los llevaba por delante).
+  const cercanos = await prisma.invoice.findMany({
+    where: {
+      ...baseFactura,
+      fecha: enVentana(MONTO_WINDOW_DAYS),
+      total: { gte: absAmount * (1 - TOLERANCE), lte: absAmount * (1 + TOLERANCE) },
+      AND: [noConsumida],
+    },
+    include: INCLUDE_FACTURA,
+    orderBy: { fecha: "desc" },
+    take: 80,
+  });
+
+  // Filtro de MONTO del pool ancho. El total del CFDI no tiene que ser el del
+  // movimiento: un depósito agrupado se cuadra con VARIOS CFDIs menores que
+  // él, y un abono parcial paga un PPD MAYOR que él. Entra todo lo que cabe en
+  // el movimiento, más los PPD más grandes; el score decide el orden. El
+  // auto-match conserva su propio query estricto — aquí sólo se SUGIERE a un
+  // humano. (Lo ya consumido lo excluye `noConsumida`, aparte.)
+  const cabeEnElMovimiento: Prisma.InvoiceWhereInput = {
+    OR: [
+      { total: { lte: absAmount * (1 + TOLERANCE) } },
+      { metodoPago: "PPD", total: { gt: absAmount } },
+    ],
+  };
+
+  // El tope existe por si el filtro ancho trae mucho — y trae mucho: deja
+  // entrar CUALQUIER factura menor al movimiento, así que un depósito grande
+  // hace candidata a casi toda la cartera. Medido en un hospital real, con la
+  // ventana de 30 días: mediana 204 candidatos, p90 751, máximo 932, y el
+  // 41 % de los movimientos ya rebasaba el tope.
+  //
+  // Por eso el recorte se hace CENTRADO en la fecha del movimiento —una
+  // consulta hacia atrás y otra hacia adelante— en vez de un `fecha: desc`
+  // sobre toda la ventana. Con el orden viejo, un movimiento del 3 de agosto
+  // conservaba las facturas del 2 de septiembre y tiraba las de agosto: se
+  // quedaba con las más NUEVAS, no con las más cercanas, que son las que
+  // puntúan. Al ensanchar a 90 días ese sesgo habría empeorado.
+  const [poolAntes, poolDespues] = await Promise.all([
+    prisma.invoice.findMany({
+      where: {
+        ...baseFactura,
+        fecha: { gte: new Date(tx.fecha.getTime() - WINDOW_DAYS * 86400000), lte: tx.fecha },
+        AND: [cabeEnElMovimiento, noConsumida],
+      },
+      include: INCLUDE_FACTURA,
+      orderBy: { fecha: "desc" },
+      take: 300,
+    }),
+    prisma.invoice.findMany({
+      where: {
+        ...baseFactura,
+        fecha: { gt: tx.fecha, lte: new Date(tx.fecha.getTime() + WINDOW_DAYS * 86400000) },
+        AND: [cabeEnElMovimiento, noConsumida],
+      },
+      include: INCLUDE_FACTURA,
+      orderBy: { fecha: "asc" },
+      take: 200,
+    }),
+  ]);
+
+  // El de importe parecido va primero: si algo se recorta después, que no sea
+  // el candidato a match 1:1.
+  const candidates = [...cercanos, ...poolAntes, ...poolDespues].filter(
+    (inv, i, todos) => todos.findIndex((o) => o.id === inv.id) === i,
+  );
 
   // ── Red de identidad ───────────────────────────────────────────────────────
   // Si el banco nombró a la contraparte (RFC o nombre extraídos del concepto),
