@@ -1,8 +1,8 @@
 # Functional and UX audit
 
-**Status:** source and roadmap audit complete; authenticated production walkthrough pending demo password  
-**Date:** 2026-09-08  
-**Branch:** `codex/ux-redesign`  
+**Status:** source, roadmap, and authenticated production walkthrough complete
+**Date:** 2026-09-09
+**Branch:** `codex/ux-redesign`
 **Scope:** discovery, information architecture, workflow design, and shared-component contracts only
 
 ## Executive decision
@@ -52,9 +52,139 @@ The target UX is aligned to the gap-closure roadmap rather than creating a compe
 
 The product thesis is also clear: the despacho is the customer, the monthly close is the operating spine, and the differentiator is moving the accountant from capture to review.
 
-### Live walkthrough boundary
+### Authenticated production walkthrough
 
-The public login and current unauthenticated experience were inspected. The authenticated production walkthrough has not yet been represented as complete because the dedicated account password is still required. No production data-changing action will be performed during that walkthrough.
+A read-only walkthrough was completed on 2026-09-09 with the dedicated demo user. It covered Inicio, Cartera, Cierre, Bancos, Nómina, Impuestos, Contabilidad, Cumplimiento, Opiniones, Hallazgos, Facturas, Directorio, Empresa, billing, notices, global search, and the existing-user add-company path.
+
+The walkthrough used navigation, period controls, tabs, filters, and detail views only. It did not upload, submit, stamp, cancel, reconcile, classify, mark paid, mark presented, change settings, purchase, edit, or delete anything.
+
+## Authenticated production findings
+
+These findings are more important than visual polish because they can change what a user believes is complete, payable, compliant, or permitted.
+
+### P0 — conflicting period context
+
+The same signed-in session showed several active contexts at once:
+
+- Inicio mixed August filing work with September setup and no-data items.
+- Cierre was on August while the persistent Copiloto led with a September balance alert.
+- Bancos opened on September when reached independently, even though the filing and accounting work was for August.
+- Accounting links into Bancos did not visibly carry the working month.
+- Nómina correctly described August IMSS as due on 17 September, but the SUA export defaulted to bimestre 5, September–October, instead of the due bimestre 4, July–August.
+
+**Risk:** a user can review or export the wrong period while believing they followed the close workflow.
+
+**Required contract:** company, working period, obligation period, payment period, and evidence period must travel together in navigation. When those periods legitimately differ, the interface must name each one.
+
+### P0 — contradictory domain state
+
+The walkthrough found these concrete contradictions:
+
+| Surface A | Surface B | Conflict |
+|---|---|---|
+| Inicio: Nómina “al corriente” with zero receipts | Nómina: “Aún no corres la nómina de este mes” | Absence of data is treated as both success and pending |
+| Impuestos checklist: no current-period REP pending | Impuestos Presentar: two REP pending for $40,212.36 | The same workflow gives opposite readiness answers |
+| Contabilidad: zero REP in period, two from other periods | Impuestos: two REP pending without equally prominent source-period scope | Scope is hidden, so counts appear contradictory |
+| Cartera: declaration “Por calcular” and $0 payable | Impuestos: calculated total payable $875.90 | Computed, saved, and portfolio states are not distinguished |
+| Cartera: CFDIs “al día” | Impuestos: SAT requests processing for nine hours and failed requests with uncontrolled errors | Freshness and job health are collapsed into a green label |
+| Cartera: three bank items pending | August Bancos/Cierre: one item pending | Portfolio and period work do not share a count contract |
+| Accounting stepper: Cierre, Divergencia, Ajustes, and Entregables checked | Accounting body: close blocked, divergence blocked, adjustments pending, data incomplete | Step summaries do not reflect their own detailed state |
+| Accounting: `POSTEADO`, “Mes cerrado,” XML ready | Same page: unmapped accounts would make SAT reject XML, reconciliation remains pending | Posted, closed, generated, and SAT-valid are incorrectly conflated |
+| Annual calculation: months 6, 8, 9, 10, 11, and 12 reported as unposted | Accounting period series: August and September reported `POSTED` | Accounting readiness projections disagree about the same months |
+| Annual return: Presented with an acuse | Same page: local calculation is incomplete because six months are unposted, yet “Use in declaration” remains available | Authority evidence and local calculation readiness are mixed |
+| Opiniones: “Opinión Positiva” | Displayed validity ended 8 September; walkthrough date was 9 September | Expired evidence remains visually positive |
+
+**Required contract:** every projection must derive from one canonical state and expose its source, scope, calculation time, evidence time, and freshness. A label such as `POSTEADO` cannot stand in for “period fully closed.”
+
+### P0 — viewer permissions are not reflected in the interface
+
+The demo user is a direct company `VIEWER` and does not belong to a despacho. The interface nevertheless exposed:
+
+- plan purchase and trial activation;
+- company-field editing;
+- CSD and e.firma upload;
+- Facturapi resynchronization and disconnection;
+- company deletion;
+- payroll creation, stamping-related, cancellation, and payment actions;
+- bank matching, classification, auto-reconciliation, account deletion, and imports;
+- invoice creation and mutable fiscal classification;
+- filing, evidence, and “mark presented” actions.
+
+The APIs may reject these actions, but late rejection is not permission-shaped UX.
+
+**Required contract:** the shell and page actions consume effective permissions. Viewers should see results, evidence, and history without disabled or doomed mutation controls. Invited viewers and accountants must not be asked to buy the plan paid by the owner or despacho.
+
+### P0 — unsafe readiness and evidence language
+
+Several states rely on self-assertion or permit consequential action before the evidence is trustworthy:
+
+- IMSS can be marked paid from an amount, optional line, and date without a required receipt or bank match.
+- DIOT can be marked presented with an optional acuse URL.
+- ISN can be marked presented while the screen says the state rate and due date are not verified against published law.
+- audit findings can be marked resolved, postponed, or ignored beside the warning without a visible reason or evidence requirement.
+- batch REP issuance, re-posting, annual calculation use, and other consequential controls appear in dense work surfaces without a consistent preview contract.
+
+**Required contract:** distinguish recorded by user, supported by uploaded evidence, matched to payment, and verified by authority. Consequential actions use preview, role check, confirmation, idempotent execution, and auditable result.
+
+### P1 — the permanent Copiloto rail makes expert work too narrow
+
+At a 1280 px desktop viewport, the 240 px sidebar and approximately 288 px Copiloto rail leave roughly 680–740 px for the primary workspace. This causes:
+
+- severe truncation in bank reconciliation;
+- card-based transaction layouts that require excessive vertical scrolling;
+- accounting and payroll tables competing with persistent duplicated findings;
+- two simultaneous assistants: a fixed rail plus the floating “Asistente Contable” panel;
+- alerts from a different period than the page being reviewed.
+
+**Decision:** Copiloto becomes contextual and collapsible, remembers the user's preference, and does not reserve width on dense workbenches below an appropriate wide-screen breakpoint. Its context must inherit company and period from the page.
+
+### P1 — onboarding is narrow and still has no real payment gate
+
+The existing-user flow correctly recognized the context as “Agregar nueva empresa” and stated that it would join the despacho. That is a strong foundation.
+
+The current production flow still presents a narrow centered card with large unused desktop space and these steps:
+
+`Asistente IA → Datos → Sincronización → Plan → Credenciales`
+
+It requests document upload before a commercial gate, includes a Plan step without Stripe activation, and does not express the approved no-trial flow. Its first screen also uses the English product term “Onboarding” inside an otherwise Spanish interface.
+
+**Decision:** preserve automatic entry-context detection, but replace the narrow card with the wide login-inspired application canvas described below. Use Spanish labels, show exact commercial scope before leaving for Stripe, verify activation on return, and only then request the e.firma mandate and credential.
+
+### P1 — dense lists lack prioritization and recovery structure
+
+Observed examples:
+
+- Bank movements default to all months and render large transaction cards. The visible filters total 223, 3, and 78 without explaining the remaining status population.
+- The August reconciliation queue mixes one unresolved movement with ten already reconciled items awaiting posting instead of foregrounding the exception.
+- Candidate matches include other months without explaining the allowed date window.
+- Imported payroll runs produce a very long historical list with limited visible filtering.
+- The declaration history expands large year groups and mixes acuses, manual captures, IMSS, and electronic-accounting evidence.
+- Empresa renders a long declaration-import history below credentials and setup.
+- Directorio shows repeated per-row synchronize, edit, and delete actions for 66 records; every visible customer lacked a postal code, but there was no focused remediation queue.
+- Hallazgos repeats the same risks in an executive summary, category summary, detailed cards, and Copiloto rail.
+
+**Decision:** desktop expert work uses compact tables, explicit mutually exclusive status facets, saved filters, exception-first queues, pagination or virtualization, and a detail panel. Mobile may use cards. Repeated risk summaries should project one canonical work item rather than duplicate it.
+
+### P1 — notification state is confused with work completion
+
+`/avisos` and `/pendientes` render the same notice history. A user can mark a notice “Hecho” even though the underlying bank or close state may remain unresolved.
+
+**Decision:** notification state is read, unread, snoozed, or archived. Domain work status is resolved only by its source workflow or by an explicit evidence-backed override. The two lifecycles must not share “done.”
+
+### What is already working
+
+The redesign should retain these strengths:
+
+- clear Spanish explanations in many fiscal workpapers;
+- visible August 2026 deadline of 17 September 2026;
+- explicit bank no-data semantics that keep the close gate blocked;
+- source labels such as SAT-received and imported historical payroll;
+- a precise, versioned, company-specific e.firma mandate limited to SAT authentication and data download;
+- strong global keyboard search for long-tail destinations;
+- reusable top tabs for Bancos, Nómina, and Impuestos;
+- direct evidence links for many acuses and accounting records;
+- transparent notes when a calculation is estimated or legally unverified;
+- automatic distinction between first-company and add-company entry contexts.
 
 ## Product model
 
@@ -686,10 +816,10 @@ Measure first correct click, completion, wrong-area visits, backtracking, time, 
 
 Discovery is complete when:
 
-- the authenticated production walkthrough has been recorded;
-- the proposed hierarchy passes first-click testing for onboarding, monthly close, banking, payroll, and filing evidence;
-- billing ownership and unit are decided;
-- the working-period and task contracts are accepted by product and engineering;
-- applicability/status/source/freshness language is approved;
-- the onboarding prototype covers every entry variant with no trial;
-- each implementation PR has a route boundary and measurable acceptance criteria.
+- [x] the authenticated production walkthrough has been recorded;
+- [ ] the proposed hierarchy passes first-click testing for onboarding, monthly close, banking, payroll, and filing evidence;
+- [ ] billing ownership and unit are decided;
+- [ ] the working-period and task contracts are accepted by product and engineering;
+- [ ] applicability/status/source/freshness language is approved;
+- [ ] the onboarding prototype covers every entry variant with no trial;
+- [ ] each implementation PR has a route boundary and measurable acceptance criteria.
