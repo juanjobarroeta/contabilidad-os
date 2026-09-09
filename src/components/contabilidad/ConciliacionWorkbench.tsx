@@ -28,6 +28,28 @@ import { evaluarCoberturaBancaria } from "@/lib/bancos/conciliacion";
 import { cn } from "@/lib/utils";
 
 // ── Tipos espejo de las APIs ──────────────────────────────────────────────────
+interface AnticipoPendiente {
+  id: string;
+  direccion: "CLIENTE" | "PROVEEDOR";
+  fecha: string;
+  monto: number;
+  cliente: string | null;
+  rfc: string | null;
+  descripcion: string;
+  dias: number;
+  severidad: "reciente" | "atencion" | "vencido";
+}
+interface ResumenAnticipos {
+  total: number;
+  porFacturar: number;
+  porRecibir: number;
+  monto: number;
+  diasMaximo: number;
+  vencidos: number;
+  montoVencido: number;
+  anticipos: AnticipoPendiente[];
+}
+
 interface Movimiento {
   id: string;
   fecha: string;
@@ -132,6 +154,18 @@ export function ConciliacionWorkbench({
   const [selImpuesto, setSelImpuesto] = useState<string | null>(null);
   const [aplicando, setAplicando] = useState(false);
   const [autoCorriendo, setAutoCorriendo] = useState(false);
+
+  // Anticipos sin CFDI: obligaciones abiertas con dinero encima. Se cargan
+  // aparte del mes porque no dependen del periodo — un anticipo de hace tres
+  // meses sigue debiendo su comprobante hoy.
+  const [anticipos, setAnticipos] = useState<ResumenAnticipos | null>(null);
+  const cargarAnticipos = useCallback(() => {
+    fetch(`/api/bancos/anticipos?companyId=${companyId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setAnticipos(d))
+      .catch(() => {});
+  }, [companyId]);
+  useEffect(() => { cargarAnticipos(); }, [cargarAnticipos]);
   const [aviso, setAviso] = useState<React.ReactNode>("");
   const [error, setError] = useState("");
   // Filtro por cuenta (client-side: el feed ya trae la cuenta de cada
@@ -532,6 +566,68 @@ export function ConciliacionWorkbench({
                 : `Esta cuenta está al corriente; ${sinGlobal === 1 ? "queda 1 movimiento" : `quedan ${sinGlobal} movimientos`} en otras cuentas.`}
         </div>
       ) : (
+        <>
+        {/* ANTICIPOS SIN CFDI. No es un banner que se cierra: es una lista de
+            obligaciones con dinero encima, ordenada por ANTIGÜEDAD, porque eso
+            es lo que la vuelve grave. Etiquetar el movimiento no lo saca de
+            aquí — sólo lo saca el comprobante. */}
+        {anticipos && anticipos.total > 0 && (
+          <div className={cn(
+            "rounded-card border bg-cos-card",
+            anticipos.vencidos > 0 ? "border-cos-red-ink/40" : "border-cos-amber-ink/40",
+          )}>
+            <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-cos-line px-5 py-3.5">
+              <div>
+                <h2 className="text-sm font-semibold text-cos-ink">Anticipos sin CFDI</h2>
+                <p className="mt-0.5 text-[12.5px] text-cos-ink-soft">
+                  <Money value={anticipos.monto} size={12.5} /> en {anticipos.total}{" "}
+                  {anticipos.total === 1 ? "movimiento" : "movimientos"}
+                  {anticipos.porFacturar > 0 && ` · ${anticipos.porFacturar} que debemos facturar`}
+                  {anticipos.porRecibir > 0 && ` · ${anticipos.porRecibir} que el proveedor debe comprobar`}
+                </p>
+              </div>
+              {anticipos.vencidos > 0 && (
+                <span className="rounded-full bg-cos-red-tint px-2.5 py-1 text-[12px] font-semibold text-cos-red-ink">
+                  {anticipos.vencidos} con más de 30 días · <Money value={anticipos.montoVencido} size={12} />
+                </span>
+              )}
+            </div>
+            <ul className="divide-y divide-cos-line-soft">
+              {anticipos.anticipos.slice(0, 8).map((a) => (
+                <li key={a.id} className="flex items-center gap-3 px-5 py-2.5">
+                  <span className={cn(
+                    "h-2 w-2 flex-none rounded-full",
+                    a.severidad === "vencido" ? "bg-cos-red-ink"
+                      : a.severidad === "atencion" ? "bg-cos-amber-ink" : "bg-cos-line",
+                  )} aria-hidden />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-medium text-cos-ink">
+                      {a.cliente ?? a.descripcion}
+                    </p>
+                    <p className="text-[11.5px] text-cos-ink-faint">
+                      {a.fecha} · {a.direccion === "CLIENTE" ? "emitir CFDI de anticipo" : "pedir CFDI al proveedor"}
+                      {a.rfc ? ` · ${a.rfc}` : ""}
+                    </p>
+                  </div>
+                  <span className={cn(
+                    "flex-none text-[12px] font-medium tabular-nums",
+                    a.severidad === "vencido" ? "text-cos-red-ink"
+                      : a.severidad === "atencion" ? "text-cos-amber-ink" : "text-cos-ink-faint",
+                  )}>
+                    {a.dias} d
+                  </span>
+                  <Money value={a.monto} size={13} className="flex-none" />
+                </li>
+              ))}
+            </ul>
+            {anticipos.total > 8 && (
+              <p className="border-t border-cos-line px-5 py-2 text-[12px] text-cos-ink-faint">
+                y {anticipos.total - 8} más
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="rounded-card border border-cos-line bg-cos-card">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-cos-line px-5 py-3.5">
             <h2 className="text-sm font-semibold text-cos-ink">Mesa de conciliación</h2>
@@ -869,6 +965,7 @@ export function ConciliacionWorkbench({
             </section>
           </div>
         </div>
+        </>
       )}
     </div>
   );

@@ -126,6 +126,9 @@ function monthRange(year: number, month: number): { start: Date; end: Date } {
  *           Reclasificación fina contra pasivo provisionado: pendiente (Ola C).
  *       IGNORED + TAX_PAYMENT       → debits impuestos por pagar
  *       IGNORED + PAYROLL_NO_CFDI   → debits sueldos y salarios
+ *       IGNORED + ANTICIPO_CLIENTE   → credits anticipos de clientes (206.01):
+ *           cobrado sin factura es PASIVO, no ingreso. El IVA se reconoce
+ *           cuando llega el CFDI — su tasa no se adivina.
  *       IGNORED + PAYROLL_DISPERSED → debits acreedores diversos (el CFDI de
  *           nómina ya reconoció el gasto; la transferencia sólo lo liquida)
  *       IGNORED + NON_DEDUCTIBLE    → debits gastos no deducibles
@@ -166,6 +169,8 @@ export const IGNORED_TAGS_VALIDOS = new Set([
   "FINANCIAL_INCOME",
   "IVA_COMISION",
   "PAYROLL_DISPERSED",
+  "ANTICIPO_CLIENTE",
+  "ANTICIPO_PROVEEDOR",
 ]);
 
 /** Spec (pura) de la subcuenta contable de una cuenta bancaria. */
@@ -328,6 +333,8 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     accOtrosIngresos,
     accInventario,
     accCostoVenta,
+    accAnticiposClientes,
+    accAnticiposProveedores,
   ] = await Promise.all([
     resolveAccount(companyId, COE_CODES.BANCOS),
     resolveAccount(companyId, COE_CODES.CLIENTES_NACIONALES),
@@ -354,6 +361,8 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     resolveAccount(companyId, COE_CODES.OTROS_INGRESOS),
     resolveAccount(companyId, COE_CODES.INVENTARIO),
     resolveAccount(companyId, COE_CODES.COSTO_VENTA),
+    resolveAccount(companyId, COE_CODES.ANTICIPOS_CLIENTES),
+    resolveAccount(companyId, COE_CODES.ANTICIPOS_PROVEEDORES),
   ]);
 
   // ─── 1. CFDIs emitted (INGRESO) ────────────────────────────────────────
@@ -951,6 +960,23 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
   const sinCategoria = bankTxs.filter(
     (t) => t.status === "IGNORED" && !IGNORED_TAGS_VALIDOS.has(t.notes ?? "")
   );
+  // ANTICIPOS: no bloquean —el pasivo está bien asentado y los libros cierran—
+  // pero el mes NO se cierra en silencio sobre ellos. Cada uno es una factura
+  // que se debe por ley y un IVA causado al cobro que no se ha declarado; que
+  // el aviso viaje en el resultado del cierre lo vuelve un hecho registrado,
+  // no una pantalla que alguien pudo no mirar.
+  const anticipos = bankTxs.filter(
+    (t) => t.status === "IGNORED" && (t.notes === "ANTICIPO_CLIENTE" || t.notes === "ANTICIPO_PROVEEDOR"),
+  );
+  if (anticipos.length > 0) {
+    const suma = anticipos.reduce((acc, t) => acc + Math.abs(t.monto), 0);
+    const porFacturar = anticipos.filter((t) => t.notes === "ANTICIPO_CLIENTE").length;
+    warnings.push(
+      `Cierras con ${anticipos.length} anticipo(s) sin CFDI por $${suma.toFixed(2)}` +
+        (porFacturar > 0 ? ` — ${porFacturar} que la empresa debe facturar.` : "."),
+    );
+  }
+
   const bloqueantes = [...unmatched, ...sinCategoria];
   if (bloqueantes.length > 0) {
     const sample = bloqueantes
@@ -1092,6 +1118,45 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       if (tag === "TAX_PAYMENT") {
         drafts.push({ ...base, chartAccountId: accImpuestos.id, monto: absAmount, tipo: "CARGO" });
         drafts.push({ ...base, chartAccountId: ctaBanco(tx).id, monto: absAmount, tipo: "ABONO" });
+        continue;
+      }
+
+      if (tag === "ANTICIPO_CLIENTE") {
+        // COBRADO SIN FACTURA. No es ingreso: el dinero se debe en bienes o
+        // servicios hasta que se entrega, así que vive como PASIVO (206.01) y
+        // no toca resultados. Cuando el CFDI aparezca y se concilie, sale de
+        // aquí contra Clientes por el camino normal.
+        //
+        // NO se acredita IVA aquí a propósito. El IVA se causa al cobro
+        // (Art. 1-B), pero su TASA depende de la venta que todavía no se
+        // factura: 16 %, 8 % en frontera, 0 % o exenta —y en un hospital lo
+        // exento es lo común—. Inventar la tasa crea un pasivo fiscal que
+        // quizá no existe. El control es la lista de «anticipos por facturar»:
+        // el remedio real es emitir el CFDI, no estimarle el impuesto.
+        if (isCredit) {
+          drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,          monto: absAmount, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: accAnticiposClientes.id,  monto: absAmount, tipo: "ABONO" });
+        } else {
+          // Devolución de un anticipo: se cancela el pasivo.
+          drafts.push({ ...base, chartAccountId: accAnticiposClientes.id,  monto: absAmount, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,          monto: absAmount, tipo: "ABONO" });
+        }
+        continue;
+      }
+
+      if (tag === "ANTICIPO_PROVEEDOR") {
+        // PAGADO SIN FACTURA: el espejo del anterior. No es gasto —es un
+        // ACTIVO (120.01)— porque el proveedor todavía nos debe el bien o el
+        // servicio. Y sin su CFDI de anticipo no hay deducción ni IVA
+        // acreditable, así que mandarlo a gasto sería deducir sin comprobante.
+        if (isCredit) {
+          // Nos devolvieron el anticipo: se cancela el activo.
+          drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,             monto: absAmount, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: accAnticiposProveedores.id,  monto: absAmount, tipo: "ABONO" });
+        } else {
+          drafts.push({ ...base, chartAccountId: accAnticiposProveedores.id,  monto: absAmount, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,             monto: absAmount, tipo: "ABONO" });
+        }
         continue;
       }
 

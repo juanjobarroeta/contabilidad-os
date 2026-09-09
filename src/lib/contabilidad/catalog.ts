@@ -43,6 +43,8 @@ export const COE_CODES = {
   IVA_ACREDITABLE_PEND: "119.01",   // IVA pendiente de pagar al proveedor
   // Pasivo
   PROVEEDORES:          "201.01",
+  ANTICIPOS_CLIENTES:   "206.01",   // Cobrado sin factura: pasivo, no ingreso
+  ANTICIPOS_PROVEEDORES: "120.01",  // Pagado sin factura: activo, no gasto
   ACREEDORES_DIVERSOS:  "205.02",   // Acreedores diversos a corto plazo nacional
   PRESTAMOS_RECIBIDOS:  "205.04",   // Acreedores nacional parte relacionada (interempresa)
   IVA_TRASLADADO:       "208.01",   // IVA cobrado al vender
@@ -138,12 +140,16 @@ export const SAT_STARTER_CATALOG: CatalogAccount[] = [
   { cuentaSAT: "119", subcuenta: "119.01",     nombre: "IVA pendiente de pago",               tipo: "ACTIVO",  nivel: 3 },
 
   // ─── 200 PASIVO ──────────────────────────────────────────────────────────
+  { cuentaSAT: "120", subcuenta: null,         nombre: "Anticipo a proveedores",               tipo: "ACTIVO",  nivel: 2 },
+  { cuentaSAT: "120", subcuenta: "120.01",     nombre: "Anticipo a proveedores nacional",      tipo: "ACTIVO",  nivel: 3 },
   { cuentaSAT: "200", subcuenta: null,         nombre: "Pasivo",                              tipo: "PASIVO",  nivel: 1 },
   { cuentaSAT: "201", subcuenta: null,         nombre: "Proveedores",                         tipo: "PASIVO",  nivel: 2 },
   { cuentaSAT: "201", subcuenta: "201.01",     nombre: "Proveedores nacionales",              tipo: "PASIVO",  nivel: 3 },
   { cuentaSAT: "205", subcuenta: null,         nombre: "Acreedores diversos a corto plazo",   tipo: "PASIVO",  nivel: 2 },
   { cuentaSAT: "205", subcuenta: "205.02",     nombre: "Acreedores diversos a corto plazo nacional", tipo: "PASIVO", nivel: 3 },
   { cuentaSAT: "205", subcuenta: "205.04",     nombre: "Acreedores diversos a corto plazo nacional parte relacionada", tipo: "PASIVO", nivel: 3 },
+  { cuentaSAT: "206", subcuenta: null,         nombre: "Anticipo de cliente",                 tipo: "PASIVO",  nivel: 2 },
+  { cuentaSAT: "206", subcuenta: "206.01",     nombre: "Anticipo de cliente nacional",        tipo: "PASIVO",  nivel: 3 },
   { cuentaSAT: "208", subcuenta: null,         nombre: "Impuestos trasladados cobrados",      tipo: "PASIVO",  nivel: 2 },
   { cuentaSAT: "208", subcuenta: "208.01",     nombre: "IVA trasladado cobrado",              tipo: "PASIVO",  nivel: 3 },
   { cuentaSAT: "209", subcuenta: null,         nombre: "Impuestos trasladados no cobrados",   tipo: "PASIVO",  nivel: 2 },
