@@ -40,8 +40,16 @@ async function main() {
     headless: process.env.HEADED !== "1",
     args: ["--ignore-certificate-errors", "--ssl-version-min=tls1"],
   });
-  const ctx = await browser.newContext({ ignoreHTTPSErrors: true });
+  const ctx = await browser.newContext({ ignoreHTTPSErrors: true, acceptDownloads: true });
   const page = await ctx.newPage();
+
+  // Cualquier descarga que dispare la página se guarda en OUT.
+  const descargados: string[] = [];
+  page.on("download", async (d) => {
+    const fn = d.suggestedFilename() || `descarga-${descargados.length}.bin`;
+    try { await d.saveAs(`${OUT}/${fn}`); descargados.push(fn); console.log(`   ⬇ ${fn}`); }
+    catch (e) { console.log("   ⬇ falló:", String(e).slice(0, 50)); }
+  });
 
   // Traza de red: cada request con su Cookie, cada response con status/redirect.
   const traza: string[] = [];
@@ -138,9 +146,61 @@ async function main() {
           )
           .catch(() => []);
         if (campos.length) {
-          console.log(`   [frame ${fr.url().slice(0, 50)}] CAMPOS:`, JSON.stringify(campos).slice(0, 2600));
+          console.log(`   [frame ${fr.url().slice(0, 50)}] CAMPOS:`, JSON.stringify(campos).slice(0, 1200));
           fs.writeFileSync(`${OUT}/pw-consulta-frame.html`, await fr.content().catch(() => ""));
         }
+      }
+
+      // 5) Llenar el form en el IFRAME de la app (ceportalconsulta…) y BUSCAR;
+      //    descargar los XML de la lista (el handler global guarda cada archivo).
+      const appFrame = page.frames().find((f) => /ceportalconsulta/.test(f.url()));
+      if (appFrame) {
+        const anio = process.env.ANIO ?? "2026";
+        const tipo = process.env.TIPOARCH ?? "0"; // 0=Todos, 1=CT, 2=B(alanza)
+        console.log(`5) lleno el form (año ${anio}, meses 1–13, tipo ${tipo}, todos estatus/envío) y Busco…`);
+        await appFrame.check("#rdoCriterios").catch(() => {});
+        await appFrame.selectOption("#ddlAnio", anio).catch((e) => console.log("   anio:", String(e).slice(0, 40)));
+        await appFrame.selectOption("#ddlMesInicio", "1").catch(() => {});
+        await appFrame.selectOption("#ddlMesFin", "13").catch(() => {});
+        await appFrame.selectOption("#ddlMotivo", process.env.MOTIVO ?? "0").catch(() => {}); // Motivo (REQUERIDO): 0=Todos, 7=Envío Mensual
+        await appFrame.selectOption("#ddlTipoArchivo", tipo).catch(() => {});
+        await appFrame.selectOption("#ddlEstatus", "0").catch(() => {});
+        await appFrame.selectOption("#ddlTipoEnvio", "0").catch(() => {});
+        await appFrame.click("#btnBuscar").catch((e) => console.log("   buscar:", String(e).slice(0, 40)));
+        await page.waitForTimeout(5000);
+        fs.writeFileSync(`${OUT}/pw-resultados.html`, await appFrame.content().catch(() => ""));
+        const info = await appFrame.evaluate(() => {
+          const rows = document.querySelectorAll("table tr, tbody tr").length;
+          const dl = Array.from(document.querySelectorAll("a[href],button,[onclick],img[onclick],span[onclick],i[onclick]"))
+            .map((e: any) => ({ t: (e.textContent || e.title || e.alt || "").replace(/\s+/g, " ").trim().slice(0, 24), href: e.href || "", oc: ((e.getAttribute && e.getAttribute("onclick")) || "").slice(0, 70), id: e.id }))
+            .filter((x: any) => /descarg|xml|acuse|\.zip|download|\.xls/i.test(`${x.t} ${x.href} ${x.oc} ${x.id}`))
+            .slice(0, 25);
+          return { rows, dl, texto: (document.body.innerText || "").replace(/\s+/g, " ").slice(0, 260) };
+        });
+        console.log(`   filas tabla: ${info.rows} · descargables: ${info.dl.length}`);
+        console.log("   texto:", JSON.stringify(info.texto));
+        if (info.dl.length) console.log("   dl:", JSON.stringify(info.dl).slice(0, 1500));
+        // El XML de cada acuse se baja con VerXML('<folio>') del onclick. Extraer
+        // los folios y llamar la función; el XML llega por download o por pestaña.
+        const folios: string[] = await appFrame.evaluate(() => {
+          const s = new Set<string>();
+          document.querySelectorAll("[onclick]").forEach((e) => {
+            const m = /VerXML\('([^']+)'\)/.exec(e.getAttribute("onclick") || "");
+            if (m) s.add(m[1]);
+          });
+          return Array.from(s);
+        });
+        console.log(`   folios con XML: ${folios.length} → ${folios.join(",").slice(0, 120)}`);
+        // VerXML dispara una descarga (ZIP con el XML). El handler global la guarda;
+        // sólo hay que llamar la función y dar un respiro entre folios.
+        for (const folio of folios.slice(0, 30)) {
+          await appFrame.evaluate((f) => (window as unknown as { VerXML: (x: string) => void }).VerXML(f), folio).catch(() => {});
+          await page.waitForTimeout(1200);
+        }
+        await page.waitForTimeout(2500); // esperar las últimas descargas
+        console.log(`   ARCHIVOS DESCARGADOS: ${descargados.length} → ${descargados.join(", ") || "(ninguno)"}`);
+      } else {
+        console.log("5) no encontré el iframe de la app de consulta (ceportalconsulta).");
       }
     } else {
       console.log("4) (no aterrizó en buzón; me salto la consulta)");
