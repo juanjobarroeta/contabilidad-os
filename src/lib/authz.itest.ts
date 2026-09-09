@@ -113,6 +113,7 @@ describe.skipIf(skip)("authz.ts contra Postgres real (P0-2b)", () => {
         { userId: U.elena, companyId: E.b, role: "VIEWER" },
         { userId: U.fede, companyId: E.c, role: "ACCOUNTANT", allowedModules: ["CONTABILIDAD"] },
         { userId: U.gaby, companyId: E.c, role: "ACCOUNTANT" },
+        { userId: U.olga, companyId: E.a, role: "OWNER" },
       ],
     });
 
@@ -176,6 +177,15 @@ describe.skipIf(skip)("authz.ts contra Postgres real (P0-2b)", () => {
       expect((await getEffectiveCompanyMembership(U.olga, E.c))?.role).toBe("OWNER");
       expect(await getEffectiveCompanyMembership(U.olga, "no-existe")).toBeNull();
     });
+
+    it("operador en capacidad de cliente: exige una membresía real", async () => {
+      expect((await getEffectiveCompanyMembership(U.olga, E.a, {
+        platformOperatorMode: "deny",
+      }))?.role).toBe("OWNER");
+      expect(await getEffectiveCompanyMembership(U.olga, E.c, {
+        platformOperatorMode: "deny",
+      })).toBeNull();
+    });
   });
 
   describe("requireMembership por bearer — el camino completo de los satélites", () => {
@@ -212,6 +222,31 @@ describe.skipIf(skip)("authz.ts contra Postgres real (P0-2b)", () => {
       const r = await requireOwner(E.b, await reqDe(U.olga));
       expect(r.membership.role).toBe("OWNER");
       await esperaAuthz(requireMembership("no-existe", undefined, await reqDe(U.olga)), 404);
+    });
+
+    it("distingue la membresía real del acceso sintético del operador", async () => {
+      const customer = await requireMembership(
+        E.a,
+        ["OWNER"],
+        await reqDe(U.olga),
+        { platformOperatorMode: "deny" },
+      );
+      expect(customer.membership.id).not.toMatch(/^operador:/);
+
+      await esperaAuthz(requireMembership(
+        E.c,
+        ["OWNER"],
+        await reqDe(U.olga),
+        { platformOperatorMode: "deny" },
+      ), 403);
+
+      const support = await requireMembership(
+        E.c,
+        ["OWNER"],
+        await reqDe(U.olga),
+        { platformOperatorMode: "fallback" },
+      );
+      expect(support.membership.id).toMatch(/^operador:/);
     });
 
     it("token basura: 401, nunca fallback silencioso a otra identidad", async () => {

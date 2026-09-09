@@ -24,7 +24,10 @@ const state = vi.hoisted(() => ({
   locked: [{ id: "company-1" }] as Array<{ id: string }>,
   registered: [] as Array<Record<string, unknown>>,
   audits: [] as Array<Record<string, unknown>>,
-  membershipCalls: [] as Array<{ hasRequest: boolean }>,
+  membershipCalls: [] as Array<{
+    hasRequest: boolean;
+    platformOperatorMode?: string;
+  }>,
   transactionCalls: 0,
 }));
 
@@ -40,8 +43,12 @@ vi.mock("@/lib/authz", () => {
       _companyId: string,
       allowedRoles?: string[],
       req?: Request,
+      options?: { platformOperatorMode?: string },
     ) => {
-      state.membershipCalls.push({ hasRequest: Boolean(req) });
+      state.membershipCalls.push({
+        hasRequest: Boolean(req),
+        platformOperatorMode: options?.platformOperatorMode,
+      });
       if (allowedRoles && !allowedRoles.includes(state.membership.role)) {
         throw new AuthzError(403, "Sin permisos suficientes");
       }
@@ -171,7 +178,10 @@ describe("existing e.firma mandate", () => {
       role: "VIEWER",
       version: MANDATO_EFIRMA.version,
     });
-    expect(state.membershipCalls).toEqual([{ hasRequest: true }]);
+    expect(state.membershipCalls).toEqual([{
+      hasRequest: true,
+      platformOperatorMode: "fallback",
+    }]);
   });
 
   it("rejects viewers, platform operators, and module-restricted staff", async () => {
@@ -239,7 +249,10 @@ describe("existing e.firma mandate", () => {
     }), context);
 
     expect(response.status).toBe(200);
-    expect(state.membershipCalls).toEqual([{ hasRequest: false }]);
+    expect(state.membershipCalls).toEqual([{
+      hasRequest: false,
+      platformOperatorMode: "deny",
+    }]);
   });
 
   it("requires the exact current acknowledgement body", async () => {

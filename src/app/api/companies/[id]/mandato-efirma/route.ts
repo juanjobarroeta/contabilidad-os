@@ -41,6 +41,7 @@ export const GET = withAuthz(async (req: Request, { params }: Params) => {
     companyId,
     undefined,
     req,
+    { platformOperatorMode: "fallback" },
   );
   const [company, acceptances] = await Promise.all([
     prisma.company.findUnique({
@@ -89,11 +90,12 @@ export const POST = withAuthz(async (req: Request, { params }: Params) => {
   const { id: companyId } = await params;
   // Esta aceptación es clickwrap humano: sólo sesión web interactiva. No se
   // admite un bearer de satélite aunque apunte al mismo usuario.
-  const { user, membership } = await requireMembership(companyId, [
-    "OWNER",
-    "ADMIN",
-    "ACCOUNTANT",
-  ]);
+  const { user, membership } = await requireMembership(
+    companyId,
+    ["OWNER", "ADMIN", "ACCOUNTANT"],
+    undefined,
+    { platformOperatorMode: "deny" },
+  );
   if (esOperadorSintetico(membership.id)) {
     throw new AuthzError(
       403,
