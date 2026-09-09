@@ -1,0 +1,33 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Worker de descarga de Contabilidad Electrónica del SAT (Playwright/Chromium).
+#
+# Corre en un SERVICIO WORKER de Railway disparado por cron — NO es el app web
+# (que se queda en nixpacks, sin Chromium). La e.firma se descifra AQUÍ con
+# CREDENTIALS_ENCRYPTION_KEY, que vive en el env de Railway y no sale de ahí.
+#
+# La imagen base aporta las LIBS DEL SISTEMA de Chromium (independientes del
+# patch). El SAT no publica imagen para 1.62.1 (sólo 1.62.0), así que basamos en
+# 1.62.0 y luego bajamos el navegador EXACTO del playwright instalado con
+# `playwright install chromium` — a prueba de diferencias de patch.
+# ─────────────────────────────────────────────────────────────────────────────
+FROM mcr.microsoft.com/playwright:v1.62.0-jammy
+
+WORKDIR /app
+ENV CI=1
+
+# Dependencias (incluye devDeps: ahí viven playwright, ts-node y tsconfig-paths).
+COPY package*.json ./
+RUN npm ci --include=dev
+
+# Navegador exacto para la versión de playwright instalada (deps del SO ya están
+# en la imagen base, por eso sin --with-deps).
+RUN npx playwright install chromium
+
+# Código + cliente de Prisma.
+COPY . .
+RUN npx prisma generate
+
+# Barre la cartera elegible (secuencial, rate-limited) y termina. Railway lo
+# dispara por cron; las env (DATABASE_URL, CREDENTIALS_ENCRYPTION_KEY) las
+# inyecta el servicio.
+CMD ["npm", "run", "ce:worker"]
