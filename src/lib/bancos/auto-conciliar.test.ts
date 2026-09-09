@@ -283,3 +283,22 @@ describe("bonoImporteUnico — un importe con centavos que no se repite", () => 
     expect(bonoImporteUnico(19439.75, [19303.42, 19661.81])).toBe(0);
   });
 });
+
+
+describe("bono de importe único dentro de un lote de terminal", () => {
+  it("un importe redondo SÍ cuenta en la terminal: $21,000 cobrados no los eligió nadie", () => {
+    expect(bonoImporteUnico(21000, [21000, 20500], { enLoteTerminal: true })).toBe(PUNTOS_IMPORTE_UNICO);
+    // Fuera de la terminal sigue sin contar: ahí es una cantidad tecleada.
+    expect(bonoImporteUnico(21000, [21000, 20500], { enLoteTerminal: false })).toBe(0);
+  });
+
+  it("pero DOS facturas iguales lo frenan igual — caso real de SPINOLA", () => {
+    // Dos depósitos de $21,000.00 y dos facturas abiertas de $21,000.00 del
+    // mismo paciente: nada en los datos dice cuál pagó cuál.
+    expect(bonoImporteUnico(21000, [21000, 21000, 21000.01], { enLoteTerminal: true })).toBe(0);
+  });
+
+  it("el centavo de redondeo cuenta como el mismo importe en el lote", () => {
+    expect(bonoImporteUnico(10869.99, [10870.0, 12000], { enLoteTerminal: true })).toBe(PUNTOS_IMPORTE_UNICO);
+  });
+});

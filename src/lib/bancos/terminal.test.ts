@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { tarjetaDeLiquidacion, tarjetaContradice } from "./terminal";
+import { cercaPeroNoExactoEnLote, mismoImporte, tarjetaDeLiquidacion, tarjetaContradice } from "./terminal";
 
 describe("tarjetaDeLiquidacion — el sufijo de la afiliación", () => {
   it("lee C como crédito y D como débito", () => {
@@ -41,5 +41,35 @@ describe("tarjetaContradice — dinero de crédito no liquida una factura de dé
   it("sin tarjeta identificada no descarta nada", () => {
     expect(tarjetaContradice(null, "04")).toBe(false);
     expect(tarjetaContradice(null, "28")).toBe(false);
+  });
+});
+
+describe("mismoImporte — un centavo dentro del lote es redondeo, no otra factura", () => {
+  it("caso real: depósito $10,869.99 contra factura $10,870.00 el mismo día", () => {
+    expect(mismoImporte(10870.0, 10869.99, true)).toBe(true);
+  });
+
+  it("fuera de la terminal, un centavo SÍ distingue", () => {
+    // En una transferencia el importe es el que alguien tecleó. Y este
+    // proveedor tiene facturas de $16,999.99, $17,000.00 y $17,000.01.
+    expect(mismoImporte(17000.0, 16999.99, false)).toBe(false);
+  });
+
+  it("dos centavos ya no son redondeo ni en el lote", () => {
+    expect(mismoImporte(10870.0, 10869.98, true)).toBe(false);
+  });
+});
+
+describe("cercaPeroNoExactoEnLote", () => {
+  it("un centavo NO se castiga en el lote", () => {
+    expect(cercaPeroNoExactoEnLote(true, 10870.0, 10869.99)).toBe(false);
+  });
+
+  it("0.3 % sí: en un lote, «cerca» no es una pista", () => {
+    expect(cercaPeroNoExactoEnLote(true, 84773.14, 84500.47)).toBe(true);
+  });
+
+  it("fuera del lote no se castiga nada", () => {
+    expect(cercaPeroNoExactoEnLote(false, 84773.14, 84500.47)).toBe(false);
   });
 });

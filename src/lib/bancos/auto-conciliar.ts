@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { conciliarPorRepEmpresa } from "./rep-aplicar";
-import { cercaPeroNoExactoEnLote, tarjetaContradice, tarjetaDeLiquidacion } from "./terminal";
+import { cercaPeroNoExactoEnLote, mismoImporte, tarjetaContradice, tarjetaDeLiquidacion } from "./terminal";
 import { detectarTraspasosEmpresa } from "./traspasos-aplicar";
 import {
   campoMontoPorTipo,
@@ -96,9 +96,18 @@ export const CASTIGO_CERCA_EN_LOTE = 90;
  * `totales` son los totales de TODOS los candidatos. Devuelve el bono sólo si
  * el importe trae centavos y exactamente un candidato lo empata al centavo.
  */
-export function bonoImporteUnico(absAmount: number, totales: number[]): number {
-  if (esImporteElegido(absAmount)) return 0;
-  const exactos = totales.filter((t) => Math.abs(t - absAmount) < 0.01).length;
+export function bonoImporteUnico(
+  absAmount: number,
+  totales: number[],
+  opts: { enLoteTerminal?: boolean } = {},
+): number {
+  const enLote = opts.enLoteTerminal ?? false;
+  // «Redondo» no significa lo mismo en una terminal. $21,000.00 transferidos
+  // son una cantidad que alguien eligió; $21,000.00 cobrados con tarjeta son
+  // el precio de un servicio. Por eso el filtro de importe elegido sólo aplica
+  // fuera del lote.
+  if (!enLote && esImporteElegido(absAmount)) return 0;
+  const exactos = totales.filter((t) => mismoImporte(t, absAmount, enLote)).length;
   return exactos === 1 ? PUNTOS_IMPORTE_UNICO : 0;
 }
 
@@ -522,9 +531,10 @@ export async function autoConciliarCuenta(
 
     // El bono de importe único se calcula UNA vez sobre todo el pool y se
     // acredita sólo al candidato que empata al centavo.
-    const bono = bonoImporteUnico(absAmount, candidates.map((c) => Number(c.total)));
     // Lote de terminal: el sufijo de la afiliación dice si fue crédito o débito.
     const tarjetaLote = tarjetaDeLiquidacion(tx.descripcion);
+    const enLote = tarjetaLote !== null;
+    const bono = bonoImporteUnico(absAmount, candidates.map((c) => Number(c.total)), { enLoteTerminal: enLote });
 
     const scored = candidates
       .map((inv) => {
@@ -550,9 +560,9 @@ export async function autoConciliarCuenta(
             },
             senales,
             absAmount,
-          ) + (bono && Math.abs(Number(inv.total) - absAmount) < 0.01 ? bono : 0)
+          ) + (bono && mismoImporte(Number(inv.total), absAmount, enLote) ? bono : 0)
             - (tarjetaContradice(tarjetaLote, inv.formaPago) ? CASTIGO_TARJETA_CONTRARIA : 0)
-            - (cercaPeroNoExactoEnLote(tarjetaLote !== null, Number(inv.total), absAmount) ? CASTIGO_CERCA_EN_LOTE : 0),
+            - (cercaPeroNoExactoEnLote(enLote, Number(inv.total), absAmount) ? CASTIGO_CERCA_EN_LOTE : 0),
         };
       })
       .sort((a, b) => b.score - a.score);

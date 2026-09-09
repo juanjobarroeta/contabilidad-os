@@ -19,6 +19,21 @@ export const FORMA_DEBITO = "28";
 
 export type TipoTarjeta = "CREDITO" | "DEBITO";
 
+/**
+ * Tolerancia de UN CENTAVO dentro de un lote de terminal.
+ *
+ * Visto en producción: un depósito de $10,869.99 contra una factura de
+ * $10,870.00 el MISMO día, y otros dos casos iguales. Eso es redondeo del
+ * procesador, no otra factura. Fuera de la terminal no aplica: en una
+ * transferencia el importe es el que alguien tecleó.
+ */
+export const TOLERANCIA_CENTAVO = 0.011;
+
+/** ¿Son el mismo importe, con la tolerancia que corresponda? PURA. */
+export function mismoImporte(a: number, b: number, enLote: boolean): boolean {
+  return Math.abs(a - b) <= (enLote ? TOLERANCIA_CENTAVO : 0.0099);
+}
+
 /** Afiliación de terminal seguida de C (crédito) o D (débito). */
 const RE_AFILIACION = /\b\d{7,}([CD])\b/;
 
@@ -73,5 +88,5 @@ export function cercaPeroNoExactoEnLote(
   montoMovimiento: number,
 ): boolean {
   if (!esLiquidacion) return false;
-  return Math.abs(totalFactura - Math.abs(montoMovimiento)) >= 0.01;
+  return !mismoImporte(totalFactura, Math.abs(montoMovimiento), true);
 }
