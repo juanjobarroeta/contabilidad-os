@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { conciliarPorRepEmpresa } from "./rep-aplicar";
+import { cercaPeroNoExactoEnLote, tarjetaContradice, tarjetaDeLiquidacion } from "./terminal";
 import { detectarTraspasosEmpresa } from "./traspasos-aplicar";
 import {
   campoMontoPorTipo,
@@ -65,6 +66,29 @@ export const PUNTOS_NOMBRE = 40;
  * y ahí la unicidad no existe ni debe inventarse.
  */
 export const PUNTOS_IMPORTE_UNICO = 40;
+
+/**
+ * Castigo por TARJETA CONTRARIA. Un lote de crédito no liquida una factura que
+ * declara débito, ni al revés — son dos mitades del mismo hecho y no pueden
+ * contradecirse.
+ *
+ * Se CASTIGA en vez de excluir a propósito: la forma de pago la captura una
+ * persona y puede estar mal. Restar 120 hunde al candidato por debajo del
+ * umbral —ni siquiera un importe exacto (100) lo salva— así que nunca se
+ * aplica solo, pero sigue visible al final de la lista para quien sepa que la
+ * captura fue errónea. Esconderlo sería decidir por el contador con un dato
+ * que no controlamos.
+ */
+export const CASTIGO_TARJETA_CONTRARIA = 120;
+
+/**
+ * Castigo por «cerca pero no exacto» dentro de un lote de terminal. Un lote es
+ * la SUMA de los cargos del día: que una factura sola se le parezca al 0.3 % no
+ * dice nada. Se hunde para que no encabece la lista, pero sigue disponible para
+ * armar el lote a mano —que es como de verdad se resuelve— y el importe EXACTO
+ * no se toca, porque un lote de un solo cargo existe.
+ */
+export const CASTIGO_CERCA_EN_LOTE = 90;
 
 /**
  * ¿Cuánto bono merece el importe? PURA.
@@ -499,6 +523,8 @@ export async function autoConciliarCuenta(
     // El bono de importe único se calcula UNA vez sobre todo el pool y se
     // acredita sólo al candidato que empata al centavo.
     const bono = bonoImporteUnico(absAmount, candidates.map((c) => Number(c.total)));
+    // Lote de terminal: el sufijo de la afiliación dice si fue crédito o débito.
+    const tarjetaLote = tarjetaDeLiquidacion(tx.descripcion);
 
     const scored = candidates
       .map((inv) => {
@@ -524,7 +550,9 @@ export async function autoConciliarCuenta(
             },
             senales,
             absAmount,
-          ) + (bono && Math.abs(Number(inv.total) - absAmount) < 0.01 ? bono : 0),
+          ) + (bono && Math.abs(Number(inv.total) - absAmount) < 0.01 ? bono : 0)
+            - (tarjetaContradice(tarjetaLote, inv.formaPago) ? CASTIGO_TARJETA_CONTRARIA : 0)
+            - (cercaPeroNoExactoEnLote(tarjetaLote !== null, Number(inv.total), absAmount) ? CASTIGO_CERCA_EN_LOTE : 0),
         };
       })
       .sort((a, b) => b.score - a.score);
