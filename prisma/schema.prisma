@@ -427,6 +427,9 @@ model Company {
   salCuentas       SalCuenta[]
   salPedidos       SalPedido[]
   salEnvios        SalEnvio[]
+
+  /** Directorio CLABE → contraparte aprendido de los CEP y las conciliaciones. */
+  cuentasContraparte CuentaContraparte[]
 }
 
 model CompanyMember {
@@ -1544,6 +1547,9 @@ model BankTransaction {
   // cada búsqueda por factura recorre la tabla entera — y el borrado en
   // cascada de un Invoice también.
   @@index([invoiceId])
+
+  /** Comprobante de Banxico (CEP) de este SPEI, si se consultó. */
+  cepMovimiento CepMovimiento?
 }
 
 // Lote de importación de estado de cuenta — agrupa los movimientos que entraron
@@ -1701,6 +1707,84 @@ enum ReconciliationStatus {
 // (BankTransaction.invoiceId) sigue vigente para los matches sencillos; los
 // matches múltiples dejan invoiceId en NULL y viven aquí. Aditivo: prod usa
 // `prisma db push`, nada existente cambia.
+// ─────────────────────────────────────────────────────────────────────────────
+// CUENTA DE UNA CONTRAPARTE: la CLABE dice QUIÉN es, y eso no se olvida.
+//
+// La primera vez que se le paga a un proveedor no hay nada que recordar; de la
+// segunda en adelante su CLABE lo identifica sin ambigüedad. Antes eso se
+// deducía en cada consulta escaneando los movimientos ya conciliados
+// (`clabesConocidasPorRfc`): funciona, pero se recalcula siempre, no se puede
+// corregir a mano y no se puede ver.
+//
+// Vive por EMPRESA y no colgada de Customer a propósito: la mayor parte del
+// valor está del lado de PROVEEDORES, y los EGRESO sincronizados del SAT casi
+// nunca tienen Customer. Cuando existe un Customer con ese RFC, la ficha lo
+// muestra igual.
+//
+// Una CLABE pertenece a una sola contraparte (por eso es única en la empresa),
+// pero una contraparte puede tener varias cuentas — de ahí el índice por RFC.
+// ─────────────────────────────────────────────────────────────────────────────
+model CuentaContraparte {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /** 18 dígitos, sin espacios. */
+  clabe  String
+  rfc    String?
+  nombre String?
+  /** Institución SPEI, tal como la nombra el CEP. */
+  banco  String?
+
+  /** De dónde salió: "CEP" (Banxico), "CONCILIACION" (aprendida) o "MANUAL". */
+  origen String @default("CEP")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, clabe])
+  @@index([companyId, rfc])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CEP DE BANXICO: el comprobante, no sólo los datos que le sacamos.
+//
+// Se consultaba el CEP, se leían RFC, nombre y concepto, y el XML FIRMADO se
+// tiraba. Ese documento es la prueba de que un importe llegó a la cuenta de un
+// beneficiario en una fecha — la evidencia de materialidad que se le enseña al
+// SAT cuando pregunta si un pago fue real. Guardarlo convierte un efecto
+// secundario de la conciliación en un papel que el despacho puede usar.
+//
+// Tabla aparte y no columnas en BankTransaction: el XML es grande y esa tabla
+// se consulta entera en muchos flujos.
+// ─────────────────────────────────────────────────────────────────────────────
+model CepMovimiento {
+  id                String   @id @default(cuid())
+  bankTransactionId String   @unique
+  createdAt         DateTime @default(now())
+
+  /** "Liquidado", "Devuelto"… Un SPEI devuelto hay que verlo. */
+  estado         String?
+  fechaOperacion String?
+  concepto       String?
+  monto          Decimal? @db.Decimal(18, 2)
+
+  ordenanteNombre String?
+  ordenanteRfc    String?
+  ordenanteCuenta String?
+  ordenanteBanco  String?
+
+  beneficiarioNombre String?
+  beneficiarioRfc    String?
+  beneficiarioCuenta String?
+  beneficiarioBanco  String?
+
+  /** El comprobante firmado, tal cual lo entrega Banxico. */
+  xml String @db.Text
+
+  bankTransaction BankTransaction @relation(fields: [bankTransactionId], references: [id], onDelete: Cascade)
+}
+
 model ConciliacionDetalle {
   id                String   @id @default(cuid())
   bankTransactionId String

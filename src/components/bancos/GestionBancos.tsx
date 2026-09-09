@@ -96,6 +96,20 @@ interface Candidate {
   id: string; uuid?: string; fecha: string; total: number; cliente: string; rfc: string;
   score: number; confidence: "alta" | "media" | "baja"; folio?: string;
 }
+/** Comprobante Electrónico de Pago de Banxico: la prueba de que el dinero
+ *  llegó a esa cuenta ese día. */
+type CepMovimiento = {
+  estado: string | null;
+  fechaOperacion: string | null;
+  concepto: string | null;
+  ordenanteNombre: string | null;
+  ordenanteRfc: string | null;
+  ordenanteBanco: string | null;
+  beneficiarioNombre: string | null;
+  beneficiarioRfc: string | null;
+  beneficiarioBanco: string | null;
+};
+
 // Pago junto: varias facturas de la misma contraparte que suman exacto el
 // movimiento (sugerido por el motor; se aplica con match-multiple).
 interface PagoJuntoSugerido {
@@ -252,6 +266,8 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
   const [manualLoading, setManualLoading] = useState(false);
   // Selección múltiple de facturas para el movimiento expandido (charola).
   const [multiSel, setMultiSel] = useState<SeleccionFactura[]>([]);
+  // Comprobante de Banxico (CEP) del movimiento expandido, si se consultó.
+  const [cep, setCep] = useState<CepMovimiento | null>(null);
   const [multiBusy, setMultiBusy] = useState(false);
   const [toast, setToast] = useState("");
   // Sugerencia post-conciliación: el abono que acabas de conciliar paga una
@@ -568,6 +584,12 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
   async function expand(tx: BankTx) {
     if (expandedId === tx.id) { setExpandedId(null); setMultiSel([]); return; }
     setExpandedId(tx.id); setCandidates([]); setImpuestoCands([]); setPagoJunto(null); setCandLoading(true); setMultiSel([]);
+    // El comprobante de Banxico, si este SPEI se consultó al CEP.
+    setCep(null);
+    fetch(`/api/bancos/transactions/${tx.id}/cep`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d) setCep(d); })
+      .catch(() => {});
     // Reset de la búsqueda manual; arranca con el tipo probable según el signo.
     setManualOpen(false); setManualQuery(""); setManualResults([]);
     setManualTipo(tx.monto < 0 ? "EGRESO" : "INGRESO");
@@ -1430,6 +1452,52 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
                                   </div>
                                 </div>
                               )}
+                              {/* COMPROBANTE DE BANXICO. No es adorno: el CEP prueba
+                                  que ESE importe llegó a la cuenta de ESE
+                                  beneficiario en ESA fecha. Es la evidencia de
+                                  materialidad que se le enseña al SAT cuando
+                                  pregunta si un pago fue real, y también le
+                                  enseña a quien concilia DE DÓNDE salió el RFC
+                                  —para que la sugerencia no parezca adivinada. */}
+                              {cep && (
+                                <div className="rounded-control border border-cos-line bg-cos-paper px-3 py-2.5 text-[12.5px]">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <p className="font-semibold text-cos-ink">
+                                      Comprobante de Banxico
+                                      {cep.estado && (
+                                        <span className={"ml-2 rounded-full px-2 py-0.5 text-[11.5px] font-medium " +
+                                          (/devuel/i.test(cep.estado)
+                                            ? "bg-cos-amber-tint text-cos-amber-ink"
+                                            : "bg-cos-brand-tint text-cos-brand-ink")}>
+                                          {cep.estado}
+                                        </span>
+                                      )}
+                                    </p>
+                                    <a href={`/api/bancos/transactions/${m.id}/cep?xml=1`}
+                                      className="flex-none text-[12.5px] font-semibold text-cos-brand-ink hover:underline">
+                                      Descargar XML
+                                    </a>
+                                  </div>
+                                  <div className="mt-1.5 grid gap-1 border-t border-cos-line pt-1.5 text-cos-ink-soft sm:grid-cols-2">
+                                    <div>
+                                      <p className="text-[11.5px] uppercase tracking-wide text-cos-ink-faint">Ordenante</p>
+                                      <p className="text-cos-ink">{cep.ordenanteNombre ?? "—"}</p>
+                                      <p className="font-mono text-[11.5px]">{cep.ordenanteRfc ?? "—"}{cep.ordenanteBanco ? ` · ${cep.ordenanteBanco}` : ""}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-[11.5px] uppercase tracking-wide text-cos-ink-faint">Beneficiario</p>
+                                      <p className="text-cos-ink">{cep.beneficiarioNombre ?? "—"}</p>
+                                      <p className="font-mono text-[11.5px]">{cep.beneficiarioRfc ?? "—"}{cep.beneficiarioBanco ? ` · ${cep.beneficiarioBanco}` : ""}</p>
+                                    </div>
+                                  </div>
+                                  {cep.concepto && (
+                                    <p className="mt-1.5 border-t border-cos-line pt-1.5 text-[11.5px] text-cos-ink-faint">
+                                      Concepto: {cep.concepto}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+
                               {/* Pago junto: N facturas de la MISMA contraparte suman
                                   exacto el movimiento — la combinación es única, por
                                   eso se ofrece en un gesto. */}

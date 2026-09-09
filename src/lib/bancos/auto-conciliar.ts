@@ -221,6 +221,17 @@ export async function clabesConocidasPorRfc(companyId: string, clabe: string): P
     const rfc = p.invoice?.customer?.rfc ?? p.invoice?.contraparteRfc;
     if (rfc) rfcs.add(rfc);
   }
+
+  // El DIRECTORIO de cuentas: lo que el CEP nos enseñó de esa CLABE, firmado
+  // por Banxico. Vale sin necesidad de historial — la primera vez que se le
+  // paga a un proveedor no hay conciliaciones previas que escanear, pero si el
+  // CEP ya dijo de quién es la cuenta, se sabe desde el primer movimiento.
+  const directorio = await prisma.cuentaContraparte.findUnique({
+    where: { companyId_clabe: { companyId, clabe: clabe.replace(/\D/g, "") } },
+    select: { rfc: true },
+  });
+  if (directorio?.rfc) rfcs.add(directorio.rfc);
+
   return rfcs;
 }
 
