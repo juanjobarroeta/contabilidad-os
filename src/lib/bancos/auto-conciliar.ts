@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { conciliarPorRepEmpresa } from "./rep-aplicar";
+import { cercaPeroNoExactoEnLote, mismoImporte, tarjetaContradice, tarjetaDeLiquidacion } from "./terminal";
 import { detectarTraspasosEmpresa } from "./traspasos-aplicar";
 import {
   campoMontoPorTipo,
@@ -67,15 +68,67 @@ export const PUNTOS_NOMBRE = 40;
 export const PUNTOS_IMPORTE_UNICO = 40;
 
 /**
+ * Castigo por TARJETA CONTRARIA. Un lote de crédito no liquida una factura que
+ * declara débito, ni al revés — son dos mitades del mismo hecho y no pueden
+ * contradecirse.
+ *
+ * Se CASTIGA en vez de excluir a propósito: la forma de pago la captura una
+ * persona y puede estar mal. Restar 120 hunde al candidato por debajo del
+ * umbral —ni siquiera un importe exacto (100) lo salva— así que nunca se
+ * aplica solo, pero sigue visible al final de la lista para quien sepa que la
+ * captura fue errónea. Esconderlo sería decidir por el contador con un dato
+ * que no controlamos.
+ */
+export const CASTIGO_TARJETA_CONTRARIA = 120;
+
+/**
+ * Castigo por «cerca pero no exacto» dentro de un lote de terminal. Un lote es
+ * la SUMA de los cargos del día: que una factura sola se le parezca al 0.3 % no
+ * dice nada. Se hunde para que no encabece la lista, pero sigue disponible para
+ * armar el lote a mano —que es como de verdad se resuelve— y el importe EXACTO
+ * no se toca, porque un lote de un solo cargo existe.
+ */
+export const CASTIGO_CERCA_EN_LOTE = 90;
+
+/**
  * ¿Cuánto bono merece el importe? PURA.
  *
  * `totales` son los totales de TODOS los candidatos. Devuelve el bono sólo si
  * el importe trae centavos y exactamente un candidato lo empata al centavo.
  */
-export function bonoImporteUnico(absAmount: number, totales: number[]): number {
-  if (Math.round(absAmount * 100) % 100 === 0) return 0; // redondo: no identifica
-  const exactos = totales.filter((t) => Math.abs(t - absAmount) < 0.01).length;
+export function bonoImporteUnico(
+  absAmount: number,
+  totales: number[],
+  opts: { enLoteTerminal?: boolean } = {},
+): number {
+  const enLote = opts.enLoteTerminal ?? false;
+  // «Redondo» no significa lo mismo en una terminal. $21,000.00 transferidos
+  // son una cantidad que alguien eligió; $21,000.00 cobrados con tarjeta son
+  // el precio de un servicio. Por eso el filtro de importe elegido sólo aplica
+  // fuera del lote.
+  if (!enLote && esImporteElegido(absAmount)) return 0;
+  const exactos = totales.filter((t) => mismoImporte(t, absAmount, enLote)).length;
   return exactos === 1 ? PUNTOS_IMPORTE_UNICO : 0;
+}
+
+/**
+ * ¿El importe parece ELEGIDO por una persona? PURA.
+ *
+ * Un múltiplo exacto de mil —$10,000, $40,000, $164,000— es una cantidad que
+ * alguien decidió: un abono a cuenta, un traspaso, un anticipo. Coinciden solos
+ * y no identifican nada.
+ *
+ * Lo que NO es elegido es cualquier otro importe, tenga centavos o no. La regla
+ * anterior exigía centavos y era demasiado tosca: dejaba fuera $39,730.00, que
+ * de redondo no tiene nada —es un total con IVA que cayó así— y que era el
+ * único candidato exacto entre seis. Se quedaba en 110 contra un umbral de 130,
+ * con el segundo a 40 puntos de distancia, y había que aplicarlo a mano.
+ *
+ * La unicidad sigue siendo el otro candado: entre 38 facturas de $3,770.00 no
+ * hay unicidad que premiar, aunque $3,770 no sea múltiplo de mil.
+ */
+export function esImporteElegido(absAmount: number): boolean {
+  return Math.round(absAmount * 100) % 100_000 === 0;
 }
 
 /**
@@ -478,7 +531,10 @@ export async function autoConciliarCuenta(
 
     // El bono de importe único se calcula UNA vez sobre todo el pool y se
     // acredita sólo al candidato que empata al centavo.
-    const bono = bonoImporteUnico(absAmount, candidates.map((c) => Number(c.total)));
+    // Lote de terminal: el sufijo de la afiliación dice si fue crédito o débito.
+    const tarjetaLote = tarjetaDeLiquidacion(tx.descripcion);
+    const enLote = tarjetaLote !== null;
+    const bono = bonoImporteUnico(absAmount, candidates.map((c) => Number(c.total)), { enLoteTerminal: enLote });
 
     const scored = candidates
       .map((inv) => {
@@ -504,7 +560,9 @@ export async function autoConciliarCuenta(
             },
             senales,
             absAmount,
-          ) + (bono && Math.abs(Number(inv.total) - absAmount) < 0.01 ? bono : 0),
+          ) + (bono && mismoImporte(Number(inv.total), absAmount, enLote) ? bono : 0)
+            - (tarjetaContradice(tarjetaLote, inv.formaPago) ? CASTIGO_TARJETA_CONTRARIA : 0)
+            - (cercaPeroNoExactoEnLote(enLote, Number(inv.total), absAmount) ? CASTIGO_CERCA_EN_LOTE : 0),
         };
       })
       .sort((a, b) => b.score - a.score);

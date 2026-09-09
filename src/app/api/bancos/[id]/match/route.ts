@@ -2,9 +2,12 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
+import { cercaPeroNoExactoEnLote, mismoImporte, tarjetaContradice, tarjetaDeLiquidacion } from "@/lib/bancos/terminal";
 import {
   autoConciliarCuenta,
   bonoImporteUnico,
+  CASTIGO_CERCA_EN_LOTE,
+  CASTIGO_TARJETA_CONTRARIA,
   clabesConocidasPorRfc,
   scoreCandidate,
   tokenIdentificante,
@@ -326,7 +329,10 @@ export async function GET(req: Request, { params }: Params) {
 
   // Bono de importe único: mismo criterio que el motor, para que el badge de
   // confianza de la mesa no contradiga lo que la auto-conciliación decide.
-  const bonoUnico = bonoImporteUnico(absAmount, candidates.map((c) => Number(c.total)));
+  // Lote de terminal: crédito o débito según el sufijo de la afiliación.
+  const tarjetaLote = tarjetaDeLiquidacion(tx.descripcion);
+  const enLote = tarjetaLote !== null;
+  const bonoUnico = bonoImporteUnico(absAmount, candidates.map((c) => Number(c.total)), { enLoteTerminal: enLote });
 
   const puntuados = candidates.map(inv => {
     // MISMA fórmula que la auto-conciliación (antes era una copia que divergió:
@@ -356,7 +362,11 @@ export async function GET(req: Request, { params }: Params) {
     // monto a 1–5% todavía se ofrece al humano, sólo que con poco puntaje.
     const diff = Math.abs(Math.abs(total) - absAmount);
     if (diff / absAmount >= 0.01 && diff / absAmount < TOLERANCE) score += 20;
-    if (bonoUnico && diff < 0.01) score += bonoUnico;
+    if (bonoUnico && mismoImporte(total, absAmount, enLote)) score += bonoUnico;
+    // Mismos castigos que el motor, para que el badge de confianza no diga
+    // «media» de algo que la auto-conciliación jamás aplicaría.
+    if (tarjetaContradice(tarjetaLote, inv.formaPago)) score -= CASTIGO_TARJETA_CONTRARIA;
+    if (cercaPeroNoExactoEnLote(enLote, total, absAmount)) score -= CASTIGO_CERCA_EN_LOTE;
     const alreadyMatched = inv.bankTransactions.length > 0 || inv.conciliacionDetalles.length > 0;
     // Neto firmado: un reembolso (cargo) resta de lo cobrado. Las porciones
     // asignadas (conciliación múltiple) suman por su monto asignado.

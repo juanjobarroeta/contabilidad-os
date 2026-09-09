@@ -257,9 +257,21 @@ describe("bonoImporteUnico — un importe con centavos que no se repite", () => 
     expect(100 + PUNTOS_IMPORTE_UNICO).toBeGreaterThanOrEqual(AUTO_MATCH_MIN_SCORE);
   });
 
-  it("redondo NO bonifica, aunque sea único: los redondos coinciden solos", () => {
+  it("un múltiplo de mil NO bonifica: es una cantidad que alguien eligió", () => {
     expect(bonoImporteUnico(40000, [40000, 39500])).toBe(0);
-    expect(bonoImporteUnico(3770, [3770])).toBe(0);
+    expect(bonoImporteUnico(10000, [10000])).toBe(0);
+    expect(bonoImporteUnico(164000, [164000])).toBe(0);
+  });
+
+  it("pero sin centavos y sin ser redondo SÍ: $39,730.00 no lo eligió nadie", () => {
+    // Caso real: único exacto entre seis candidatos, se quedaba en 110 contra
+    // un umbral de 130 con el segundo a 40 puntos. La regla vieja pedía
+    // centavos y lo metía en el mismo saco que $40,000.
+    expect(bonoImporteUnico(39730, [39730, 39902.65, 39354.31, 40000])).toBe(PUNTOS_IMPORTE_UNICO);
+  });
+
+  it("la unicidad sigue mandando: 38 facturas de $3,770 no premian a ninguna", () => {
+    expect(bonoImporteUnico(3770, [3770, 3770, 3770])).toBe(0);
   });
 
   it("varios exactos no bonifica: ahí no hay unicidad que premiar", () => {
@@ -269,5 +281,24 @@ describe("bonoImporteUnico — un importe con centavos que no se repite", () => 
 
   it("sin ningún exacto no bonifica", () => {
     expect(bonoImporteUnico(19439.75, [19303.42, 19661.81])).toBe(0);
+  });
+});
+
+
+describe("bono de importe único dentro de un lote de terminal", () => {
+  it("un importe redondo SÍ cuenta en la terminal: $21,000 cobrados no los eligió nadie", () => {
+    expect(bonoImporteUnico(21000, [21000, 20500], { enLoteTerminal: true })).toBe(PUNTOS_IMPORTE_UNICO);
+    // Fuera de la terminal sigue sin contar: ahí es una cantidad tecleada.
+    expect(bonoImporteUnico(21000, [21000, 20500], { enLoteTerminal: false })).toBe(0);
+  });
+
+  it("pero DOS facturas iguales lo frenan igual — caso real de SPINOLA", () => {
+    // Dos depósitos de $21,000.00 y dos facturas abiertas de $21,000.00 del
+    // mismo paciente: nada en los datos dice cuál pagó cuál.
+    expect(bonoImporteUnico(21000, [21000, 21000, 21000.01], { enLoteTerminal: true })).toBe(0);
+  });
+
+  it("el centavo de redondeo cuenta como el mismo importe en el lote", () => {
+    expect(bonoImporteUnico(10869.99, [10870.0, 12000], { enLoteTerminal: true })).toBe(PUNTOS_IMPORTE_UNICO);
   });
 });
