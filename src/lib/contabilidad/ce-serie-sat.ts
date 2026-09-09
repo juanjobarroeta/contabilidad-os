@@ -10,7 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "../prisma";
 import { balanzaASerie, guardarBalanzaMes, type ImportarSerieResult } from "./ce-serie";
-import { abrirBuzonSat, getFielBytes } from "@/lib/sat-portal/buzon-playwright";
+import { abrirBuzonSat, getFielBytes } from "../sat-portal/buzon-playwright";
 import { descargarCeAnioSat, type CeXml } from "./ce-descarga-sat";
 
 export interface ImportarSerieSatOpts {

@@ -18,8 +18,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { chromium, type BrowserContext, type Page } from "playwright";
-import { prisma } from "@/lib/prisma";
-import { decryptSecret } from "@/lib/crypto";
+import { prisma } from "../prisma";
+import { decryptSecret } from "../crypto";
 
 /** Los bytes crudos de la e.firma que el JS del SAT firma en el navegador. */
 export interface FielBytes {
@@ -91,13 +91,29 @@ export async function abrirBuzonSat<T>(
     const ctx = await browser.newContext({ ignoreHTTPSErrors: true, acceptDownloads: true });
     const page = await ctx.newPage();
 
-    await page.goto(ENTRADA, { waitUntil: "networkidle", timeout: 45000 }).catch(() => {});
-    // Tab e.firma: #buttonFiel navega al contrato fiel_Aviso, que sirve el certform.
-    await page.locator("#buttonFiel").click({ timeout: 8000 }).catch(() => {});
-    await page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {});
-    await page.waitForTimeout(1600);
-    if ((await page.locator("#fileCertificate").count()) === 0) {
-      throw new BuzonAccesoError(fiel.rfc, "no apareció el certform de e.firma (¿cambió el login?)");
+    // El certform a veces llega lento (card de login del SAT). Espéralo
+    // ACTIVAMENTE y reintenta la navegación un par de veces antes de rendirse —
+    // evita fallos transitorios en el barrido de cartera.
+    let certform = false;
+    for (let intento = 1; intento <= 3 && !certform; intento++) {
+      await page.goto(ENTRADA, { waitUntil: "networkidle", timeout: 45000 }).catch(() => {});
+      // Tab e.firma: #buttonFiel navega al contrato fiel_Aviso, que sirve el certform.
+      await page.locator("#buttonFiel").click({ timeout: 8000 }).catch(() => {});
+      certform = await page
+        .locator("#fileCertificate")
+        .waitFor({ state: "attached", timeout: 15000 })
+        .then(() => true)
+        .catch(() => false);
+      if (!certform) {
+        log(`certform no apareció (intento ${intento}/3)`);
+        await page.waitForTimeout(2000);
+      }
+    }
+    if (!certform) {
+      throw new BuzonAccesoError(
+        fiel.rfc,
+        "no apareció el certform de e.firma tras 3 intentos (¿SAT lento/throttling, o cambió el login?)",
+      );
     }
 
     fs.writeFileSync(cerPath, fiel.cerDer);
