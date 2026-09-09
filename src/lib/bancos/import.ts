@@ -30,6 +30,7 @@ import { claveDeDuplicado, planImportacionConHora } from "@/lib/bancos/dedup";
 import { cuentaTieneIngestExterno, ERROR_CUENTA_PUENTE } from "@/lib/bancos/fuentes";
 import { primeraReglaQueEmpata, signoDeMonto, type FamiliaConcepto } from "@/lib/bancos/categorizar-concepto";
 import { decodificarEstadoDeCuenta, esExcelBinario } from "@/lib/bancos/decodificar";
+import { clasificarCargoBancario } from "./clasificar-cargo";
 import { camposContraparte, parseSpei } from "@/lib/bancos/spei-descripcion";
 import { nombresPorRfc } from "@/lib/bancos/contraparte-nombre";
 import { kickCron } from "@/lib/cron-scheduler";
@@ -242,33 +243,12 @@ export async function persistTransactions(opts: {
       notes = reglaMatch.familia;
       hitsPorRegla.set(reglaMatch.id, (hitsPorRegla.get(reglaMatch.id) ?? 0) + 1);
     } else {
-      // 2) Patrones hardcodeados de siempre.
-      // El IVA de la comisión va PRIMERO: su renglón también dice «comisión» y
-      // con el orden inverso se etiquetaba como gasto. Se acepta la abreviatura
-      // («IVA COM. TRANS. AMEX»), que es como la escriben BBVA y Banorte y por
-      // la que 12 renglones seguían cayendo en la mesa como gasto sin
-      // identificar.
-      const isIvaComision = /\biva\b[\s.]*(com\b|com\.|comisi)/i.test(desc);
-      const isBankFee = !isIvaComision && /comisi[oó]n/i.test(desc);
-      const isTaxPayment =
-        /pago\s+de\s+impuestos|^impuesto|recaudaci[oó]n|\bsat\b|tesofe/i.test(desc);
-      const isInternalTransfer = /traspaso\s+(entre|a)\s+cuentas?\s+propias?|transferencia\s+propia/i.test(desc);
-      const isBankNoise = /compensaci[oó]n\s+por\s+retraso/i.test(desc) || tx.monto === 0;
-      if (isIvaComision) {
+      // 2) Patrones hardcodeados de siempre — la decisión vive en
+      //    `clasificar-cargo.ts`, pura y probada.
+      const auto = clasificarCargoBancario(desc, tx.monto);
+      if (auto) {
         status = "IGNORED";
-        notes = "IVA_COMISION";
-      } else if (isBankFee) {
-        status = "IGNORED";
-        notes = "PENDING_MONTHLY_CFDI";
-      } else if (isTaxPayment) {
-        status = "IGNORED";
-        notes = "TAX_PAYMENT";
-      } else if (isInternalTransfer) {
-        status = "IGNORED";
-        notes = "INTERNAL_TRANSFER";
-      } else if (isBankNoise) {
-        status = "IGNORED";
-        notes = "BANK_NOISE";
+        notes = auto;
       }
     }
 
