@@ -42,7 +42,9 @@ export type TagSinFactura =
   | "RENT"
   | "FINANCIAL_INCOME"
   | "IVA_COMISION"
-  | "PAYROLL_DISPERSED";
+  | "PAYROLL_DISPERSED"
+  | "ANTICIPO_CLIENTE"
+  | "ANTICIPO_PROVEEDOR";
 
 /**
  * Las categorías que la mesa ofrece de un toque — las MISMAS del tab
@@ -58,6 +60,14 @@ export const CATEGORIAS_MESA: { tag: TagSinFactura | null; label: string }[] = [
   // si la transferencia liquida la provisión (acreedores) o reconoce el gasto
   // (sueldos). Lo elige quien mira la mesa, que sí lo sabe.
   { tag: "PAYROLL_DISPERSED", label: "Dispersión de nómina ya timbrada" },
+  // Cobrado sin factura. NO es ingreso: es un pasivo con el cliente hasta que
+  // se emite el CFDI. Y por ley ese CFDI hay que emitirlo, así que el tag no
+  // archiva el movimiento — lo pone en la lista de anticipos por facturar.
+  { tag: "ANTICIPO_CLIENTE", label: "Anticipo de cliente (falta CFDI)" },
+  // El espejo: PAGADO sin factura. Tampoco es gasto — es un activo hasta que
+  // el proveedor emita su CFDI de anticipo. Sin ese comprobante no hay
+  // deducción ni IVA acreditable, así que la lista sirve para reclamárselo.
+  { tag: "ANTICIPO_PROVEEDOR", label: "Anticipo a proveedor (falta CFDI)" },
   { tag: "LOAN_RECEIVED", label: "Préstamo recibido" },
   { tag: "LOAN_GIVEN", label: "Préstamo otorgado" },
   { tag: "CAPITAL_CONTRIBUTION", label: "Aportación de capital" },

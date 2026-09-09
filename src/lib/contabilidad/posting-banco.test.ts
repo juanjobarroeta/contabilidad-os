@@ -112,10 +112,12 @@ describe("subcuentaBancoSpec", () => {
 });
 
 describe("IGNORED_TAGS_VALIDOS", () => {
-  it("los doce tags del contrato, y nada más", () => {
+  it("los catorce tags del contrato, y nada más", () => {
     // RENT y FINANCIAL_INCOME entraron cuando el flujo de Movimientos ya podía
     // etiquetarlas pero el cierre las rechazaba como "sin categoría".
     expect([...IGNORED_TAGS_VALIDOS].sort()).toEqual([
+      "ANTICIPO_CLIENTE",
+      "ANTICIPO_PROVEEDOR",
       "CAPITAL_CONTRIBUTION",
       "FINANCIAL_INCOME",
       "INTERNAL_TRANSFER",
