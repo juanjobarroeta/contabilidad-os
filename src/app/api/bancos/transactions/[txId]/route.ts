@@ -325,12 +325,12 @@ export async function PATCH(req: Request, { params }: Params) {
           { status: 400 }
         );
       }
-      if (asignaciones.length < 2) {
-        return NextResponse.json(
-          { error: 'Para conciliar con una sola factura utilice action: "match" con invoiceId.' },
-          { status: 400 }
-        );
-      }
+      // UNA SOLA FACTURA TAMBIÉN VALE. Antes se exigían dos y se mandaba a
+      // `match`, pero `match` se come el movimiento ENTERO: «aplica $3,000 de
+      // este depósito a esta cuenta y deja el resto» no se podía expresar.
+      // Es el caso de las liquidaciones de terminal —un depósito cubre varias
+      // cuentas de paciente y sólo una fracción de cada factura— y el de
+      // cualquier cobro parcial. Lo que sobra se postea como anticipo.
       const parsed: { invoiceId: string; monto: number }[] = [];
       for (const a of asignaciones) {
         const monto = Number(a?.monto);
