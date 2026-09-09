@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { fechaCalendarioIso } from "./obligaciones";
 import { normalizarUuid, variantesUuid } from "./fiscal/uuid";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -170,7 +171,7 @@ export async function detectComplementosPendientes(
       totalComplementado,
       montoPendiente,
       ultimoPago: ultimoPago.toISOString().slice(0, 10),
-      fechaLimite: fechaLimite.toISOString().slice(0, 10),
+      fechaLimite: fechaCalendarioIso(fechaLimite),
       urgencia,
       diasParaVencer: dias,
     });
@@ -268,7 +269,7 @@ export async function detectComplementosRecibidosPendientes(
       total: Number(g.total),
       totalPagado: Math.round(totalPagado * 100) / 100,
       ultimoPago: ultimoPago.toISOString().slice(0, 10),
-      fechaLimite: fechaLimite.toISOString().slice(0, 10),
+      fechaLimite: fechaCalendarioIso(fechaLimite),
       urgencia,
       diasParaVencer: dias,
     });

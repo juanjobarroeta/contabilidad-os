@@ -6,6 +6,7 @@ import { retencionesDelPeriodo } from "@/lib/fiscal/retenciones";
 import { leerRenglonesIeps } from "@/lib/fiscal/ieps/leer";
 import { aPagarIeps, periodoIeps, type DecisionAcreditamiento } from "@/lib/fiscal/ieps/periodo";
 import { prisma } from "@/lib/prisma";
+import { periodoMensualPorDefecto } from "@/lib/fiscal/periodo-operativo";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/salameria/fiscal?companyId=…&year=2026&month=8
@@ -34,9 +35,9 @@ export const GET = withAuthz(async (req: Request) => {
   await requireModule(companyId, "SALAMERIA", req);
 
   const hoy = new Date();
-  const previo = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
-  const year = Number(searchParams.get("year") ?? previo.getFullYear());
-  const month = Number(searchParams.get("month") ?? previo.getMonth() + 1);
+  const previo = periodoMensualPorDefecto(hoy);
+  const year = Number(searchParams.get("year") ?? previo.year);
+  const month = Number(searchParams.get("month") ?? previo.month);
   if (
     !Number.isInteger(year) ||
     !Number.isInteger(month) ||

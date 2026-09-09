@@ -1,6 +1,6 @@
 # ContabilidadOS gap-closure plan
 
-Status date: 2026-09-08
+Status date: 2026-09-09
 Production baseline: product/engineering
 Baseline branch: `codex/gap-closure-roadmap`, based on production commit `97d0adfe`
 
@@ -63,7 +63,7 @@ Target: 2–3 weeks. No general-availability sales before this gate passes.
 | REL-001B Central due-date calculation | VERIFY | Dashboard now calls the same `calcularVencimiento` service as Compliance, including bimonthly `YYYY-Bn` keys and shifted annual deadlines |
 | REL-001C Calendar-date rendering | VERIFY | Compliance pins fiscal dates to UTC display semantics so `2026-09-17` cannot render as September 16 in Mexico |
 | REL-001D CFF/RFC deadline rules | IN_PROGRESS | Weekends, fixed/movable Article 12 days, and sixth-numeric-digit calculations are tested; eligibility exclusions under Decree Article 5.1 still need taxpayer facts and UI provenance before activation |
-| REL-001E Consumer parity | IN_PROGRESS | Inventory notifications, firm cockpit, exports, and any remaining raw deadline calculations; add an API contract test before staging |
+| REL-001E Consumer parity | VERIFY | Shared monthly contract now drives the firm cockpit, home queue, satellite fiscal defaults, payroll cockpit ranges, and IMSS/IVA notifications. Fiscal APIs emit calendar dates, the DIOT agenda uses the federal deadline, and an API parity test covers the Railway-UTC/Mexico rollover. Automated suite: 330 files / 3,649 tests; staging and production smoke remain. |
 | REL-003A Fail-closed empty-bank state | VERIFY | Reconciliation, declaration checklist, and workbench now classify zero bank movements as `NO_DATA`; no-data periods cannot become mathematically reconciled or open the normal signing path |
 | REL-003B Intentional no-bank workflow | VERIFY | Writer-only confirmation persists timestamp, user, and a required explanation; it is revocable, rejected when movements exist, and automatically stops opening the gate if movements later arrive. UI and downstream gates label it as a human decision and never as 100% reconciliation |
 | SAT-001 Native Buzón CE evidence pilot | IN_PROGRESS | The live credential-free CE preflight passes through the full SSO bootstrap; the session-aware form contract, exact signer envelope, pre-send TLS gate, redacted first-signed-POST probe, route allowlist, bounded transport, non-replayable run identity, durable single-flight lease, awaited credential-use audits, interactive-session-only existing-credential mandate workflow, and inert one-shot Railway worker/runbook are implemented. The mandate blocks platform support, bearer tokens, viewers, and vertical-only staff. No customer credential has been transmitted. Exit requires deployment approval, an authorized customer acceptance, a supervised SMP login, authenticated RFC marker, fixed-period metadata inventory, and proof of whether SAT exposes original CE XML or receipts only |

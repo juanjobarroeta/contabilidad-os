@@ -3,6 +3,7 @@ import { empresasAccesiblesIds } from "./authz";
 import { prisma } from "./prisma";
 import { estadoPagosImss } from "./fiscal/imss-pagos";
 import { formatCurrency } from "./utils";
+import { contratoMensualFiscal } from "./fiscal/contrato-mensual";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Recordatorio del pago de cuotas IMSS (SIPARE). A partir de T-5 antes del
@@ -45,8 +46,8 @@ export async function notifyImssPago(
 
   // El periodo cuyo vencimiento está en curso es el MES ANTERIOR (sus cuotas
   // vencen el día 17 de este mes).
-  const year = hoy.getMonth() === 0 ? hoy.getFullYear() - 1 : hoy.getFullYear();
-  const month = hoy.getMonth() === 0 ? 12 : hoy.getMonth();
+  const { periodo } = contratoMensualFiscal(hoy);
+  const { year, month } = periodo;
 
   let notified = 0;
   let empresas = 0;

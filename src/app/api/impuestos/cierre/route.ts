@@ -6,7 +6,8 @@ import { computeTaxPosition } from "@/lib/impuestos";
 import { getAsimiladosResumen } from "@/lib/fiscal/asimilados";
 import { detectComplementosPendientes } from "@/lib/complementos";
 import { formatCurrency } from "@/lib/utils";
-import { calcularVencimiento, type ObligacionConfig } from "@/lib/obligaciones";
+import { calcularVencimiento, fechaCalendarioIso, type ObligacionConfig } from "@/lib/obligaciones";
+import { fechaFiscalEnMexico } from "@/lib/fiscal/periodo-operativo";
 import { Prisma, type TaxDeclarationType } from "@prisma/client";
 import { evidenciaPresentacion } from "@/lib/fiscal/presentacion";
 import { cargarNominaParaIsn } from "@/lib/fiscal/audit/service";
@@ -217,7 +218,7 @@ export async function GET(req: Request) {
         const decl = isnDecls.find((d) => d.isnEntidad === o.entidad);
         return {
           ...o,
-          fechaLimite: o.fechaLimite.toISOString(),
+          fechaLimite: fechaCalendarioIso(o.fechaLimite),
           estado: estadoFor(decl?.status ?? null, o.fechaLimite),
           fechaPresentacion: decl?.fechaPresentacion ?? null,
           evidencia: evidenciaPresentacion(decl ?? null),
@@ -293,7 +294,7 @@ export async function GET(req: Request) {
       // Traslada IEPS y no tiene la obligación en el padrón: eso no lo arregla
       // esta pantalla, pero callarlo sería dejar la declaración sin presentar.
       sinObligacionRegistrada: p.causa && !obligado,
-      vencimiento: vencimiento.toISOString(),
+      vencimiento: fechaCalendarioIso(vencimiento),
       estado: estadoFor(iepsDecl?.status ?? null, vencimiento),
       lineaCaptura: iepsDecl?.lineaCaptura ?? null,
       acuseUrl: iepsDecl?.acuseUrl ?? null,
@@ -309,7 +310,7 @@ export async function GET(req: Request) {
     ? {
         aplica: true,
         proveedores: egresosConIvaCount,
-        vencimiento: calcularVencimiento(DIOT_CONFIG, periodo).toISOString(),
+        vencimiento: fechaCalendarioIso(calcularVencimiento(DIOT_CONFIG, periodo)),
         estado: estadoFor(diotDecl?.status ?? null, calcularVencimiento(DIOT_CONFIG, periodo)),
         acuseUrl: diotDecl?.acuseUrl ?? null,
         fechaPresentacion: diotDecl?.fechaPresentacion ?? null,
@@ -319,7 +320,8 @@ export async function GET(req: Request) {
 
   // ── Readiness checklist ───────────────────────────────────────────────────
   const today = new Date();
-  const isCurrentMonth = today.getFullYear() === year && today.getMonth() + 1 === month;
+  const todayFiscal = fechaFiscalEnMexico(today);
+  const isCurrentMonth = todayFiscal.year === year && todayFiscal.month === month;
   const readiness = {
     cfdisSincronizados: {
       ok: cfdiCount > 0,
@@ -374,7 +376,7 @@ export async function GET(req: Request) {
       lineas: federalLineas,
       totalAPagar,
       saldoFavorIva,
-      vencimiento: federalVencimiento.toISOString(),
+      vencimiento: fechaCalendarioIso(federalVencimiento),
       estado: federalEstado,
       lineaCaptura: federalDecl?.lineaCaptura ?? null,
       acuseUrl: federalDecl?.acuseUrl ?? null,

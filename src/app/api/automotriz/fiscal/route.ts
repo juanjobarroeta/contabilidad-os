@@ -5,6 +5,7 @@ import { checklistDeclaracion } from "@/lib/fiscal/checklist-declaracion";
 import { retencionesDelPeriodo } from "@/lib/fiscal/retenciones";
 import { isanDelPeriodo } from "@/lib/automotriz/isan-periodo";
 import { prisma } from "@/lib/prisma";
+import { periodoMensualPorDefecto } from "@/lib/fiscal/periodo-operativo";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/automotriz/fiscal?companyId=…&year=2026&month=7
@@ -29,9 +30,9 @@ export const GET = withAuthz(async (req: Request) => {
   await requireModule(companyId, "AUTOMOTRIZ", req);
 
   const hoy = new Date();
-  const previo = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
-  const year = Number(searchParams.get("year") ?? previo.getFullYear());
-  const month = Number(searchParams.get("month") ?? previo.getMonth() + 1);
+  const previo = periodoMensualPorDefecto(hoy);
+  const year = Number(searchParams.get("year") ?? previo.year);
+  const month = Number(searchParams.get("month") ?? previo.month);
   if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12 || year < 2000 || year > 2100) {
     return NextResponse.json({ error: "Periodo inválido" }, { status: 400 });
   }

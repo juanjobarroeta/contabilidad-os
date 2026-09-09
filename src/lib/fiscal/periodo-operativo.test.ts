@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   diasEntreFechasCalendario,
   fechaFiscalEnMexico,
+  periodoMensualActual,
   periodoMensualPorDefecto,
+  rangoPeriodoMensual,
 } from "./periodo-operativo";
 
 describe("periodoMensualPorDefecto", () => {
@@ -29,6 +31,17 @@ describe("periodoMensualPorDefecto", () => {
       month: 7,
       key: "2026-07",
     });
+  });
+
+  it("keeps the current month and database range on the Mexico calendar", () => {
+    const current = periodoMensualActual(new Date("2026-09-01T00:30:00Z"));
+    expect(current).toEqual({ year: 2026, month: 8, key: "2026-08" });
+
+    const range = rangoPeriodoMensual(current);
+    expect(range.from.getFullYear()).toBe(2026);
+    expect(range.from.getMonth()).toBe(7);
+    expect(range.to.getFullYear()).toBe(2026);
+    expect(range.to.getMonth()).toBe(8);
   });
 
   it("exposes the same Mexico calendar date for deadline comparisons", () => {
