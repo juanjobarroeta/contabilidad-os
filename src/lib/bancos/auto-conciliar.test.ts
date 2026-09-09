@@ -257,9 +257,21 @@ describe("bonoImporteUnico — un importe con centavos que no se repite", () => 
     expect(100 + PUNTOS_IMPORTE_UNICO).toBeGreaterThanOrEqual(AUTO_MATCH_MIN_SCORE);
   });
 
-  it("redondo NO bonifica, aunque sea único: los redondos coinciden solos", () => {
+  it("un múltiplo de mil NO bonifica: es una cantidad que alguien eligió", () => {
     expect(bonoImporteUnico(40000, [40000, 39500])).toBe(0);
-    expect(bonoImporteUnico(3770, [3770])).toBe(0);
+    expect(bonoImporteUnico(10000, [10000])).toBe(0);
+    expect(bonoImporteUnico(164000, [164000])).toBe(0);
+  });
+
+  it("pero sin centavos y sin ser redondo SÍ: $39,730.00 no lo eligió nadie", () => {
+    // Caso real: único exacto entre seis candidatos, se quedaba en 110 contra
+    // un umbral de 130 con el segundo a 40 puntos. La regla vieja pedía
+    // centavos y lo metía en el mismo saco que $40,000.
+    expect(bonoImporteUnico(39730, [39730, 39902.65, 39354.31, 40000])).toBe(PUNTOS_IMPORTE_UNICO);
+  });
+
+  it("la unicidad sigue mandando: 38 facturas de $3,770 no premian a ninguna", () => {
+    expect(bonoImporteUnico(3770, [3770, 3770, 3770])).toBe(0);
   });
 
   it("varios exactos no bonifica: ahí no hay unicidad que premiar", () => {

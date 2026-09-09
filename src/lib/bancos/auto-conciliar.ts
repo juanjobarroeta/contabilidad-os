@@ -73,9 +73,29 @@ export const PUNTOS_IMPORTE_UNICO = 40;
  * el importe trae centavos y exactamente un candidato lo empata al centavo.
  */
 export function bonoImporteUnico(absAmount: number, totales: number[]): number {
-  if (Math.round(absAmount * 100) % 100 === 0) return 0; // redondo: no identifica
+  if (esImporteElegido(absAmount)) return 0;
   const exactos = totales.filter((t) => Math.abs(t - absAmount) < 0.01).length;
   return exactos === 1 ? PUNTOS_IMPORTE_UNICO : 0;
+}
+
+/**
+ * ¿El importe parece ELEGIDO por una persona? PURA.
+ *
+ * Un múltiplo exacto de mil —$10,000, $40,000, $164,000— es una cantidad que
+ * alguien decidió: un abono a cuenta, un traspaso, un anticipo. Coinciden solos
+ * y no identifican nada.
+ *
+ * Lo que NO es elegido es cualquier otro importe, tenga centavos o no. La regla
+ * anterior exigía centavos y era demasiado tosca: dejaba fuera $39,730.00, que
+ * de redondo no tiene nada —es un total con IVA que cayó así— y que era el
+ * único candidato exacto entre seis. Se quedaba en 110 contra un umbral de 130,
+ * con el segundo a 40 puntos de distancia, y había que aplicarlo a mano.
+ *
+ * La unicidad sigue siendo el otro candado: entre 38 facturas de $3,770.00 no
+ * hay unicidad que premiar, aunque $3,770 no sea múltiplo de mil.
+ */
+export function esImporteElegido(absAmount: number): boolean {
+  return Math.round(absAmount * 100) % 100_000 === 0;
 }
 
 /**
