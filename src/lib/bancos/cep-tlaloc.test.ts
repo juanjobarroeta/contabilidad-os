@@ -101,3 +101,17 @@ describe("consultarCep", () => {
     expect(f).not.toHaveBeenCalled();
   });
 });
+
+describe("el RFC del CEP va sin espacios", () => {
+  it("un corte de ancho fijo a medio RFC no rompe el empate", () => {
+    // Caso real: Banxico entregó «GEP850101 1S6». Con el espacio, ese RFC no
+    // empata con ninguna factura y el espacio no se ve al leerlo en pantalla.
+    const xml = `<SPEI_Tercero FechaOperacion="2026-08-05">
+      <Ordenante Nombre="SECRETARIA DE PLANEACION" RFC="GEP850101 1S6" Cuenta="012914002011633454" BancoEmisor="BBVA"/>
+      <Beneficiario Nombre="CENTRO" RFC="CPM2307076Z9" Cuenta="072180001234567890" BancoReceptor="BANORTE" MontoPago="1000.00" Concepto="PAGO"/>
+    </SPEI_Tercero>`;
+    const cep = parseCepXml(xml);
+    expect(cep?.ordenante.rfc).toBe("GEP8501011S6");
+    expect(cep?.beneficiario.rfc).toBe("CPM2307076Z9");
+  });
+});

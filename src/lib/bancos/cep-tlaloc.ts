@@ -41,6 +41,8 @@ export interface Cep {
   monto: number | null;
   fechaOperacion: string | null;
   estado: string | null;
+  /** El comprobante firmado, tal cual lo entrega Banxico. Es la prueba. */
+  xml: string;
 }
 
 export interface ParamsCep {
@@ -74,17 +76,22 @@ const attr = (xml: string, tag: string, nombre: string): string | null => {
 export function parseCepXml(xml: string): Cep | null {
   if (!xml || !/<(SPEI_Tercero|Beneficiario)\b/.test(xml)) return null;
   const limpio = (s: string | null) => (s ? s.replace(/\s+/g, " ").trim() : null);
+  // El RFC va SIN espacios. Banxico parte los campos en bloques de ancho fijo y
+  // a veces el corte cae a medio RFC: «GEP850101 1S6» no empata con ninguna
+  // factura, y el espacio no se ve al leerlo en pantalla.
+  const rfcLimpio = (s: string | null | undefined) =>
+    s ? s.replace(/\s+/g, "").toUpperCase() || null : null;
   const monto = attr(xml, "Beneficiario", "MontoPago");
   return {
     ordenante: {
       nombre: limpio(attr(xml, "Ordenante", "Nombre")),
-      rfc: attr(xml, "Ordenante", "RFC")?.toUpperCase() ?? null,
+      rfc: rfcLimpio(attr(xml, "Ordenante", "RFC")),
       cuenta: attr(xml, "Ordenante", "Cuenta"),
       banco: limpio(attr(xml, "Ordenante", "BancoEmisor")),
     },
     beneficiario: {
       nombre: limpio(attr(xml, "Beneficiario", "Nombre")),
-      rfc: attr(xml, "Beneficiario", "RFC")?.toUpperCase() ?? null,
+      rfc: rfcLimpio(attr(xml, "Beneficiario", "RFC")),
       cuenta: attr(xml, "Beneficiario", "Cuenta"),
       banco: limpio(attr(xml, "Beneficiario", "BancoReceptor")),
     },
@@ -92,6 +99,7 @@ export function parseCepXml(xml: string): Cep | null {
     monto: monto ? Number(monto) : null,
     fechaOperacion: attr(xml, "SPEI_Tercero", "FechaOperacion"),
     estado: null,
+    xml,
   };
 }
 
