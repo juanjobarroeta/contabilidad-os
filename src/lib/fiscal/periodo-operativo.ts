@@ -79,15 +79,12 @@ export function periodoMensualActual(hoy: Date = new Date()): PeriodoMensual {
 }
 
 /**
- * Database boundaries for a fiscal calendar month.
- *
- * Accounting dates are stored as timezone-less calendar values in PostgreSQL,
- * so routes must build the same local Date boundaries instead of deriving them
- * from the Railway UTC month.
+ * UTC database boundaries for a fiscal calendar month. This matches the
+ * accounting posting engine and keeps local development identical to Railway.
  */
 export function rangoPeriodoMensual(periodo: Pick<PeriodoMensual, "year" | "month">): RangoPeriodoMensual {
   return {
-    from: new Date(periodo.year, periodo.month - 1, 1),
-    to: new Date(periodo.year, periodo.month, 1),
+    from: new Date(Date.UTC(periodo.year, periodo.month - 1, 1)),
+    to: new Date(Date.UTC(periodo.year, periodo.month, 1)),
   };
 }

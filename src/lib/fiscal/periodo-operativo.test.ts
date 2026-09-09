@@ -38,10 +38,8 @@ describe("periodoMensualPorDefecto", () => {
     expect(current).toEqual({ year: 2026, month: 8, key: "2026-08" });
 
     const range = rangoPeriodoMensual(current);
-    expect(range.from.getFullYear()).toBe(2026);
-    expect(range.from.getMonth()).toBe(7);
-    expect(range.to.getFullYear()).toBe(2026);
-    expect(range.to.getMonth()).toBe(8);
+    expect(range.from.toISOString()).toBe("2026-08-01T00:00:00.000Z");
+    expect(range.to.toISOString()).toBe("2026-09-01T00:00:00.000Z");
   });
 
   it("exposes the same Mexico calendar date for deadline comparisons", () => {
