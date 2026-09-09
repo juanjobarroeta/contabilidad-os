@@ -20,6 +20,9 @@ import {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const WINDOW_DAYS = 14;
+/** Ventana para candidatos cuyo RFC empata con el del movimiento: la identidad
+ *  sustituye a la cercanía de fechas (ver el bloque en autoConciliarCuenta). */
+const IDENTITY_WINDOW_DAYS = 60;
 const TOLERANCE = 0.01; // 1%
 
 // Umbral de auto-aplicación: muy alta confianza Y sin ambigüedad.
@@ -373,6 +376,47 @@ export async function autoConciliarCuenta(
       // proveedores, que es donde más movimientos hay.
       include: { customer: { select: { rfc: true, razonSocial: true } } },
     });
+
+    // ── Ventana ancha CUANDO HAY RFC ──────────────────────────────────────
+    // Los 14 días son un sustituto de la confianza: sin saber quién es la
+    // contraparte, la cercanía de fechas es casi lo único que respalda un
+    // match automático. Cuando el RFC empata ese sustituto sobra — el RFC
+    // vale 120 puntos, más que el importe exacto, porque identifica a la
+    // PERSONA. Y pagar a 30 o 60 días es lo normal: la factura existe, con su
+    // importe al centavo y su RFC, sólo que lleva un mes emitida.
+    //
+    // Medido sobre 239 movimientos pendientes de un hospital: a 14 días se
+    // conciliaban solos CERO; con esta ventana, cinco — con puntajes de 200,
+    // 260, 260 y 340, o sea sostenidos por RFC y folio, no por adivinar con
+    // monto y fecha. Entre ellos pagos de $268,184.33 y $131,291.61.
+    //
+    // Lo que NO se relaja es el importe: sigue al ±1 %. Esto ensancha sólo la
+    // fecha, y sólo para quien ya está identificado. Si aparecen dos facturas
+    // del mismo RFC y el mismo importe, el desempate por ambigüedad las frena
+    // igual que siempre.
+    if (tx.contraparteRfc) {
+      const porRfc = await prisma.invoice.findMany({
+        where: {
+          companyId,
+          tipo: { in: tiposCandidatos },
+          status: "STAMPED",
+          fecha: {
+            gte: new Date(tx.fecha.getTime() - IDENTITY_WINDOW_DAYS * 86400000),
+            lte: new Date(tx.fecha.getTime() + IDENTITY_WINDOW_DAYS * 86400000),
+          },
+          total: { gte: absAmount * (1 - TOLERANCE), lte: absAmount * (1 + TOLERANCE) },
+          bankTransactions: { none: { status: "MATCHED" } },
+          conciliacionDetalles: { none: {} },
+          OR: [
+            { contraparteRfc: { equals: tx.contraparteRfc, mode: "insensitive" } },
+            { customer: { rfc: { equals: tx.contraparteRfc, mode: "insensitive" } } },
+          ],
+        },
+        include: { customer: { select: { rfc: true, razonSocial: true } } },
+      });
+      const yaEsta = new Set(candidates.map((c) => c.id));
+      for (const inv of porRfc) if (!yaEsta.has(inv.id)) candidates.push(inv);
+    }
 
     if (candidates.length === 0) continue;
 
