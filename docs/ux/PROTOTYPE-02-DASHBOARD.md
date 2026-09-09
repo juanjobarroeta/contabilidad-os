@@ -21,7 +21,7 @@ It includes:
 - Safe actions that can proceed while import runs
 - Dataset status with source and freshness shown together
 - A detailed coverage drawer for the 50 requested periods
-- Responsive desktop and mobile navigation treatments
+- Responsive navigation with Nómina as a primary destination and secondary modules grouped into submenus
 - Spanish interface copy with no emoji characters
 
 The mockup intentionally does not invent balances, tax estimates, or compliance scores before the required fiscal coverage exists.
@@ -64,6 +64,7 @@ These contracts should be evaluated against existing shared components before im
 | Prototype contract | Second consumer |
 |---|---|
 | Application page shell | Banking and compliance |
+| Primary navigation and submenu pattern | Payroll, banking, tax, and company administration |
 | Company context | Every company-scoped route |
 | Period context | Taxes, accounting, and compliance |
 | Primary next action | Compliance and bank reconciliation |
@@ -90,4 +91,5 @@ These contracts should be evaluated against existing shared components before im
 - Estimated, presented, and SAT-verified states remain visibly distinct.
 - Source and freshness are available without opening a secondary page.
 - The primary action preserves company and period context on navigation.
+- Nómina remains directly accessible on desktop and mobile without opening a submenu.
 - The same shared status and period patterns can be used by compliance and declarations.

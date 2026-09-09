@@ -1072,16 +1072,7 @@ html&gt;body{padding:0}&lt;/style&gt;
     #cos-dashboard-importing .cos-company strong { overflow: hidden; font-size: 12px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
     #cos-dashboard-importing .cos-company span { color: var(--cos-muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
 
-    #cos-dashboard-importing .cos-nav { display: grid; gap: 18px; margin-top: 22px; }
-    #cos-dashboard-importing .cos-nav-group { display: grid; gap: 3px; }
-    #cos-dashboard-importing .cos-nav-label {
-      padding: 0 9px 5px;
-      color: var(--cos-faint);
-      font-size: 10px;
-      font-weight: 500;
-      letter-spacing: 0.07em;
-      text-transform: uppercase;
-    }
+    #cos-dashboard-importing .cos-nav { display: grid; gap: 4px; margin-top: 22px; }
 
     #cos-dashboard-importing .cos-nav-item {
       width: 100%;
@@ -1098,6 +1089,27 @@ html&gt;body{padding:0}&lt;/style&gt;
 
     #cos-dashboard-importing .cos-nav-item:hover { border-color: var(--cos-border); color: var(--cos-text); }
     #cos-dashboard-importing .cos-nav-item[aria-current=&quot;page&quot;] { background: var(--cos-blue-soft); color: #dce8ff; }
+    #cos-dashboard-importing .cos-nav-menu { min-width: 0; }
+    #cos-dashboard-importing .cos-nav-menu &gt; summary {
+      min-height: 35px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 10px;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      color: var(--cos-muted);
+      font-size: 12px;
+      list-style: none;
+      cursor: pointer;
+    }
+    #cos-dashboard-importing .cos-nav-menu &gt; summary::-webkit-details-marker { display: none; }
+    #cos-dashboard-importing .cos-nav-menu &gt; summary::after { color: var(--cos-faint); content: &quot;+&quot;; }
+    #cos-dashboard-importing .cos-nav-menu[open] &gt; summary { border-color: var(--cos-border); color: var(--cos-text); }
+    #cos-dashboard-importing .cos-nav-menu[open] &gt; summary::after { content: &quot;-&quot;; }
+    #cos-dashboard-importing .cos-nav-submenu { display: grid; gap: 3px; margin-top: 3px; padding-left: 10px; }
+    #cos-dashboard-importing .cos-nav-submenu .cos-nav-item { min-height: 32px; color: var(--cos-faint); }
 
     #cos-dashboard-importing .cos-user {
       display: grid;
@@ -1440,21 +1452,56 @@ html&gt;body{padding:0}&lt;/style&gt;
       #cos-dashboard-importing .cos-mobile-header .cos-brand { padding: 0; }
       #cos-dashboard-importing .cos-mobile-company { color: var(--cos-muted); font-size: 10px; text-align: right; }
       #cos-dashboard-importing .cos-mobile-nav {
+        position: relative;
+        z-index: 4;
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
         border-bottom: 1px solid var(--cos-border);
         background: var(--cos-sidebar);
       }
-      #cos-dashboard-importing .cos-mobile-nav button {
+      #cos-dashboard-importing .cos-mobile-nav &gt; button,
+      #cos-dashboard-importing .cos-mobile-menu &gt; summary {
         min-height: 44px;
+        display: grid;
+        place-items: center;
         padding: 8px 4px;
         border: 0;
         border-bottom: 2px solid transparent;
         background: transparent;
         color: var(--cos-muted);
         font-size: 10px;
+        list-style: none;
+        cursor: pointer;
       }
-      #cos-dashboard-importing .cos-mobile-nav button[aria-current=&quot;page&quot;] { border-bottom-color: var(--cos-blue); color: var(--cos-text); }
+      #cos-dashboard-importing .cos-mobile-menu { position: relative; min-width: 0; }
+      #cos-dashboard-importing .cos-mobile-menu &gt; summary::-webkit-details-marker { display: none; }
+      #cos-dashboard-importing .cos-mobile-nav &gt; button[aria-current=&quot;page&quot;],
+      #cos-dashboard-importing .cos-mobile-menu[open] &gt; summary { border-bottom-color: var(--cos-blue); color: var(--cos-text); }
+      #cos-dashboard-importing .cos-mobile-menu-list {
+        position: absolute;
+        top: calc(100% + 1px);
+        right: 0;
+        width: min(220px, calc(100vw - 24px));
+        display: grid;
+        gap: 3px;
+        padding: 6px;
+        border: 1px solid var(--cos-border);
+        border-radius: 9px;
+        background: var(--cos-surface-raised);
+        box-shadow: 0 18px 40px rgb(0 0 0 / 38%);
+      }
+      #cos-dashboard-importing .cos-mobile-menu-list button {
+        width: 100%;
+        min-height: 40px;
+        padding: 9px 10px;
+        border: 1px solid transparent;
+        border-radius: 7px;
+        background: transparent;
+        color: var(--cos-muted);
+        text-align: left;
+        cursor: pointer;
+      }
+      #cos-dashboard-importing .cos-mobile-menu-list button:hover { border-color: var(--cos-border); color: var(--cos-text); }
       #cos-dashboard-importing .cos-content { padding: 23px 16px 28px; }
       #cos-dashboard-importing .cos-page-head { align-items: stretch; flex-direction: column; gap: 15px; }
       #cos-dashboard-importing .cos-period-context { width: 100%; }
@@ -1506,25 +1553,29 @@ html&gt;body{padding:0}&lt;/style&gt;
       &lt;/button&gt;
 
       &lt;nav class=&quot;cos-nav&quot; aria-label=&quot;Navegación principal&quot;&gt;
-        &lt;div class=&quot;cos-nav-group&quot;&gt;
-          &lt;button class=&quot;cos-nav-item&quot; type=&quot;button&quot; aria-current=&quot;page&quot;&gt;Inicio&lt;/button&gt;
-        &lt;/div&gt;
-        &lt;div class=&quot;cos-nav-group&quot;&gt;
-          &lt;span class=&quot;cos-nav-label&quot;&gt;Operación&lt;/span&gt;
-          &lt;button class=&quot;cos-nav-item&quot; type=&quot;button&quot; data-action-message=&quot;Facturas conserva la empresa y el periodo activos.&quot;&gt;Facturas&lt;/button&gt;
-          &lt;button class=&quot;cos-nav-item&quot; type=&quot;button&quot; data-action-message=&quot;Bancos abre la configuración de cuentas de esta empresa.&quot;&gt;Bancos&lt;/button&gt;
-          &lt;button class=&quot;cos-nav-item&quot; type=&quot;button&quot; data-action-message=&quot;Nómina conserva el contexto de Comercializadora Norte.&quot;&gt;Nómina&lt;/button&gt;
-        &lt;/div&gt;
-        &lt;div class=&quot;cos-nav-group&quot;&gt;
-          &lt;span class=&quot;cos-nav-label&quot;&gt;Cierre y declaraciones&lt;/span&gt;
-          &lt;button class=&quot;cos-nav-item&quot; type=&quot;button&quot; data-action-message=&quot;Impuestos abre agosto de 2026 para esta empresa.&quot;&gt;Impuestos&lt;/button&gt;
-          &lt;button class=&quot;cos-nav-item&quot; type=&quot;button&quot; data-action-message=&quot;Contabilidad abre el cierre de agosto de 2026.&quot;&gt;Contabilidad&lt;/button&gt;
-          &lt;button class=&quot;cos-nav-item&quot; type=&quot;button&quot; data-action-message=&quot;Cumplimiento abre obligaciones y evidencia del mismo periodo.&quot;&gt;Cumplimiento&lt;/button&gt;
-        &lt;/div&gt;
-        &lt;div class=&quot;cos-nav-group&quot;&gt;
-          &lt;span class=&quot;cos-nav-label&quot;&gt;Empresa&lt;/span&gt;
-          &lt;button class=&quot;cos-nav-item&quot; type=&quot;button&quot; data-action-message=&quot;Configuración abre la identidad y conexiones de esta empresa.&quot;&gt;Configuración&lt;/button&gt;
-        &lt;/div&gt;
+        &lt;button class=&quot;cos-nav-item&quot; type=&quot;button&quot; aria-current=&quot;page&quot;&gt;Inicio&lt;/button&gt;
+        &lt;button class=&quot;cos-nav-item&quot; type=&quot;button&quot; data-action-message=&quot;Nómina conserva la empresa y el periodo activos.&quot;&gt;Nómina&lt;/button&gt;
+        &lt;details class=&quot;cos-nav-menu&quot;&gt;
+          &lt;summary&gt;Operación&lt;/summary&gt;
+          &lt;div class=&quot;cos-nav-submenu&quot;&gt;
+            &lt;button class=&quot;cos-nav-item&quot; type=&quot;button&quot; data-action-message=&quot;Facturas conserva la empresa y el periodo activos.&quot;&gt;Facturas&lt;/button&gt;
+            &lt;button class=&quot;cos-nav-item&quot; type=&quot;button&quot; data-action-message=&quot;Bancos abre la configuración de cuentas de esta empresa.&quot;&gt;Bancos&lt;/button&gt;
+          &lt;/div&gt;
+        &lt;/details&gt;
+        &lt;details class=&quot;cos-nav-menu&quot;&gt;
+          &lt;summary&gt;Fiscal&lt;/summary&gt;
+          &lt;div class=&quot;cos-nav-submenu&quot;&gt;
+            &lt;button class=&quot;cos-nav-item&quot; type=&quot;button&quot; data-action-message=&quot;Impuestos abre agosto de 2026 para esta empresa.&quot;&gt;Impuestos&lt;/button&gt;
+            &lt;button class=&quot;cos-nav-item&quot; type=&quot;button&quot; data-action-message=&quot;Contabilidad abre el cierre de agosto de 2026.&quot;&gt;Contabilidad&lt;/button&gt;
+            &lt;button class=&quot;cos-nav-item&quot; type=&quot;button&quot; data-action-message=&quot;Cumplimiento abre obligaciones y evidencia del mismo periodo.&quot;&gt;Cumplimiento&lt;/button&gt;
+          &lt;/div&gt;
+        &lt;/details&gt;
+        &lt;details class=&quot;cos-nav-menu&quot;&gt;
+          &lt;summary&gt;Empresa&lt;/summary&gt;
+          &lt;div class=&quot;cos-nav-submenu&quot;&gt;
+            &lt;button class=&quot;cos-nav-item&quot; type=&quot;button&quot; data-action-message=&quot;Configuración abre la identidad y conexiones de esta empresa.&quot;&gt;Configuración&lt;/button&gt;
+          &lt;/div&gt;
+        &lt;/details&gt;
       &lt;/nav&gt;
 
       &lt;div class=&quot;cos-user&quot;&gt;
@@ -1540,9 +1591,23 @@ html&gt;body{padding:0}&lt;/style&gt;
       &lt;/header&gt;
       &lt;nav class=&quot;cos-mobile-nav&quot; aria-label=&quot;Navegación móvil&quot;&gt;
         &lt;button type=&quot;button&quot; aria-current=&quot;page&quot;&gt;Inicio&lt;/button&gt;
-        &lt;button type=&quot;button&quot; data-action-message=&quot;Bancos abre la configuración de cuentas.&quot;&gt;Bancos&lt;/button&gt;
-        &lt;button type=&quot;button&quot; data-action-message=&quot;Fiscal abre el periodo activo.&quot;&gt;Fiscal&lt;/button&gt;
-        &lt;button type=&quot;button&quot; data-action-message=&quot;Empresa abre la configuración.&quot;&gt;Empresa&lt;/button&gt;
+        &lt;button type=&quot;button&quot; data-action-message=&quot;Nómina conserva la empresa y el periodo activos.&quot;&gt;Nómina&lt;/button&gt;
+        &lt;details class=&quot;cos-mobile-menu&quot;&gt;
+          &lt;summary&gt;Operación&lt;/summary&gt;
+          &lt;div class=&quot;cos-mobile-menu-list&quot;&gt;
+            &lt;button type=&quot;button&quot; data-action-message=&quot;Facturas conserva la empresa y el periodo activos.&quot;&gt;Facturas&lt;/button&gt;
+            &lt;button type=&quot;button&quot; data-action-message=&quot;Bancos abre la configuración de cuentas.&quot;&gt;Bancos&lt;/button&gt;
+          &lt;/div&gt;
+        &lt;/details&gt;
+        &lt;details class=&quot;cos-mobile-menu&quot;&gt;
+          &lt;summary&gt;Más&lt;/summary&gt;
+          &lt;div class=&quot;cos-mobile-menu-list&quot;&gt;
+            &lt;button type=&quot;button&quot; data-action-message=&quot;Impuestos abre el periodo activo.&quot;&gt;Impuestos&lt;/button&gt;
+            &lt;button type=&quot;button&quot; data-action-message=&quot;Contabilidad abre el cierre del periodo activo.&quot;&gt;Contabilidad&lt;/button&gt;
+            &lt;button type=&quot;button&quot; data-action-message=&quot;Cumplimiento abre obligaciones y evidencia.&quot;&gt;Cumplimiento&lt;/button&gt;
+            &lt;button type=&quot;button&quot; data-action-message=&quot;Configuración abre la identidad y conexiones de esta empresa.&quot;&gt;Configuración&lt;/button&gt;
+          &lt;/div&gt;
+        &lt;/details&gt;
       &lt;/nav&gt;
 
       &lt;div class=&quot;cos-topbar&quot;&gt;
@@ -1702,7 +1767,19 @@ html&gt;body{padding:0}&lt;/style&gt;
       }
 
       root.querySelectorAll(&quot;[data-action-message]&quot;).forEach((button) =&gt; {
-        button.addEventListener(&quot;click&quot;, () =&gt; showFeedback(button.dataset.actionMessage));
+        button.addEventListener(&quot;click&quot;, () =&gt; {
+          showFeedback(button.dataset.actionMessage);
+          const mobileMenu = button.closest(&quot;.cos-mobile-menu&quot;);
+          if (mobileMenu) mobileMenu.open = false;
+        });
+      });
+      root.querySelectorAll(&quot;.cos-nav-menu, .cos-mobile-menu&quot;).forEach((menu) =&gt; {
+        menu.addEventListener(&quot;toggle&quot;, () =&gt; {
+          if (!menu.open) return;
+          root.querySelectorAll(menu.classList.contains(&quot;cos-mobile-menu&quot;) ? &quot;.cos-mobile-menu&quot; : &quot;.cos-nav-menu&quot;).forEach((otherMenu) =&gt; {
+            if (otherMenu !== menu) otherMenu.open = false;
+          });
+        });
       });
       root.querySelectorAll(&quot;[data-period-direction]&quot;).forEach((button) =&gt; {
         button.addEventListener(&quot;click&quot;, () =&gt; {
