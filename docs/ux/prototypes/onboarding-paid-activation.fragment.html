@@ -1,0 +1,756 @@
+<div id="cos-onboarding-no-trial">
+  <style>
+    #cos-onboarding-no-trial {
+      --cos-bg: #090d13;
+      --cos-shell: #11161d;
+      --cos-panel: #171c24;
+      --cos-panel-soft: #0d1218;
+      --cos-field: #0a0f15;
+      --cos-border: #29313b;
+      --cos-border-strong: #3b4654;
+      --cos-text: #f1f4f8;
+      --cos-muted: #949daa;
+      --cos-blue: #5688e8;
+      --cos-blue-hover: #4678d7;
+      --cos-blue-soft: #172844;
+      --cos-blue-border: #2d4f82;
+      --cos-positive: #73c99a;
+      --cos-positive-soft: #13271f;
+      position: relative;
+      width: 100%;
+      min-width: 0;
+      color: var(--cos-text);
+      background: var(--cos-bg);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    #cos-onboarding-no-trial * { box-sizing: border-box; }
+    #cos-onboarding-no-trial button,
+    #cos-onboarding-no-trial input,
+    #cos-onboarding-no-trial select { font: inherit; }
+    #cos-onboarding-no-trial button,
+    #cos-onboarding-no-trial a,
+    #cos-onboarding-no-trial label { -webkit-tap-highlight-color: transparent; }
+    #cos-onboarding-no-trial .cos-stage {
+      width: 100%;
+      min-height: 760px;
+      padding: clamp(22px, 3.2vw, 48px);
+      background: radial-gradient(circle at 78% 0%, rgb(52 88 151 / 12%), transparent 34%), var(--cos-bg);
+    }
+    #cos-onboarding-no-trial .cos-page { width: min(1320px, 100%); margin: 0 auto; }
+    #cos-onboarding-no-trial .cos-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 20px;
+      padding: 0 2px;
+    }
+    #cos-onboarding-no-trial .cos-brand {
+      color: var(--cos-text);
+      font-size: 18px;
+      font-weight: 500;
+      letter-spacing: -0.035em;
+    }
+    #cos-onboarding-no-trial .cos-brand span { color: var(--cos-blue); }
+    #cos-onboarding-no-trial .cos-header-state { color: var(--cos-muted); font-size: 12px; }
+    #cos-onboarding-no-trial .cos-shell {
+      display: grid;
+      grid-template-columns: 300px minmax(0, 1fr);
+      min-height: 680px;
+      overflow: hidden;
+      border: 1px solid var(--cos-border);
+      border-radius: 18px;
+      background: var(--cos-shell);
+      box-shadow: 0 28px 90px rgb(0 0 0 / 34%);
+    }
+    #cos-onboarding-no-trial .cos-aside {
+      display: flex;
+      flex-direction: column;
+      padding: 34px 26px 28px;
+      border-right: 1px solid var(--cos-border);
+      background: var(--cos-panel-soft);
+    }
+    #cos-onboarding-no-trial .cos-kicker,
+    #cos-onboarding-no-trial .cos-overline {
+      margin: 0 0 8px;
+      color: #8eb2f4;
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+    }
+    #cos-onboarding-no-trial .cos-aside h1 {
+      margin: 0;
+      color: var(--cos-text);
+      font-size: 28px;
+      font-weight: 500;
+      letter-spacing: -0.04em;
+      line-height: 1.13;
+    }
+    #cos-onboarding-no-trial .cos-aside-copy {
+      margin: 12px 0 28px;
+      color: var(--cos-muted);
+      font-size: 13px;
+    }
+    #cos-onboarding-no-trial .cos-steps { display: grid; gap: 7px; }
+    #cos-onboarding-no-trial .cos-step {
+      width: 100%;
+      min-height: 52px;
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr);
+      gap: 11px;
+      align-items: center;
+      padding: 10px;
+      border: 1px solid transparent;
+      border-radius: 10px;
+      background: transparent;
+      color: var(--cos-muted);
+      text-align: left;
+      cursor: pointer;
+    }
+    #cos-onboarding-no-trial .cos-step:hover { border-color: var(--cos-border); }
+    #cos-onboarding-no-trial .cos-step[aria-selected="true"] {
+      border-color: var(--cos-blue-border);
+      background: var(--cos-blue-soft);
+      color: var(--cos-text);
+    }
+    #cos-onboarding-no-trial .cos-step[data-complete="true"] { color: #c8d2df; }
+    #cos-onboarding-no-trial .cos-step-number {
+      display: grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border: 1px solid var(--cos-border-strong);
+      border-radius: 50%;
+      color: inherit;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    #cos-onboarding-no-trial .cos-step[aria-selected="true"] .cos-step-number {
+      border-color: var(--cos-blue);
+      background: var(--cos-blue);
+      color: #ffffff;
+    }
+    #cos-onboarding-no-trial .cos-step[data-complete="true"] .cos-step-number {
+      border-color: #46627e;
+      background: #172331;
+    }
+    #cos-onboarding-no-trial .cos-step-title { display: block; color: inherit; font-size: 13px; font-weight: 500; }
+    #cos-onboarding-no-trial .cos-step-detail { display: block; margin-top: 1px; color: var(--cos-muted); font-size: 11px; }
+    #cos-onboarding-no-trial .cos-account { margin-top: auto; padding-top: 28px; color: var(--cos-muted); font-size: 11px; }
+    #cos-onboarding-no-trial .cos-account strong,
+    #cos-onboarding-no-trial .cos-account span { display: block; }
+    #cos-onboarding-no-trial .cos-account strong {
+      margin: 4px 0 2px;
+      color: var(--cos-text);
+      font-size: 13px;
+      font-weight: 500;
+    }
+    #cos-onboarding-no-trial .cos-main {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      padding: 38px clamp(28px, 4vw, 56px) 30px;
+    }
+    #cos-onboarding-no-trial .cos-screen { flex: 1; }
+    #cos-onboarding-no-trial h2 {
+      max-width: 760px;
+      margin: 0;
+      color: var(--cos-text);
+      font-size: clamp(27px, 3vw, 34px);
+      font-weight: 500;
+      letter-spacing: -0.04em;
+      line-height: 1.14;
+    }
+    #cos-onboarding-no-trial .cos-lead { max-width: 72ch; margin: 10px 0 24px; color: var(--cos-muted); font-size: 14px; }
+    #cos-onboarding-no-trial .cos-notice {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+      padding: 12px 14px;
+      border: 1px solid var(--cos-blue-border);
+      border-radius: 10px;
+      background: var(--cos-blue-soft);
+      color: #c8daf9;
+      font-size: 12px;
+    }
+    #cos-onboarding-no-trial .cos-notice strong { color: #eef4ff; font-weight: 500; }
+    #cos-onboarding-no-trial .cos-notice-label { flex: 0 0 auto; color: #8eb2f4; font-weight: 500; }
+    #cos-onboarding-no-trial .cos-panel {
+      padding: 18px;
+      border: 1px solid var(--cos-border);
+      border-radius: 12px;
+      background: var(--cos-panel);
+    }
+    #cos-onboarding-no-trial .cos-panel-title { display: block; margin-bottom: 4px; color: var(--cos-text); font-size: 13px; font-weight: 500; }
+    #cos-onboarding-no-trial .cos-panel-copy { margin: 0; color: var(--cos-muted); font-size: 12px; }
+    #cos-onboarding-no-trial .cos-split {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(250px, 0.72fr);
+      gap: 16px;
+      align-items: start;
+    }
+    #cos-onboarding-no-trial .cos-consents { display: grid; gap: 12px; margin-top: 18px; }
+    #cos-onboarding-no-trial .cos-consent {
+      display: grid;
+      grid-template-columns: 20px minmax(0, 1fr);
+      gap: 11px;
+      align-items: start;
+      padding: 14px;
+      border: 1px solid var(--cos-border);
+      border-radius: 10px;
+      background: var(--cos-panel-soft);
+    }
+    #cos-onboarding-no-trial .cos-consent:hover { border-color: var(--cos-border-strong); }
+    #cos-onboarding-no-trial .cos-consent input { width: 17px; height: 17px; margin: 2px 0 0; accent-color: var(--cos-blue); }
+    #cos-onboarding-no-trial .cos-consent-text { color: #dbe1e9; font-size: 13px; }
+    #cos-onboarding-no-trial .cos-consent-text small { display: block; margin-top: 4px; color: var(--cos-muted); font-size: 11px; }
+    #cos-onboarding-no-trial .cos-link {
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: #8eb2f4;
+      font-weight: 500;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      cursor: pointer;
+    }
+    #cos-onboarding-no-trial .cos-record-list,
+    #cos-onboarding-no-trial .cos-use-list,
+    #cos-onboarding-no-trial .cos-import-list { display: grid; gap: 11px; margin: 16px 0 0; padding: 0; list-style: none; }
+    #cos-onboarding-no-trial .cos-record-list li,
+    #cos-onboarding-no-trial .cos-use-list li {
+      padding-top: 11px;
+      border-top: 1px solid var(--cos-border);
+      color: #d3dae4;
+      font-size: 12px;
+    }
+    #cos-onboarding-no-trial .cos-record-list span,
+    #cos-onboarding-no-trial .cos-use-list span { display: block; margin-top: 2px; color: var(--cos-muted); font-size: 11px; }
+    #cos-onboarding-no-trial .cos-upload {
+      width: 100%;
+      min-height: 108px;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      border: 1px dashed var(--cos-border-strong);
+      border-radius: 10px;
+      background: var(--cos-panel-soft);
+      color: var(--cos-text);
+      text-align: center;
+      cursor: pointer;
+    }
+    #cos-onboarding-no-trial .cos-upload:hover { border-color: var(--cos-blue); }
+    #cos-onboarding-no-trial .cos-upload strong,
+    #cos-onboarding-no-trial .cos-upload span { display: block; }
+    #cos-onboarding-no-trial .cos-upload strong { font-size: 13px; font-weight: 500; }
+    #cos-onboarding-no-trial .cos-upload span { margin-top: 4px; color: var(--cos-muted); font-size: 11px; }
+    #cos-onboarding-no-trial .cos-divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 16px 0;
+      color: var(--cos-muted);
+      font-size: 10px;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+    }
+    #cos-onboarding-no-trial .cos-divider::before,
+    #cos-onboarding-no-trial .cos-divider::after { height: 1px; flex: 1; background: var(--cos-border); content: ""; }
+    #cos-onboarding-no-trial .cos-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    #cos-onboarding-no-trial .cos-field { display: grid; min-width: 0; gap: 6px; }
+    #cos-onboarding-no-trial .cos-field > span { color: #dbe1e9; font-size: 11px; font-weight: 500; }
+    #cos-onboarding-no-trial input[type="text"],
+    #cos-onboarding-no-trial input[type="password"],
+    #cos-onboarding-no-trial select {
+      width: 100%;
+      min-height: 42px;
+      padding: 9px 11px;
+      border: 1px solid var(--cos-border);
+      border-radius: 8px;
+      outline: none;
+      background: var(--cos-field);
+      color: var(--cos-text);
+      font-size: 13px;
+    }
+    #cos-onboarding-no-trial input:focus,
+    #cos-onboarding-no-trial select:focus { border-color: var(--cos-blue); box-shadow: 0 0 0 3px rgb(86 136 232 / 14%); }
+    #cos-onboarding-no-trial .cos-help { margin: 12px 0 0; color: var(--cos-muted); font-size: 11px; }
+    #cos-onboarding-no-trial .cos-period {
+      display: inline-flex;
+      gap: 4px;
+      margin: 0 0 14px;
+      padding: 3px;
+      border: 1px solid var(--cos-border);
+      border-radius: 9px;
+      background: var(--cos-field);
+    }
+    #cos-onboarding-no-trial .cos-period button {
+      min-height: 34px;
+      padding: 6px 12px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--cos-muted);
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    #cos-onboarding-no-trial .cos-period button[aria-pressed="true"] {
+      background: var(--cos-panel);
+      color: var(--cos-text);
+      box-shadow: 0 1px 4px rgb(0 0 0 / 32%);
+    }
+    #cos-onboarding-no-trial .cos-plans { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    #cos-onboarding-no-trial .cos-plan {
+      min-height: 156px;
+      padding: 16px;
+      border: 1px solid var(--cos-border);
+      border-radius: 11px;
+      background: var(--cos-panel);
+      color: var(--cos-text);
+      text-align: left;
+      cursor: pointer;
+    }
+    #cos-onboarding-no-trial .cos-plan:hover { border-color: var(--cos-border-strong); }
+    #cos-onboarding-no-trial .cos-plan[aria-pressed="true"] { border-color: var(--cos-blue); box-shadow: inset 0 0 0 1px var(--cos-blue); }
+    #cos-onboarding-no-trial .cos-plan-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+    #cos-onboarding-no-trial .cos-plan-name { font-size: 14px; font-weight: 500; }
+    #cos-onboarding-no-trial .cos-plan-tag { color: #8eb2f4; font-size: 10px; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; }
+    #cos-onboarding-no-trial .cos-price { display: block; margin: 10px 0 8px; font-size: 23px; font-weight: 500; letter-spacing: -0.03em; }
+    #cos-onboarding-no-trial .cos-price small { color: var(--cos-muted); font-size: 10px; font-weight: 500; letter-spacing: 0; }
+    #cos-onboarding-no-trial .cos-plan-copy { display: block; color: var(--cos-muted); font-size: 11px; }
+    #cos-onboarding-no-trial .cos-order { position: sticky; top: 18px; }
+    #cos-onboarding-no-trial .cos-order-lines {
+      display: grid;
+      gap: 10px;
+      margin: 16px 0;
+      padding: 14px 0;
+      border-top: 1px solid var(--cos-border);
+      border-bottom: 1px solid var(--cos-border);
+    }
+    #cos-onboarding-no-trial .cos-order-line,
+    #cos-onboarding-no-trial .cos-order-total { display: flex; justify-content: space-between; gap: 18px; color: var(--cos-muted); font-size: 12px; }
+    #cos-onboarding-no-trial .cos-order-line strong,
+    #cos-onboarding-no-trial .cos-order-total strong { color: var(--cos-text); font-weight: 500; text-align: right; }
+    #cos-onboarding-no-trial .cos-order-total { align-items: flex-end; color: var(--cos-text); font-weight: 500; }
+    #cos-onboarding-no-trial .cos-order-total strong { font-size: 20px; letter-spacing: -0.02em; }
+    #cos-onboarding-no-trial .cos-status {
+      display: inline-flex;
+      min-height: 25px;
+      align-items: center;
+      padding: 4px 9px;
+      border: 1px solid #28543f;
+      border-radius: 99px;
+      background: var(--cos-positive-soft);
+      color: var(--cos-positive);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    #cos-onboarding-no-trial .cos-file-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+    #cos-onboarding-no-trial .cos-file {
+      min-height: 92px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 15px;
+      border: 1px dashed var(--cos-border-strong);
+      border-radius: 10px;
+      background: var(--cos-panel-soft);
+      color: var(--cos-text);
+      text-align: left;
+      cursor: pointer;
+    }
+    #cos-onboarding-no-trial .cos-file:hover { border-color: var(--cos-blue); }
+    #cos-onboarding-no-trial .cos-file strong,
+    #cos-onboarding-no-trial .cos-file span { display: block; }
+    #cos-onboarding-no-trial .cos-file strong { font-size: 12px; font-weight: 500; }
+    #cos-onboarding-no-trial .cos-file span { margin-top: 4px; color: #8eb2f4; font-size: 11px; }
+    #cos-onboarding-no-trial .cos-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
+    #cos-onboarding-no-trial .cos-stat { padding: 14px; border: 1px solid var(--cos-border); border-radius: 10px; background: var(--cos-panel); }
+    #cos-onboarding-no-trial .cos-stat span,
+    #cos-onboarding-no-trial .cos-stat strong { display: block; }
+    #cos-onboarding-no-trial .cos-stat span { color: var(--cos-muted); font-size: 10px; }
+    #cos-onboarding-no-trial .cos-stat strong { margin-top: 4px; color: var(--cos-text); font-size: 13px; font-weight: 500; }
+    #cos-onboarding-no-trial .cos-progress-card { padding: 20px; border: 1px solid var(--cos-border); border-radius: 12px; background: var(--cos-panel); }
+    #cos-onboarding-no-trial .cos-progress-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+    #cos-onboarding-no-trial .cos-progress-head strong { display: block; font-size: 14px; font-weight: 500; }
+    #cos-onboarding-no-trial .cos-rfc { display: block; margin-top: 3px; color: var(--cos-muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+    #cos-onboarding-no-trial .cos-progress { height: 7px; margin: 19px 0 9px; overflow: hidden; border-radius: 99px; background: var(--cos-border); }
+    #cos-onboarding-no-trial .cos-progress span { display: block; width: 64%; height: 100%; border-radius: inherit; background: var(--cos-blue); }
+    #cos-onboarding-no-trial .cos-progress-meta { display: flex; justify-content: space-between; gap: 12px; color: var(--cos-muted); font-size: 11px; }
+    #cos-onboarding-no-trial .cos-import-list li {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 18px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--cos-border);
+      color: #dbe1e9;
+      font-size: 12px;
+    }
+    #cos-onboarding-no-trial .cos-import-list span:last-child { color: var(--cos-muted); }
+    #cos-onboarding-no-trial .cos-import-list .is-active { color: #8eb2f4; }
+    #cos-onboarding-no-trial .cos-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-top: 26px;
+      padding-top: 20px;
+      border-top: 1px solid var(--cos-border);
+    }
+    #cos-onboarding-no-trial .cos-action-note { max-width: 54ch; color: var(--cos-muted); font-size: 11px; }
+    #cos-onboarding-no-trial .cos-buttons { display: flex; gap: 9px; margin-left: auto; }
+    #cos-onboarding-no-trial .cos-btn {
+      min-height: 42px;
+      padding: 9px 16px;
+      border: 1px solid var(--cos-border-strong);
+      border-radius: 8px;
+      background: transparent;
+      color: var(--cos-text);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    #cos-onboarding-no-trial .cos-btn:hover { background: var(--cos-panel); }
+    #cos-onboarding-no-trial .cos-btn:disabled { opacity: 0.38; cursor: default; }
+    #cos-onboarding-no-trial .cos-btn:disabled:hover { background: transparent; }
+    #cos-onboarding-no-trial .cos-primary { min-width: 142px; border-color: var(--cos-blue); background: var(--cos-blue); color: #ffffff; }
+    #cos-onboarding-no-trial .cos-primary:hover { background: var(--cos-blue-hover); }
+    #cos-onboarding-no-trial .cos-footer { margin-top: 14px; color: #707987; text-align: center; font-size: 10px; }
+    #cos-onboarding-no-trial .cos-dialog-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: rgb(4 7 10 / 78%);
+      backdrop-filter: blur(6px);
+    }
+    #cos-onboarding-no-trial .cos-dialog {
+      width: min(500px, 100%);
+      padding: 24px;
+      border: 1px solid var(--cos-border-strong);
+      border-radius: 14px;
+      background: #151a21;
+      box-shadow: 0 30px 100px rgb(0 0 0 / 58%);
+    }
+    #cos-onboarding-no-trial .cos-dialog-brand { color: #b9c6d8; font-size: 12px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
+    #cos-onboarding-no-trial .cos-dialog h3 { margin: 8px 0 7px; color: var(--cos-text); font-size: 21px; font-weight: 500; letter-spacing: -0.025em; }
+    #cos-onboarding-no-trial .cos-dialog > p { margin: 0; color: var(--cos-muted); font-size: 12px; }
+    #cos-onboarding-no-trial .cos-dialog-summary { margin: 18px 0; padding: 14px; border: 1px solid var(--cos-border); border-radius: 10px; background: var(--cos-panel-soft); }
+    #cos-onboarding-no-trial .cos-dialog-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 18px; }
+    #cos-onboarding-no-trial [hidden] { display: none !important; }
+
+    @media (max-width: 980px) {
+      #cos-onboarding-no-trial .cos-stage { padding: 22px; }
+      #cos-onboarding-no-trial .cos-shell { grid-template-columns: 1fr; }
+      #cos-onboarding-no-trial .cos-aside { padding: 22px; border-right: 0; border-bottom: 1px solid var(--cos-border); }
+      #cos-onboarding-no-trial .cos-aside h1,
+      #cos-onboarding-no-trial .cos-aside-copy,
+      #cos-onboarding-no-trial .cos-account { display: none; }
+      #cos-onboarding-no-trial .cos-kicker { margin-bottom: 14px; }
+      #cos-onboarding-no-trial .cos-steps { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+      #cos-onboarding-no-trial .cos-step { display: flex; min-height: 44px; justify-content: center; padding: 7px; }
+      #cos-onboarding-no-trial .cos-step-text { display: none; }
+      #cos-onboarding-no-trial .cos-main { padding: 30px 28px 26px; }
+    }
+    @media (max-width: 720px) {
+      #cos-onboarding-no-trial .cos-stage { min-height: 0; padding: 12px; }
+      #cos-onboarding-no-trial .cos-header { margin-bottom: 12px; }
+      #cos-onboarding-no-trial .cos-header-state { display: none; }
+      #cos-onboarding-no-trial .cos-shell { border-radius: 14px; }
+      #cos-onboarding-no-trial .cos-aside { padding: 16px; }
+      #cos-onboarding-no-trial .cos-main { padding: 24px 17px 19px; }
+      #cos-onboarding-no-trial .cos-split,
+      #cos-onboarding-no-trial .cos-grid,
+      #cos-onboarding-no-trial .cos-plans,
+      #cos-onboarding-no-trial .cos-file-grid,
+      #cos-onboarding-no-trial .cos-summary { grid-template-columns: 1fr; }
+      #cos-onboarding-no-trial .cos-order { position: static; }
+      #cos-onboarding-no-trial .cos-notice,
+      #cos-onboarding-no-trial .cos-progress-head,
+      #cos-onboarding-no-trial .cos-progress-meta { flex-direction: column; gap: 5px; }
+      #cos-onboarding-no-trial .cos-actions { align-items: stretch; flex-direction: column; }
+      #cos-onboarding-no-trial .cos-action-note { max-width: none; }
+      #cos-onboarding-no-trial .cos-buttons { width: 100%; margin-left: 0; }
+      #cos-onboarding-no-trial .cos-btn { flex: 1; }
+      #cos-onboarding-no-trial .cos-primary { min-width: 0; }
+      #cos-onboarding-no-trial .cos-dialog-layer { align-items: end; padding: 12px; }
+      #cos-onboarding-no-trial .cos-dialog { padding: 20px; }
+    }
+    @media (max-width: 430px) {
+      #cos-onboarding-no-trial .cos-stage { padding: 0; }
+      #cos-onboarding-no-trial .cos-header { padding: 14px 16px 0; }
+      #cos-onboarding-no-trial .cos-shell { border-right: 0; border-left: 0; border-radius: 0; }
+      #cos-onboarding-no-trial .cos-period { width: 100%; }
+      #cos-onboarding-no-trial .cos-period button { flex: 1; }
+      #cos-onboarding-no-trial .cos-dialog-actions { flex-direction: column-reverse; }
+      #cos-onboarding-no-trial .cos-dialog-actions .cos-btn { width: 100%; }
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      #cos-onboarding-no-trial .cos-step,
+      #cos-onboarding-no-trial .cos-consent,
+      #cos-onboarding-no-trial .cos-plan,
+      #cos-onboarding-no-trial .cos-upload,
+      #cos-onboarding-no-trial .cos-file,
+      #cos-onboarding-no-trial .cos-btn,
+      #cos-onboarding-no-trial input,
+      #cos-onboarding-no-trial select { transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease; }
+    }
+  </style>
+
+  <section class="cos-stage" aria-label="Prototipo de alta de empresa sin periodo de prueba">
+    <div class="cos-page">
+      <header class="cos-header">
+        <div class="cos-brand">Contabilidad<span>OS</span></div>
+        <div class="cos-header-state">Cuenta verificada · Configuración protegida</div>
+      </header>
+
+      <section class="cos-shell">
+        <aside class="cos-aside">
+          <p class="cos-kicker">Alta de empresa</p>
+          <h1>Activa tu empresa</h1>
+          <p class="cos-aside-copy">Contrata el servicio antes de conectar credenciales fiscales o iniciar descargas.</p>
+          <nav class="cos-steps" aria-label="Pasos del alta de empresa">
+            <button class="cos-step" type="button" data-step="0" aria-selected="true"><span class="cos-step-number">1</span><span class="cos-step-text"><span class="cos-step-title">Acuerdos</span><span class="cos-step-detail">Términos y privacidad</span></span></button>
+            <button class="cos-step" type="button" data-step="1" aria-selected="false"><span class="cos-step-number">2</span><span class="cos-step-text"><span class="cos-step-title">Empresa</span><span class="cos-step-detail">Identidad fiscal</span></span></button>
+            <button class="cos-step" type="button" data-step="2" aria-selected="false"><span class="cos-step-number">3</span><span class="cos-step-text"><span class="cos-step-title">Plan y pago</span><span class="cos-step-detail">Activación en Stripe</span></span></button>
+            <button class="cos-step" type="button" data-step="3" aria-selected="false"><span class="cos-step-number">4</span><span class="cos-step-text"><span class="cos-step-title">e.firma</span><span class="cos-step-detail">Autorización y carga</span></span></button>
+            <button class="cos-step" type="button" data-step="4" aria-selected="false"><span class="cos-step-number">5</span><span class="cos-step-text"><span class="cos-step-title">Importación</span><span class="cos-step-detail">Sincronización inicial</span></span></button>
+          </nav>
+          <div class="cos-account">Sesión iniciada<strong>juan@empresa.com</strong><span>Cuenta nueva · Sin empresas</span></div>
+        </aside>
+
+        <main class="cos-main" aria-live="polite">
+          <section class="cos-screen" data-screen="0">
+            <p class="cos-overline">Paso 1 de 5</p>
+            <h2>Antes de configurar tu empresa</h2>
+            <p class="cos-lead">Necesitamos registrar tu aceptación antes de recibir documentos o credenciales fiscales. No se solicitará la e.firma en esta etapa.</p>
+            <div class="cos-notice"><span><strong>Estado detectado:</strong> esta cuenta no tiene empresas registradas. Crearemos la primera al completar el pago.</span><span class="cos-notice-label">Sin selección manual</span></div>
+            <div class="cos-split">
+              <div class="cos-panel">
+                <span class="cos-panel-title">Acuerdos obligatorios</span>
+                <p class="cos-panel-copy">Los documentos se muestran antes de cualquier carga de información fiscal.</p>
+                <div class="cos-consents">
+                  <div class="cos-consent"><input id="cos-terms" type="checkbox" data-legal="terms"><div><label class="cos-consent-text" for="cos-terms">Acepto los Términos y Condiciones vigentes para el uso de ContabilidadOS.<small>Incluye las condiciones de contratación, renovación y cancelación.</small></label><button class="cos-link" type="button" data-document="terms">Leer Términos y Condiciones</button></div></div>
+                  <div class="cos-consent"><input id="cos-privacy" type="checkbox" data-legal="privacy"><div><label class="cos-consent-text" for="cos-privacy">He leído el Aviso de Privacidad y autorizo el tratamiento necesario de los datos fiscales de la empresa.<small>La autorización se limita a las finalidades descritas en el aviso.</small></label><button class="cos-link" type="button" data-document="privacy">Leer Aviso de Privacidad</button></div></div>
+                </div>
+              </div>
+              <aside class="cos-panel">
+                <span class="cos-panel-title">Evidencia de aceptación</span>
+                <p class="cos-panel-copy">El registro queda asociado a esta cuenta y a la versión aceptada.</p>
+                <ul class="cos-record-list"><li>Documento y versión<span>Términos y Aviso vigentes</span></li><li>Momento de aceptación<span>Fecha y hora del servidor</span></li><li>Contexto de la sesión<span>Cuenta, IP y navegador</span></li></ul>
+              </aside>
+            </div>
+          </section>
+
+          <section class="cos-screen" data-screen="1" hidden>
+            <p class="cos-overline">Paso 2 de 5</p>
+            <h2>Identifica la empresa</h2>
+            <p class="cos-lead">Con la privacidad aceptada, puedes cargar la Constancia de Situación Fiscal o capturar los datos manualmente. Todavía no conectaremos el SAT.</p>
+            <div class="cos-panel">
+              <button class="cos-upload" type="button" data-upload-csf><span><strong data-csf-title>Seleccionar Constancia de Situación Fiscal</strong><span data-csf-detail>Archivo PDF emitido por el SAT</span></span></button>
+              <p class="cos-help">La constancia se procesa para extraer los datos de identificación descritos en el Aviso de Privacidad.</p>
+              <div class="cos-divider">o captura los datos</div>
+              <div class="cos-grid">
+                <label class="cos-field"><span>RFC</span><input type="text" value="CON920414AB3" aria-label="RFC"></label>
+                <label class="cos-field"><span>Tipo de persona</span><select aria-label="Tipo de persona"><option>Persona moral</option><option>Persona física</option></select></label>
+                <label class="cos-field"><span>Razón social</span><input type="text" value="Comercializadora Norte" aria-label="Razón social"></label>
+                <label class="cos-field"><span>Fecha de inicio de operaciones</span><input type="text" value="14/04/1992" aria-label="Fecha de inicio de operaciones"></label>
+              </div>
+            </div>
+          </section>
+
+          <section class="cos-screen" data-screen="2" hidden>
+            <p class="cos-overline">Paso 3 de 5</p>
+            <h2>Elige el plan y activa el servicio</h2>
+            <p class="cos-lead">No hay periodo de prueba. La suscripción comienza cuando Stripe confirma el pago de esta empresa.</p>
+            <div class="cos-period" role="group" aria-label="Periodicidad de pago"><button type="button" data-period="monthly" aria-pressed="true">Mensual</button><button type="button" data-period="annual" aria-pressed="false">Anual, 2 meses incluidos</button></div>
+            <div class="cos-split">
+              <div class="cos-plans" aria-label="Planes disponibles">
+                <button class="cos-plan" type="button" data-plan="basic" aria-pressed="false"><span class="cos-plan-top"><span class="cos-plan-name">Básico</span></span><span class="cos-price" data-price-basic>$499 <small>MXN al mes</small></span><span class="cos-plan-copy">Consultas, reportes y obligaciones de la empresa.</span></button>
+                <button class="cos-plan" type="button" data-plan="professional" aria-pressed="true"><span class="cos-plan-top"><span class="cos-plan-name">Profesional</span><span class="cos-plan-tag">Recomendado</span></span><span class="cos-price" data-price-professional>$1,299 <small>MXN al mes</small></span><span class="cos-plan-copy">Sincronización SAT, conciliación bancaria y asistencia avanzada.</span></button>
+              </div>
+              <aside class="cos-panel cos-order">
+                <span class="cos-panel-title">Resumen de contratación</span><p class="cos-panel-copy">Una suscripción para Comercializadora Norte.</p>
+                <div class="cos-order-lines"><div class="cos-order-line"><span>Plan</span><strong data-order-plan>Profesional mensual</strong></div><div class="cos-order-line"><span>Subtotal</span><strong data-order-subtotal>$1,299.00 MXN</strong></div><div class="cos-order-line"><span>IVA</span><strong data-order-tax>$207.84 MXN</strong></div><div class="cos-order-total"><span>Total hoy</span><strong data-order-total>$1,506.84 MXN</strong></div></div>
+                <p class="cos-panel-copy" data-renewal-copy>Renovación mensual. Puedes cancelar antes del siguiente cargo.</p>
+              </aside>
+            </div>
+          </section>
+
+          <section class="cos-screen" data-screen="3" hidden>
+            <p class="cos-overline">Paso 4 de 5</p>
+            <h2>Autoriza y carga la e.firma</h2>
+            <p class="cos-lead">El pago ya fue confirmado. Ahora puedes autorizar el uso limitado de la e.firma para descargar y sincronizar información del SAT.</p>
+            <div class="cos-notice"><span><strong>Pago confirmado por Stripe.</strong> Plan Profesional mensual para Comercializadora Norte.</span><span class="cos-status">Cuenta activa</span></div>
+            <div class="cos-split">
+              <div class="cos-panel">
+                <div class="cos-file-grid"><button class="cos-file" type="button"><strong>Certificado de e.firma</strong><span>empresa.cer seleccionado</span></button><button class="cos-file" type="button"><strong>Llave privada</strong><span>empresa.key seleccionada</span></button></div>
+                <div class="cos-grid"><label class="cos-field"><span>Contraseña de la e.firma</span><input type="password" value="contrasena-ejemplo" aria-label="Contraseña de la e.firma"></label><label class="cos-field"><span>Historial por importar</span><select aria-label="Historial por importar"><option>Últimos 5 años</option><option>Último año</option><option>Sin historial previo</option></select></label></div>
+                <div class="cos-consents">
+                  <label class="cos-consent"><input type="checkbox" data-efirma="authority"><span class="cos-consent-text">Confirmo que tengo facultades para conectar la e.firma de esta empresa.</span></label>
+                  <label class="cos-consent"><input type="checkbox" data-efirma="authorization"><span class="cos-consent-text">Autorizo su almacenamiento cifrado y su uso limitado para consulta, descarga y sincronización con el SAT.<small>Esta autorización queda registrada por separado de los Términos y el Aviso de Privacidad.</small></span></label>
+                </div>
+              </div>
+              <aside class="cos-panel">
+                <span class="cos-panel-title">Uso autorizado</span><p class="cos-panel-copy">Mientras opere la conexión actual con el SAT:</p>
+                <ul class="cos-use-list"><li>Descarga y sincronización de CFDI<span>Incluye el historial que seleccionaste.</span></li><li>Procesamiento mediante Syntage<span>La credencial se comparte únicamente para operar la conexión.</span></li><li>Sin presentación automática<span>No se firmarán declaraciones ni se emitirán comprobantes.</span></li><li>CSD fuera de este paso<span>Se solicitará después solo si activas emisión de CFDI.</span></li></ul>
+              </aside>
+            </div>
+          </section>
+
+          <section class="cos-screen" data-screen="4" hidden>
+            <p class="cos-overline">Paso 5 de 5</p>
+            <h2>La importación está en curso</h2>
+            <p class="cos-lead">La suscripción está activa y la e.firma fue validada. Puedes entrar a la aplicación mientras la sincronización continúa en segundo plano.</p>
+            <div class="cos-summary"><div class="cos-stat"><span>Plan activo</span><strong data-summary-plan>Profesional</strong></div><div class="cos-stat"><span>Pago</span><strong>Confirmado por Stripe</strong></div><div class="cos-stat"><span>Historial solicitado</span><strong>50 periodos</strong></div></div>
+            <div class="cos-split">
+              <div class="cos-progress-card"><div class="cos-progress-head"><div><strong>Comercializadora Norte</strong><span class="cos-rfc">CON920414AB3</span></div><span class="cos-status">En proceso</span></div><div class="cos-progress" role="progressbar" aria-label="Progreso de importación" aria-valuenow="64" aria-valuemin="0" aria-valuemax="100"><span></span></div><div class="cos-progress-meta"><span>32 de 50 periodos procesados</span><span>Última actividad hace 2 minutos</span></div></div>
+              <aside class="cos-panel"><span class="cos-panel-title">Estado de la activación</span><ul class="cos-import-list"><li><span>Pago y suscripción</span><span>Completado</span></li><li><span>Validación de e.firma</span><span>Completado</span></li><li><span>Descarga inicial</span><span class="is-active">En proceso</span></li></ul></aside>
+            </div>
+          </section>
+
+          <div class="cos-actions">
+            <div class="cos-action-note" data-action-note>Acepta ambos documentos para continuar.</div>
+            <div class="cos-buttons"><button id="cos-back" class="cos-btn" type="button" disabled>Regresar</button><button id="cos-next" class="cos-btn cos-primary" type="button" disabled>Continuar</button></div>
+          </div>
+        </main>
+      </section>
+      <div class="cos-footer">Aviso de Privacidad · Términos y Condiciones · Soporte</div>
+    </div>
+  </section>
+
+  <div class="cos-dialog-layer" data-stripe-dialog hidden>
+    <section class="cos-dialog" role="dialog" aria-modal="true" aria-labelledby="cos-stripe-title">
+      <span class="cos-dialog-brand">Stripe Checkout</span>
+      <h3 id="cos-stripe-title">Continúa al pago seguro</h3>
+      <p>En el producto real, saldrás temporalmente a Stripe para capturar la tarjeta y aceptar las condiciones del cargo. ContabilidadOS no recibe los datos de la tarjeta.</p>
+      <div class="cos-dialog-summary"><div class="cos-order-line"><span data-dialog-plan>Profesional mensual</span><strong>1 empresa</strong></div><div class="cos-order-total"><span>Total a pagar</span><strong data-dialog-total>$1,506.84 MXN</strong></div></div>
+      <p>Después del pago, regresaremos a esta configuración y verificaremos la confirmación de Stripe antes de habilitar la e.firma.</p>
+      <div class="cos-dialog-actions"><button class="cos-btn" type="button" data-stripe-cancel>Volver</button><button class="cos-btn cos-primary" type="button" data-stripe-confirm>Simular pago aprobado</button></div>
+    </section>
+  </div>
+
+  <script>
+    (() => {
+      const root = document.getElementById("cos-onboarding-no-trial");
+      const steps = [...root.querySelectorAll("[data-step]")];
+      const screens = [...root.querySelectorAll("[data-screen]")];
+      const plans = [...root.querySelectorAll("[data-plan]")];
+      const periods = [...root.querySelectorAll("[data-period]")];
+      const legalChecks = [...root.querySelectorAll("[data-legal]")];
+      const efirmaChecks = [...root.querySelectorAll("[data-efirma]")];
+      const back = root.querySelector("#cos-back");
+      const next = root.querySelector("#cos-next");
+      const note = root.querySelector("[data-action-note]");
+      const stripeDialog = root.querySelector("[data-stripe-dialog]");
+      const basicPrice = root.querySelector("[data-price-basic]");
+      const professionalPrice = root.querySelector("[data-price-professional]");
+      const orderPlan = root.querySelector("[data-order-plan]");
+      const orderSubtotal = root.querySelector("[data-order-subtotal]");
+      const orderTax = root.querySelector("[data-order-tax]");
+      const orderTotal = root.querySelector("[data-order-total]");
+      const renewalCopy = root.querySelector("[data-renewal-copy]");
+      const dialogPlan = root.querySelector("[data-dialog-plan]");
+      const dialogTotal = root.querySelector("[data-dialog-total]");
+      const summaryPlan = root.querySelector("[data-summary-plan]");
+      let active = 0;
+      let selectedPlan = "professional";
+      let selectedPeriod = "monthly";
+      let paymentConfirmed = false;
+
+      const pricing = {
+        basic: { monthly: { subtotal: 499, tax: 79.84, total: 578.84 }, annual: { subtotal: 4990, tax: 798.4, total: 5788.4 } },
+        professional: { monthly: { subtotal: 1299, tax: 207.84, total: 1506.84 }, annual: { subtotal: 12990, tax: 2078.4, total: 15068.4 } },
+      };
+      const actionNotes = [
+        "Acepta ambos documentos para continuar.",
+        "La e.firma no se solicita hasta después de confirmar el pago.",
+        "Serás redirigido a Stripe; ContabilidadOS no recibe los datos de la tarjeta.",
+        "Autoriza el uso limitado de la e.firma para iniciar la sincronización.",
+        "La descarga continuará aunque entres a la aplicación.",
+      ];
+      const formatMoney = (value) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 2 }).format(value) + " MXN";
+      const allChecked = (collection) => collection.every((input) => input.checked);
+
+      function refreshPurchase() {
+        plans.forEach((plan) => plan.setAttribute("aria-pressed", String(plan.dataset.plan === selectedPlan)));
+        periods.forEach((period) => period.setAttribute("aria-pressed", String(period.dataset.period === selectedPeriod)));
+        const annual = selectedPeriod === "annual";
+        const planName = selectedPlan === "professional" ? "Profesional" : "Básico";
+        const periodName = annual ? "anual" : "mensual";
+        const current = pricing[selectedPlan][selectedPeriod];
+        basicPrice.innerHTML = annual ? "$4,990 <small>MXN al año</small>" : "$499 <small>MXN al mes</small>";
+        professionalPrice.innerHTML = annual ? "$12,990 <small>MXN al año</small>" : "$1,299 <small>MXN al mes</small>";
+        orderPlan.textContent = `${planName} ${periodName}`;
+        orderSubtotal.textContent = formatMoney(current.subtotal);
+        orderTax.textContent = formatMoney(current.tax);
+        orderTotal.textContent = formatMoney(current.total);
+        dialogPlan.textContent = `${planName} ${periodName}`;
+        dialogTotal.textContent = formatMoney(current.total);
+        summaryPlan.textContent = planName;
+        renewalCopy.textContent = annual ? "Renovación anual. Puedes cancelar antes del siguiente cargo." : "Renovación mensual. Puedes cancelar antes del siguiente cargo.";
+      }
+
+      function refreshActions() {
+        back.disabled = active === 0;
+        next.disabled = active === 0 ? !allChecked(legalChecks) : active === 3 ? !allChecked(efirmaChecks) : false;
+        next.textContent = active === 2 ? paymentConfirmed ? "Pago confirmado" : "Continuar a Stripe" : active === 3 ? "Validar e iniciar importación" : active === 4 ? "Abrir inicio" : "Continuar";
+        note.textContent = actionNotes[active];
+      }
+
+      function show(index) {
+        active = Math.max(0, Math.min(4, index));
+        steps.forEach((step, i) => {
+          step.setAttribute("aria-selected", String(i === active));
+          step.dataset.complete = String(i < active || (i === 2 && paymentConfirmed));
+        });
+        screens.forEach((screen, i) => { screen.hidden = i !== active; });
+        refreshActions();
+      }
+
+      function openStripe() {
+        stripeDialog.hidden = false;
+        root.querySelector("[data-stripe-cancel]").focus();
+      }
+
+      function closeStripe() {
+        stripeDialog.hidden = true;
+        next.focus();
+      }
+
+      steps.forEach((step) => step.addEventListener("click", () => show(Number(step.dataset.step))));
+      legalChecks.forEach((input) => input.addEventListener("change", refreshActions));
+      efirmaChecks.forEach((input) => input.addEventListener("change", refreshActions));
+      plans.forEach((plan) => plan.addEventListener("click", () => { selectedPlan = plan.dataset.plan; paymentConfirmed = false; refreshPurchase(); refreshActions(); }));
+      periods.forEach((period) => period.addEventListener("click", () => { selectedPeriod = period.dataset.period; paymentConfirmed = false; refreshPurchase(); refreshActions(); }));
+      root.querySelectorAll("[data-document]").forEach((button) => button.addEventListener("click", () => {
+        note.textContent = button.dataset.document === "terms" ? "Vista previa de los Términos y Condiciones vigentes." : "Vista previa del Aviso de Privacidad vigente.";
+      }));
+      root.querySelector("[data-upload-csf]").addEventListener("click", () => {
+        root.querySelector("[data-csf-title]").textContent = "Constancia seleccionada";
+        root.querySelector("[data-csf-detail]").textContent = "constancia-fiscal.pdf · Lista para revisión";
+      });
+      root.querySelector("[data-stripe-cancel]").addEventListener("click", closeStripe);
+      root.querySelector("[data-stripe-confirm]").addEventListener("click", () => { paymentConfirmed = true; stripeDialog.hidden = true; show(3); });
+      stripeDialog.addEventListener("click", (event) => { if (event.target === stripeDialog) closeStripe(); });
+      root.addEventListener("keydown", (event) => { if (event.key === "Escape" && !stripeDialog.hidden) closeStripe(); });
+      back.addEventListener("click", () => show(active - 1));
+      next.addEventListener("click", () => {
+        if (active === 2 && !paymentConfirmed) { openStripe(); return; }
+        show(active === 4 ? 0 : active + 1);
+      });
+      refreshPurchase();
+      show(0);
+    })();
+  </script>
+</div>
