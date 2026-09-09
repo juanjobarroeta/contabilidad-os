@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { conciliarPorRepEmpresa } from "./rep-aplicar";
+import { detectarTraspasosEmpresa } from "./traspasos-aplicar";
 import {
   campoMontoPorTipo,
   esTipoImpuestoConciliable,
@@ -488,7 +489,7 @@ export async function autoConciliarCuenta(
 // error en una cuenta no detiene las demás.
 export async function autoConciliarEmpresa(
   companyId: string,
-): Promise<{ matched: number; accounts: number; impuestosLc: ImpuestosLcStats; rep: RepStats }> {
+): Promise<{ matched: number; accounts: number; impuestosLc: ImpuestosLcStats; rep: RepStats; traspasos: number }> {
   // ── PRIMERO EL REP ────────────────────────────────────────────────────────
   // El complemento de pago DICE qué facturas liquidó un pago y cuánto a cada
   // una: es evidencia firmada por el emisor, no inferencia nuestra. Corre
@@ -496,6 +497,7 @@ export async function autoConciliarEmpresa(
   // parecerse a UNA — ningún ranking por monto puede resolver ese caso, y
   // además el desglose es lo único que reparte bien el IVA al flujo.
   const rep: RepStats = { conciliados: 0, facturas: 0, ambiguos: 0 };
+  let traspasos = 0;
   try {
     const r = await conciliarPorRepEmpresa(companyId, { aplicar: true });
     rep.conciliados = r.conciliados;
@@ -503,6 +505,18 @@ export async function autoConciliarEmpresa(
     rep.ambiguos = r.ambiguos;
   } catch (e) {
     console.error(`[auto-conciliar] REP falló para ${companyId}:`, e);
+  }
+
+  // ── TRASPASOS ENTRE CUENTAS PROPIAS ───────────────────────────────────────
+  // Antes de buscarles factura: no la tienen. El banco no dice a dónde fue el
+  // dinero («COMPRA ORDEN DE PAGO SPEI» no nombra cuenta destino), pero la otra
+  // pata ya está importada — si una cuenta muestra −$230,000 y otra de la misma
+  // empresa +$230,000 el mismo día, ese par es el traspaso.
+  try {
+    const t = await detectarTraspasosEmpresa(companyId, { aplicar: true });
+    traspasos = t.etiquetados;
+  } catch (e) {
+    console.error(`[auto-conciliar] traspasos espejo falló para ${companyId}:`, e);
   }
 
   const accounts = await prisma.bankAccount.findMany({
@@ -525,5 +539,5 @@ export async function autoConciliarEmpresa(
     }
   }
 
-  return { matched: matched + rep.conciliados, accounts: accounts.length, impuestosLc, rep };
+  return { matched: matched + rep.conciliados, accounts: accounts.length, impuestosLc, rep, traspasos };
 }
