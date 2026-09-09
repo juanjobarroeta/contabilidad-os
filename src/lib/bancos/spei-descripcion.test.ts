@@ -485,3 +485,34 @@ describe("BBVA · pago a cuenta de tercero: el nombre va EN MEDIO del renglón",
     expect(r.claveRastreo).toBe("BNET01002608030032871616");
   });
 });
+
+describe("razón social suelta: la descripción entera es el nombre", () => {
+  const nombre = (d: string) => parseSpei(d).contraparteNombre ?? null;
+
+  it("caso real: «SEGUROS SURA SA DE C» (SA DE CV cortado por el renglón)", () => {
+    // Sin esto el movimiento quedaba «sin identificar» aunque el banco
+    // imprimiera el nombre completo, y el «pago junto» llegó a ofrecer seis
+    // facturas de una farmacia para pagar la póliza de una aseguradora.
+    expect(nombre("SEGUROS SURA SA DE C")).toBe("SEGUROS SURA");
+  });
+
+  it("otras terminaciones societarias", () => {
+    expect(nombre("GRUPO TEXTIL ORIENTE SA DE CV")).toBe("GRUPO TEXTIL ORIENTE");
+    expect(nombre("DISTRIBUIDORA MEDICA S DE RL DE CV")).toBe("DISTRIBUIDORA MEDICA");
+    expect(nombre("CONSTRUCCIONES DEL BAJIO SC")).toBe("CONSTRUCCIONES DEL BAJIO");
+  });
+
+  it("la jerga del banco NO se toma por nombre", () => {
+    expect(nombre("SERV BANCA INTERNET")).toBeNull();
+    expect(nombre("RETIRO DEP. ELECTRONICO")).toBeNull();
+    expect(nombre("COMPRA ORDEN DE PAGO SPEI 0140826")).toBeNull();
+    expect(nombre("TRASPASO CUENTAS PROPIAS")).toBeNull();
+    expect(nombre("DEPOSITO EN EFECTIVO")).toBeNull();
+  });
+
+  it("no pisa lo que ya extrajo una regla con prefijo", () => {
+    // «SPEI ENVIADO …» sigue mandando: la regla suelta sólo cubre el hueco.
+    expect(nombre("PAGO CUENTA DE TERCERO BNET 0547714750 TECNOLOGIAS NARCIS"))
+      .toBe("TECNOLOGIAS NARCIS");
+  });
+});
