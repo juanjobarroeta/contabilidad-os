@@ -39,3 +39,42 @@ describe("whereBusquedaFacturas", () => {
     expect(campos).toEqual(expect.arrayContaining(["uuid", "folio", "customer", "contraparteNombre"]));
   });
 });
+
+describe("búsqueda por importe — la caja lo ofrece, ahora lo cumple", () => {
+  const totalDe = (q: string) => {
+    const w = whereBusquedaFacturas(q);
+    const grupos = (w?.AND ?? []) as Array<{ OR: Array<Record<string, unknown>> }>;
+    return grupos.flatMap((g) => g.OR).filter((c) => "total" in c).map((c) => c.total);
+  };
+
+  it("con decimales busca el importe exacto", () => {
+    expect(totalDe("4989.20")).toEqual([{ gte: 4989.195, lte: 4989.205 }]);
+  });
+
+  it("sin decimales toma la parte entera: 4989 encuentra 4,989.20", () => {
+    expect(totalDe("4989")).toEqual([{ gte: 4989, lt: 4990 }]);
+  });
+
+  it("ignora el signo de pesos y las comas", () => {
+    expect(totalDe("$4,989.20")).toEqual([{ gte: 4989.195, lte: 4989.205 }]);
+  });
+
+  it("una palabra que no es número no genera rango", () => {
+    expect(totalDe("farmadrogueria")).toEqual([]);
+    expect(totalDe("W-7346")).toEqual([]);
+  });
+
+  it("el importe convive con el nombre: ambas palabras deben aparecer", () => {
+    const w = whereBusquedaFacturas("medina 4989.20");
+    expect((w?.AND as unknown[])?.length).toBe(2);
+  });
+
+  it("sigue buscando texto en todos los campos de siempre", () => {
+    const w = whereBusquedaFacturas("bilbao");
+    const campos = ((w?.AND as Array<{ OR: Array<Record<string, unknown>> }>)[0].OR).map((c) => Object.keys(c)[0]);
+    expect(campos).toContain("uuid");
+    expect(campos).toContain("customer");
+    expect(campos).toContain("contraparteNombre");
+    expect(campos).not.toContain("total");
+  });
+});

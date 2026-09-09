@@ -25,7 +25,30 @@ const CAMPOS = (token: string): Prisma.InvoiceWhereInput[] => [
   // público en general, que no tienen Customer.
   { contraparteNombre: { contains: token, mode: "insensitive" } },
   { contraparteRfc: { contains: token, mode: "insensitive" } },
+  ...rangoTotal(token),
 ];
+
+/**
+ * Búsqueda POR IMPORTE. La caja de la mesa de conciliación ofrece «buscar otra
+ * factura por cliente, folio o monto», y el monto no buscaba nada: los campos
+ * de arriba son todos de texto, así que teclear 4989.20 no devolvía la factura
+ * de $4,989.20. Quien concilia sabe la cantidad —la está viendo en el estado
+ * de cuenta— y es lo primero que teclea.
+ *
+ * Con decimales se busca ese importe exacto; sin decimales se toma como la
+ * parte entera («4989» encuentra 4,989.20), que es como la gente escribe un
+ * importe de memoria. Se ignoran $ y comas. Es un OR más dentro del grupo de
+ * la palabra: sólo AGREGA resultados, nunca quita.
+ */
+function rangoTotal(token: string): Prisma.InvoiceWhereInput[] {
+  const limpio = token.replace(/[$,\s]/g, "");
+  if (!/^\d+(\.\d{1,2})?$/.test(limpio)) return [];
+  const n = Number(limpio);
+  if (!Number.isFinite(n) || n <= 0) return [];
+  return limpio.includes(".")
+    ? [{ total: { gte: n - 0.005, lte: n + 0.005 } }]
+    : [{ total: { gte: n, lt: n + 1 } }];
+}
 
 /** Palabras de la consulta, sin vacíos ni duplicados; máximo 8 para acotar el SQL. */
 export function tokensDeBusqueda(q: string | null | undefined): string[] {
