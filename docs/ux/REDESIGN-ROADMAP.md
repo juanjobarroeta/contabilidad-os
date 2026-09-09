@@ -8,13 +8,18 @@
 
 ## Delivery order
 
-1. Onboarding and company setup
-2. Dashboard
-3. Bank reconciliation
-4. Compliance and declarations
-5. Secondary pages
+The authenticated product audit refined the original page list into this workflow sequence:
 
-The next redesign is the **dashboard**. It is the first recurring surface users see after onboarding and will force agreement on page hierarchy, company and period context, source freshness, status language, and primary-action behavior before those patterns spread into banking and compliance.
+1. Foundation contracts
+2. Onboarding and Empresa
+3. Inicio and Cartera
+4. Cierre mensual
+5. Bancos
+6. Nómina
+7. Fiscal y contable
+8. Secondary operations and settings
+
+The active redesign is **Inicio and Cartera**. It proves page hierarchy, company and period context, source freshness, role-shaped actions, status language, and one canonical work queue before those contracts are used by Cierre mensual, Bancos, and compliance. The next prototype after this one is **Cierre mensual**.
 
 ## Shared-component strategy
 

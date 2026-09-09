@@ -724,6 +724,8 @@ Key success test: a user can explain why payment precedes e.firma, what data acc
 
 ### Prototype 02: Inicio and Cartera
 
+Design contract and interactive artifact: [`PROTOTYPE-02-INICIO-CARTERA.md`](./PROTOTYPE-02-INICIO-CARTERA.md).
+
 Use real company, obligation, freshness, and assignment states. Test owner and accountant lenses without building separate products.
 
 Key success test: the first correct action and its reason are found in under ten seconds.

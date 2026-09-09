@@ -1,12 +1,14 @@
 # Prototype 02 — Dashboard
 
-**Status:** first interactive slice ready for review
+**Status:** superseded as the complete dashboard contract; retained as the new-company import state
 
 **Fidelity:** workflow and hierarchy before visual implementation
 
 **Primary question:** What requires action now, for which RFC and period, and why?
 
 **Prototype:** `docs/ux/prototypes/dashboard-importing.html`
+
+The authenticated audit expanded this surface into the shared **Inicio and Cartera** model. See [`PROTOTYPE-02-INICIO-CARTERA.md`](./PROTOTYPE-02-INICIO-CARTERA.md) for the current contract. This earlier artifact remains a required state for a recently activated company whose SAT import is still running.
 
 ## First slice
 
