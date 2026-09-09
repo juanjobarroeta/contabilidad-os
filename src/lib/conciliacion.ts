@@ -260,6 +260,24 @@ export function checkInvoiceMatchGuard(
             `exhibición: la porción asignada debe cubrir el total (tolerancia 1%).`,
         };
       }
+      return { ok: true };
+    }
+    // MATCH 1:1 SOBRE PUE. Aquí no había validación de importe, y por ahí se
+    // coló en producción un depósito en efectivo de $250,000 conciliado con una
+    // factura de $10,556 —23 veces más grande—: el asiento abonaba los $250,000
+    // completos a Clientes contra una factura que no los explicaba.
+    //
+    // «Una sola exhibición» significa que el pago ES el total. Si el movimiento
+    // cubre esa factura Y otra cosa, eso es conciliación múltiple, no 1:1.
+    const pago = montoEfectivo(newTx);
+    if (Math.abs(pago - total) > total * PPD_ACUMULADO_TOLERANCIA) {
+      return {
+        ok: false,
+        error:
+          `El movimiento (${fmtMonto(pago)}) no coincide con el total de la factura ` +
+          `PUE (${fmtMonto(total)}). Una factura PUE se paga en una sola exhibición. ` +
+          `Si el movimiento cubre esta factura y algo más, use la conciliación múltiple.`,
+      };
     }
     return { ok: true };
   }
@@ -267,7 +285,23 @@ export function checkInvoiceMatchGuard(
   // PPD: permitir parcialidades mientras el acumulado no exceda el total.
   // Sin porción asignada y sin pagos previos se conserva el comportamiento
   // legado (el primer match 1:1 no valida monto contra total).
-  if (previos.length === 0 && newTx.montoAsignado === undefined) return { ok: true };
+  // PPD, primer pago 1:1: no se valida el monto EXACTO —una parcialidad es
+  // legítimamente menor que el total— pero sí que no lo EXCEDA. Un movimiento
+  // mayor que la factura no es una parcialidad de nada; visto en producción,
+  // un SPEI de $12,687.07 aplicado a una factura de $7,106.97.
+  if (previos.length === 0 && newTx.montoAsignado === undefined) {
+    const pago = montoEfectivo(newTx);
+    if (pago > total * (1 + PPD_ACUMULADO_TOLERANCIA)) {
+      return {
+        ok: false,
+        error:
+          `El movimiento (${fmtMonto(pago)}) excede el total de la factura ` +
+          `(${fmtMonto(invoice.total)}). Si cubre esta factura y algo más, use la ` +
+          `conciliación múltiple para repartirlo.`,
+      };
+    }
+    return { ok: true };
+  }
   const acumulado = previos.reduce((s, t) => s + montoEfectivo(t), 0) + montoEfectivo(newTx);
   const limite = total * (1 + PPD_ACUMULADO_TOLERANCIA);
   if (acumulado > limite) {

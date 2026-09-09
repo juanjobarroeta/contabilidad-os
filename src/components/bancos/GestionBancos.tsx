@@ -1333,6 +1333,17 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
                               Ver factura
                             </button>
                           </div>
+                          {/* DESHACER. Estaba sólo en la conciliación uno-a-varios:
+                              un movimiento conciliado 1:1 —la mayoría— no tenía
+                              cómo revertirse desde la pantalla, aunque la acción
+                              `unmatch` existiera desde siempre. Equivocarse
+                              conciliando es normal; no poder corregirlo, no. */}
+                          {!selectMode && (
+                            <button onClick={() => desconciliar(m.id)} disabled={acting === m.id}
+                              className="mt-2 text-[13px] font-semibold text-cos-red-ink hover:underline disabled:opacity-50">
+                              {acting === m.id ? "…" : "Desconciliar"}
+                            </button>
+                          )}
                         </div>
                       )}
 
