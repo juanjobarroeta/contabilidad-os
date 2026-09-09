@@ -1,10 +1,30 @@
 # Prototype 02 — Dashboard
 
-**Status:** next redesign
+**Status:** first interactive slice ready for review
 
 **Fidelity:** workflow and hierarchy before visual implementation
 
 **Primary question:** What requires action now, for which RFC and period, and why?
+
+**Prototype:** `docs/ux/prototypes/dashboard-importing.html`
+
+## First slice
+
+The first slice begins exactly where the approved onboarding ends: a paid company is active, e.firma is valid, and the historical SAT import is still running.
+
+It includes:
+
+- Persistent company context without a context questionnaire
+- Shared period context centered on August 2026
+- One dominant import-readiness action instead of a generic KPI grid
+- The 17 September 2026 monthly deadline and its dependency on fiscal coverage
+- Safe actions that can proceed while import runs
+- Dataset status with source and freshness shown together
+- A detailed coverage drawer for the 50 requested periods
+- Responsive desktop and mobile navigation treatments
+- Spanish interface copy with no emoji characters
+
+The mockup intentionally does not invent balances, tax estimates, or compliance scores before the required fiscal coverage exists.
 
 ## Entry states inferred by the application
 
@@ -40,6 +60,17 @@ It must not start with a generic KPI grid. Metrics appear only when they help ex
 - Loading, empty, error, permission, and stale-data states
 
 These contracts should be evaluated against existing shared components before implementation. The prototype must name a second consumer for every new shared component.
+
+| Prototype contract | Second consumer |
+|---|---|
+| Application page shell | Banking and compliance |
+| Company context | Every company-scoped route |
+| Period context | Taxes, accounting, and compliance |
+| Primary next action | Compliance and bank reconciliation |
+| Status, source, and freshness | Taxes, accounting, banking |
+| Readiness progress | SAT import and accounting close |
+| Detail drawer | Reconciliation exceptions and filing evidence |
+| Responsive status table | Banking imports and compliance history |
 
 ## Required prototype states
 

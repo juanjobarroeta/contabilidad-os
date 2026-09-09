@@ -1,0 +1,730 @@
+<div id="cos-dashboard-importing">
+  <style>
+    #cos-dashboard-importing {
+      --cos-bg: #090d13;
+      --cos-sidebar: #0c1117;
+      --cos-surface: #11171f;
+      --cos-surface-raised: #171d26;
+      --cos-surface-soft: #0d131a;
+      --cos-border: #29323d;
+      --cos-border-strong: #3a4654;
+      --cos-text: #f2f4f7;
+      --cos-muted: #96a0ad;
+      --cos-faint: #6f7986;
+      --cos-blue: #5688e8;
+      --cos-blue-hover: #4779d5;
+      --cos-blue-soft: #172845;
+      --cos-blue-border: #315286;
+      --cos-green: #76c99c;
+      --cos-green-soft: #13271f;
+      --cos-amber: #e3b269;
+      --cos-amber-soft: #292116;
+      position: relative;
+      width: 100%;
+      min-width: 0;
+      color: var(--cos-text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+      font-weight: 400;
+      line-height: 1.48;
+    }
+
+    #cos-dashboard-importing * { box-sizing: border-box; }
+    #cos-dashboard-importing button,
+    #cos-dashboard-importing select { font: inherit; }
+    #cos-dashboard-importing button { -webkit-tap-highlight-color: transparent; }
+
+    #cos-dashboard-importing .cos-app {
+      width: 100%;
+      min-height: 780px;
+      display: grid;
+      grid-template-columns: 236px minmax(0, 1fr);
+      overflow: hidden;
+      border: 1px solid var(--cos-border);
+      border-radius: 15px;
+      background: var(--cos-bg);
+      box-shadow: 0 26px 80px rgb(0 0 0 / 34%);
+    }
+
+    #cos-dashboard-importing .cos-sidebar {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      padding: 23px 17px 18px;
+      border-right: 1px solid var(--cos-border);
+      background: var(--cos-sidebar);
+    }
+
+    #cos-dashboard-importing .cos-brand {
+      padding: 0 9px 20px;
+      color: var(--cos-text);
+      font-size: 17px;
+      font-weight: 500;
+      letter-spacing: -0.035em;
+    }
+
+    #cos-dashboard-importing .cos-brand span { color: var(--cos-blue); }
+
+    #cos-dashboard-importing .cos-company {
+      width: 100%;
+      display: grid;
+      gap: 2px;
+      padding: 11px 12px;
+      border: 1px solid var(--cos-border);
+      border-radius: 9px;
+      background: var(--cos-surface);
+      color: var(--cos-text);
+      text-align: left;
+      cursor: pointer;
+    }
+
+    #cos-dashboard-importing .cos-company:hover { border-color: var(--cos-border-strong); }
+    #cos-dashboard-importing .cos-company strong { overflow: hidden; font-size: 12px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+    #cos-dashboard-importing .cos-company span { color: var(--cos-muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
+
+    #cos-dashboard-importing .cos-nav { display: grid; gap: 18px; margin-top: 22px; }
+    #cos-dashboard-importing .cos-nav-group { display: grid; gap: 3px; }
+    #cos-dashboard-importing .cos-nav-label {
+      padding: 0 9px 5px;
+      color: var(--cos-faint);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+    }
+
+    #cos-dashboard-importing .cos-nav-item {
+      width: 100%;
+      min-height: 35px;
+      padding: 8px 10px;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      background: transparent;
+      color: var(--cos-muted);
+      font-size: 12px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    #cos-dashboard-importing .cos-nav-item:hover { border-color: var(--cos-border); color: var(--cos-text); }
+    #cos-dashboard-importing .cos-nav-item[aria-current="page"] { background: var(--cos-blue-soft); color: #dce8ff; }
+
+    #cos-dashboard-importing .cos-user {
+      display: grid;
+      grid-template-columns: 32px minmax(0, 1fr);
+      gap: 9px;
+      align-items: center;
+      margin-top: auto;
+      padding: 14px 8px 0;
+      border-top: 1px solid var(--cos-border);
+    }
+
+    #cos-dashboard-importing .cos-avatar {
+      display: grid;
+      width: 32px;
+      height: 32px;
+      place-items: center;
+      border-radius: 50%;
+      background: #202a37;
+      color: #cad6e5;
+      font-size: 10px;
+      font-weight: 500;
+    }
+
+    #cos-dashboard-importing .cos-user strong,
+    #cos-dashboard-importing .cos-user span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #cos-dashboard-importing .cos-user strong { color: var(--cos-text); font-size: 11px; font-weight: 500; }
+    #cos-dashboard-importing .cos-user span { color: var(--cos-muted); font-size: 10px; }
+
+    #cos-dashboard-importing .cos-mobile-header,
+    #cos-dashboard-importing .cos-mobile-nav { display: none; }
+
+    #cos-dashboard-importing .cos-main { min-width: 0; background: var(--cos-bg); }
+    #cos-dashboard-importing .cos-topbar {
+      min-height: 58px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      padding: 10px clamp(22px, 3vw, 42px);
+      border-bottom: 1px solid var(--cos-border);
+      background: var(--cos-sidebar);
+    }
+
+    #cos-dashboard-importing .cos-search {
+      width: min(300px, 34vw);
+      min-height: 35px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 7px 10px;
+      border: 1px solid var(--cos-border);
+      border-radius: 8px;
+      background: var(--cos-surface-soft);
+      color: var(--cos-muted);
+      font-size: 11px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    #cos-dashboard-importing .cos-search:hover { border-color: var(--cos-border-strong); }
+    #cos-dashboard-importing .cos-search span:last-child { color: var(--cos-faint); font-size: 10px; }
+    #cos-dashboard-importing .cos-help-button {
+      min-height: 35px;
+      padding: 7px 11px;
+      border: 1px solid var(--cos-border);
+      border-radius: 8px;
+      background: transparent;
+      color: var(--cos-muted);
+      font-size: 11px;
+      cursor: pointer;
+    }
+    #cos-dashboard-importing .cos-help-button:hover { color: var(--cos-text); border-color: var(--cos-border-strong); }
+
+    #cos-dashboard-importing .cos-content {
+      width: min(1180px, 100%);
+      margin: 0 auto;
+      padding: 30px clamp(22px, 3vw, 42px) 40px;
+    }
+
+    #cos-dashboard-importing .cos-page-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 22px;
+      margin-bottom: 22px;
+    }
+
+    #cos-dashboard-importing .cos-eyebrow { margin: 0 0 5px; color: var(--cos-muted); font-size: 11px; }
+    #cos-dashboard-importing h1 { margin: 0; color: var(--cos-text); font-size: 27px; font-weight: 500; letter-spacing: -0.035em; line-height: 1.18; }
+    #cos-dashboard-importing .cos-company-meta { margin: 5px 0 0; color: var(--cos-muted); font-size: 11px; }
+
+    #cos-dashboard-importing .cos-period-context {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      overflow: hidden;
+      border: 1px solid var(--cos-border);
+      border-radius: 9px;
+      background: var(--cos-surface);
+    }
+
+    #cos-dashboard-importing .cos-period-context button {
+      min-width: 38px;
+      min-height: 43px;
+      border: 0;
+      background: transparent;
+      color: var(--cos-muted);
+      cursor: pointer;
+    }
+    #cos-dashboard-importing .cos-period-context button:hover { background: var(--cos-surface-raised); color: var(--cos-text); }
+    #cos-dashboard-importing .cos-period-label { min-width: 150px; padding: 6px 13px; border-right: 1px solid var(--cos-border); border-left: 1px solid var(--cos-border); text-align: center; }
+    #cos-dashboard-importing .cos-period-label span,
+    #cos-dashboard-importing .cos-period-label strong { display: block; }
+    #cos-dashboard-importing .cos-period-label span { color: var(--cos-muted); font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; }
+    #cos-dashboard-importing .cos-period-label strong { margin-top: 1px; color: var(--cos-text); font-size: 12px; font-weight: 500; }
+
+    #cos-dashboard-importing .cos-primary-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.65fr) minmax(245px, 0.65fr);
+      gap: 14px;
+      margin-bottom: 25px;
+    }
+
+    #cos-dashboard-importing .cos-primary-action,
+    #cos-dashboard-importing .cos-deadline,
+    #cos-dashboard-importing .cos-section-panel {
+      border: 1px solid var(--cos-border);
+      border-radius: 12px;
+      background: var(--cos-surface);
+    }
+
+    #cos-dashboard-importing .cos-primary-action { padding: 21px 22px; }
+    #cos-dashboard-importing .cos-state-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+
+    #cos-dashboard-importing .cos-state {
+      display: inline-flex;
+      min-height: 25px;
+      align-items: center;
+      padding: 4px 9px;
+      border: 1px solid var(--cos-blue-border);
+      border-radius: 99px;
+      background: var(--cos-blue-soft);
+      color: #a9c5f7;
+      font-size: 9px;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    #cos-dashboard-importing .cos-freshness { color: var(--cos-muted); font-size: 10px; }
+    #cos-dashboard-importing .cos-primary-action h2 { max-width: 670px; margin: 0; color: var(--cos-text); font-size: 21px; font-weight: 500; letter-spacing: -0.025em; line-height: 1.25; }
+    #cos-dashboard-importing .cos-primary-copy { max-width: 72ch; margin: 8px 0 18px; color: var(--cos-muted); font-size: 12px; }
+
+    #cos-dashboard-importing .cos-progress-head,
+    #cos-dashboard-importing .cos-progress-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+    #cos-dashboard-importing .cos-progress-head { color: #dbe3ee; font-size: 11px; }
+    #cos-dashboard-importing .cos-progress-head strong { color: var(--cos-text); font-size: 12px; font-weight: 500; }
+    #cos-dashboard-importing .cos-progress-track { height: 7px; margin: 9px 0 8px; overflow: hidden; border-radius: 99px; background: #29323d; }
+    #cos-dashboard-importing .cos-progress-bar { width: 64%; height: 100%; border-radius: inherit; background: var(--cos-blue); }
+    #cos-dashboard-importing .cos-progress-meta { color: var(--cos-muted); font-size: 10px; }
+
+    #cos-dashboard-importing .cos-primary-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-top: 19px;
+      padding-top: 15px;
+      border-top: 1px solid var(--cos-border);
+    }
+    #cos-dashboard-importing .cos-source { color: var(--cos-muted); font-size: 10px; }
+    #cos-dashboard-importing .cos-source strong { color: #c9d2df; font-weight: 500; }
+
+    #cos-dashboard-importing .cos-action {
+      min-height: 38px;
+      padding: 8px 13px;
+      border: 1px solid var(--cos-border-strong);
+      border-radius: 8px;
+      background: transparent;
+      color: var(--cos-text);
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    #cos-dashboard-importing .cos-action:hover { background: var(--cos-surface-raised); }
+    #cos-dashboard-importing .cos-action-primary { border-color: var(--cos-blue); background: var(--cos-blue); color: #ffffff; }
+    #cos-dashboard-importing .cos-action-primary:hover { background: var(--cos-blue-hover); }
+
+    #cos-dashboard-importing .cos-deadline { display: flex; flex-direction: column; padding: 20px; }
+    #cos-dashboard-importing .cos-deadline-label { color: var(--cos-muted); font-size: 10px; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; }
+    #cos-dashboard-importing .cos-deadline-date { display: flex; align-items: baseline; gap: 7px; margin: 11px 0 5px; color: var(--cos-text); }
+    #cos-dashboard-importing .cos-deadline-date strong { font-size: 32px; font-weight: 500; letter-spacing: -0.04em; line-height: 1; }
+    #cos-dashboard-importing .cos-deadline-date span { color: var(--cos-muted); font-size: 12px; }
+    #cos-dashboard-importing .cos-deadline h3 { margin: 0; color: #dbe3ee; font-size: 13px; font-weight: 500; }
+    #cos-dashboard-importing .cos-deadline p { margin: 6px 0 17px; color: var(--cos-muted); font-size: 11px; }
+    #cos-dashboard-importing .cos-deadline-status { margin-top: auto; padding-top: 13px; border-top: 1px solid var(--cos-border); color: var(--cos-amber); font-size: 10px; }
+
+    #cos-dashboard-importing .cos-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 11px; }
+    #cos-dashboard-importing .cos-section-head h2 { margin: 0; color: var(--cos-text); font-size: 15px; font-weight: 500; }
+    #cos-dashboard-importing .cos-section-head span { color: var(--cos-muted); font-size: 10px; }
+
+    #cos-dashboard-importing .cos-lower-grid { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 20px; }
+    #cos-dashboard-importing .cos-section-panel { overflow: hidden; }
+    #cos-dashboard-importing .cos-next-item {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr) auto;
+      gap: 11px;
+      align-items: start;
+      padding: 15px 16px;
+      border: 0;
+      border-bottom: 1px solid var(--cos-border);
+      background: transparent;
+      color: var(--cos-text);
+      text-align: left;
+      cursor: pointer;
+    }
+    #cos-dashboard-importing .cos-next-item:last-child { border-bottom: 0; }
+    #cos-dashboard-importing .cos-next-item:hover { background: var(--cos-surface-raised); }
+    #cos-dashboard-importing .cos-next-number {
+      display: grid;
+      width: 26px;
+      height: 26px;
+      place-items: center;
+      border: 1px solid var(--cos-border-strong);
+      border-radius: 50%;
+      color: #b9c4d2;
+      font-size: 10px;
+      font-weight: 500;
+    }
+    #cos-dashboard-importing .cos-next-copy strong,
+    #cos-dashboard-importing .cos-next-copy span { display: block; }
+    #cos-dashboard-importing .cos-next-copy strong { font-size: 11px; font-weight: 500; }
+    #cos-dashboard-importing .cos-next-copy span { margin-top: 3px; color: var(--cos-muted); font-size: 10px; }
+    #cos-dashboard-importing .cos-next-state { color: #8eb2f4; font-size: 10px; white-space: nowrap; }
+    #cos-dashboard-importing .cos-next-state.is-waiting { color: var(--cos-muted); }
+
+    #cos-dashboard-importing .cos-data-table { width: 100%; border-collapse: collapse; }
+    #cos-dashboard-importing .cos-data-table th,
+    #cos-dashboard-importing .cos-data-table td { padding: 12px 14px; border-bottom: 1px solid var(--cos-border); text-align: left; vertical-align: top; }
+    #cos-dashboard-importing .cos-data-table tr:last-child td { border-bottom: 0; }
+    #cos-dashboard-importing .cos-data-table th { color: var(--cos-faint); font-size: 9px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
+    #cos-dashboard-importing .cos-data-table td { color: #dbe3ee; font-size: 10px; }
+    #cos-dashboard-importing .cos-data-table td strong,
+    #cos-dashboard-importing .cos-data-table td span { display: block; }
+    #cos-dashboard-importing .cos-data-table td strong { color: var(--cos-text); font-size: 11px; font-weight: 500; }
+    #cos-dashboard-importing .cos-data-table td span { margin-top: 2px; color: var(--cos-muted); font-size: 9px; }
+    #cos-dashboard-importing .cos-table-state { color: var(--cos-blue); font-weight: 500; }
+    #cos-dashboard-importing .cos-table-state.is-muted { color: var(--cos-muted); }
+
+    #cos-dashboard-importing .cos-feedback {
+      min-height: 20px;
+      margin: 18px 0 0;
+      color: var(--cos-muted);
+      font-size: 10px;
+      text-align: right;
+    }
+
+    #cos-dashboard-importing .cos-drawer-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      display: flex;
+      justify-content: flex-end;
+      background: rgb(4 7 10 / 72%);
+      backdrop-filter: blur(5px);
+    }
+    #cos-dashboard-importing .cos-drawer {
+      width: min(480px, 100%);
+      min-height: 100%;
+      padding: 24px;
+      border-left: 1px solid var(--cos-border-strong);
+      background: var(--cos-surface);
+      box-shadow: -24px 0 70px rgb(0 0 0 / 42%);
+    }
+    #cos-dashboard-importing .cos-drawer-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+    #cos-dashboard-importing .cos-drawer-head h2 { margin: 0; color: var(--cos-text); font-size: 20px; font-weight: 500; letter-spacing: -0.025em; }
+    #cos-dashboard-importing .cos-drawer-head p { margin: 5px 0 0; color: var(--cos-muted); font-size: 11px; }
+    #cos-dashboard-importing .cos-close {
+      min-width: 62px;
+      min-height: 36px;
+      padding: 7px 10px;
+      border: 1px solid var(--cos-border);
+      border-radius: 7px;
+      background: transparent;
+      color: var(--cos-muted);
+      font-size: 10px;
+      cursor: pointer;
+    }
+    #cos-dashboard-importing .cos-close:hover { color: var(--cos-text); border-color: var(--cos-border-strong); }
+    #cos-dashboard-importing .cos-drawer-summary { display: flex; justify-content: space-between; gap: 16px; margin: 22px 0; padding: 14px 0; border-top: 1px solid var(--cos-border); border-bottom: 1px solid var(--cos-border); }
+    #cos-dashboard-importing .cos-drawer-summary div { min-width: 0; }
+    #cos-dashboard-importing .cos-drawer-summary span,
+    #cos-dashboard-importing .cos-drawer-summary strong { display: block; }
+    #cos-dashboard-importing .cos-drawer-summary span { color: var(--cos-muted); font-size: 9px; }
+    #cos-dashboard-importing .cos-drawer-summary strong { margin-top: 2px; color: var(--cos-text); font-size: 13px; font-weight: 500; }
+    #cos-dashboard-importing .cos-coverage { display: grid; gap: 16px; }
+    #cos-dashboard-importing .cos-year-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; color: #dbe3ee; font-size: 11px; }
+    #cos-dashboard-importing .cos-year-head span:last-child { color: var(--cos-muted); font-size: 10px; }
+    #cos-dashboard-importing .cos-year-track { height: 6px; overflow: hidden; border-radius: 99px; background: #29323d; }
+    #cos-dashboard-importing .cos-year-track span { display: block; height: 100%; border-radius: inherit; background: var(--cos-blue); }
+    #cos-dashboard-importing .cos-year[data-state="complete"] .cos-year-track span { background: var(--cos-green); }
+    #cos-dashboard-importing .cos-year-note { margin: 6px 0 0; color: var(--cos-muted); font-size: 9px; }
+    #cos-dashboard-importing .cos-drawer-notice { margin-top: 22px; padding: 13px; border: 1px solid var(--cos-blue-border); border-radius: 9px; background: var(--cos-blue-soft); color: #c8d9f7; font-size: 10px; }
+    #cos-dashboard-importing [hidden] { display: none !important; }
+
+    @media (max-width: 1020px) {
+      #cos-dashboard-importing .cos-app { grid-template-columns: 205px minmax(0, 1fr); }
+      #cos-dashboard-importing .cos-sidebar { padding-inline: 13px; }
+      #cos-dashboard-importing .cos-primary-grid { grid-template-columns: minmax(0, 1.4fr) minmax(220px, 0.7fr); }
+      #cos-dashboard-importing .cos-lower-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 760px) {
+      #cos-dashboard-importing .cos-app { display: block; min-height: 0; }
+      #cos-dashboard-importing .cos-sidebar,
+      #cos-dashboard-importing .cos-topbar { display: none; }
+      #cos-dashboard-importing .cos-mobile-header {
+        min-height: 58px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--cos-border);
+        background: var(--cos-sidebar);
+      }
+      #cos-dashboard-importing .cos-mobile-header .cos-brand { padding: 0; }
+      #cos-dashboard-importing .cos-mobile-company { color: var(--cos-muted); font-size: 10px; text-align: right; }
+      #cos-dashboard-importing .cos-mobile-nav {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        border-bottom: 1px solid var(--cos-border);
+        background: var(--cos-sidebar);
+      }
+      #cos-dashboard-importing .cos-mobile-nav button {
+        min-height: 44px;
+        padding: 8px 4px;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        background: transparent;
+        color: var(--cos-muted);
+        font-size: 10px;
+      }
+      #cos-dashboard-importing .cos-mobile-nav button[aria-current="page"] { border-bottom-color: var(--cos-blue); color: var(--cos-text); }
+      #cos-dashboard-importing .cos-content { padding: 23px 16px 28px; }
+      #cos-dashboard-importing .cos-page-head { align-items: stretch; flex-direction: column; gap: 15px; }
+      #cos-dashboard-importing .cos-period-context { width: 100%; }
+      #cos-dashboard-importing .cos-period-label { min-width: 0; }
+      #cos-dashboard-importing .cos-primary-grid { grid-template-columns: 1fr; }
+      #cos-dashboard-importing .cos-state-line,
+      #cos-dashboard-importing .cos-primary-footer { align-items: flex-start; flex-direction: column; }
+      #cos-dashboard-importing .cos-primary-footer .cos-action { width: 100%; }
+      #cos-dashboard-importing .cos-deadline { min-height: 215px; }
+      #cos-dashboard-importing .cos-data-table thead { display: none; }
+      #cos-dashboard-importing .cos-data-table,
+      #cos-dashboard-importing .cos-data-table tbody,
+      #cos-dashboard-importing .cos-data-table tr,
+      #cos-dashboard-importing .cos-data-table td { display: block; width: 100%; }
+      #cos-dashboard-importing .cos-data-table tr { padding: 11px 14px; border-bottom: 1px solid var(--cos-border); }
+      #cos-dashboard-importing .cos-data-table tr:last-child { border-bottom: 0; }
+      #cos-dashboard-importing .cos-data-table td { padding: 3px 0; border: 0; }
+      #cos-dashboard-importing .cos-data-table td::before { display: inline; margin-right: 6px; color: var(--cos-faint); font-size: 9px; content: attr(data-label) ":"; }
+      #cos-dashboard-importing .cos-data-table td strong,
+      #cos-dashboard-importing .cos-data-table td span { display: inline; }
+      #cos-dashboard-importing .cos-data-table td span { margin-left: 4px; }
+    }
+
+    @media (max-width: 430px) {
+      #cos-dashboard-importing .cos-app { border-right: 0; border-left: 0; border-radius: 0; }
+      #cos-dashboard-importing .cos-primary-action,
+      #cos-dashboard-importing .cos-deadline { padding: 17px; }
+      #cos-dashboard-importing .cos-progress-head,
+      #cos-dashboard-importing .cos-progress-meta { align-items: flex-start; flex-direction: column; gap: 4px; }
+      #cos-dashboard-importing .cos-next-item { grid-template-columns: 27px minmax(0, 1fr); }
+      #cos-dashboard-importing .cos-next-state { grid-column: 2; }
+      #cos-dashboard-importing .cos-drawer { padding: 19px 16px; }
+      #cos-dashboard-importing .cos-drawer-summary { flex-wrap: wrap; }
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      #cos-dashboard-importing button,
+      #cos-dashboard-importing .cos-progress-bar,
+      #cos-dashboard-importing .cos-year-track span { transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease, width 180ms ease; }
+    }
+  </style>
+
+  <section class="cos-app" aria-label="Inicio de ContabilidadOS durante la importación inicial">
+    <aside class="cos-sidebar">
+      <div class="cos-brand">Contabilidad<span>OS</span></div>
+      <button class="cos-company" type="button" data-action-message="El selector conserva empresa, permisos y periodo.">
+        <strong>Comercializadora Norte</strong>
+        <span>CON920414AB3</span>
+      </button>
+
+      <nav class="cos-nav" aria-label="Navegación principal">
+        <div class="cos-nav-group">
+          <button class="cos-nav-item" type="button" aria-current="page">Inicio</button>
+        </div>
+        <div class="cos-nav-group">
+          <span class="cos-nav-label">Operación</span>
+          <button class="cos-nav-item" type="button" data-action-message="Facturas conserva la empresa y el periodo activos.">Facturas</button>
+          <button class="cos-nav-item" type="button" data-action-message="Bancos abre la configuración de cuentas de esta empresa.">Bancos</button>
+          <button class="cos-nav-item" type="button" data-action-message="Nómina conserva el contexto de Comercializadora Norte.">Nómina</button>
+        </div>
+        <div class="cos-nav-group">
+          <span class="cos-nav-label">Cierre y declaraciones</span>
+          <button class="cos-nav-item" type="button" data-action-message="Impuestos abre agosto de 2026 para esta empresa.">Impuestos</button>
+          <button class="cos-nav-item" type="button" data-action-message="Contabilidad abre el cierre de agosto de 2026.">Contabilidad</button>
+          <button class="cos-nav-item" type="button" data-action-message="Cumplimiento abre obligaciones y evidencia del mismo periodo.">Cumplimiento</button>
+        </div>
+        <div class="cos-nav-group">
+          <span class="cos-nav-label">Empresa</span>
+          <button class="cos-nav-item" type="button" data-action-message="Configuración abre la identidad y conexiones de esta empresa.">Configuración</button>
+        </div>
+      </nav>
+
+      <div class="cos-user">
+        <span class="cos-avatar">JB</span>
+        <span><strong>Juan Barroeta</strong><span>Administrador</span></span>
+      </div>
+    </aside>
+
+    <main class="cos-main">
+      <header class="cos-mobile-header">
+        <div class="cos-brand">Contabilidad<span>OS</span></div>
+        <div class="cos-mobile-company">Comercializadora Norte<br>CON920414AB3</div>
+      </header>
+      <nav class="cos-mobile-nav" aria-label="Navegación móvil">
+        <button type="button" aria-current="page">Inicio</button>
+        <button type="button" data-action-message="Bancos abre la configuración de cuentas.">Bancos</button>
+        <button type="button" data-action-message="Fiscal abre el periodo activo.">Fiscal</button>
+        <button type="button" data-action-message="Empresa abre la configuración.">Empresa</button>
+      </nav>
+
+      <div class="cos-topbar">
+        <button class="cos-search" type="button" data-action-message="La búsqueda global conserva empresa y periodo."><span>Buscar en ContabilidadOS</span><span>Comando K</span></button>
+        <button class="cos-help-button" type="button" data-action-message="Soporte recibe el contexto de esta pantalla.">Ayuda</button>
+      </div>
+
+      <div class="cos-content">
+        <header class="cos-page-head">
+          <div>
+            <p class="cos-eyebrow">Inicio</p>
+            <h1>Comercializadora Norte</h1>
+            <p class="cos-company-meta">CON920414AB3 · Plan Profesional activo</p>
+          </div>
+          <div class="cos-period-context" aria-label="Periodo de trabajo">
+            <button type="button" data-period-direction="previous" aria-label="Periodo anterior">Anterior</button>
+            <div class="cos-period-label"><span>Periodo de trabajo</span><strong data-period-label>Agosto 2026</strong></div>
+            <button type="button" data-period-direction="next" aria-label="Periodo siguiente">Siguiente</button>
+          </div>
+        </header>
+
+        <section class="cos-primary-grid" aria-label="Prioridad principal">
+          <article class="cos-primary-action">
+            <div class="cos-state-line">
+              <span class="cos-state">Importación inicial · En proceso</span>
+              <span class="cos-freshness">Última respuesta correcta hace 2 minutos</span>
+            </div>
+            <h2>Estamos preparando cinco años de información fiscal</h2>
+            <p class="cos-primary-copy">Ya puedes revisar la identidad de la empresa o conectar bancos. Los cálculos de agosto se habilitarán cuando termine la cobertura necesaria.</p>
+
+            <div class="cos-progress-head"><span>Cobertura solicitada</span><strong>32 de 50 periodos</strong></div>
+            <div class="cos-progress-track" role="progressbar" aria-label="Cobertura importada" aria-valuenow="64" aria-valuemin="0" aria-valuemax="100"><div class="cos-progress-bar"></div></div>
+            <div class="cos-progress-meta"><span>Julio 2022 a agosto 2026</span><span>Sin periodos fallidos</span></div>
+
+            <div class="cos-primary-footer">
+              <span class="cos-source"><strong>Fuente:</strong> SAT vía Syntage · Actualizado 8 sep 2026, 19:58</span>
+              <button class="cos-action cos-action-primary" type="button" data-open-coverage>Ver cobertura</button>
+            </div>
+          </article>
+
+          <aside class="cos-deadline">
+            <span class="cos-deadline-label">Próximo vencimiento</span>
+            <div class="cos-deadline-date"><strong data-deadline-day>17</strong><span data-deadline-month>septiembre</span></div>
+            <h3 data-deadline-title>Mensuales de agosto 2026</h3>
+            <p data-deadline-copy>Faltan 9 días. La preparación comenzará cuando estén disponibles los CFDI requeridos.</p>
+            <span class="cos-deadline-status" data-deadline-status>Esperando cobertura fiscal</span>
+          </aside>
+        </section>
+
+        <section class="cos-lower-grid">
+          <div>
+            <div class="cos-section-head"><h2>Qué puedes hacer ahora</h2><span>Ordenado por dependencia</span></div>
+            <div class="cos-section-panel">
+              <button class="cos-next-item" type="button" data-action-message="Abriríamos la ficha compartida de identidad y conexiones.">
+                <span class="cos-next-number">1</span>
+                <span class="cos-next-copy"><strong>Revisar los datos de la empresa</strong><span>Confirma regímenes, domicilio y obligaciones detectadas.</span></span>
+                <span class="cos-next-state">Disponible</span>
+              </button>
+              <button class="cos-next-item" type="button" data-action-message="Abriríamos Bancos con Comercializadora Norte ya seleccionada.">
+                <span class="cos-next-number">2</span>
+                <span class="cos-next-copy"><strong>Conectar una cuenta bancaria</strong><span>La conciliación puede configurarse mientras continúa el SAT.</span></span>
+                <span class="cos-next-state">Disponible</span>
+              </button>
+              <button class="cos-next-item" type="button" data-action-message="La preparación fiscal aún depende de la cobertura importada.">
+                <span class="cos-next-number">3</span>
+                <span class="cos-next-copy"><strong>Preparar las obligaciones de agosto</strong><span>Se habilitará cuando la cobertura mínima esté completa.</span></span>
+                <span class="cos-next-state is-waiting">Aún no disponible</span>
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <div class="cos-section-head"><h2>Estado de los datos</h2><span>Fuente y actualización visibles</span></div>
+            <div class="cos-section-panel">
+              <table class="cos-data-table">
+                <thead><tr><th>Conjunto</th><th>Estado</th><th>Fuente</th><th>Actualización</th></tr></thead>
+                <tbody>
+                  <tr><td data-label="Conjunto"><strong>CFDI emitidos y recibidos</strong><span>Jul 2022 a ago 2026</span></td><td data-label="Estado"><span class="cos-table-state">Importando 64%</span></td><td data-label="Fuente">SAT vía Syntage</td><td data-label="Actualización">Hace 2 minutos</td></tr>
+                  <tr><td data-label="Conjunto"><strong>Obligaciones fiscales</strong><span>Agosto 2026</span></td><td data-label="Estado"><span class="cos-table-state">Análisis pendiente</span></td><td data-label="Fuente">CSF y CFDI</td><td data-label="Actualización">Al completar cobertura</td></tr>
+                  <tr><td data-label="Conjunto"><strong>Movimientos bancarios</strong><span>Sin cuenta configurada</span></td><td data-label="Estado"><span class="cos-table-state is-muted">No conectado</span></td><td data-label="Fuente">Usuario</td><td data-label="Actualización">Sin datos</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <p class="cos-feedback" aria-live="polite" data-feedback>La empresa y el periodo se conservarán en cada navegación.</p>
+      </div>
+    </main>
+  </section>
+
+  <div class="cos-drawer-layer" data-coverage-layer hidden>
+    <aside class="cos-drawer" role="dialog" aria-modal="true" aria-labelledby="cos-coverage-title">
+      <div class="cos-drawer-head">
+        <div><h2 id="cos-coverage-title">Cobertura de la importación</h2><p>Comercializadora Norte · CON920414AB3</p></div>
+        <button class="cos-close" type="button" data-close-coverage>Cerrar</button>
+      </div>
+      <div class="cos-drawer-summary">
+        <div><span>Solicitados</span><strong>50 periodos</strong></div>
+        <div><span>Completos</span><strong>32 periodos</strong></div>
+        <div><span>Fallidos</span><strong>Ninguno</strong></div>
+      </div>
+      <div class="cos-coverage">
+        <div class="cos-year" data-state="complete"><div class="cos-year-head"><span>2022 · julio a diciembre</span><span>6 de 6</span></div><div class="cos-year-track"><span style="width:100%"></span></div></div>
+        <div class="cos-year" data-state="complete"><div class="cos-year-head"><span>2023</span><span>12 de 12</span></div><div class="cos-year-track"><span style="width:100%"></span></div></div>
+        <div class="cos-year" data-state="complete"><div class="cos-year-head"><span>2024</span><span>12 de 12</span></div><div class="cos-year-track"><span style="width:100%"></span></div></div>
+        <div class="cos-year"><div class="cos-year-head"><span>2025</span><span>2 de 12</span></div><div class="cos-year-track"><span style="width:16.67%"></span></div><p class="cos-year-note">Enero y febrero completos. Marzo está en proceso.</p></div>
+        <div class="cos-year"><div class="cos-year-head"><span>2026 · enero a agosto</span><span>Pendiente</span></div><div class="cos-year-track"><span style="width:0%"></span></div></div>
+      </div>
+      <div class="cos-drawer-notice">No afirmaremos que la importación terminó hasta resolver todos los periodos solicitados. Si el SAT no responde o un periodo falla, aparecerá aquí con una causa específica.</div>
+    </aside>
+  </div>
+
+  <script>
+    (() => {
+      const root = document.getElementById("cos-dashboard-importing");
+      const feedback = root.querySelector("[data-feedback]");
+      const coverageLayer = root.querySelector("[data-coverage-layer]");
+      const coverageButton = root.querySelector("[data-open-coverage]");
+      const closeButton = root.querySelector("[data-close-coverage]");
+      const periodLabel = root.querySelector("[data-period-label]");
+      const deadlineDay = root.querySelector("[data-deadline-day]");
+      const deadlineMonth = root.querySelector("[data-deadline-month]");
+      const deadlineTitle = root.querySelector("[data-deadline-title]");
+      const deadlineCopy = root.querySelector("[data-deadline-copy]");
+      const deadlineStatus = root.querySelector("[data-deadline-status]");
+      const periods = [
+        { label: "Julio 2026", day: "17", month: "agosto", title: "Mensuales de julio 2026", copy: "El vencimiento ya pasó. La cobertura importada determinará si existe trabajo pendiente.", status: "Revisión pendiente" },
+        { label: "Agosto 2026", day: "17", month: "septiembre", title: "Mensuales de agosto 2026", copy: "Faltan 9 días. La preparación comenzará cuando estén disponibles los CFDI requeridos.", status: "Esperando cobertura fiscal" },
+        { label: "Septiembre 2026", day: "17", month: "octubre", title: "Mensuales de septiembre 2026", copy: "Periodo en curso. Todavía no corresponde preparar la declaración mensual.", status: "Periodo en curso" },
+      ];
+      let periodIndex = 1;
+
+      function showFeedback(message) {
+        feedback.textContent = message;
+      }
+
+      function refreshPeriod() {
+        const period = periods[periodIndex];
+        periodLabel.textContent = period.label;
+        deadlineDay.textContent = period.day;
+        deadlineMonth.textContent = period.month;
+        deadlineTitle.textContent = period.title;
+        deadlineCopy.textContent = period.copy;
+        deadlineStatus.textContent = period.status;
+        showFeedback(`Periodo activo: ${period.label}. La empresa seleccionada no cambió.`);
+      }
+
+      function openCoverage() {
+        coverageLayer.hidden = false;
+        closeButton.focus();
+      }
+
+      function closeCoverage() {
+        coverageLayer.hidden = true;
+        coverageButton.focus();
+      }
+
+      root.querySelectorAll("[data-action-message]").forEach((button) => {
+        button.addEventListener("click", () => showFeedback(button.dataset.actionMessage));
+      });
+      root.querySelectorAll("[data-period-direction]").forEach((button) => {
+        button.addEventListener("click", () => {
+          periodIndex += button.dataset.periodDirection === "previous" ? -1 : 1;
+          periodIndex = Math.max(0, Math.min(periods.length - 1, periodIndex));
+          refreshPeriod();
+        });
+      });
+      coverageButton.addEventListener("click", openCoverage);
+      closeButton.addEventListener("click", closeCoverage);
+      coverageLayer.addEventListener("click", (event) => { if (event.target === coverageLayer) closeCoverage(); });
+      root.addEventListener("keydown", (event) => { if (event.key === "Escape" && !coverageLayer.hidden) closeCoverage(); });
+    })();
+  </script>
+</div>

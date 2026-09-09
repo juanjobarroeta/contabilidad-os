@@ -1,0 +1,2009 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Inicio | ContabilidadOS</title>
+<style>:root{color-scheme:dark;background:#090d13}html,body{margin:0}body{box-sizing:border-box;background:inherit}iframe{display:block;width:100%;height:100vh;margin:0 auto;border:0}</style>
+</head>
+<body>
+<iframe sandbox="allow-scripts" referrerpolicy="no-referrer" title="Inicio | ContabilidadOS" srcdoc="&lt;!doctype html&gt;
+&lt;html lang=&quot;es-MX&quot;&gt;
+&lt;head&gt;
+&lt;meta charset=&quot;utf-8&quot;&gt;
+&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot;&gt;
+&lt;meta name=&quot;referrer&quot; content=&quot;no-referrer&quot;&gt;
+&lt;meta http-equiv=&quot;Content-Security-Policy&quot; content=&quot;default-src &#x27;none&#x27;; script-src &#x27;unsafe-inline&#x27; &#x27;unsafe-eval&#x27; &#x27;wasm-unsafe-eval&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src &#x27;unsafe-inline&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;&quot;&gt;
+&lt;title&gt;Inicio | ContabilidadOS&lt;/title&gt;
+&lt;style&gt;:root {
+  color-scheme: light dark;
+  background-color: var(
+    --background,
+    var(--color-background-primary, light-dark(rgb(255 255 255), rgb(24 24 24)))
+  ) !important;
+
+  /* Agent-facing contract; keep in sync with SKILL.md. */
+  --background: var(
+    --color-background-primary,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --card: color-mix(in oklab, var(--foreground) 5%, var(--background));
+  --card-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --popover: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255), rgb(45 45 45))
+  );
+  --popover-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --primary: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --primary-foreground: var(
+    --color-text-inverse,
+    light-dark(rgb(255 255 255), rgb(13 13 13))
+  );
+  --secondary: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255 / 96%), rgb(54 54 54 / 96%))
+  );
+  --secondary-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --muted: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --muted-foreground: var(
+    --color-text-secondary,
+    light-dark(rgb(26 28 31 / 49.4%), rgb(255 255 255 / 49.8%))
+  );
+  --accent: var(
+    --color-background-info,
+    light-dark(rgb(229 242 255), rgb(13 39 63))
+  );
+  --accent-foreground: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --destructive: var(
+    --color-text-warning,
+    light-dark(rgb(226 85 7), rgb(255 133 73))
+  );
+  --border: var(
+    --color-border-secondary,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+  --input: var(
+    --color-border-primary,
+    light-dark(
+      rgb(26 28 31 / 11.8%),
+      color-mix(in oklab, rgb(0 0 0) 10%, transparent)
+    )
+  );
+  --ring: var(
+    --color-ring-primary,
+    light-dark(rgb(51 156 255), rgb(131 195 255 / 76%))
+  );
+  --font-size-base: var(--font-text-md-size, 14px);
+  --blue: light-dark(rgb(51 156 255), rgb(51 156 255));
+  --orange: light-dark(rgb(226 85 7), rgb(251 106 34));
+  --green: light-dark(rgb(0 162 64), rgb(64 201 119));
+  --red: light-dark(rgb(224 46 42), rgb(255 103 100));
+  --purple: light-dark(rgb(146 79 247), rgb(173 123 249));
+  --yellow: light-dark(rgb(255 195 0), rgb(255 210 64));
+  --viz-series-1: var(--primary);
+  --viz-series-2: light-dark(rgb(243 136 59), rgb(245 154 86));
+  --viz-series-3: light-dark(rgb(93 201 119), rgb(116 213 139));
+  --viz-series-4: light-dark(rgb(235 119 177), rgb(240 143 192));
+  --viz-series-5: light-dark(rgb(155 121 236), rgb(170 145 239));
+  --viz-series-6: light-dark(rgb(58 185 177), rgb(90 203 194));
+
+  /* Internal implementation variables; not part of the agent contract. */
+  --font-sans: -apple-system, system-ui, &quot;Segoe UI&quot;, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;,
+    monospace;
+  --font-size-normal: max(11px, var(--font-size-base));
+  --font-size-tooltip: calc(var(--font-size-base) - 1px);
+  --font-size-small: max(11px, calc(var(--font-size-base) - 2px));
+  --font-size-h1: calc(var(--font-size-normal) * 1.7142857143);
+  --font-size-h2: calc(var(--font-size-normal) * 1.4285714286);
+  --font-size-h3: calc(var(--font-size-normal) * 1.2857142857);
+  --font-weight-normal: 430;
+  --font-weight-medium: 500;
+  --line-height-normal: calc(var(--font-size-normal) * 1.5);
+  --line-height-tooltip: calc(var(--font-size-tooltip) * 1.4285714286);
+  --line-height-small: calc(var(--font-size-small) + 4px);
+  --radius: var(--border-radius-lg, 12.5px);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-2xl: calc(var(--radius) * 1.6);
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px -1px rgb(0 0 0 / 8%);
+  --checkmark-image: url(&quot;data:image/svg+xml,%3Csvg xmlns=&#x27;http://www.w3.org/2000/svg&#x27; viewBox=&#x27;0 0 17 17&#x27;%3E%3Cpath d=&#x27;M12.8961 3.64101C13.1297 3.41418 13.4984 3.37523 13.7779 3.56581C14.0571 3.75635 14.1554 4.11331 14.0299 4.41347L13.9615 4.53847L7.71151 13.7045C7.59411 13.8767 7.4063 13.9877 7.19881 14.0072C6.99136 14.0267 6.78564 13.9533 6.63826 13.806L2.88826 10.056L2.79842 9.9457C2.6192 9.67407 2.64927 9.30496 2.88826 9.06581C3.12738 8.82669 3.49647 8.79676 3.76815 8.97597L3.8785 9.06581L7.03084 12.2182L12.8053 3.74941L12.8961 3.64101Z&#x27;/%3E%3C/svg%3E&quot;);
+
+  /* Legacy aliases; not part of the current agent contract. */
+  --viz-bg: transparent;
+  --viz-panel: var(--card);
+  --viz-border: var(--border);
+  --viz-text: var(--foreground);
+  --viz-muted: var(--muted-foreground);
+  --viz-accent: var(--primary);
+  --viz-accent-text: var(--primary-foreground);
+  --viz-accent-bg: var(--accent);
+  --viz-font-size: var(--font-size-base);
+  --viz-warning: var(--destructive);
+}
+
+:root[data-theme=&quot;light&quot;] {
+  color-scheme: light;
+}
+
+:root[data-theme=&quot;dark&quot;] {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html &gt; body {
+  /* Preserve MCP aliases for older inline renderers without creating :root cycles. */
+  --color-background-primary: var(
+    --background,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --color-text-primary: var(
+    --foreground,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --color-border-secondary: var(
+    --border,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+
+  margin: 0;
+  padding: 5px;
+  color: var(--foreground);
+  background: transparent !important;
+  font-family: var(--font-sans) !important;
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-normal);
+}
+
+a {
+  color: color-mix(in srgb, var(--viz-accent) 80%, var(--viz-text) 20%);
+  cursor: pointer;
+  font-weight: var(--font-weight-medium, 500);
+  text-decoration: none;
+  text-underline-offset: 2px;
+}
+
+a:is(:hover, :focus-visible) {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 0.5px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin-block: 0;
+}
+
+h1 {
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h2 {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h3,
+h4,
+h5,
+h6 {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+}
+
+b,
+strong,
+th {
+  font-weight: var(--font-weight-medium);
+}
+
+code:not(pre code) {
+  display: inline;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  corner-shape: superellipse(1.5);
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  word-break: break-word;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--foreground);
+  font: inherit;
+  text-align: start;
+}
+
+.table :is(th, td) {
+  padding-block: 10px;
+  padding-inline: 0 24px;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+
+.table-responsive &gt; .table :is(th, td) {
+  overflow-wrap: break-word;
+}
+
+.table :is(th, td):last-child {
+  padding-inline-end: 0;
+}
+
+.table :is(caption, thead th) {
+  font-weight: 600;
+}
+
+.table thead th {
+  padding-block: 8px;
+  border-bottom-color: color-mix(in srgb, var(--foreground) 16%, transparent);
+}
+
+.table tbody tr:last-child :is(th, td) {
+  border-bottom: 0;
+}
+
+.table.table-sm :is(th, td) {
+  padding-block: 6px;
+}
+
+.table.table-sm :is(th, td):not(:last-child) {
+  padding-inline-end: 16px;
+}
+
+.table :is(.text-end, [align=&quot;right&quot;]) {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.table :is(.text-center, [align=&quot;center&quot;]) {
+  text-align: center;
+}
+
+.table .text-nowrap {
+  white-space: nowrap;
+}
+
+#widget {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  background: transparent !important;
+}
+
+.card {
+  min-width: 0;
+  padding: 12px;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  border-radius: var(--radius-2xl);
+  corner-shape: superellipse(1.5);
+  color: var(--card-foreground);
+  background: var(--card);
+}
+
+#widget &gt; :not(.card, .progress) {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: min(
+    20rem,
+    var(--tooltip-available-width, calc(100vw - 10px)),
+    calc(100vw - 10px)
+  );
+  max-height: min(
+    var(--tooltip-available-height, calc(100vh - 10px)),
+    calc(100vh - 10px)
+  );
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--popover-foreground);
+  background: var(--popover);
+  box-shadow: none;
+  font-size: var(--font-size-tooltip);
+  line-height: var(--line-height-tooltip);
+  overflow-wrap: break-word;
+  white-space: normal;
+  pointer-events: none;
+  user-select: none;
+}
+
+.viz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(180px, 24%), 1fr));
+  gap: 10px;
+}
+
+.viz-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.viz-stat-value {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+.viz-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.progress {
+  display: flex;
+  height: 6px;
+  margin-block: calc((var(--line-height-normal, 1.5em) - 6px) / 2);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+}
+
+.progress-bar {
+  height: 100%;
+  flex-shrink: 0;
+  border: 0;
+  background: var(--viz-series-1);
+}
+
+.viz-badge {
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  color: var(--accent-foreground);
+  background: var(--accent);
+  font-weight: var(--font-weight-medium);
+}
+
+small,
+.text-small,
+.viz-badge {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.text-muted {
+  color: var(--muted-foreground);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.viz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.viz-controls &gt; .form-label {
+  display: grid;
+  min-width: min(100%, 260px);
+  flex: 1 1 280px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 12px;
+  margin-bottom: 0;
+}
+
+.viz-controls &gt; .form-label &gt; :is(.form-control, .form-range, .form-select) {
+  grid-column: 1 / -1;
+}
+
+.btn,
+.form-check-input,
+.form-control,
+.form-range,
+.form-select {
+  font: inherit;
+}
+
+.btn {
+  appearance: button;
+  display: inline-flex;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 8px;
+  -webkit-app-region: no-drag;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: var(--cursor-interaction, pointer);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.btn:is(.btn-block, .viz-tile) {
+  inline-size: 100%;
+}
+
+.btn.viz-tile {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+a.btn {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn-primary {
+  border-color: transparent;
+  color: var(--primary-foreground);
+  background: var(--foreground);
+  background-clip: padding-box;
+}
+
+.btn-primary .text-muted {
+  color: color-mix(in srgb, var(--primary-foreground) 50%, transparent);
+}
+
+.btn-primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 80%, transparent);
+  background-clip: padding-box;
+}
+
+.btn-ghost {
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.btn-ghost:not(:disabled):hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+[data-lucide] {
+  stroke-width: 1.6;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--foreground);
+}
+
+.form-control {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--foreground);
+  background: var(--secondary);
+}
+
+.form-control::placeholder {
+  color: var(--muted-foreground);
+}
+
+.form-control[type=&quot;file&quot;] {
+  padding: 0;
+  overflow: hidden;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control[type=&quot;file&quot;]::file-selector-button {
+  min-height: 26px;
+  margin-right: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--input);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: inherit;
+  font: inherit;
+}
+
+.form-control[type=&quot;file&quot;]:not(:disabled):hover::file-selector-button {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-control-color[type=&quot;color&quot;] {
+  width: 40px;
+  height: 28px;
+  padding: 3px;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control-color[type=&quot;color&quot;]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.form-control-color[type=&quot;color&quot;]::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 4px);
+  corner-shape: superellipse(1.5);
+}
+
+textarea.form-control {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.form-control:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.form-select {
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 32px 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--foreground);
+  background-color: var(--secondary);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%),
+    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 10px) 50%;
+  background-repeat: no-repeat;
+  background-size: 4px 4px;
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-select:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-select:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-check {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-check-input {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin: 0;
+  border: 1px solid var(--input);
+  color: var(--primary-foreground);
+  background-color: transparent;
+  cursor: var(--cursor-interaction, default);
+  transition:
+    background-color 150ms,
+    border-color 150ms,
+    box-shadow 150ms;
+}
+
+.form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;] {
+  border-color: var(--input);
+  border-radius: var(--radius-sm);
+  corner-shape: superellipse(1.5);
+  background-color: var(--secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input:not(:disabled):not(:checked):hover {
+  background-color: var(--card);
+}
+
+.form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;]:checked {
+  border-color: var(--primary);
+  background-color: var(--primary);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input[type=&quot;checkbox&quot;]:checked::before {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--primary-foreground);
+  content: &quot;&quot;;
+  mask: var(--checkmark-image) center / 12px 12px no-repeat;
+}
+
+.form-check-input[type=&quot;radio&quot;] {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+}
+
+.form-check-input[type=&quot;radio&quot;]:checked {
+  border: 2px solid var(--primary);
+  background:
+    radial-gradient(circle, var(--primary-foreground) 0 2.5px, transparent 3px),
+    var(--primary);
+}
+
+.form-check:not(.form-switch) .form-check-input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+}
+
+.form-switch .form-check-input:disabled,
+.form-switch .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.form-check-label {
+  color: var(--foreground);
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-switch .form-check-input {
+  position: relative;
+  width: 32px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+  box-shadow: none;
+  transition: background-color 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid light-dark(var(--primary-foreground), var(--foreground));
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+  box-shadow: var(--shadow-sm);
+  content: &quot;&quot;;
+  transform: translate(2px, -50%);
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input:checked {
+  background: var(--primary);
+}
+
+.form-switch .form-check-input:checked::before {
+  transform: translate(14px, -50%);
+}
+
+.form-switch .form-check-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.form-range {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 28px;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  outline: none;
+  border: 0;
+  accent-color: var(--primary);
+  background: linear-gradient(
+      color-mix(in srgb, var(--foreground) 7%, transparent),
+      color-mix(in srgb, var(--foreground) 7%, transparent)
+    )
+    center / 100% 2px no-repeat;
+}
+
+.form-range::-webkit-slider-runnable-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-webkit-slider-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range::-moz-range-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-moz-range-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.btn:not(.btn-primary, .viz-tile):is(
+  [aria-pressed=&quot;true&quot;],
+  [aria-selected=&quot;true&quot;],
+  .is-selected
+) {
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.btn.viz-tile:is([aria-pressed=&quot;true&quot;], [aria-selected=&quot;true&quot;], .is-selected) {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  .btn,
+  .form-control,
+  .form-select {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .form-control,
+  .form-select {
+    font-size: max(16px, var(--font-size-normal));
+  }
+
+  .form-control[type=&quot;file&quot;]::file-selector-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .form-control-color[type=&quot;color&quot;] {
+    width: 44px;
+    height: 44px;
+  }
+
+  .form-control:is(
+    [type=&quot;date&quot;],
+    [type=&quot;datetime-local&quot;],
+    [type=&quot;month&quot;],
+    [type=&quot;time&quot;],
+    [type=&quot;week&quot;]
+  ) {
+    min-width: 0;
+    max-width: 100%;
+    padding-block: 8px;
+  }
+
+  .form-check {
+    min-height: 44px;
+    padding-inline: 15px;
+  }
+
+  .form-check-input {
+    position: relative;
+  }
+
+  .form-check-input::after {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    content: &quot;&quot;;
+    transform: translate(-50%, -50%);
+  }
+
+  .form-check-label {
+    display: inline-flex;
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+  }
+
+  .form-range {
+    height: 44px;
+    touch-action: pan-y;
+  }
+
+  .form-range::-webkit-slider-runnable-track {
+    height: 44px;
+  }
+
+  .form-range::-moz-range-track {
+    height: 44px;
+  }
+
+  .form-range::-webkit-slider-thumb {
+    margin-top: 12px;
+  }
+}
+
+svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+#widget &gt; svg {
+  width: 100%;
+}
+
+/* Model-authored chart rules can otherwise stretch icons after these styles load. */
+svg.lucide {
+  display: block;
+  width: 16px !important;
+  height: 16px !important;
+  flex: none;
+  margin: 0 !important;
+  stroke-width: 1.6;
+}
+
+.text-warning,
+.text-destructive {
+  color: var(--destructive);
+}
+
+html&gt;body{padding:0}&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;div id=&quot;cos-dashboard-importing&quot;&gt;
+  &lt;style&gt;
+    #cos-dashboard-importing {
+      --cos-bg: #090d13;
+      --cos-sidebar: #0c1117;
+      --cos-surface: #11171f;
+      --cos-surface-raised: #171d26;
+      --cos-surface-soft: #0d131a;
+      --cos-border: #29323d;
+      --cos-border-strong: #3a4654;
+      --cos-text: #f2f4f7;
+      --cos-muted: #96a0ad;
+      --cos-faint: #6f7986;
+      --cos-blue: #5688e8;
+      --cos-blue-hover: #4779d5;
+      --cos-blue-soft: #172845;
+      --cos-blue-border: #315286;
+      --cos-green: #76c99c;
+      --cos-green-soft: #13271f;
+      --cos-amber: #e3b269;
+      --cos-amber-soft: #292116;
+      position: relative;
+      width: 100%;
+      min-width: 0;
+      color: var(--cos-text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;
+      font-size: 14px;
+      font-weight: 400;
+      line-height: 1.48;
+    }
+
+    #cos-dashboard-importing * { box-sizing: border-box; }
+    #cos-dashboard-importing button,
+    #cos-dashboard-importing select { font: inherit; }
+    #cos-dashboard-importing button { -webkit-tap-highlight-color: transparent; }
+
+    #cos-dashboard-importing .cos-app {
+      width: 100%;
+      min-height: 780px;
+      display: grid;
+      grid-template-columns: 236px minmax(0, 1fr);
+      overflow: hidden;
+      border: 1px solid var(--cos-border);
+      border-radius: 15px;
+      background: var(--cos-bg);
+      box-shadow: 0 26px 80px rgb(0 0 0 / 34%);
+    }
+
+    #cos-dashboard-importing .cos-sidebar {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      padding: 23px 17px 18px;
+      border-right: 1px solid var(--cos-border);
+      background: var(--cos-sidebar);
+    }
+
+    #cos-dashboard-importing .cos-brand {
+      padding: 0 9px 20px;
+      color: var(--cos-text);
+      font-size: 17px;
+      font-weight: 500;
+      letter-spacing: -0.035em;
+    }
+
+    #cos-dashboard-importing .cos-brand span { color: var(--cos-blue); }
+
+    #cos-dashboard-importing .cos-company {
+      width: 100%;
+      display: grid;
+      gap: 2px;
+      padding: 11px 12px;
+      border: 1px solid var(--cos-border);
+      border-radius: 9px;
+      background: var(--cos-surface);
+      color: var(--cos-text);
+      text-align: left;
+      cursor: pointer;
+    }
+
+    #cos-dashboard-importing .cos-company:hover { border-color: var(--cos-border-strong); }
+    #cos-dashboard-importing .cos-company strong { overflow: hidden; font-size: 12px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+    #cos-dashboard-importing .cos-company span { color: var(--cos-muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
+
+    #cos-dashboard-importing .cos-nav { display: grid; gap: 18px; margin-top: 22px; }
+    #cos-dashboard-importing .cos-nav-group { display: grid; gap: 3px; }
+    #cos-dashboard-importing .cos-nav-label {
+      padding: 0 9px 5px;
+      color: var(--cos-faint);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+    }
+
+    #cos-dashboard-importing .cos-nav-item {
+      width: 100%;
+      min-height: 35px;
+      padding: 8px 10px;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      background: transparent;
+      color: var(--cos-muted);
+      font-size: 12px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    #cos-dashboard-importing .cos-nav-item:hover { border-color: var(--cos-border); color: var(--cos-text); }
+    #cos-dashboard-importing .cos-nav-item[aria-current=&quot;page&quot;] { background: var(--cos-blue-soft); color: #dce8ff; }
+
+    #cos-dashboard-importing .cos-user {
+      display: grid;
+      grid-template-columns: 32px minmax(0, 1fr);
+      gap: 9px;
+      align-items: center;
+      margin-top: auto;
+      padding: 14px 8px 0;
+      border-top: 1px solid var(--cos-border);
+    }
+
+    #cos-dashboard-importing .cos-avatar {
+      display: grid;
+      width: 32px;
+      height: 32px;
+      place-items: center;
+      border-radius: 50%;
+      background: #202a37;
+      color: #cad6e5;
+      font-size: 10px;
+      font-weight: 500;
+    }
+
+    #cos-dashboard-importing .cos-user strong,
+    #cos-dashboard-importing .cos-user span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #cos-dashboard-importing .cos-user strong { color: var(--cos-text); font-size: 11px; font-weight: 500; }
+    #cos-dashboard-importing .cos-user span { color: var(--cos-muted); font-size: 10px; }
+
+    #cos-dashboard-importing .cos-mobile-header,
+    #cos-dashboard-importing .cos-mobile-nav { display: none; }
+
+    #cos-dashboard-importing .cos-main { min-width: 0; background: var(--cos-bg); }
+    #cos-dashboard-importing .cos-topbar {
+      min-height: 58px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      padding: 10px clamp(22px, 3vw, 42px);
+      border-bottom: 1px solid var(--cos-border);
+      background: var(--cos-sidebar);
+    }
+
+    #cos-dashboard-importing .cos-search {
+      width: min(300px, 34vw);
+      min-height: 35px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 7px 10px;
+      border: 1px solid var(--cos-border);
+      border-radius: 8px;
+      background: var(--cos-surface-soft);
+      color: var(--cos-muted);
+      font-size: 11px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    #cos-dashboard-importing .cos-search:hover { border-color: var(--cos-border-strong); }
+    #cos-dashboard-importing .cos-search span:last-child { color: var(--cos-faint); font-size: 10px; }
+    #cos-dashboard-importing .cos-help-button {
+      min-height: 35px;
+      padding: 7px 11px;
+      border: 1px solid var(--cos-border);
+      border-radius: 8px;
+      background: transparent;
+      color: var(--cos-muted);
+      font-size: 11px;
+      cursor: pointer;
+    }
+    #cos-dashboard-importing .cos-help-button:hover { color: var(--cos-text); border-color: var(--cos-border-strong); }
+
+    #cos-dashboard-importing .cos-content {
+      width: min(1180px, 100%);
+      margin: 0 auto;
+      padding: 30px clamp(22px, 3vw, 42px) 40px;
+    }
+
+    #cos-dashboard-importing .cos-page-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 22px;
+      margin-bottom: 22px;
+    }
+
+    #cos-dashboard-importing .cos-eyebrow { margin: 0 0 5px; color: var(--cos-muted); font-size: 11px; }
+    #cos-dashboard-importing h1 { margin: 0; color: var(--cos-text); font-size: 27px; font-weight: 500; letter-spacing: -0.035em; line-height: 1.18; }
+    #cos-dashboard-importing .cos-company-meta { margin: 5px 0 0; color: var(--cos-muted); font-size: 11px; }
+
+    #cos-dashboard-importing .cos-period-context {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      overflow: hidden;
+      border: 1px solid var(--cos-border);
+      border-radius: 9px;
+      background: var(--cos-surface);
+    }
+
+    #cos-dashboard-importing .cos-period-context button {
+      min-width: 38px;
+      min-height: 43px;
+      border: 0;
+      background: transparent;
+      color: var(--cos-muted);
+      cursor: pointer;
+    }
+    #cos-dashboard-importing .cos-period-context button:hover { background: var(--cos-surface-raised); color: var(--cos-text); }
+    #cos-dashboard-importing .cos-period-label { min-width: 150px; padding: 6px 13px; border-right: 1px solid var(--cos-border); border-left: 1px solid var(--cos-border); text-align: center; }
+    #cos-dashboard-importing .cos-period-label span,
+    #cos-dashboard-importing .cos-period-label strong { display: block; }
+    #cos-dashboard-importing .cos-period-label span { color: var(--cos-muted); font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; }
+    #cos-dashboard-importing .cos-period-label strong { margin-top: 1px; color: var(--cos-text); font-size: 12px; font-weight: 500; }
+
+    #cos-dashboard-importing .cos-primary-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.65fr) minmax(245px, 0.65fr);
+      gap: 14px;
+      margin-bottom: 25px;
+    }
+
+    #cos-dashboard-importing .cos-primary-action,
+    #cos-dashboard-importing .cos-deadline,
+    #cos-dashboard-importing .cos-section-panel {
+      border: 1px solid var(--cos-border);
+      border-radius: 12px;
+      background: var(--cos-surface);
+    }
+
+    #cos-dashboard-importing .cos-primary-action { padding: 21px 22px; }
+    #cos-dashboard-importing .cos-state-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+
+    #cos-dashboard-importing .cos-state {
+      display: inline-flex;
+      min-height: 25px;
+      align-items: center;
+      padding: 4px 9px;
+      border: 1px solid var(--cos-blue-border);
+      border-radius: 99px;
+      background: var(--cos-blue-soft);
+      color: #a9c5f7;
+      font-size: 9px;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    #cos-dashboard-importing .cos-freshness { color: var(--cos-muted); font-size: 10px; }
+    #cos-dashboard-importing .cos-primary-action h2 { max-width: 670px; margin: 0; color: var(--cos-text); font-size: 21px; font-weight: 500; letter-spacing: -0.025em; line-height: 1.25; }
+    #cos-dashboard-importing .cos-primary-copy { max-width: 72ch; margin: 8px 0 18px; color: var(--cos-muted); font-size: 12px; }
+
+    #cos-dashboard-importing .cos-progress-head,
+    #cos-dashboard-importing .cos-progress-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+    #cos-dashboard-importing .cos-progress-head { color: #dbe3ee; font-size: 11px; }
+    #cos-dashboard-importing .cos-progress-head strong { color: var(--cos-text); font-size: 12px; font-weight: 500; }
+    #cos-dashboard-importing .cos-progress-track { height: 7px; margin: 9px 0 8px; overflow: hidden; border-radius: 99px; background: #29323d; }
+    #cos-dashboard-importing .cos-progress-bar { width: 64%; height: 100%; border-radius: inherit; background: var(--cos-blue); }
+    #cos-dashboard-importing .cos-progress-meta { color: var(--cos-muted); font-size: 10px; }
+
+    #cos-dashboard-importing .cos-primary-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-top: 19px;
+      padding-top: 15px;
+      border-top: 1px solid var(--cos-border);
+    }
+    #cos-dashboard-importing .cos-source { color: var(--cos-muted); font-size: 10px; }
+    #cos-dashboard-importing .cos-source strong { color: #c9d2df; font-weight: 500; }
+
+    #cos-dashboard-importing .cos-action {
+      min-height: 38px;
+      padding: 8px 13px;
+      border: 1px solid var(--cos-border-strong);
+      border-radius: 8px;
+      background: transparent;
+      color: var(--cos-text);
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    #cos-dashboard-importing .cos-action:hover { background: var(--cos-surface-raised); }
+    #cos-dashboard-importing .cos-action-primary { border-color: var(--cos-blue); background: var(--cos-blue); color: #ffffff; }
+    #cos-dashboard-importing .cos-action-primary:hover { background: var(--cos-blue-hover); }
+
+    #cos-dashboard-importing .cos-deadline { display: flex; flex-direction: column; padding: 20px; }
+    #cos-dashboard-importing .cos-deadline-label { color: var(--cos-muted); font-size: 10px; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; }
+    #cos-dashboard-importing .cos-deadline-date { display: flex; align-items: baseline; gap: 7px; margin: 11px 0 5px; color: var(--cos-text); }
+    #cos-dashboard-importing .cos-deadline-date strong { font-size: 32px; font-weight: 500; letter-spacing: -0.04em; line-height: 1; }
+    #cos-dashboard-importing .cos-deadline-date span { color: var(--cos-muted); font-size: 12px; }
+    #cos-dashboard-importing .cos-deadline h3 { margin: 0; color: #dbe3ee; font-size: 13px; font-weight: 500; }
+    #cos-dashboard-importing .cos-deadline p { margin: 6px 0 17px; color: var(--cos-muted); font-size: 11px; }
+    #cos-dashboard-importing .cos-deadline-status { margin-top: auto; padding-top: 13px; border-top: 1px solid var(--cos-border); color: var(--cos-amber); font-size: 10px; }
+
+    #cos-dashboard-importing .cos-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 11px; }
+    #cos-dashboard-importing .cos-section-head h2 { margin: 0; color: var(--cos-text); font-size: 15px; font-weight: 500; }
+    #cos-dashboard-importing .cos-section-head span { color: var(--cos-muted); font-size: 10px; }
+
+    #cos-dashboard-importing .cos-lower-grid { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 20px; }
+    #cos-dashboard-importing .cos-section-panel { overflow: hidden; }
+    #cos-dashboard-importing .cos-next-item {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr) auto;
+      gap: 11px;
+      align-items: start;
+      padding: 15px 16px;
+      border: 0;
+      border-bottom: 1px solid var(--cos-border);
+      background: transparent;
+      color: var(--cos-text);
+      text-align: left;
+      cursor: pointer;
+    }
+    #cos-dashboard-importing .cos-next-item:last-child { border-bottom: 0; }
+    #cos-dashboard-importing .cos-next-item:hover { background: var(--cos-surface-raised); }
+    #cos-dashboard-importing .cos-next-number {
+      display: grid;
+      width: 26px;
+      height: 26px;
+      place-items: center;
+      border: 1px solid var(--cos-border-strong);
+      border-radius: 50%;
+      color: #b9c4d2;
+      font-size: 10px;
+      font-weight: 500;
+    }
+    #cos-dashboard-importing .cos-next-copy strong,
+    #cos-dashboard-importing .cos-next-copy span { display: block; }
+    #cos-dashboard-importing .cos-next-copy strong { font-size: 11px; font-weight: 500; }
+    #cos-dashboard-importing .cos-next-copy span { margin-top: 3px; color: var(--cos-muted); font-size: 10px; }
+    #cos-dashboard-importing .cos-next-state { color: #8eb2f4; font-size: 10px; white-space: nowrap; }
+    #cos-dashboard-importing .cos-next-state.is-waiting { color: var(--cos-muted); }
+
+    #cos-dashboard-importing .cos-data-table { width: 100%; border-collapse: collapse; }
+    #cos-dashboard-importing .cos-data-table th,
+    #cos-dashboard-importing .cos-data-table td { padding: 12px 14px; border-bottom: 1px solid var(--cos-border); text-align: left; vertical-align: top; }
+    #cos-dashboard-importing .cos-data-table tr:last-child td { border-bottom: 0; }
+    #cos-dashboard-importing .cos-data-table th { color: var(--cos-faint); font-size: 9px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
+    #cos-dashboard-importing .cos-data-table td { color: #dbe3ee; font-size: 10px; }
+    #cos-dashboard-importing .cos-data-table td strong,
+    #cos-dashboard-importing .cos-data-table td span { display: block; }
+    #cos-dashboard-importing .cos-data-table td strong { color: var(--cos-text); font-size: 11px; font-weight: 500; }
+    #cos-dashboard-importing .cos-data-table td span { margin-top: 2px; color: var(--cos-muted); font-size: 9px; }
+    #cos-dashboard-importing .cos-table-state { color: var(--cos-blue); font-weight: 500; }
+    #cos-dashboard-importing .cos-table-state.is-muted { color: var(--cos-muted); }
+
+    #cos-dashboard-importing .cos-feedback {
+      min-height: 20px;
+      margin: 18px 0 0;
+      color: var(--cos-muted);
+      font-size: 10px;
+      text-align: right;
+    }
+
+    #cos-dashboard-importing .cos-drawer-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      display: flex;
+      justify-content: flex-end;
+      background: rgb(4 7 10 / 72%);
+      backdrop-filter: blur(5px);
+    }
+    #cos-dashboard-importing .cos-drawer {
+      width: min(480px, 100%);
+      min-height: 100%;
+      padding: 24px;
+      border-left: 1px solid var(--cos-border-strong);
+      background: var(--cos-surface);
+      box-shadow: -24px 0 70px rgb(0 0 0 / 42%);
+    }
+    #cos-dashboard-importing .cos-drawer-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+    #cos-dashboard-importing .cos-drawer-head h2 { margin: 0; color: var(--cos-text); font-size: 20px; font-weight: 500; letter-spacing: -0.025em; }
+    #cos-dashboard-importing .cos-drawer-head p { margin: 5px 0 0; color: var(--cos-muted); font-size: 11px; }
+    #cos-dashboard-importing .cos-close {
+      min-width: 62px;
+      min-height: 36px;
+      padding: 7px 10px;
+      border: 1px solid var(--cos-border);
+      border-radius: 7px;
+      background: transparent;
+      color: var(--cos-muted);
+      font-size: 10px;
+      cursor: pointer;
+    }
+    #cos-dashboard-importing .cos-close:hover { color: var(--cos-text); border-color: var(--cos-border-strong); }
+    #cos-dashboard-importing .cos-drawer-summary { display: flex; justify-content: space-between; gap: 16px; margin: 22px 0; padding: 14px 0; border-top: 1px solid var(--cos-border); border-bottom: 1px solid var(--cos-border); }
+    #cos-dashboard-importing .cos-drawer-summary div { min-width: 0; }
+    #cos-dashboard-importing .cos-drawer-summary span,
+    #cos-dashboard-importing .cos-drawer-summary strong { display: block; }
+    #cos-dashboard-importing .cos-drawer-summary span { color: var(--cos-muted); font-size: 9px; }
+    #cos-dashboard-importing .cos-drawer-summary strong { margin-top: 2px; color: var(--cos-text); font-size: 13px; font-weight: 500; }
+    #cos-dashboard-importing .cos-coverage { display: grid; gap: 16px; }
+    #cos-dashboard-importing .cos-year-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; color: #dbe3ee; font-size: 11px; }
+    #cos-dashboard-importing .cos-year-head span:last-child { color: var(--cos-muted); font-size: 10px; }
+    #cos-dashboard-importing .cos-year-track { height: 6px; overflow: hidden; border-radius: 99px; background: #29323d; }
+    #cos-dashboard-importing .cos-year-track span { display: block; height: 100%; border-radius: inherit; background: var(--cos-blue); }
+    #cos-dashboard-importing .cos-year[data-state=&quot;complete&quot;] .cos-year-track span { background: var(--cos-green); }
+    #cos-dashboard-importing .cos-year-note { margin: 6px 0 0; color: var(--cos-muted); font-size: 9px; }
+    #cos-dashboard-importing .cos-drawer-notice { margin-top: 22px; padding: 13px; border: 1px solid var(--cos-blue-border); border-radius: 9px; background: var(--cos-blue-soft); color: #c8d9f7; font-size: 10px; }
+    #cos-dashboard-importing [hidden] { display: none !important; }
+
+    @media (max-width: 1020px) {
+      #cos-dashboard-importing .cos-app { grid-template-columns: 205px minmax(0, 1fr); }
+      #cos-dashboard-importing .cos-sidebar { padding-inline: 13px; }
+      #cos-dashboard-importing .cos-primary-grid { grid-template-columns: minmax(0, 1.4fr) minmax(220px, 0.7fr); }
+      #cos-dashboard-importing .cos-lower-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 760px) {
+      #cos-dashboard-importing .cos-app { display: block; min-height: 0; }
+      #cos-dashboard-importing .cos-sidebar,
+      #cos-dashboard-importing .cos-topbar { display: none; }
+      #cos-dashboard-importing .cos-mobile-header {
+        min-height: 58px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--cos-border);
+        background: var(--cos-sidebar);
+      }
+      #cos-dashboard-importing .cos-mobile-header .cos-brand { padding: 0; }
+      #cos-dashboard-importing .cos-mobile-company { color: var(--cos-muted); font-size: 10px; text-align: right; }
+      #cos-dashboard-importing .cos-mobile-nav {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        border-bottom: 1px solid var(--cos-border);
+        background: var(--cos-sidebar);
+      }
+      #cos-dashboard-importing .cos-mobile-nav button {
+        min-height: 44px;
+        padding: 8px 4px;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        background: transparent;
+        color: var(--cos-muted);
+        font-size: 10px;
+      }
+      #cos-dashboard-importing .cos-mobile-nav button[aria-current=&quot;page&quot;] { border-bottom-color: var(--cos-blue); color: var(--cos-text); }
+      #cos-dashboard-importing .cos-content { padding: 23px 16px 28px; }
+      #cos-dashboard-importing .cos-page-head { align-items: stretch; flex-direction: column; gap: 15px; }
+      #cos-dashboard-importing .cos-period-context { width: 100%; }
+      #cos-dashboard-importing .cos-period-label { min-width: 0; }
+      #cos-dashboard-importing .cos-primary-grid { grid-template-columns: 1fr; }
+      #cos-dashboard-importing .cos-state-line,
+      #cos-dashboard-importing .cos-primary-footer { align-items: flex-start; flex-direction: column; }
+      #cos-dashboard-importing .cos-primary-footer .cos-action { width: 100%; }
+      #cos-dashboard-importing .cos-deadline { min-height: 215px; }
+      #cos-dashboard-importing .cos-data-table thead { display: none; }
+      #cos-dashboard-importing .cos-data-table,
+      #cos-dashboard-importing .cos-data-table tbody,
+      #cos-dashboard-importing .cos-data-table tr,
+      #cos-dashboard-importing .cos-data-table td { display: block; width: 100%; }
+      #cos-dashboard-importing .cos-data-table tr { padding: 11px 14px; border-bottom: 1px solid var(--cos-border); }
+      #cos-dashboard-importing .cos-data-table tr:last-child { border-bottom: 0; }
+      #cos-dashboard-importing .cos-data-table td { padding: 3px 0; border: 0; }
+      #cos-dashboard-importing .cos-data-table td::before { display: inline; margin-right: 6px; color: var(--cos-faint); font-size: 9px; content: attr(data-label) &quot;:&quot;; }
+      #cos-dashboard-importing .cos-data-table td strong,
+      #cos-dashboard-importing .cos-data-table td span { display: inline; }
+      #cos-dashboard-importing .cos-data-table td span { margin-left: 4px; }
+    }
+
+    @media (max-width: 430px) {
+      #cos-dashboard-importing .cos-app { border-right: 0; border-left: 0; border-radius: 0; }
+      #cos-dashboard-importing .cos-primary-action,
+      #cos-dashboard-importing .cos-deadline { padding: 17px; }
+      #cos-dashboard-importing .cos-progress-head,
+      #cos-dashboard-importing .cos-progress-meta { align-items: flex-start; flex-direction: column; gap: 4px; }
+      #cos-dashboard-importing .cos-next-item { grid-template-columns: 27px minmax(0, 1fr); }
+      #cos-dashboard-importing .cos-next-state { grid-column: 2; }
+      #cos-dashboard-importing .cos-drawer { padding: 19px 16px; }
+      #cos-dashboard-importing .cos-drawer-summary { flex-wrap: wrap; }
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      #cos-dashboard-importing button,
+      #cos-dashboard-importing .cos-progress-bar,
+      #cos-dashboard-importing .cos-year-track span { transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease, width 180ms ease; }
+    }
+  &lt;/style&gt;
+
+  &lt;section class=&quot;cos-app&quot; aria-label=&quot;Inicio de ContabilidadOS durante la importación inicial&quot;&gt;
+    &lt;aside class=&quot;cos-sidebar&quot;&gt;
+      &lt;div class=&quot;cos-brand&quot;&gt;Contabilidad&lt;span&gt;OS&lt;/span&gt;&lt;/div&gt;
+      &lt;button class=&quot;cos-company&quot; type=&quot;button&quot; data-action-message=&quot;El selector conserva empresa, permisos y periodo.&quot;&gt;
+        &lt;strong&gt;Comercializadora Norte&lt;/strong&gt;
+        &lt;span&gt;CON920414AB3&lt;/span&gt;
+      &lt;/button&gt;
+
+      &lt;nav class=&quot;cos-nav&quot; aria-label=&quot;Navegación principal&quot;&gt;
+        &lt;div class=&quot;cos-nav-group&quot;&gt;
+          &lt;button class=&quot;cos-nav-item&quot; type=&quot;button&quot; aria-current=&quot;page&quot;&gt;Inicio&lt;/button&gt;
+        &lt;/div&gt;
+        &lt;div class=&quot;cos-nav-group&quot;&gt;
+          &lt;span class=&quot;cos-nav-label&quot;&gt;Operación&lt;/span&gt;
+          &lt;button class=&quot;cos-nav-item&quot; type=&quot;button&quot; data-action-message=&quot;Facturas conserva la empresa y el periodo activos.&quot;&gt;Facturas&lt;/button&gt;
+          &lt;button class=&quot;cos-nav-item&quot; type=&quot;button&quot; data-action-message=&quot;Bancos abre la configuración de cuentas de esta empresa.&quot;&gt;Bancos&lt;/button&gt;
+          &lt;button class=&quot;cos-nav-item&quot; type=&quot;button&quot; data-action-message=&quot;Nómina conserva el contexto de Comercializadora Norte.&quot;&gt;Nómina&lt;/button&gt;
+        &lt;/div&gt;
+        &lt;div class=&quot;cos-nav-group&quot;&gt;
+          &lt;span class=&quot;cos-nav-label&quot;&gt;Cierre y declaraciones&lt;/span&gt;
+          &lt;button class=&quot;cos-nav-item&quot; type=&quot;button&quot; data-action-message=&quot;Impuestos abre agosto de 2026 para esta empresa.&quot;&gt;Impuestos&lt;/button&gt;
+          &lt;button class=&quot;cos-nav-item&quot; type=&quot;button&quot; data-action-message=&quot;Contabilidad abre el cierre de agosto de 2026.&quot;&gt;Contabilidad&lt;/button&gt;
+          &lt;button class=&quot;cos-nav-item&quot; type=&quot;button&quot; data-action-message=&quot;Cumplimiento abre obligaciones y evidencia del mismo periodo.&quot;&gt;Cumplimiento&lt;/button&gt;
+        &lt;/div&gt;
+        &lt;div class=&quot;cos-nav-group&quot;&gt;
+          &lt;span class=&quot;cos-nav-label&quot;&gt;Empresa&lt;/span&gt;
+          &lt;button class=&quot;cos-nav-item&quot; type=&quot;button&quot; data-action-message=&quot;Configuración abre la identidad y conexiones de esta empresa.&quot;&gt;Configuración&lt;/button&gt;
+        &lt;/div&gt;
+      &lt;/nav&gt;
+
+      &lt;div class=&quot;cos-user&quot;&gt;
+        &lt;span class=&quot;cos-avatar&quot;&gt;JB&lt;/span&gt;
+        &lt;span&gt;&lt;strong&gt;Juan Barroeta&lt;/strong&gt;&lt;span&gt;Administrador&lt;/span&gt;&lt;/span&gt;
+      &lt;/div&gt;
+    &lt;/aside&gt;
+
+    &lt;main class=&quot;cos-main&quot;&gt;
+      &lt;header class=&quot;cos-mobile-header&quot;&gt;
+        &lt;div class=&quot;cos-brand&quot;&gt;Contabilidad&lt;span&gt;OS&lt;/span&gt;&lt;/div&gt;
+        &lt;div class=&quot;cos-mobile-company&quot;&gt;Comercializadora Norte&lt;br&gt;CON920414AB3&lt;/div&gt;
+      &lt;/header&gt;
+      &lt;nav class=&quot;cos-mobile-nav&quot; aria-label=&quot;Navegación móvil&quot;&gt;
+        &lt;button type=&quot;button&quot; aria-current=&quot;page&quot;&gt;Inicio&lt;/button&gt;
+        &lt;button type=&quot;button&quot; data-action-message=&quot;Bancos abre la configuración de cuentas.&quot;&gt;Bancos&lt;/button&gt;
+        &lt;button type=&quot;button&quot; data-action-message=&quot;Fiscal abre el periodo activo.&quot;&gt;Fiscal&lt;/button&gt;
+        &lt;button type=&quot;button&quot; data-action-message=&quot;Empresa abre la configuración.&quot;&gt;Empresa&lt;/button&gt;
+      &lt;/nav&gt;
+
+      &lt;div class=&quot;cos-topbar&quot;&gt;
+        &lt;button class=&quot;cos-search&quot; type=&quot;button&quot; data-action-message=&quot;La búsqueda global conserva empresa y periodo.&quot;&gt;&lt;span&gt;Buscar en ContabilidadOS&lt;/span&gt;&lt;span&gt;Comando K&lt;/span&gt;&lt;/button&gt;
+        &lt;button class=&quot;cos-help-button&quot; type=&quot;button&quot; data-action-message=&quot;Soporte recibe el contexto de esta pantalla.&quot;&gt;Ayuda&lt;/button&gt;
+      &lt;/div&gt;
+
+      &lt;div class=&quot;cos-content&quot;&gt;
+        &lt;header class=&quot;cos-page-head&quot;&gt;
+          &lt;div&gt;
+            &lt;p class=&quot;cos-eyebrow&quot;&gt;Inicio&lt;/p&gt;
+            &lt;h1&gt;Comercializadora Norte&lt;/h1&gt;
+            &lt;p class=&quot;cos-company-meta&quot;&gt;CON920414AB3 · Plan Profesional activo&lt;/p&gt;
+          &lt;/div&gt;
+          &lt;div class=&quot;cos-period-context&quot; aria-label=&quot;Periodo de trabajo&quot;&gt;
+            &lt;button type=&quot;button&quot; data-period-direction=&quot;previous&quot; aria-label=&quot;Periodo anterior&quot;&gt;Anterior&lt;/button&gt;
+            &lt;div class=&quot;cos-period-label&quot;&gt;&lt;span&gt;Periodo de trabajo&lt;/span&gt;&lt;strong data-period-label&gt;Agosto 2026&lt;/strong&gt;&lt;/div&gt;
+            &lt;button type=&quot;button&quot; data-period-direction=&quot;next&quot; aria-label=&quot;Periodo siguiente&quot;&gt;Siguiente&lt;/button&gt;
+          &lt;/div&gt;
+        &lt;/header&gt;
+
+        &lt;section class=&quot;cos-primary-grid&quot; aria-label=&quot;Prioridad principal&quot;&gt;
+          &lt;article class=&quot;cos-primary-action&quot;&gt;
+            &lt;div class=&quot;cos-state-line&quot;&gt;
+              &lt;span class=&quot;cos-state&quot;&gt;Importación inicial · En proceso&lt;/span&gt;
+              &lt;span class=&quot;cos-freshness&quot;&gt;Última respuesta correcta hace 2 minutos&lt;/span&gt;
+            &lt;/div&gt;
+            &lt;h2&gt;Estamos preparando cinco años de información fiscal&lt;/h2&gt;
+            &lt;p class=&quot;cos-primary-copy&quot;&gt;Ya puedes revisar la identidad de la empresa o conectar bancos. Los cálculos de agosto se habilitarán cuando termine la cobertura necesaria.&lt;/p&gt;
+
+            &lt;div class=&quot;cos-progress-head&quot;&gt;&lt;span&gt;Cobertura solicitada&lt;/span&gt;&lt;strong&gt;32 de 50 periodos&lt;/strong&gt;&lt;/div&gt;
+            &lt;div class=&quot;cos-progress-track&quot; role=&quot;progressbar&quot; aria-label=&quot;Cobertura importada&quot; aria-valuenow=&quot;64&quot; aria-valuemin=&quot;0&quot; aria-valuemax=&quot;100&quot;&gt;&lt;div class=&quot;cos-progress-bar&quot;&gt;&lt;/div&gt;&lt;/div&gt;
+            &lt;div class=&quot;cos-progress-meta&quot;&gt;&lt;span&gt;Julio 2022 a agosto 2026&lt;/span&gt;&lt;span&gt;Sin periodos fallidos&lt;/span&gt;&lt;/div&gt;
+
+            &lt;div class=&quot;cos-primary-footer&quot;&gt;
+              &lt;span class=&quot;cos-source&quot;&gt;&lt;strong&gt;Fuente:&lt;/strong&gt; SAT vía Syntage · Actualizado 8 sep 2026, 19:58&lt;/span&gt;
+              &lt;button class=&quot;cos-action cos-action-primary&quot; type=&quot;button&quot; data-open-coverage&gt;Ver cobertura&lt;/button&gt;
+            &lt;/div&gt;
+          &lt;/article&gt;
+
+          &lt;aside class=&quot;cos-deadline&quot;&gt;
+            &lt;span class=&quot;cos-deadline-label&quot;&gt;Próximo vencimiento&lt;/span&gt;
+            &lt;div class=&quot;cos-deadline-date&quot;&gt;&lt;strong data-deadline-day&gt;17&lt;/strong&gt;&lt;span data-deadline-month&gt;septiembre&lt;/span&gt;&lt;/div&gt;
+            &lt;h3 data-deadline-title&gt;Mensuales de agosto 2026&lt;/h3&gt;
+            &lt;p data-deadline-copy&gt;Faltan 9 días. La preparación comenzará cuando estén disponibles los CFDI requeridos.&lt;/p&gt;
+            &lt;span class=&quot;cos-deadline-status&quot; data-deadline-status&gt;Esperando cobertura fiscal&lt;/span&gt;
+          &lt;/aside&gt;
+        &lt;/section&gt;
+
+        &lt;section class=&quot;cos-lower-grid&quot;&gt;
+          &lt;div&gt;
+            &lt;div class=&quot;cos-section-head&quot;&gt;&lt;h2&gt;Qué puedes hacer ahora&lt;/h2&gt;&lt;span&gt;Ordenado por dependencia&lt;/span&gt;&lt;/div&gt;
+            &lt;div class=&quot;cos-section-panel&quot;&gt;
+              &lt;button class=&quot;cos-next-item&quot; type=&quot;button&quot; data-action-message=&quot;Abriríamos la ficha compartida de identidad y conexiones.&quot;&gt;
+                &lt;span class=&quot;cos-next-number&quot;&gt;1&lt;/span&gt;
+                &lt;span class=&quot;cos-next-copy&quot;&gt;&lt;strong&gt;Revisar los datos de la empresa&lt;/strong&gt;&lt;span&gt;Confirma regímenes, domicilio y obligaciones detectadas.&lt;/span&gt;&lt;/span&gt;
+                &lt;span class=&quot;cos-next-state&quot;&gt;Disponible&lt;/span&gt;
+              &lt;/button&gt;
+              &lt;button class=&quot;cos-next-item&quot; type=&quot;button&quot; data-action-message=&quot;Abriríamos Bancos con Comercializadora Norte ya seleccionada.&quot;&gt;
+                &lt;span class=&quot;cos-next-number&quot;&gt;2&lt;/span&gt;
+                &lt;span class=&quot;cos-next-copy&quot;&gt;&lt;strong&gt;Conectar una cuenta bancaria&lt;/strong&gt;&lt;span&gt;La conciliación puede configurarse mientras continúa el SAT.&lt;/span&gt;&lt;/span&gt;
+                &lt;span class=&quot;cos-next-state&quot;&gt;Disponible&lt;/span&gt;
+              &lt;/button&gt;
+              &lt;button class=&quot;cos-next-item&quot; type=&quot;button&quot; data-action-message=&quot;La preparación fiscal aún depende de la cobertura importada.&quot;&gt;
+                &lt;span class=&quot;cos-next-number&quot;&gt;3&lt;/span&gt;
+                &lt;span class=&quot;cos-next-copy&quot;&gt;&lt;strong&gt;Preparar las obligaciones de agosto&lt;/strong&gt;&lt;span&gt;Se habilitará cuando la cobertura mínima esté completa.&lt;/span&gt;&lt;/span&gt;
+                &lt;span class=&quot;cos-next-state is-waiting&quot;&gt;Aún no disponible&lt;/span&gt;
+              &lt;/button&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+
+          &lt;div&gt;
+            &lt;div class=&quot;cos-section-head&quot;&gt;&lt;h2&gt;Estado de los datos&lt;/h2&gt;&lt;span&gt;Fuente y actualización visibles&lt;/span&gt;&lt;/div&gt;
+            &lt;div class=&quot;cos-section-panel&quot;&gt;
+              &lt;table class=&quot;cos-data-table&quot;&gt;
+                &lt;thead&gt;&lt;tr&gt;&lt;th&gt;Conjunto&lt;/th&gt;&lt;th&gt;Estado&lt;/th&gt;&lt;th&gt;Fuente&lt;/th&gt;&lt;th&gt;Actualización&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
+                &lt;tbody&gt;
+                  &lt;tr&gt;&lt;td data-label=&quot;Conjunto&quot;&gt;&lt;strong&gt;CFDI emitidos y recibidos&lt;/strong&gt;&lt;span&gt;Jul 2022 a ago 2026&lt;/span&gt;&lt;/td&gt;&lt;td data-label=&quot;Estado&quot;&gt;&lt;span class=&quot;cos-table-state&quot;&gt;Importando 64%&lt;/span&gt;&lt;/td&gt;&lt;td data-label=&quot;Fuente&quot;&gt;SAT vía Syntage&lt;/td&gt;&lt;td data-label=&quot;Actualización&quot;&gt;Hace 2 minutos&lt;/td&gt;&lt;/tr&gt;
+                  &lt;tr&gt;&lt;td data-label=&quot;Conjunto&quot;&gt;&lt;strong&gt;Obligaciones fiscales&lt;/strong&gt;&lt;span&gt;Agosto 2026&lt;/span&gt;&lt;/td&gt;&lt;td data-label=&quot;Estado&quot;&gt;&lt;span class=&quot;cos-table-state&quot;&gt;Análisis pendiente&lt;/span&gt;&lt;/td&gt;&lt;td data-label=&quot;Fuente&quot;&gt;CSF y CFDI&lt;/td&gt;&lt;td data-label=&quot;Actualización&quot;&gt;Al completar cobertura&lt;/td&gt;&lt;/tr&gt;
+                  &lt;tr&gt;&lt;td data-label=&quot;Conjunto&quot;&gt;&lt;strong&gt;Movimientos bancarios&lt;/strong&gt;&lt;span&gt;Sin cuenta configurada&lt;/span&gt;&lt;/td&gt;&lt;td data-label=&quot;Estado&quot;&gt;&lt;span class=&quot;cos-table-state is-muted&quot;&gt;No conectado&lt;/span&gt;&lt;/td&gt;&lt;td data-label=&quot;Fuente&quot;&gt;Usuario&lt;/td&gt;&lt;td data-label=&quot;Actualización&quot;&gt;Sin datos&lt;/td&gt;&lt;/tr&gt;
+                &lt;/tbody&gt;
+              &lt;/table&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/section&gt;
+
+        &lt;p class=&quot;cos-feedback&quot; aria-live=&quot;polite&quot; data-feedback&gt;La empresa y el periodo se conservarán en cada navegación.&lt;/p&gt;
+      &lt;/div&gt;
+    &lt;/main&gt;
+  &lt;/section&gt;
+
+  &lt;div class=&quot;cos-drawer-layer&quot; data-coverage-layer hidden&gt;
+    &lt;aside class=&quot;cos-drawer&quot; role=&quot;dialog&quot; aria-modal=&quot;true&quot; aria-labelledby=&quot;cos-coverage-title&quot;&gt;
+      &lt;div class=&quot;cos-drawer-head&quot;&gt;
+        &lt;div&gt;&lt;h2 id=&quot;cos-coverage-title&quot;&gt;Cobertura de la importación&lt;/h2&gt;&lt;p&gt;Comercializadora Norte · CON920414AB3&lt;/p&gt;&lt;/div&gt;
+        &lt;button class=&quot;cos-close&quot; type=&quot;button&quot; data-close-coverage&gt;Cerrar&lt;/button&gt;
+      &lt;/div&gt;
+      &lt;div class=&quot;cos-drawer-summary&quot;&gt;
+        &lt;div&gt;&lt;span&gt;Solicitados&lt;/span&gt;&lt;strong&gt;50 periodos&lt;/strong&gt;&lt;/div&gt;
+        &lt;div&gt;&lt;span&gt;Completos&lt;/span&gt;&lt;strong&gt;32 periodos&lt;/strong&gt;&lt;/div&gt;
+        &lt;div&gt;&lt;span&gt;Fallidos&lt;/span&gt;&lt;strong&gt;Ninguno&lt;/strong&gt;&lt;/div&gt;
+      &lt;/div&gt;
+      &lt;div class=&quot;cos-coverage&quot;&gt;
+        &lt;div class=&quot;cos-year&quot; data-state=&quot;complete&quot;&gt;&lt;div class=&quot;cos-year-head&quot;&gt;&lt;span&gt;2022 · julio a diciembre&lt;/span&gt;&lt;span&gt;6 de 6&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;cos-year-track&quot;&gt;&lt;span style=&quot;width:100%&quot;&gt;&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;
+        &lt;div class=&quot;cos-year&quot; data-state=&quot;complete&quot;&gt;&lt;div class=&quot;cos-year-head&quot;&gt;&lt;span&gt;2023&lt;/span&gt;&lt;span&gt;12 de 12&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;cos-year-track&quot;&gt;&lt;span style=&quot;width:100%&quot;&gt;&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;
+        &lt;div class=&quot;cos-year&quot; data-state=&quot;complete&quot;&gt;&lt;div class=&quot;cos-year-head&quot;&gt;&lt;span&gt;2024&lt;/span&gt;&lt;span&gt;12 de 12&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;cos-year-track&quot;&gt;&lt;span style=&quot;width:100%&quot;&gt;&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;
+        &lt;div class=&quot;cos-year&quot;&gt;&lt;div class=&quot;cos-year-head&quot;&gt;&lt;span&gt;2025&lt;/span&gt;&lt;span&gt;2 de 12&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;cos-year-track&quot;&gt;&lt;span style=&quot;width:16.67%&quot;&gt;&lt;/span&gt;&lt;/div&gt;&lt;p class=&quot;cos-year-note&quot;&gt;Enero y febrero completos. Marzo está en proceso.&lt;/p&gt;&lt;/div&gt;
+        &lt;div class=&quot;cos-year&quot;&gt;&lt;div class=&quot;cos-year-head&quot;&gt;&lt;span&gt;2026 · enero a agosto&lt;/span&gt;&lt;span&gt;Pendiente&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;cos-year-track&quot;&gt;&lt;span style=&quot;width:0%&quot;&gt;&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;
+      &lt;/div&gt;
+      &lt;div class=&quot;cos-drawer-notice&quot;&gt;No afirmaremos que la importación terminó hasta resolver todos los periodos solicitados. Si el SAT no responde o un periodo falla, aparecerá aquí con una causa específica.&lt;/div&gt;
+    &lt;/aside&gt;
+  &lt;/div&gt;
+
+  &lt;script&gt;
+    (() =&gt; {
+      const root = document.getElementById(&quot;cos-dashboard-importing&quot;);
+      const feedback = root.querySelector(&quot;[data-feedback]&quot;);
+      const coverageLayer = root.querySelector(&quot;[data-coverage-layer]&quot;);
+      const coverageButton = root.querySelector(&quot;[data-open-coverage]&quot;);
+      const closeButton = root.querySelector(&quot;[data-close-coverage]&quot;);
+      const periodLabel = root.querySelector(&quot;[data-period-label]&quot;);
+      const deadlineDay = root.querySelector(&quot;[data-deadline-day]&quot;);
+      const deadlineMonth = root.querySelector(&quot;[data-deadline-month]&quot;);
+      const deadlineTitle = root.querySelector(&quot;[data-deadline-title]&quot;);
+      const deadlineCopy = root.querySelector(&quot;[data-deadline-copy]&quot;);
+      const deadlineStatus = root.querySelector(&quot;[data-deadline-status]&quot;);
+      const periods = [
+        { label: &quot;Julio 2026&quot;, day: &quot;17&quot;, month: &quot;agosto&quot;, title: &quot;Mensuales de julio 2026&quot;, copy: &quot;El vencimiento ya pasó. La cobertura importada determinará si existe trabajo pendiente.&quot;, status: &quot;Revisión pendiente&quot; },
+        { label: &quot;Agosto 2026&quot;, day: &quot;17&quot;, month: &quot;septiembre&quot;, title: &quot;Mensuales de agosto 2026&quot;, copy: &quot;Faltan 9 días. La preparación comenzará cuando estén disponibles los CFDI requeridos.&quot;, status: &quot;Esperando cobertura fiscal&quot; },
+        { label: &quot;Septiembre 2026&quot;, day: &quot;17&quot;, month: &quot;octubre&quot;, title: &quot;Mensuales de septiembre 2026&quot;, copy: &quot;Periodo en curso. Todavía no corresponde preparar la declaración mensual.&quot;, status: &quot;Periodo en curso&quot; },
+      ];
+      let periodIndex = 1;
+
+      function showFeedback(message) {
+        feedback.textContent = message;
+      }
+
+      function refreshPeriod() {
+        const period = periods[periodIndex];
+        periodLabel.textContent = period.label;
+        deadlineDay.textContent = period.day;
+        deadlineMonth.textContent = period.month;
+        deadlineTitle.textContent = period.title;
+        deadlineCopy.textContent = period.copy;
+        deadlineStatus.textContent = period.status;
+        showFeedback(`Periodo activo: ${period.label}. La empresa seleccionada no cambió.`);
+      }
+
+      function openCoverage() {
+        coverageLayer.hidden = false;
+        closeButton.focus();
+      }
+
+      function closeCoverage() {
+        coverageLayer.hidden = true;
+        coverageButton.focus();
+      }
+
+      root.querySelectorAll(&quot;[data-action-message]&quot;).forEach((button) =&gt; {
+        button.addEventListener(&quot;click&quot;, () =&gt; showFeedback(button.dataset.actionMessage));
+      });
+      root.querySelectorAll(&quot;[data-period-direction]&quot;).forEach((button) =&gt; {
+        button.addEventListener(&quot;click&quot;, () =&gt; {
+          periodIndex += button.dataset.periodDirection === &quot;previous&quot; ? -1 : 1;
+          periodIndex = Math.max(0, Math.min(periods.length - 1, periodIndex));
+          refreshPeriod();
+        });
+      });
+      coverageButton.addEventListener(&quot;click&quot;, openCoverage);
+      closeButton.addEventListener(&quot;click&quot;, closeCoverage);
+      coverageLayer.addEventListener(&quot;click&quot;, (event) =&gt; { if (event.target === coverageLayer) closeCoverage(); });
+      root.addEventListener(&quot;keydown&quot;, (event) =&gt; { if (event.key === &quot;Escape&quot; &amp;&amp; !coverageLayer.hidden) closeCoverage(); });
+    })();
+  &lt;/script&gt;
+&lt;/div&gt;
+
+&lt;script src=&quot;https://unpkg.com/@floating-ui/core@1.7.3/dist/floating-ui.core.umd.min.js&quot;&gt;&lt;/script&gt;
+&lt;script src=&quot;https://unpkg.com/@floating-ui/dom@1.7.4/dist/floating-ui.dom.umd.min.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+(() =&gt; {
+  if (window.FloatingUIDOM == null) {
+    return;
+  }
+  const { autoUpdate, computePosition, flip, offset, shift, size } =
+    window.FloatingUIDOM;
+  const tooltipPlacements = new Set([&quot;top&quot;, &quot;right&quot;, &quot;bottom&quot;, &quot;left&quot;]);
+  const tooltipId = `codex-visualization-tooltip-${
+    window.crypto?.randomUUID?.() ?? Date.now().toString(36)
+  }`;
+  const tooltipGap = 5;
+  const hoverDelay = 700;
+  const skipDelay = 300;
+  let activeTrigger = null;
+  let pendingTrigger = null;
+  let tooltip = null;
+  let openTimeout = null;
+  let autoUpdateCleanup = null;
+  let positionRequest = 0;
+  let skipDelayUntil = 0;
+  let lastPointerWasTouch = false;
+  let pinnedByTouch = false;
+
+  const getTrigger = (target) =&gt;
+    target?.nodeType === Node.ELEMENT_NODE
+      ? target.closest(&quot;[data-tooltip]&quot;)
+      : null;
+  const containsTarget = (trigger, target) =&gt;
+    target?.nodeType != null &amp;&amp; trigger.contains(target);
+  const getContent = (trigger) =&gt;
+    trigger.getAttribute(&quot;data-tooltip&quot;)?.trim() ?? &quot;&quot;;
+  const getPlacement = (trigger) =&gt; {
+    const placement = trigger.getAttribute(&quot;data-tooltip-placement&quot;);
+    return tooltipPlacements.has(placement) ? placement : &quot;top&quot;;
+  };
+  const getTooltip = () =&gt; {
+    if (tooltip == null) {
+      tooltip = document.createElement(&quot;div&quot;);
+      tooltip.id = tooltipId;
+      tooltip.className = &quot;tooltip&quot;;
+      tooltip.setAttribute(&quot;role&quot;, &quot;tooltip&quot;);
+    }
+    return tooltip;
+  };
+  const setDescribedBy = (trigger, described) =&gt; {
+    const ids = new Set(
+      (trigger.getAttribute(&quot;aria-describedby&quot;) ?? &quot;&quot;)
+        .split(/\s+/)
+        .filter(Boolean),
+    );
+    if (described) {
+      ids.add(tooltipId);
+    } else {
+      ids.delete(tooltipId);
+    }
+    if (ids.size === 0) {
+      trigger.removeAttribute(&quot;aria-describedby&quot;);
+    } else {
+      trigger.setAttribute(&quot;aria-describedby&quot;, [...ids].join(&quot; &quot;));
+    }
+  };
+  const clearOpenTimeout = () =&gt; {
+    if (openTimeout != null) {
+      window.clearTimeout(openTimeout);
+      openTimeout = null;
+    }
+    pendingTrigger = null;
+  };
+  const closeTooltip = (activateSkipDelay = true) =&gt; {
+    clearOpenTimeout();
+    pinnedByTouch = false;
+    positionRequest += 1;
+    autoUpdateCleanup?.();
+    autoUpdateCleanup = null;
+    if (activeTrigger == null) {
+      return;
+    }
+    setDescribedBy(activeTrigger, false);
+    activeTrigger = null;
+    tooltip?.remove();
+    if (activateSkipDelay) {
+      skipDelayUntil = Date.now() + skipDelay;
+    }
+  };
+  const updatePosition = (trigger, floating) =&gt; {
+    const request = ++positionRequest;
+    void computePosition(trigger, floating, {
+      middleware: [
+        offset(tooltipGap),
+        flip({ padding: tooltipGap }),
+        shift({ padding: tooltipGap }),
+        size({
+          padding: tooltipGap,
+          apply({ availableHeight, availableWidth, elements }) {
+            elements.floating.style.setProperty(
+              &quot;--tooltip-available-width&quot;,
+              `${Math.max(0, availableWidth)}px`,
+            );
+            elements.floating.style.setProperty(
+              &quot;--tooltip-available-height&quot;,
+              `${Math.max(0, availableHeight)}px`,
+            );
+          },
+        }),
+      ],
+      placement: getPlacement(trigger),
+      strategy: &quot;fixed&quot;,
+    })
+      .then(({ x, y }) =&gt; {
+        if (activeTrigger !== trigger || request !== positionRequest) {
+          return;
+        }
+        const scale = window.devicePixelRatio || 1;
+        floating.style.transform = `translate(${Math.round(x * scale) / scale}px, ${Math.round(y * scale) / scale}px)`;
+        floating.style.visibility = &quot;visible&quot;;
+      })
+      .catch(() =&gt; {
+        if (activeTrigger === trigger &amp;&amp; request === positionRequest) {
+          closeTooltip(false);
+        }
+      });
+  };
+  const openTooltip = (trigger) =&gt; {
+    const content = getContent(trigger);
+    if (!trigger.isConnected || content.length === 0) {
+      return;
+    }
+    clearOpenTimeout();
+    if (activeTrigger === trigger) {
+      return;
+    }
+    closeTooltip();
+    const floating = getTooltip();
+    floating.textContent = content;
+    floating.style.visibility = &quot;hidden&quot;;
+    floating.style.transform = &quot;translate(0, 0)&quot;;
+    document.body.appendChild(floating);
+    activeTrigger = trigger;
+    setDescribedBy(trigger, true);
+    autoUpdateCleanup = autoUpdate(trigger, floating, () =&gt; {
+      updatePosition(trigger, floating);
+    });
+  };
+  const requestOpen = (trigger, immediate = false) =&gt; {
+    if (
+      getContent(trigger).length === 0 ||
+      activeTrigger === trigger ||
+      pendingTrigger === trigger
+    ) {
+      return;
+    }
+    clearOpenTimeout();
+    pendingTrigger = trigger;
+    const delay =
+      immediate || activeTrigger != null || Date.now() &lt; skipDelayUntil
+        ? 0
+        : hoverDelay;
+    if (delay === 0) {
+      openTooltip(trigger);
+      return;
+    }
+    openTimeout = window.setTimeout(() =&gt; {
+      openTimeout = null;
+      pendingTrigger = null;
+      openTooltip(trigger);
+    }, delay);
+  };
+  const handlePointerOpen = (event) =&gt; {
+    if (event.pointerType === &quot;touch&quot;) {
+      return;
+    }
+    const trigger = getTrigger(event.target);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    requestOpen(trigger);
+  };
+  const handlePointer = (event) =&gt; {
+    lastPointerWasTouch =
+      event.type === &quot;pointerdown&quot; &amp;&amp; event.pointerType === &quot;touch&quot;;
+  };
+  const handleTouchClick = (event) =&gt; {
+    const isTouch = event.pointerType === &quot;touch&quot; || lastPointerWasTouch;
+    lastPointerWasTouch = false;
+    if (!isTouch || event.detail === 0) {
+      return;
+    }
+    const trigger = getTrigger(event.target);
+    if (
+      trigger == null ||
+      !trigger.isConnected ||
+      getContent(trigger).length === 0 ||
+      (pinnedByTouch &amp;&amp; activeTrigger === trigger)
+    ) {
+      if (pinnedByTouch) {
+        closeTooltip();
+      }
+      return;
+    }
+    openTooltip(trigger);
+    pinnedByTouch = activeTrigger === trigger;
+    window.setTimeout(() =&gt; {
+      if (activeTrigger === trigger &amp;&amp; !trigger.isConnected) {
+        closeTooltip(false);
+      }
+    }, 0);
+  };
+  const handleLeave = (event) =&gt; {
+    if (pinnedByTouch) {
+      return;
+    }
+    const trigger = getTrigger(event.target);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const handleFocusIn = (event) =&gt; {
+    const trigger = getTrigger(event.target);
+    if (trigger?.matches(&quot;:focus-visible&quot;)) {
+      requestOpen(trigger, true);
+    }
+  };
+  const handleKeyDown = (event) =&gt; {
+    if (event.key === &quot;Escape&quot;) {
+      closeTooltip();
+    }
+  };
+  const handleContextMenu = (event) =&gt; {
+    lastPointerWasTouch = false;
+    const trigger = getTrigger(event.target);
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const destroy = () =&gt; {
+    closeTooltip(false);
+    lastPointerWasTouch = false;
+    document.removeEventListener(&quot;pointerover&quot;, handlePointerOpen);
+    document.removeEventListener(&quot;pointerdown&quot;, handlePointer);
+    document.removeEventListener(&quot;pointercancel&quot;, handlePointer);
+    document.removeEventListener(&quot;click&quot;, handleTouchClick);
+    document.removeEventListener(&quot;pointerout&quot;, handleLeave);
+    document.removeEventListener(&quot;focusin&quot;, handleFocusIn);
+    document.removeEventListener(&quot;focusout&quot;, handleLeave);
+    document.removeEventListener(&quot;keydown&quot;, handleKeyDown);
+    document.removeEventListener(&quot;contextmenu&quot;, handleContextMenu);
+    tooltip = null;
+  };
+
+  document.addEventListener(&quot;pointerover&quot;, handlePointerOpen);
+  document.addEventListener(&quot;pointerdown&quot;, handlePointer);
+  document.addEventListener(&quot;pointercancel&quot;, handlePointer);
+  document.addEventListener(&quot;click&quot;, handleTouchClick);
+  document.addEventListener(&quot;pointerout&quot;, handleLeave);
+  document.addEventListener(&quot;focusin&quot;, handleFocusIn);
+  document.addEventListener(&quot;focusout&quot;, handleLeave);
+  document.addEventListener(&quot;keydown&quot;, handleKeyDown);
+  document.addEventListener(&quot;contextmenu&quot;, handleContextMenu);
+  window.addEventListener(&quot;pagehide&quot;, destroy, { once: true });
+})();
+&lt;/script&gt;
+&lt;script id=&quot;codex-visualization-lucide&quot; async src=&quot;https://unpkg.com/lucide@1.17.0/dist/umd/lucide.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+(() =&gt; {
+  const initialize = () =&gt; {
+    globalThis.lucide?.createIcons({ attrs: { width: 16, height: 16 } });
+  };
+  if (globalThis.lucide != null) {
+    initialize();
+    return;
+  }
+  document
+    .getElementById(&quot;codex-visualization-lucide&quot;)
+    ?.addEventListener(&quot;load&quot;, initialize, { once: true });
+})();
+&lt;/script&gt;
+
+&lt;/body&gt;
+&lt;/html&gt;
+"></iframe>
+</body>
+</html>
