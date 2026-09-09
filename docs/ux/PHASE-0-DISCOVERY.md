@@ -3,11 +3,13 @@
 **Date:** 2026-09-08
 **Status:** Discovery only. No production UI implementation belongs in the current SAT Phase 0 PR.
 
+The detailed capability audit, target hierarchy, workflow contracts, and phased prototype roadmap live in [`FUNCTIONAL-UX-AUDIT.md`](./FUNCTIONAL-UX-AUDIT.md). That document is the current source of truth when this initial discovery note differs.
+
 ## Decision
 
 Start the redesign now as research, information architecture, and low-fidelity prototypes. Keep production component, layout, token, and route changes on later page-scoped branches after the SAT/fiscal work is stable.
 
-The first prototype is **onboarding and company setup**. It has the highest leverage: every customer passes through it, it determines data coverage and trust, and the current experience combines eight steps, document parsing, company creation, credential setup, and a legacy plan-choice screen in one 1,276-line client page. The approved target flow records legal acceptance before fiscal-document collection, confirms payment through Stripe before requesting e.firma, and starts import only after a verified payment event. There is no trial in the current commercial model.
+The first prototype is **onboarding and company setup**. It has the highest leverage: every customer passes through it, it determines data coverage and trust, and the current experience combines document parsing, company creation, credential setup, import scope, and a legacy plan-choice screen in one 1,350-line client page. The approved target flow records legal acceptance before sensitive credential collection, validates company fit, confirms payment through Stripe before requesting e.firma, and starts import only after a verified payment event. There is no trial in the current commercial model.
 
 ## What exists today
 
@@ -25,14 +27,14 @@ The counts below are a source-level baseline, not a visual quality score.
 
 | Signal | Current baseline | Meaning |
 |---|---:|---|
-| Indexed destinations in global search | 39 | The product is broad enough that information architecture matters more than styling. |
-| Native `<button>` instances | ~503 | Interaction styling and behavior are mostly page-local. |
+| Indexed destinations in global search | 42 | The product is broad enough that information architecture matters more than styling. |
+| Native `<button>` instances | ~580 | Interaction styling and behavior are mostly page-local. |
 | Shared `<Button>` usages | ~14 | The primitive exists but adoption is low. |
-| Native `<input>` instances | ~276 | Forms need a shared field/error/help contract. |
-| Shared `<Table>` usages | ~2 | Dense financial views still implement table behavior independently. |
-| Onboarding page | 1,276 lines | Multiple distinct jobs are coupled in one wizard. |
-| Dashboard page | 681 lines | The page has good state-aware content but owns many display patterns locally. |
-| Banks page | 1,798 lines | Account setup, import, matching, categorization, history, and bulk actions share one surface. |
+| Native `<input>` instances | ~287 | Forms need a shared field/error/help contract. |
+| Shared `<Table>` usages | ~5 | Dense financial views still implement table behavior independently. |
+| Onboarding page | 1,350 lines | Multiple distinct jobs are coupled in one wizard. |
+| Dashboard route | 113 lines | High-level orchestration has begun moving into reusable dashboard sections. |
+| Bank manager | 2,004 lines | Account setup, import, matching, categorization, history, and bulk actions share one surface. |
 
 Large files are a delivery risk because a visual change, workflow change, and fiscal behavior change can land in the same diff. The redesign should therefore use page shells and workflow boundaries before broad component cleanup.
 
@@ -50,23 +52,26 @@ Large files are a delivery risk because a visual change, workflow change, and fi
 
 1. **The sidebar mixes objects, jobs, and oversight.** Clients and suppliers are directories; invoices and banks are operations; taxes and accounting are period workflows; compliance and pending items are oversight. All are peers in the navigation.
 2. **Fiscal boundaries are hard to predict.** A user must learn whether a task belongs in Taxes, Compliance, Accounting, Findings, Opinions, or Pending Items.
-3. **Payroll occupies five navigation entries.** This makes the sidebar complete but pushes secondary destinations into the primary path.
+3. **Payroll is now correctly promoted as its own section.** The remaining work is to make its hub express the full run-to-evidence workflow and connect its multi-RFC cockpit to Cartera.
 4. **Mobile inherits the full desktop drawer.** It is responsive mechanically, but it has not yet been reduced to the few jobs a mobile user is likely to perform.
 5. **Settings and company setup overlap.** Company credentials live in `Mi Empresa`, company administration lives under Settings, and adding a company returns to the onboarding wizard.
 
-### Information architecture hypothesis
+### Audited information architecture hypothesis
 
 Do not implement this until card-sorting or task testing supports it.
 
 | Primary area | User question | Includes |
 |---|---|---|
-| Home | What needs my attention? | Dashboard, pending work, multi-RFC portfolio |
-| Operate | What happened in the business? | Invoices, banks, payroll |
-| Close and file | Can I close and comply for this period? | Monthly taxes, accounting close, deliverables, filings |
-| Records | Who and what do I transact with? | Clients, suppliers, fixed assets |
-| Company | Is this RFC configured and connected? | Fiscal identity, e.firma, CSD, team, notifications, plan |
+| Inicio | What needs my attention now? | Active-company tasks, deadlines, decisions, blockers |
+| Cartera, conditional | Which RFC needs whom next? | Multi-RFC queue, assignment, freshness, deadlines |
+| Cierre mensual | Can this period be closed, filed, and evidenced? | Canonical cross-module close and next action |
+| Operación | What happened in the business? | Facturación, Bancos, Directorio |
+| Nómina | Can payroll be prepared, stamped, paid, and evidenced? | Runs, employees, IMSS, annual adjustment, multi-RFC view |
+| Fiscal y contable | Where is the specialist work and history? | Taxes, accounting, declarations, evidence, compliance, fixed assets |
+| Empresa | Is this RFC configured and connected? | Identity, obligations, e.firma, CSD, coverage, opening |
+| Configuración | How is the organization administered? | Despacho, users, billing, account, notifications, integrations |
 
-Compliance status, SAT opinions, and findings should be tested as views inside **Home** or **Close and file**, rather than assumed to require a permanent top-level destination.
+`/cierre` is the orchestration layer. The accounting close is its accounting drill-down, not a competing definition of completion. Compliance and filing blockers feed Inicio and Cierre while their evidence and history remain directly reachable under Fiscal y contable.
 
 ## Critical workflow audit
 
@@ -228,11 +233,14 @@ Not allowed:
 ### After fiscal stabilization
 
 1. `codex/ux-redesign` — approved prototypes, component contracts, and user-test findings only
-2. Onboarding/company setup implementation
-3. Dashboard implementation
-4. Bank reconciliation implementation
-5. Compliance/declarations implementation
-6. Secondary pages and design-system adoption
+2. Shared shell context and semantic status primitives
+3. Onboarding and Empresa implementation
+4. Inicio and Cartera implementation
+5. Cierre mensual shell implementation
+6. Bank reconciliation implementation
+7. Nómina implementation
+8. Taxes, declarations, compliance, and accounting drill-downs
+9. Facturación, Directorio, reports, settings, and remaining design-system adoption
 
 Each implementation PR must own one primary route, list the fiscal/API contracts it consumes without changing them, include loading/empty/error/permission states, and have desktop plus mobile acceptance evidence.
 
