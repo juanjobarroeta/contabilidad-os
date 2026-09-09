@@ -125,11 +125,12 @@ export async function PATCH(req: Request, { params }: Params) {
   // e.firma pasaba el guardado con badge verde y reventaba después en la
   // descarga masiva con un mensaje genérico.
   if (estadoFiel === "COMPLETE") {
-    const actor = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { esOperador: true },
-    });
-    if (actor?.esOperador) {
+    const customerMember = await getEffectiveCompanyMembership(
+      session.user.id,
+      companyId,
+      { platformOperatorMode: "deny" },
+    );
+    if (!customerMember || customerMember.role === "VIEWER") {
       return NextResponse.json(
         {
           error:

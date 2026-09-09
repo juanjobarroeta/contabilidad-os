@@ -21,6 +21,20 @@ export type AuthUser = {
   scope?: string;
 };
 
+type PlatformOperatorMode =
+  | "override"
+  | "fallback"
+  | "deny";
+
+type MembershipResolutionOptions = {
+  /**
+   * override: preserve the normal cross-tenant platform OWNER grant.
+   * fallback: prefer a real customer/despacho membership, then use the grant.
+   * deny: ignore the platform grant and require real customer authority.
+   */
+  platformOperatorMode?: PlatformOperatorMode;
+};
+
 /**
  * Returns the authenticated user for the incoming request, or throws
  * AuthzError(401). Supports two auth paths in parallel:
@@ -124,12 +138,16 @@ function despachoRoleToCompanyRole(r: "OWNER" | "ADMIN" | "ACCOUNTANT"): MemberR
  */
 export async function getEffectiveCompanyMembership(
   userId: string,
-  companyId: string
+  companyId: string,
+  options: MembershipResolutionOptions = {},
 ): Promise<{ userId: string; companyId: string; role: MemberRole } | null> {
+  const operatorMode = options.platformOperatorMode ?? "override";
+  const operator = operatorMode === "deny" ? false : await isOperador(userId);
+
   // Operador de plataforma: acceso OWNER a cualquier empresa, cruzando
   // despachos. Sólo si la empresa existe (devolvemos null si no, para no
   // inventar acceso a un id basura).
-  if (await isOperador(userId)) {
+  if (operator && operatorMode === "override") {
     const exists = await prisma.company.findUnique({
       where: { id: companyId },
       select: { id: true },
@@ -170,7 +188,12 @@ export async function getEffectiveCompanyMembership(
     }
   }
 
-  if (!direct && !despachoMember) return null;
+  if (!direct && !despachoMember) {
+    if (operator && operatorMode === "fallback" && company) {
+      return { userId, companyId, role: "OWNER" };
+    }
+    return null;
+  }
 
   const rank: Record<MemberRole, number> = { OWNER: 4, ADMIN: 3, ACCOUNTANT: 2, VIEWER: 1 };
   let effectiveRole: MemberRole = direct?.role ?? "VIEWER";
@@ -207,12 +230,15 @@ export async function getEffectiveCompanyMembership(
 export async function requireMembership(
   companyId: string,
   allowedRoles?: MemberRole[],
-  req?: Request
+  req?: Request,
+  options: MembershipResolutionOptions = {},
 ) {
   const user = await requireUser(req);
+  const operatorMode = options.platformOperatorMode ?? "override";
+  const operator = operatorMode === "deny" ? false : await isOperador(user.id);
 
   // Operador de plataforma: acceso OWNER a cualquier empresa existente.
-  if (await isOperador(user.id)) {
+  if (operator && operatorMode === "override") {
     const exists = await prisma.company.findUnique({
       where: { id: companyId },
       select: { id: true },
@@ -265,6 +291,23 @@ export async function requireMembership(
   }
 
   if (!direct && !despachoMember) {
+    if (operator && operatorMode === "fallback") {
+      if (!company) throw new AuthzError(404, "Empresa no encontrada");
+      if (allowedRoles && !allowedRoles.includes("OWNER")) {
+        throw new AuthzError(403, "Sin permisos suficientes");
+      }
+      return {
+        user,
+        membership: {
+          id: `operador:${user.id}:${companyId}`,
+          userId: user.id,
+          companyId,
+          role: "OWNER" as MemberRole,
+          createdAt: new Date(),
+          accessViaDespacho: false,
+        },
+      };
+    }
     throw new AuthzError(403, "Sin acceso a esta empresa");
   }
 
