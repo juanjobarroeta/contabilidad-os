@@ -134,7 +134,7 @@ export function CePresentadoPanel({ companyId }: { companyId: string }) {
           ))}
         </div>
         <span className="text-xs text-cos-ink-soft">
-          Leído de la balanza presentada al SAT — no del motor de posteo.
+          Leído de la balanza presentada al SAT — no del proceso de contabilización.
         </span>
       </div>
 

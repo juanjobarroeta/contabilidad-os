@@ -381,7 +381,7 @@ export function PilotoDelCierre() {
           <div>
             <p className="text-[16px] font-semibold text-cos-jade-ink">Todo al día</p>
             <p className="text-[13px] text-cos-ink-soft">
-              Sin vencidos, banco conciliado, nómina timbrada y mes posteado — entregables listos.
+              Sin vencidos, banco conciliado, nómina timbrada y mes contabilizado — entregables listos.
             </p>
           </div>
         </li>

@@ -26,12 +26,16 @@ function paso(over: Partial<PasoConDecision>): PasoConDecision {
   } as PasoConDecision;
 }
 
-function cierre(pasos: PasoConDecision[], accountingStatus: EstadoContableCierre | null = "DRAFT"): CierreEvaluado {
+function cierre(
+  pasos: PasoConDecision[],
+  accountingStatus: EstadoContableCierre | null = "DRAFT",
+  declaracionExterna = false
+): CierreEvaluado {
   return {
     companyId: "c1", year: 2021, month: 7, periodo: "2021-07",
     cierreId: null, responsableUserId: null, conversationId: null, cerradoAt: null,
     accountingStatus,
-    estado: resolverEstadoCierre({ estadoContable: accountingStatus, pasos }),
+    estado: resolverEstadoCierre({ estadoContable: accountingStatus, pasos, declaracionExterna }),
     pasos,
     resumen: { total: pasos.length, aplican: pasos.length, listos: 0, atencion: 0, bloquean: 0, confirmados: 0, completo: false },
   };
@@ -65,6 +69,15 @@ describe("estadoDelPeriodo — hecho de presentación separado del cierre", () =
       cierre([paso({ senales: [PRESENTADA, { clave: "x:pago_conciliado", estado: "ok", resumen: "pago ligado" }] })])
     );
     expect(conPago.pagado).toBe(true);
+  });
+
+  it("reconoce una declaración histórica aunque el paso no tenga la señal calculada", () => {
+    const e = estadoDelPeriodo(cierre([paso({ senales: [] })], null, true));
+    expect(e).toMatchObject({
+      declarado: true,
+      detalle: "Declaración histórica importada.",
+      pagado: false,
+    });
   });
 
   it("el avance cuenta completo cuando el estado canónico sí quedó cerrado", () => {

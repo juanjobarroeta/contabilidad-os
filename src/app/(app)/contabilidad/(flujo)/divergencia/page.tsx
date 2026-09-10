@@ -212,7 +212,7 @@ export default function DivergenciaPage() {
         </div>
       ) : !data ? (
         <div className="rounded-card border border-cos-line bg-cos-card p-8 text-sm text-cos-ink-soft">
-          No se pudo calcular la divergencia del período. Revisa que el mes tenga asientos posteados.
+          No se pudo calcular la divergencia del período. Revisa que el mes tenga asientos contabilizados.
         </div>
       ) : (
         <>
@@ -408,7 +408,7 @@ export default function DivergenciaPage() {
                       </Link>
 
                       {/* «Así lo clasifico yo»: PostingCuentaOverride para el código
-                          que el motor postea; aplica en el siguiente posteo. */}
+                          que usa el motor; aplica en la siguiente contabilización. */}
                       <div className="rounded-control border border-cos-line">
                         <button
                           onClick={() => setClasifAbierto((v) => !v)}

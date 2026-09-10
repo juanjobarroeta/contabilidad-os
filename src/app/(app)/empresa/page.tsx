@@ -1530,7 +1530,9 @@ export default function EmpresaPage() {
                         {d.isrPagar != null && d.isrPagar > 0 && (
                           <span>ISR: <Money value={d.isrPagar} weight={700} className="text-cos-red-ink" /></span>
                         )}
-                        <span className="px-1.5 py-0.5 rounded bg-cos-brand-tint text-cos-brand-ink font-medium text-[10px]">Importado</span>
+                        <span className="px-1.5 py-0.5 rounded bg-cos-brand-tint text-cos-brand-ink font-medium text-[10px]">
+                          {d.tipo === "DECLARACION_ANUAL" ? "Importada" : "Declarado · cierre externo"}
+                        </span>
                       </div>
                     </div>
                   ))}

@@ -46,7 +46,9 @@ export interface SenalesEmpresa {
     sinClasificar: number; // UNMATCHED + IGNORED sin categoría
   };
   cierre: {
-    mesAnteriorPosteado: boolean;
+    mesAnteriorContabilizado: boolean;
+    /** El periodo llegó declarado y cerrado como historia externa. */
+    cerradoFueraDeContabilidadOS: boolean;
     /** Sólo se ofrece cerrar cuando el resto de la fila está limpio. */
     label: string; // «julio»
   };
@@ -157,7 +159,8 @@ export function filasDeEmpresa(s: SenalesEmpresa, opts: { diaDelMes: number }): 
 
   // 5. Cierre — sólo cuando la fila está limpia: nada vencido, banco al día.
   if (
-    !s.cierre.mesAnteriorPosteado &&
+    !s.cierre.mesAnteriorContabilizado &&
+    !s.cierre.cerradoFueraDeContabilidadOS &&
     s.declaracion.estado === "presentada" &&
     s.banco.sinClasificar === 0 &&
     s.nomina.runsSinTimbrar.length === 0

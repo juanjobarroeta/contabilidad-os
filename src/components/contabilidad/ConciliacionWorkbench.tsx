@@ -311,7 +311,7 @@ export function ConciliacionWorkbench({
               </>
             ) : montoPorContabilizar > 0 ? (
               <>
-                <Money value={montoPorContabilizar} className="text-[12px]" muted /> ya conciliados, esperan el posteo
+                <Money value={montoPorContabilizar} className="text-[12px]" muted /> ya conciliados, esperan la contabilización
               </>
             ) : undefined
           }

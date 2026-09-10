@@ -107,7 +107,11 @@ function NegocioInner() {
             }`}
           >
             <p className="flex items-center gap-2 text-[17px] font-semibold leading-snug text-cos-ink sm:text-[20px]">
-              {r.alDia ? (
+              {r.cerradoFueraDeContabilidadOS ? (
+                <>
+                  <Check className="h-5 w-5 shrink-0 text-cos-jade-ink" /> Declarado · cerrado fuera de ContabilidadOS.
+                </>
+              ) : r.alDia ? (
                 <>
                   <Check className="h-5 w-5 shrink-0 text-cos-jade-ink" /> Tu {mes} está al corriente.
                 </>
@@ -122,7 +126,9 @@ function NegocioInner() {
               )}
             </p>
             <p className="mt-1.5 text-[13.5px] text-cos-ink">
-              {r.listos} de {r.total} partes del mes están listas.
+              {r.cerradoFueraDeContabilidadOS
+                ? "Conservamos la declaración histórica como el punto de partida de la empresa."
+                : `${r.listos} de ${r.total} partes del mes están listas.`}
             </p>
           </section>
 

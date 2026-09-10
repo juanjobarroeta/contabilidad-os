@@ -30,6 +30,8 @@ export interface ResumenNegocio {
   diasRestantes: number | null;
   /** Ya se presentó la declaración del mes. */
   declarado: boolean;
+  /** La declaración llegó como un cierre histórico hecho fuera del producto. */
+  cerradoFueraDeContabilidadOS: boolean;
 }
 
 function num(v: unknown): number | null {
@@ -51,6 +53,7 @@ export function resumenNegocio(cierre: CierreEvaluado): ResumenNegocio {
   // del contador. Suponerlo por ausencia de pendientes sería inventarle
   // tranquilidad a alguien.
   const { declarado } = estadoDelPeriodo(cierre);
+  const cerradoFueraDeContabilidadOS = cierre.estado.origenCierre === "FUERA_DE_CONTABILIDAD_OS";
 
   const vistos = new Set<string>();
   const falta: ResumenNegocio["falta"] = [];
@@ -68,11 +71,12 @@ export function resumenNegocio(cierre: CierreEvaluado): ResumenNegocio {
     alDia: cierre.estado.cerrado || (cierre.estado.fase !== "BLOQUEADO" && acciones.length === 0),
     listos: avance.listos,
     total: avance.total,
-    falta,
-    detienen: cierre.estado.bloqueos.length,
+    falta: cerradoFueraDeContabilidadOS ? [] : falta,
+    detienen: cerradoFueraDeContabilidadOS ? 0 : cierre.estado.bloqueos.length,
     aPagar,
     fechaLimite: declaracion?.fechaLimite ?? impuestos?.fechaLimite ?? null,
     diasRestantes: declaracion?.diasRestantes ?? impuestos?.diasRestantes ?? null,
     declarado,
+    cerradoFueraDeContabilidadOS,
   };
 }

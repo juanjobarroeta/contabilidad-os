@@ -67,9 +67,14 @@ export default function HistorialDeclaracionesPage() {
 
   // Presentada o borrador: sin el chip, una FILED y una DRAFT se leían igual
   // («a pagar $X») en una página que se llama «Declaraciones presentadas».
-  const EstadoDecl = ({ s }: { s: string }) =>
-    s === "FILED" || s === "PAID" ? (
-      <span className="mr-1.5 rounded-full bg-cos-jade-tint px-1.5 py-0.5 text-[11px] font-semibold text-cos-jade-ink">Presentada</span>
+  const EstadoDecl = ({ d }: { d: Decl }) =>
+    d.status === "FILED" || d.status === "PAID" ? (
+      <span
+        className="mr-1.5 rounded-full bg-cos-jade-tint px-1.5 py-0.5 text-[11px] font-semibold text-cos-jade-ink"
+        title={d.isHistorical ? "Declarado · cerrado fuera de ContabilidadOS" : undefined}
+      >
+        {d.isHistorical ? "Declarado · cierre externo" : "Presentada"}
+      </span>
     ) : (
       <span className="mr-1.5 rounded-full bg-cos-amber-tint px-1.5 py-0.5 text-[11px] font-semibold text-cos-amber-ink">Borrador</span>
     );
@@ -111,7 +116,7 @@ export default function HistorialDeclaracionesPage() {
                   <span className={cell.iva ? "text-cos-ink" : "text-cos-ink-faint"}>
                     {cell.iva ? (
                       <>
-                        <EstadoDecl s={cell.iva.status} />
+                        <EstadoDecl d={cell.iva} />
                         {cell.iva.ivaSaldoFavor && cell.iva.ivaSaldoFavor > 0
                           ? <span className="text-cos-jade-ink">{fmt(cell.iva.ivaSaldoFavor)} a favor</span>
                           : <>a pagar {fmt(cell.iva.ivaPagar)}</>}{" "}
@@ -120,7 +125,7 @@ export default function HistorialDeclaracionesPage() {
                     ) : "—"}
                   </span>
                   <span className={cell.isr ? "text-cos-ink" : "text-cos-ink-faint"}>
-                    {cell.isr ? <><EstadoDecl s={cell.isr.status} />a pagar {fmt(cell.isr.isrPagar)} <Acuse d={cell.isr} /></> : "—"}
+                    {cell.isr ? <><EstadoDecl d={cell.isr} />a pagar {fmt(cell.isr.isrPagar)} <Acuse d={cell.isr} /></> : "—"}
                   </span>
                 </div>
               );
