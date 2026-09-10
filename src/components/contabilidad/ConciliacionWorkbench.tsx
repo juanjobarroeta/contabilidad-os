@@ -482,7 +482,7 @@ export function ConciliacionWorkbench({
                   movimientos, que es justo lo que hace falta ahí. En móvil,
                   donde las columnas se apilan y no hay nada que estirar, se
                   mantiene el tope para que la lista no empuje todo hacia abajo. */}
-              <ul className="max-h-[430px] flex-1 overflow-y-auto lg:max-h-none lg:min-h-[430px]">
+              <ul className="max-h-[430px] flex-1 overflow-y-auto lg:max-h-screen lg:min-h-[430px]">
                 {pendientes.map((m) => {
                   const activo = selTx?.id === m.id;
                   return (
@@ -537,8 +537,13 @@ export function ConciliacionWorkbench({
                 editarlas, y no tenía búsqueda manual de facturas, comprobante
                 CEP, pagos de impuestos ni desconciliar. Conciliar daba un
                 resultado distinto según la pestaña. */}
-            <section className="min-w-0 border-t border-cos-line lg:border-t-0">
-              <p className="border-b border-cos-line-soft px-5 py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-cos-ink-faint">
+            {/* PEGADO AL SCROLL. La lista de la izquierda crece con el mes —148
+                movimientos en un hospital— y sin esto el panel se iba hacia
+                arriba: bajabas a buscar un movimiento y perdías de vista dónde
+                resolverlo. `self-start` es lo que le da lugar al sticky dentro
+                del grid; sin eso la celda se estira y no hay dónde pegarse. */}
+            <section className="min-w-0 border-t border-cos-line lg:sticky lg:top-0 lg:self-start lg:max-h-screen lg:overflow-y-auto lg:border-t-0">
+              <p className="sticky top-0 z-10 border-b border-cos-line-soft bg-cos-card px-5 py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-cos-ink-faint">
                 {selTx ? "Resolver el movimiento" : "CFDI candidatos"}
               </p>
               {!selTx ? (
