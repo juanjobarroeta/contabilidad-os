@@ -14,7 +14,7 @@ import { prisma } from "@/lib/prisma";
 import { AuthzError, requireMembership, requireModule, requireWriter } from "@/lib/authz";
 import { withHospital } from "@/lib/hospital/with-hospital";
 import { bitacora, errorZod } from "@/lib/hospital/http";
-import { MAX_BYTES_FOTO, fotoResumen, validarCupo, validarFoto } from "@/lib/hospital/ticket-fotos";
+import { fotoResumen, validarCupo, validarFoto } from "@/lib/hospital/ticket-fotos";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -85,7 +85,13 @@ export const POST = withHospital(async (req: Request, ctx: Ctx) => {
   return NextResponse.json(fotoResumen(foto), { status: 201 });
 });
 
+/** El body trae la imagen en base64, que infla ~33 %: subir seis fotos
+ *  seguidas no cabe en el default de diez segundos. */
 export const maxDuration = 30;
-/** El body trae la imagen en base64: el default de 1 MB no alcanza. */
+/** Buffer.from(base64) necesita Node, no el runtime de borde. */
 export const runtime = "nodejs";
-export const config = { api: { bodyParser: { sizeLimit: `${Math.ceil((MAX_BYTES_FOTO * 4) / 3 / 1024 / 1024) + 1}mb` } } };
+// OJO: aquí NO va `export const config = { api: { bodyParser } }`. Eso es del
+// Pages Router; en el App Router es un «invalid segment configuration export»
+// que tumba el build entero — y `tsc` no lo ve, porque como TypeScript es
+// válido. El límite de cuerpo de un Route Handler no se configura: se valida
+// en la ruta, que es lo que hace `validarFoto`.
