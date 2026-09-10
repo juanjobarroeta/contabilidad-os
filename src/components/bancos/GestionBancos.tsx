@@ -21,17 +21,17 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { Fragment, useEffect, useState, useCallback, useRef } from "react";
-import Link from "next/link";
 import {
   Landmark, Upload, Sparkles, Loader2, Link2, Search, CheckCircle2,
-  AlertTriangle, ChevronDown, Plus, CheckSquare, X, Building2, Users,
-  Banknote, Ban, ArrowLeftRight, SlidersHorizontal, Pencil, Trash2,
+  AlertTriangle, ChevronDown, Plus, CheckSquare, X, Building2,
+    ArrowLeftRight, SlidersHorizontal, Pencil, Trash2,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { RepresentacionImpresa } from "@/components/facturas/RepresentacionImpresa";
 import { Card, Money, Chip } from "@/components/ui";
 import { Alert, RetryButton } from "@/components/ui/feedback";
 import { etiquetaImpuesto } from "@/lib/conciliacion-impuestos";
+import { ResolverMovimiento } from "./ResolverMovimiento";
 
 // ── Types (mirror /api/bancos) ────────────────────────────────────────────────
 interface BankAccount {
@@ -90,40 +90,7 @@ interface BankTx {
     invoice: { id: string; uuid?: string | null; folio?: string | null; serie?: string | null; total: number; contraparteNombre?: string | null; customer?: { razonSocial: string } | null };
   }[];
 }
-// Línea de la charola de selección múltiple: factura elegida + monto asignado editable.
-interface SeleccionFactura { id: string; label: string; total: number; monto: string }
-interface Candidate {
-  id: string; uuid?: string; fecha: string; total: number; cliente: string; rfc: string;
-  score: number; confidence: "alta" | "media" | "baja"; folio?: string;
-}
-/** Comprobante Electrónico de Pago de Banxico: la prueba de que el dinero
- *  llegó a esa cuenta ese día. */
-type CepMovimiento = {
-  estado: string | null;
-  fechaOperacion: string | null;
-  concepto: string | null;
-  ordenanteNombre: string | null;
-  ordenanteRfc: string | null;
-  ordenanteBanco: string | null;
-  beneficiarioNombre: string | null;
-  beneficiarioRfc: string | null;
-  beneficiarioBanco: string | null;
-};
 
-// Pago junto: varias facturas de la misma contraparte que suman exacto el
-// movimiento (sugerido por el motor; se aplica con match-multiple).
-interface PagoJuntoSugerido {
-  rfc: string;
-  cliente: string;
-  suma: number;
-  facturas: Array<{ invoiceId: string; monto: number; folio: string; fecha: string | null }>;
-}
-// Candidato de pago de impuestos (declaración pendiente, sólo egresos).
-interface ImpuestoCandidate {
-  id: string; tipo: string; periodo: string; etiqueta: string;
-  montoEsperado: number | null; fechaLimitePago: string | null;
-  score: number; confidence: "alta" | "media" | "baja";
-}
 interface Counts {
   UNMATCHED?: number; MATCHED?: number; IGNORED?: number; total?: number;
   PENDING?: number; TAX_PAYMENT?: number; PAYROLL_NO_CFDI?: number;
@@ -142,24 +109,6 @@ type Filter =
 /** Movimientos por página. La lista crece con «Cargar más». */
 const PAGE_SIZE = 80;
 
-const CATEGORIAS: { tag: string | null; label: string; icon: typeof Banknote }[] = [
-  { tag: "TAX_PAYMENT",          label: "Pago de impuestos",        icon: Building2 },
-  { tag: "PAYROLL_NO_CFDI",      label: "Nómina sin CFDI",          icon: Users },
-  { tag: "PAYROLL_DISPERSED",    label: "Dispersión de nómina ya timbrada", icon: Users },
-  // Cobrado/pagado sin factura: pasivo y activo, no ingreso ni gasto. No
-  // archivan el movimiento — lo mandan a la lista de anticipos sin CFDI.
-  { tag: "ANTICIPO_CLIENTE",     label: "Anticipo de cliente (falta CFDI)",  icon: Banknote },
-  { tag: "ANTICIPO_PROVEEDOR",   label: "Anticipo a proveedor (falta CFDI)", icon: Banknote },
-  { tag: "LOAN_RECEIVED",        label: "Préstamo recibido",        icon: Banknote },
-  { tag: "LOAN_GIVEN",           label: "Préstamo otorgado",        icon: Banknote },
-  { tag: "CAPITAL_CONTRIBUTION", label: "Aportación de capital",    icon: Building2 },
-  { tag: "IVA_COMISION",         label: "IVA de comisión bancaria", icon: Banknote },
-  { tag: "RENT",                 label: "Renta sin CFDI",           icon: Building2 },
-  { tag: "FINANCIAL_INCOME",     label: "Intereses ganados",        icon: Banknote },
-  { tag: "NON_DEDUCTIBLE",       label: "No deducible",             icon: Ban },
-  { tag: "INTERNAL_TRANSFER",    label: "Transferencia entre cuentas", icon: ArrowLeftRight },
-  { tag: null,                   label: "Ignorar",                  icon: X },
-];
 // tag → etiqueta corta para el chip de estado en un movimiento ya categorizado.
 const TAG_LABEL: Record<string, string> = {
   TAX_PAYMENT: "Impuestos", PENDING_MONTHLY_CFDI: "Pendiente CFDI",
@@ -195,25 +144,9 @@ const FAMILIA_LOTE: { familia: string; label: string }[] = [
   { familia: "FINANCIAL_INCOME",  label: "Intereses / rendimientos" },
   { familia: "INTERNAL_TRANSFER", label: "Traspaso entre cuentas" },
 ];
-// Ruido bancario que no distingue a un comercio (espeja el heurístico del
-// servidor en reglas-categorizacion.ts). El token propuesto es editable.
-const TOKEN_STOP = new Set([
-  "SPEI","PAGO","PAGOS","COMPRA","CARGO","ABONO","TARJETA","DEBITO","CREDITO",
-  "TRANSFERENCIA","TRASPASO","REFERENCIA","REF","FOLIO","CLABE","CUENTA","BANCO",
-  "COM","MXN","USD","OPERACION","AUT","MEXICO","MEX","SUC","TDD","TDC","INT",
-  "NACIONAL","NEGOCIO","DIGITAL","ONLINE","WWW","COMISION",
-]);
-function tokenDeDescripcion(desc: string): string {
-  if (!desc) return "";
-  const norm = desc.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
-  const tokens = norm.split(/[^A-Z]+/).filter((t) => t.length >= 3 && !TOKEN_STOP.has(t));
-  if (tokens.length === 0) return "";
-  return tokens.reduce((mejor, t) => (t.length > mejor.length ? t : mejor), tokens[0]);
-}
 
 const BANKS = ["BBVA","Banamex","Santander","Banorte","HSBC","Scotiabank","Afirme","Inbursa","BanBajío","Otro"];
 const LBL = "block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint";
-const CONF: Record<Candidate["confidence"], "jade" | "amber" | "slate"> = { alta: "jade", media: "amber", baja: "slate" };
 const fmtFecha = (iso: string) => {
   const M = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
   const d = new Date(iso);
@@ -258,22 +191,7 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
   const [verFacturaId, setVerFacturaId] = useState<string | null>(null);
   const [busy, setBusy] = useState<"" | "auto" | "upload">("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [pagoJunto, setPagoJunto] = useState<PagoJuntoSugerido | null>(null);
-  const [impuestoCands, setImpuestoCands] = useState<ImpuestoCandidate[]>([]);
-  const [candLoading, setCandLoading] = useState(false);
   const [acting, setActing] = useState<string | null>(null);
-  // Búsqueda manual de factura para el movimiento expandido (inline, antes era /detalle).
-  const [manualOpen, setManualOpen] = useState(false);
-  const [manualTipo, setManualTipo] = useState<"INGRESO" | "EGRESO" | "NOMINA">("EGRESO");
-  const [manualQuery, setManualQuery] = useState("");
-  const [manualResults, setManualResults] = useState<FacturaSearch[]>([]);
-  const [manualLoading, setManualLoading] = useState(false);
-  // Selección múltiple de facturas para el movimiento expandido (charola).
-  const [multiSel, setMultiSel] = useState<SeleccionFactura[]>([]);
-  // Comprobante de Banxico (CEP) del movimiento expandido, si se consultó.
-  const [cep, setCep] = useState<CepMovimiento | null>(null);
-  const [multiBusy, setMultiBusy] = useState(false);
   const [toast, setToast] = useState("");
   // Sugerencia post-conciliación: el abono que acabas de conciliar paga una
   // factura PPD → ofrecer emitir su complemento de pago (REP) de un toque con
@@ -286,13 +204,6 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
   const [selectMode, setSelectMode] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [bulkMatchOpen, setBulkMatchOpen] = useState(false);
-  // Panel "categorizar todos los similares" del movimiento expandido.
-  const [similarOpen, setSimilarOpen] = useState<string | null>(null);
-  const [similarToken, setSimilarToken] = useState("");
-  const [similarFamilia, setSimilarFamilia] = useState<string>("NON_DEDUCTIBLE");
-  const [similarSigno, setSimilarSigno] = useState<"CREDITO" | "DEBITO">("DEBITO");
-  const [similarCount, setSimilarCount] = useState<number | null>(null);
-  const [similarBusy, setSimilarBusy] = useState(false);
   // Modal de cuenta: null=cerrado · {account:null}=agregar · {account:X}=editar
   const [accountModal, setAccountModal] = useState<{ account: BankAccount | null } | null>(null);
   // Resumen de la última importación cuando hubo filas descartadas o posibles
@@ -437,24 +348,6 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
   // Al cambiar de cuenta, el mes elegido puede no existir en la otra — reset.
   useEffect(() => { setMes(""); }, [selectedId]);
 
-  // Búsqueda manual de facturas (debounced) para el movimiento expandido.
-  useEffect(() => {
-    if (!expandedId || !manualOpen || !activeCompany) return;
-    let cancelled = false;
-    const t = setTimeout(async () => {
-      setManualLoading(true);
-      try {
-        const params = new URLSearchParams({ companyId: activeCompany.id, tipo: manualTipo, take: "20", unmatchedOnly: "true" });
-        if (manualQuery.trim()) params.set("q", manualQuery.trim());
-        const res = await fetch(`/api/facturas?${params}`);
-        const data = await res.json();
-        if (!cancelled) setManualResults(Array.isArray(data) ? data : []);
-      } catch { if (!cancelled) setManualResults([]); }
-      finally { if (!cancelled) setManualLoading(false); }
-    }, 250);
-    return () => { cancelled = true; clearTimeout(t); };
-  }, [expandedId, manualOpen, manualTipo, manualQuery, activeCompany]);
-
   const account = accounts.find((a) => a.id === selectedId) ?? null;
 
   async function autoReconcile() {
@@ -586,42 +479,10 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
     } finally { setBusy(""); e.target.value = ""; }
   }
 
-  async function expand(tx: BankTx) {
-    if (expandedId === tx.id) { setExpandedId(null); setMultiSel([]); return; }
-    setExpandedId(tx.id); setCandidates([]); setImpuestoCands([]); setPagoJunto(null); setCandLoading(true); setMultiSel([]);
-    // El comprobante de Banxico, si este SPEI se consultó al CEP.
-    setCep(null);
-    fetch(`/api/bancos/transactions/${tx.id}/cep`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (d) setCep(d); })
-      .catch(() => {});
-    // Reset de la búsqueda manual; arranca con el tipo probable según el signo.
-    setManualOpen(false); setManualQuery(""); setManualResults([]);
-    setManualTipo(tx.monto < 0 ? "EGRESO" : "INGRESO");
-    try {
-      const res = await fetch(`/api/bancos/${tx.bankAccountId}/match?txId=${tx.id}`);
-      const data = await res.json();
-      setCandidates(data.candidates ?? []);
-      setImpuestoCands(data.impuestos ?? []);
-      setPagoJunto(data.pagoJunto ?? null);
-    } finally { setCandLoading(false); }
-  }
-
-  async function conciliar(txId: string, invoiceId: string) {
-    const res = await fetch(`/api/bancos/transactions/${txId}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "match", invoiceId }),
-    });
-    if (res.ok) {
-      const data = await res.json().catch(() => null);
-      showToast("Movimiento conciliado");
-      // Cobro de una PPD → sugerir el REP (el IVA se causa en el mes del pago
-      // y el complemento vence el quinto día natural del mes siguiente).
-      if (data?.repSugerido) {
-        setRepSugerido({ txId, ...data.repSugerido });
-      }
-      setExpandedId(null); setMultiSel([]); await Promise.all([loadTxs(), loadAccounts()]);
-    } else showToast("No se pudo conciliar");
+  /** Abre o cierra el panel del movimiento. La carga de candidatos, CEP y
+   *  búsqueda manual vive en `ResolverMovimiento`, que se monta al abrir. */
+  function expand(tx: BankTx) {
+    setExpandedId((actual) => (actual === tx.id ? null : tx.id));
   }
 
   async function emitirRepSugerido() {
@@ -645,88 +506,6 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
     }
   }
 
-  // Conciliar el egreso como pago de una declaración (SIPARE / línea de
-  // captura): movimiento → MATCHED y declaración → PAID en un solo gesto.
-  async function conciliarImpuesto(txId: string, taxDeclarationId: string, etiqueta: string) {
-    setActing(txId);
-    try {
-      const res = await fetch(`/api/bancos/transactions/${txId}`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "match-impuesto", taxDeclarationId }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        showToast(`Pago conciliado: ${etiqueta}`);
-        setExpandedId(null); setMultiSel([]);
-        await Promise.all([loadTxs(), loadAccounts()]);
-      } else {
-        showToast(data?.error ?? "No se pudo conciliar el pago de impuestos");
-      }
-    } finally { setActing(null); }
-  }
-
-  // Aplica el pago junto sugerido en un gesto: mismas asignaciones, mismo
-  // PATCH match-multiple que la selección manual.
-  async function aplicarPagoJunto(txId: string) {
-    if (!pagoJunto) return;
-    setMultiBusy(true);
-    try {
-      const res = await fetch(`/api/bancos/transactions/${txId}`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "match-multiple",
-          asignaciones: pagoJunto.facturas.map((fac) => ({ invoiceId: fac.invoiceId, monto: fac.monto })),
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        showToast(`Pago junto aplicado: ${pagoJunto.facturas.length} facturas de ${pagoJunto.cliente}`);
-        setExpandedId(null); setMultiSel([]); setPagoJunto(null);
-        await Promise.all([loadTxs(), loadAccounts()]);
-      } else {
-        showToast(data?.error ?? "No se pudo aplicar el pago junto");
-      }
-    } finally { setMultiBusy(false); }
-  }
-
-  // ── Conciliación múltiple: un movimiento ↔ varias facturas ─────────────────
-  function toggleMultiSel(f: { id: string; label: string; total: number }) {
-    setMultiSel((prev) =>
-      prev.some((s) => s.id === f.id)
-        ? prev.filter((s) => s.id !== f.id)
-        : [...prev, { id: f.id, label: f.label, total: f.total, monto: f.total.toFixed(2) }]
-    );
-  }
-
-  function setMultiMonto(id: string, monto: string) {
-    setMultiSel((prev) => prev.map((s) => (s.id === id ? { ...s, monto } : s)));
-  }
-
-  async function conciliarMultiple(txId: string) {
-    const asignaciones = multiSel.map((s) => ({ invoiceId: s.id, monto: Number(s.monto) }));
-    if (asignaciones.some((a) => !Number.isFinite(a.monto) || a.monto <= 0)) {
-      showToast("Revise los montos asignados: deben ser mayores a cero");
-      return;
-    }
-    setMultiBusy(true);
-    try {
-      const res = await fetch(`/api/bancos/transactions/${txId}`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "match-multiple", asignaciones }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        showToast(data?.advertencia?.mensaje
-          ? `Conciliado con ${asignaciones.length} facturas. ${data.advertencia.mensaje}`
-          : `Conciliado con ${asignaciones.length} facturas`);
-        setExpandedId(null); setMultiSel([]);
-        await Promise.all([loadTxs(), loadAccounts()]);
-      } else {
-        showToast(data?.error ?? "No se pudo conciliar");
-      }
-    } finally { setMultiBusy(false); }
-  }
-
   async function desconciliar(txId: string) {
     setActing(txId);
     try {
@@ -736,19 +515,6 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
       });
       if (res.ok) { showToast("Movimiento desconciliado"); await Promise.all([loadTxs(), loadAccounts()]); }
       else showToast("No se pudo desconciliar");
-    } finally { setActing(null); }
-  }
-
-  // Categorizar sin factura (o ignorar): PATCH ignore + tag en notes.
-  async function categorizar(txId: string, tag: string | null, label: string) {
-    setActing(txId);
-    try {
-      const res = await fetch(`/api/bancos/transactions/${txId}`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "ignore", notes: tag }),
-      });
-      if (res.ok) { showToast(`Categorizado: ${label}`); setExpandedId(null); await Promise.all([loadTxs(), loadAccounts()]); }
-      else showToast("No se pudo categorizar");
     } finally { setActing(null); }
   }
 
@@ -844,57 +610,6 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
     } finally { setActing(null); }
   }
 
-  // ── "Categorizar todos los similares" (movimiento expandido) ────────────────
-  function abrirSimilares(tx: BankTx) {
-    if (similarOpen === tx.id) { setSimilarOpen(null); return; }
-    const token = tokenDeDescripcion(tx.descripcion);
-    const signo: "CREDITO" | "DEBITO" = tx.monto >= 0 ? "CREDITO" : "DEBITO";
-    setSimilarOpen(tx.id);
-    setSimilarToken(token);
-    setSimilarSigno(signo);
-    setSimilarFamilia("NON_DEDUCTIBLE");
-    setSimilarCount(null);
-  }
-
-  // Cuenta los similares sin conciliar cada vez que cambia el token/signo.
-  useEffect(() => {
-    if (!similarOpen || !activeCompany || !similarToken.trim()) { setSimilarCount(null); return; }
-    let cancelled = false;
-    const t = setTimeout(async () => {
-      try {
-        const params = new URLSearchParams({ companyId: activeCompany.id, patron: similarToken.trim(), signo: similarSigno });
-        const res = await fetch(`/api/bancos/sugerencias/lote?${params}`);
-        const data = await res.json().catch(() => ({}));
-        if (!cancelled) setSimilarCount(typeof data.count === "number" ? data.count : null);
-      } catch { if (!cancelled) setSimilarCount(null); }
-    }, 300);
-    return () => { cancelled = true; clearTimeout(t); };
-  }, [similarOpen, similarToken, similarSigno, activeCompany]);
-
-  async function categorizarSimilares(txId: string) {
-    const patron = similarToken.trim();
-    if (!patron) { showToast("Escribe un patrón para agrupar"); return; }
-    const label = FAMILIA_LOTE.find((f) => f.familia === similarFamilia)?.label ?? similarFamilia;
-    setSimilarBusy(true);
-    try {
-      const res = await fetch("/api/bancos/sugerencias/lote", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          txIds: [txId], familia: similarFamilia, patron, signo: similarSigno,
-          crearRegla: true, retroactivo: true,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        const n = (data?.lote?.aprobados ?? 0) + (data?.retro?.aprobados ?? 0);
-        showToast(`${n} movimiento(s) categorizados como "${label}". Regla guardada.`);
-        setSimilarOpen(null); setExpandedId(null);
-        await Promise.all([loadTxs(), loadAccounts()]);
-      } else {
-        showToast(data?.error ?? "No se pudieron categorizar los similares");
-      }
-    } finally { setSimilarBusy(false); }
-  }
 
   function statusChip(tx: BankTx) {
     if (tx.status === "MATCHED") return <Chip status="conciliado" label="Conciliado" icon={<CheckCircle2 className="h-3 w-3" />} />;
@@ -1447,310 +1162,15 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
                             <Search className="h-[15px] w-[15px]" /> {expandedId === m.id ? "Ocultar" : "Buscar coincidencia"}
                           </button>
                           {expandedId === m.id && (
-                            <div className="mt-3 flex flex-col gap-3">
-                              {/* El detalle fino y la cadena CRUDA del banco.
-                                  Van aquí y no en la tarjeta porque estorban al
-                                  hojear, pero nunca se esconden: el estado de
-                                  cuenta es la fuente de verdad y quien concilia
-                                  a mano necesita poder leerla tal cual. */}
-                              {(m.contraparteClabe || m.claveRastreo || m.contraparteNombre) && (
-                                <div className="rounded-control bg-cos-paper px-3 py-2.5 text-[12.5px] text-cos-ink-soft">
-                                  {m.contraparteClabe && (
-                                    <div>CLABE <span className="font-mono text-cos-ink">{m.contraparteClabe}</span></div>
-                                  )}
-                                  {m.claveRastreo && (
-                                    <div className="mt-0.5">
-                                      Clave de rastreo <span className="font-mono text-cos-ink">{m.claveRastreo}</span>
-                                    </div>
-                                  )}
-                                  <div className="mt-1.5 break-words border-t border-cos-line pt-1.5 text-[11.5px] text-cos-ink-faint">
-                                    {m.descripcion}
-                                  </div>
-                                </div>
-                              )}
-                              {/* COMPROBANTE DE BANXICO. No es adorno: el CEP prueba
-                                  que ESE importe llegó a la cuenta de ESE
-                                  beneficiario en ESA fecha. Es la evidencia de
-                                  materialidad que se le enseña al SAT cuando
-                                  pregunta si un pago fue real, y también le
-                                  enseña a quien concilia DE DÓNDE salió el RFC
-                                  —para que la sugerencia no parezca adivinada. */}
-                              {cep && (
-                                <div className="rounded-control border border-cos-line bg-cos-paper px-3 py-2.5 text-[12.5px]">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <p className="font-semibold text-cos-ink">
-                                      Comprobante de Banxico
-                                      {cep.estado && (
-                                        <span className={"ml-2 rounded-full px-2 py-0.5 text-[11.5px] font-medium " +
-                                          (/devuel/i.test(cep.estado)
-                                            ? "bg-cos-amber-tint text-cos-amber-ink"
-                                            : "bg-cos-brand-tint text-cos-brand-ink")}>
-                                          {cep.estado}
-                                        </span>
-                                      )}
-                                    </p>
-                                    <a href={`/api/bancos/transactions/${m.id}/cep?xml=1`}
-                                      className="flex-none text-[12.5px] font-semibold text-cos-brand-ink hover:underline">
-                                      Descargar XML
-                                    </a>
-                                  </div>
-                                  <div className="mt-1.5 grid gap-1 border-t border-cos-line pt-1.5 text-cos-ink-soft sm:grid-cols-2">
-                                    <div>
-                                      <p className="text-[11.5px] uppercase tracking-wide text-cos-ink-faint">Ordenante</p>
-                                      <p className="text-cos-ink">{cep.ordenanteNombre ?? "—"}</p>
-                                      <p className="font-mono text-[11.5px]">{cep.ordenanteRfc ?? "—"}{cep.ordenanteBanco ? ` · ${cep.ordenanteBanco}` : ""}</p>
-                                    </div>
-                                    <div>
-                                      <p className="text-[11.5px] uppercase tracking-wide text-cos-ink-faint">Beneficiario</p>
-                                      <p className="text-cos-ink">{cep.beneficiarioNombre ?? "—"}</p>
-                                      <p className="font-mono text-[11.5px]">{cep.beneficiarioRfc ?? "—"}{cep.beneficiarioBanco ? ` · ${cep.beneficiarioBanco}` : ""}</p>
-                                    </div>
-                                  </div>
-                                  {cep.concepto && (
-                                    <p className="mt-1.5 border-t border-cos-line pt-1.5 text-[11.5px] text-cos-ink-faint">
-                                      Concepto: {cep.concepto}
-                                    </p>
-                                  )}
-                                </div>
-                              )}
-
-                              {/* Pago junto: N facturas de la MISMA contraparte suman
-                                  exacto el movimiento — la combinación es única, por
-                                  eso se ofrece en un gesto. */}
-                              {!candLoading && pagoJunto && (
-                                <div className="rounded-control border border-cos-brand/30 bg-cos-brand-tint px-3 py-2.5">
-                                  <p className="text-[13px] font-semibold text-cos-brand-ink">
-                                    Pago junto: {pagoJunto.facturas.length} facturas de {pagoJunto.cliente} suman exacto <Money value={pagoJunto.suma} size={13} />
-                                  </p>
-                                  <p className="mt-0.5 text-[12px] text-cos-ink-soft">
-                                    {pagoJunto.facturas.map((fac) => `${fac.folio} (${fac.monto.toLocaleString("es-MX", { style: "currency", currency: "MXN" })})`).join(" + ")}
-                                  </p>
-                                  <button onClick={() => aplicarPagoJunto(m.id)} disabled={multiBusy}
-                                    className="mt-2 rounded-control bg-cos-brand px-3 py-1.5 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
-                                    {multiBusy ? "Aplicando…" : "Conciliar las " + pagoJunto.facturas.length + " facturas"}
-                                  </button>
-                                </div>
-                              )}
-                              {candLoading ? (
-                                <span className="inline-flex items-center gap-2 text-[13px] text-cos-ink-faint"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Buscando facturas…</span>
-                              ) : candidates.length > 0 ? (
-                                <>
-                                  <p className="text-[12.5px] font-semibold text-cos-ink">Coincidencias sugeridas</p>
-                                  <div className="flex flex-col gap-2">
-                                    {candidates.map((c) => (
-                                      <div key={c.id} className="flex items-center justify-between gap-3 rounded-control bg-cos-paper px-3 py-2.5">
-                                        <div className="min-w-0">
-                                          <p className="truncate text-[13.5px] font-medium text-cos-ink">{c.cliente}</p>
-                                          <p className="text-[12px] text-cos-ink-faint"><span className="font-mono">{c.rfc}</span> · {fmtFecha(c.fecha)} · <Money value={c.total} size={12} muted /></p>
-                                        </div>
-                                        <div className="flex flex-none items-center gap-2">
-                                          <Chip tone={CONF[c.confidence]} label={c.confidence} />
-                                          <button onClick={() => toggleMultiSel({ id: c.id, label: c.cliente, total: c.total })}
-                                            className={"rounded-control border px-3 py-1.5 text-[13px] font-semibold " + (multiSel.some((s) => s.id === c.id) ? "border-cos-brand bg-cos-brand-tint text-cos-brand-ink" : "border-cos-line bg-cos-card text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink")}>
-                                            {multiSel.some((s) => s.id === c.id) ? "Quitar" : "Agregar"}
-                                          </button>
-                                          <button onClick={() => conciliar(m.id, c.id)} className="rounded-control bg-cos-brand px-3 py-1.5 text-[13px] font-semibold text-white hover:bg-cos-brand-deep">Conciliar</button>
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </>
-                              ) : (
-                                <span className="text-[13px] text-cos-ink-faint">Sin coincidencias automáticas.</span>
-                              )}
-
-                              {/* Pagos de impuestos pendientes (sólo egresos): declaraciones
-                                  SIPARE / línea de captura sin pagar de periodos recientes.
-                                  Un tap en «Conciliar» marca pago PAID + movimiento MATCHED. */}
-                              {!candLoading && impuestoCands.length > 0 && (
-                                <>
-                                  <p className="text-[12.5px] font-semibold text-cos-ink">Pagos de impuestos pendientes</p>
-                                  <div className="flex flex-col gap-2">
-                                    {impuestoCands.map((c) => (
-                                      <div key={c.id} className="flex items-center justify-between gap-3 rounded-control bg-cos-paper px-3 py-2.5">
-                                        <div className="min-w-0">
-                                          <p className="truncate text-[13.5px] font-medium text-cos-ink">{c.etiqueta}</p>
-                                          <p className="text-[12px] text-cos-ink-faint">
-                                            {c.montoEsperado != null
-                                              ? <Money value={c.montoEsperado} size={12} muted />
-                                              : <span>Monto según SUA (sin estimado)</span>}
-                                            {c.fechaLimitePago && <> · vence {fmtFecha(c.fechaLimitePago)}</>}
-                                          </p>
-                                        </div>
-                                        <div className="flex flex-none items-center gap-2">
-                                          <Chip tone={CONF[c.confidence]} label={c.confidence} />
-                                          <button onClick={() => conciliarImpuesto(m.id, c.id, c.etiqueta)} disabled={acting === m.id}
-                                            className="rounded-control bg-cos-brand px-3 py-1.5 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
-                                            Conciliar
-                                          </button>
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </>
-                              )}
-
-                              {/* Charola de conciliación múltiple: facturas agregadas, monto asignado
-                                  editable por línea y suma contra el monto del movimiento. */}
-                              {multiSel.length > 0 && (() => {
-                                const seleccionado = multiSel.reduce((s, x) => s + (Number(x.monto) || 0), 0);
-                                const restante = Math.abs(m.monto) - seleccionado;
-                                const excede = seleccionado > Math.abs(m.monto) * 1.01;
-                                const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
-                                return (
-                                  <div className="rounded-control border border-cos-brand bg-cos-brand-tint/40 p-3">
-                                    <p className="text-[12.5px] font-semibold text-cos-ink">
-                                      Conciliación múltiple · {multiSel.length} factura{multiSel.length === 1 ? "" : "s"} seleccionada{multiSel.length === 1 ? "" : "s"}
-                                    </p>
-                                    <div className="mt-2 flex flex-col gap-1.5">
-                                      {multiSel.map((s) => (
-                                        <div key={s.id} className="flex items-center gap-2">
-                                          <span className="min-w-0 flex-1 truncate text-[13px] text-cos-ink">{s.label}</span>
-                                          <input type="number" step="0.01" min="0" value={s.monto}
-                                            onChange={(e) => setMultiMonto(s.id, e.target.value)}
-                                            aria-label={`Monto asignado a ${s.label}`}
-                                            className="w-[120px] rounded-control border border-cos-line bg-cos-card px-2 py-1 text-right font-mono text-[12.5px] text-cos-ink outline-none focus:border-cos-brand" />
-                                          <button onClick={() => toggleMultiSel(s)} title="Quitar de la selección"
-                                            className="grid h-6 w-6 flex-none place-items-center rounded-control text-cos-ink-faint hover:bg-cos-paper hover:text-cos-ink">
-                                            <X className="h-3.5 w-3.5" />
-                                          </button>
-                                        </div>
-                                      ))}
-                                    </div>
-                                    <div className="mt-2 flex flex-col gap-0.5 border-t border-dashed border-cos-line pt-2 text-[12.5px]">
-                                      <div className="flex justify-between">
-                                        <span className="text-cos-ink-soft">Suma asignada</span>
-                                        <span className={"font-mono font-semibold " + (excede ? "text-cos-red-ink" : "text-cos-ink")}>{fmt(seleccionado)}</span>
-                                      </div>
-                                      <div className="flex justify-between">
-                                        <span className="text-cos-ink-soft">Monto del movimiento</span>
-                                        <span className="font-mono text-cos-ink">{fmt(Math.abs(m.monto))}</span>
-                                      </div>
-                                      <div className="flex justify-between">
-                                        <span className="text-cos-ink-soft">Restante</span>
-                                        <span className={"font-mono " + (excede ? "text-cos-red-ink" : "text-cos-ink")}>{fmt(restante)}</span>
-                                      </div>
-                                    </div>
-                                    {excede && (
-                                      <p className="mt-1.5 text-[12px] text-cos-red-ink">La suma asignada excede el monto del movimiento.</p>
-                                    )}
-                                    {!excede && restante > Math.abs(m.monto) * 0.01 && (
-                                      <p className="mt-1.5 text-[12px] text-cos-amber-ink">
-                                        Lo que quede sin asignar se registra como <b>anticipo</b>, no como cobro
-                                        de una factura. El cierre lo reporta.
-                                      </p>
-                                    )}
-                                    <button onClick={() => conciliarMultiple(m.id)} disabled={multiBusy || multiSel.length < 1 || excede}
-                                      className="mt-2.5 w-full rounded-control bg-cos-brand px-3 py-2 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
-                                      {multiBusy ? "Conciliando…" : `Conciliar ${multiSel.length} factura${multiSel.length === 1 ? "" : "s"}`}
-                                    </button>
-
-                                  </div>
-                                );
-                              })()}
-
-                              <div className="rounded-control border border-cos-line">
-                                <button onClick={() => setManualOpen((o) => !o)}
-                                  className="flex w-full items-center gap-2 px-3 py-2.5 text-[13px] text-cos-ink-faint hover:text-cos-brand-ink">
-                                  <Search className="h-[15px] w-[15px]" /> Buscar otra factura por cliente, folio o monto…
-                                  <ChevronDown className={"ml-auto h-3.5 w-3.5 transition-transform " + (manualOpen ? "rotate-180" : "")} />
-                                </button>
-                                {manualOpen && (
-                                  <div className="border-t border-cos-line-soft p-2.5">
-                                    <div className="mb-2 flex gap-1.5">
-                                      {(["INGRESO","EGRESO","NOMINA"] as const).map((t) => (
-                                        <button key={t} onClick={() => setManualTipo(t)}
-                                          className={"rounded-full px-2.5 py-1 text-[12px] font-medium " + (manualTipo === t ? "bg-cos-brand text-white" : "bg-cos-paper text-cos-ink-soft hover:bg-cos-line-soft")}>
-                                          {t === "INGRESO" ? "Ingresos" : t === "EGRESO" ? "Gastos" : "Nómina"}
-                                        </button>
-                                      ))}
-                                    </div>
-                                    <div className="flex items-center gap-2 rounded-control border border-cos-line px-2.5 py-1.5">
-                                      <Search className="h-4 w-4 text-cos-ink-faint" />
-                                      <input value={manualQuery} onChange={(e) => setManualQuery(e.target.value)} autoFocus
-                                        placeholder="Cliente, RFC, UUID, folio…"
-                                        className="w-full bg-transparent text-[13px] outline-none placeholder:text-cos-ink-faint" />
-                                    </div>
-                                    <div className="mt-2 max-h-[40vh] overflow-y-auto">
-                                      {manualLoading ? (
-                                        <div className="flex items-center gap-2 py-3 text-[12.5px] text-cos-ink-faint"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Buscando…</div>
-                                      ) : manualResults.length === 0 ? (
-                                        <p className="py-3 text-center text-[12.5px] text-cos-ink-faint">Sin facturas por conciliar con ese criterio.</p>
-                                      ) : manualResults.map((f) => (
-                                        <div key={f.id} className="flex items-center justify-between gap-3 border-b border-cos-line-soft py-2 last:border-0">
-                                          <div className="min-w-0">
-                                            <p className="truncate text-[13px] font-medium text-cos-ink">{f.customer?.razonSocial ?? "—"}</p>
-                                            <p className="text-[11.5px] text-cos-ink-faint"><span className="font-mono">{f.customer?.rfc ?? "—"}</span>{f.folio ? ` · ${f.serie ?? ""}${f.folio}` : ""} · {fmtFecha(f.fecha)} · <Money value={f.total} size={11.5} muted /></p>
-                                          </div>
-                                          <div className="flex flex-none items-center gap-1.5">
-                                            <button onClick={() => toggleMultiSel({ id: f.id, label: f.customer?.razonSocial ?? "Factura", total: f.total })}
-                                              className={"rounded-control border px-3 py-1.5 text-[12.5px] font-semibold " + (multiSel.some((s) => s.id === f.id) ? "border-cos-brand bg-cos-brand-tint text-cos-brand-ink" : "border-cos-line bg-cos-card text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink")}>
-                                              {multiSel.some((s) => s.id === f.id) ? "Quitar" : "Agregar"}
-                                            </button>
-                                            <button onClick={() => conciliar(m.id, f.id)} className="rounded-control bg-cos-brand px-3 py-1.5 text-[12.5px] font-semibold text-white hover:bg-cos-brand-deep">Conciliar</button>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className="flex items-center gap-3">
-                                <span className="h-px flex-1 bg-cos-line-soft" />
-                                <span className="text-[12px] text-cos-ink-faint">o categoriza sin factura</span>
-                                <span className="h-px flex-1 bg-cos-line-soft" />
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                {CATEGORIAS.map(({ tag, label, icon: Icon }) => (
-                                  <button key={label} onClick={() => categorizar(m.id, tag, label)} disabled={acting === m.id}
-                                    className={"inline-flex items-center gap-2 rounded-control border border-cos-line bg-cos-card px-3 py-2 text-[13px] font-medium hover:border-cos-brand hover:bg-cos-brand-tint hover:text-cos-brand-ink disabled:opacity-50 " + (tag === null ? "text-cos-ink-faint" : "text-cos-ink-soft")}>
-                                    <Icon className="h-[15px] w-[15px] opacity-70" /> {label}
-                                  </button>
-                                ))}
-                              </div>
-
-                              {/* Categorizar TODOS los similares: deriva un token del
-                                  concepto, cuenta los movimientos sin conciliar que
-                                  coinciden, deja elegir la familia (los restaurantes
-                                  pueden ser parcialmente deducibles — no se agrupan a
-                                  ciegas), guarda la regla y la aplica retroactivamente. */}
-                              <div className="rounded-control border border-cos-line">
-                                <button onClick={() => abrirSimilares(m)}
-                                  className="flex w-full items-center gap-2 px-3 py-2.5 text-[13px] font-semibold text-cos-brand-ink hover:bg-cos-brand-tint/40">
-                                  <SlidersHorizontal className="h-[15px] w-[15px]" /> Categorizar todos los similares…
-                                  <ChevronDown className={"ml-auto h-3.5 w-3.5 transition-transform " + (similarOpen === m.id ? "rotate-180" : "")} />
-                                </button>
-                                {similarOpen === m.id && (
-                                  <div className="flex flex-col gap-2.5 border-t border-cos-line-soft p-3">
-                                    <label className="block">
-                                      <span className="text-[11.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">Patrón a agrupar</span>
-                                      <input value={similarToken} onChange={(e) => setSimilarToken(e.target.value.toUpperCase())}
-                                        placeholder="Ej. RAPPI, OPENAI…"
-                                        className="mt-1 w-full rounded-control border border-cos-line bg-cos-card px-3 py-2 font-mono text-[13px] uppercase text-cos-ink outline-none focus:border-cos-brand" />
-                                    </label>
-                                    <label className="block">
-                                      <span className="text-[11.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">Clasificar como</span>
-                                      <select value={similarFamilia} onChange={(e) => setSimilarFamilia(e.target.value)}
-                                        className="mt-1 w-full rounded-control border border-cos-line bg-cos-card px-3 py-2 text-[13px] text-cos-ink outline-none focus:border-cos-brand">
-                                        {FAMILIA_LOTE.map((f) => <option key={f.familia} value={f.familia}>{f.label}</option>)}
-                                      </select>
-                                    </label>
-                                    <p className="text-[12.5px] text-cos-ink-soft">
-                                      {similarToken.trim()
-                                        ? similarCount == null
-                                          ? "Contando movimientos similares…"
-                                          : <>Se categorizarán <b>{similarCount}</b> movimiento{similarCount === 1 ? "" : "s"} sin conciliar que contienen <span className="font-mono">{similarToken.trim()}</span>. Se recordará como regla.</>
-                                        : "Escribe un patrón para agrupar los movimientos similares."}
-                                    </p>
-                                    <button onClick={() => categorizarSimilares(m.id)} disabled={similarBusy || !similarToken.trim() || similarCount === 0}
-                                      className="w-full rounded-control bg-cos-brand px-3 py-2 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
-                                      {similarBusy ? "Categorizando…" : similarCount != null && similarCount > 0 ? `Categorizar ${similarCount} similares` : "Categorizar similares"}
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
+                            <ResolverMovimiento
+                              tx={m}
+                              companyId={activeCompany.id}
+                              onCambio={() => Promise.all([loadTxs(), loadAccounts()]).then(() => {})}
+                              onToast={showToast}
+                              onVerFactura={setVerFacturaId}
+                              onRepSugerido={setRepSugerido}
+                              onResuelto={() => setExpandedId(null)}
+                            />
                           )}
                         </div>
                       )}
