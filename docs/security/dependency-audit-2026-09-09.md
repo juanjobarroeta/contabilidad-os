@@ -8,7 +8,7 @@ Root production dependency graph only, measured with:
 npm audit --omit=dev
 ```
 
-The audit is being remediated in bounded slices. None of these slices take the higher-risk Facturapi, Prisma, or spreadsheet migrations without their own compatibility work.
+The audit is being remediated in bounded slices. Higher-risk Facturapi, Prisma, framework, and spreadsheet upgrades require their own compatibility evidence.
 
 ## Result
 
@@ -17,6 +17,7 @@ The audit is being remediated in bounded slices. None of these slices take the h
 | `origin/main` before SEC-DEP-001A | 4 | 15 | 3 | 22 |
 | SEC-DEP-001A | 0 | 15 | 4 | 19 |
 | SEC-DEP-001B | 0 | 8 | 2 | 10 |
+| SEC-DEP-001C | 0 | 7 | 2 | 9 |
 
 The four critical findings were attached to `next`, `next-auth`, `@auth/prisma-adapter`, and the transitive `@auth/core` package.
 
@@ -50,6 +51,20 @@ The following resolutions stay within the version ranges already permitted by th
 
 This removes seven high and two moderate findings without changing direct dependency ranges. Next.js still pins a separate affected PostCSS version; resolving that advisory requires the Next.js 16 major line.
 
+## SEC-DEP-001C remediation
+
+The direct `xlsx` dependency moves from 0.18.5 to 0.20.3. The npm registry release is stale, so the lockfile uses the [official SheetJS distribution](https://docs.sheetjs.com/docs/getting-started/installation/frameworks/) rather than a third-party republish:
+
+```text
+https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
+```
+
+- Downloaded tarball SHA-256: `8dc73fc3b00203e72d176e85b50938627c7b086e607c682e8d3c22c02bb99fe8`
+- Lockfile integrity: `sha512-oLDq3jw7AcLqKWH2AhCpVTZl8mf6X2YReP+Neh0SJUzV/BdZYjth94tG5toiMB1PPrYtxOCfaoUCkvtuH+3AJA==`
+- Application changes: none; existing CommonJS/ESM imports and workbook APIs remain compatible.
+
+This clears the prototype-pollution and regular-expression denial-of-service findings attached to the 0.18.5 parser.
+
 ## Verification
 
 - `npm ls next next-auth @auth/prisma-adapter @auth/core --depth=2`
@@ -65,13 +80,22 @@ SEC-DEP-001B verification:
 - `npm test`: 334 test files, 3,681 tests passed
 - `npm run build`: production compilation, type validation, and 374 static pages passed
 
+SEC-DEP-001C verification:
+
+- `npm ci`: passed from the lockfile using the official tarball URL
+- `npm ls xlsx --depth=0`: `xlsx@0.20.3`
+- Focused spreadsheet suite: 5 test files, 58 tests passed
+- `npm audit --omit=dev`: 0 critical, 7 high, 2 moderate
+- `npm test`: 334 test files, 3,681 tests passed
+- `npx tsc --noEmit`: passed
+- `npm run build`: production compilation, type validation, and 374 static pages passed
+
 ## Remaining SEC-DEP-001 work
 
-The Phase 0 release gate remains open because eight high advisories remain:
+The Phase 0 release gate remains open because seven high advisories remain:
 
 - Facturapi and Axios require a major SDK upgrade; isolate it behind contract tests.
 - Prisma, `@prisma/config`, `deepmerge-ts`, and `effect` require a separate controlled major upgrade.
-- `xlsx` has no registry-provided fix; replace it, remove the affected path, or document a reviewed exception with exposure controls.
 - Next.js pins the remaining affected PostCSS release; npm reports a Next.js 16 major as the available remediation.
 
 Moderate findings, including the Anthropic SDK and Next.js/PostCSS chain, remain tracked but do not replace the zero-critical/high Phase 0 requirement.
