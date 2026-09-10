@@ -4,10 +4,14 @@
 //
 // Responde tres preguntas que hoy nadie ha medido, en este orden:
 //
-//   Fase 0 (BD, GRATIS)   ¿Qué tenemos ya, por año, y en qué forma?
-//                         Separa las filas con `rawXml` (CFDI real, descarga
-//                         masiva) de las que no lo tienen (folios que entraron
-//                         por Syntage). Esa es la forma del archivo heredado.
+//   Fase 0 (BD, GRATIS)   ¿Qué tenemos ya, por año — y POR DÓNDE entró?
+//                         Cuidado: `rawXml` NO dice la fuente. La descarga
+//                         masiva y el import de Syntage escriben por la misma
+//                         `importarCfdiXml`. La procedencia se infiere de los
+//                         rastros: SatSyncRequest (pedimos nosotros) vs
+//                         CostEvent SYNTAGE (le pagamos a un tercero). Un año
+//                         con facturas y sin solicitud propia entró por fuera,
+//                         y ése es el que se pierde al cancelar Syntage.
 //
 //   Fase 1 (SAT, CUESTA)  ¿Qué EXISTE? Metadata por AÑO completo → el manifiesto:
 //                         UUID, fecha, monto, contraparte y estatus de cada CFDI
@@ -164,6 +168,62 @@ interface InventarioAnio {
   conXml: number;
   sinXml: number;
   cancelados: number;
+}
+
+/**
+ * ¿De dónde vino el archivo? `Invoice.rawXml` NO lo dice: la descarga masiva
+ * (sat-sync.ts) y el import de Syntage (cron/syntage-cfdis) escriben por la
+ * MISMA función `importarCfdiXml`, y el propio cron lo documenta («el MISMO
+ * camino que la descarga masiva del SAT»). No hay columna de procedencia.
+ *
+ * Lo que sí distingue son los RASTROS de cada vía:
+ *   · SatSyncRequest  → solicitudes NUESTRAS al SAT (por año y tipo).
+ *   · CostEvent SYNTAGE → extracciones que le PAGAMOS a Syntage.
+ * Un año con facturas y sin solicitud propia entró por un tercero; uno con
+ * solicitud propia FINISHED se bajó aquí. No es una prueba por factura, pero
+ * es la evidencia que existe — y es la que decide el riesgo de cancelar
+ * Syntage (lo que sólo ellos tienen se pierde al cortar).
+ */
+interface ProcedenciaAnio {
+  anio: number;
+  solicitudesPropias: number;
+  solicitudesFinished: number;
+}
+
+async function fase0Procedencia(companyId: string): Promise<{
+  porAnio: ProcedenciaAnio[];
+  syntage: Array<{ subtipo: string; n: number; primera: string | null; ultima: string | null }>;
+}> {
+  const [propias, syntage] = await Promise.all([
+    prisma.$queryRaw<Array<{ anio: number; n: bigint; finished: bigint }>>`
+      SELECT "year" AS anio,
+             COUNT(*)                                    AS n,
+             COUNT(*) FILTER (WHERE "status" = 'FINISHED') AS finished
+      FROM "SatSyncRequest"
+      WHERE "companyId" = ${companyId}
+      GROUP BY 1 ORDER BY 1`,
+    prisma.$queryRaw<Array<{ subtipo: string; n: bigint; primera: Date | null; ultima: Date | null }>>`
+      SELECT "subtipo",
+             COUNT(*)            AS n,
+             MIN("occurredAt")   AS primera,
+             MAX("occurredAt")   AS ultima
+      FROM "CostEvent"
+      WHERE "companyId" = ${companyId} AND "categoria" = 'SYNTAGE'
+      GROUP BY 1 ORDER BY 1`,
+  ]);
+  return {
+    porAnio: propias.map((p) => ({
+      anio: p.anio,
+      solicitudesPropias: Number(p.n),
+      solicitudesFinished: Number(p.finished),
+    })),
+    syntage: syntage.map((s) => ({
+      subtipo: s.subtipo,
+      n: Number(s.n),
+      primera: s.primera ? s.primera.toISOString().slice(0, 10) : null,
+      ultima: s.ultima ? s.ultima.toISOString().slice(0, 10) : null,
+    })),
+  };
 }
 
 async function fase0Inventario(companyId: string): Promise<InventarioAnio[]> {
@@ -436,10 +496,40 @@ async function main(): Promise<void> {
     }
     const sinXml = inventario.reduce((s, i) => s + i.sinXml, 0);
     if (sinXml > 0) {
+      console.log(`\n   ${sinXml} filas sin rawXml: folios sin el CFDI original detrás.`);
+    }
+  }
+
+  // ── Procedencia ───────────────────────────────────────────────────────────
+  // OJO: rawXml NO distingue la fuente (ambas vías importan por la misma
+  // función). Lo que distingue son los rastros de cada una.
+  const proc = await fase0Procedencia(company.id);
+  console.log("\n   procedencia — solicitudes NUESTRAS al SAT (SatSyncRequest):");
+  if (proc.porAnio.length === 0) {
+    console.log("     ninguna. TODO el archivo entró por un tercero, no por descarga masiva propia.");
+  } else {
+    console.log("     año   solicitudes   FINISHED");
+    for (const p of proc.porAnio) {
       console.log(
-        `\n   ${sinXml} filas sin rawXml: folios que entraron por un tercero (Syntage),\n` +
-          `   no por descarga masiva. Son el archivo heredado — ver §Fase 2.`,
+        `     ${p.anio}  ${String(p.solicitudesPropias).padStart(11)}  ${String(p.solicitudesFinished).padStart(8)}`,
       );
+    }
+    const conFacturas = new Set(inventario.filter((i) => i.total > 0).map((i) => i.anio));
+    const conSolicitud = new Set(proc.porAnio.filter((p) => p.solicitudesFinished > 0).map((p) => p.anio));
+    const soloTerceros = [...conFacturas].filter((a) => !conSolicitud.has(a)).sort();
+    if (soloTerceros.length > 0) {
+      console.log(
+        `\n     ⚠ años CON facturas y SIN solicitud propia terminada: ${soloTerceros.join(", ")}`,
+      );
+      console.log("       ese tramo lo trajo un tercero — se pierde al cancelar Syntage si el SAT ya no lo sirve.");
+    }
+  }
+  console.log("\n   procedencia — extracciones PAGADAS a Syntage (CostEvent):");
+  if (proc.syntage.length === 0) {
+    console.log("     ninguna. A esta empresa nunca se le pagó una extracción de Syntage.");
+  } else {
+    for (const s of proc.syntage) {
+      console.log(`     ${s.subtipo.padEnd(38)} ${String(s.n).padStart(4)}   ${s.primera} → ${s.ultima}`);
     }
   }
 
@@ -573,6 +663,7 @@ async function main(): Promise<void> {
             aplicar: APLICAR,
             aniosSondeados: anios,
             inventarioPropio: inventario,
+            procedencia: proc,
             solicitudes,
             manifiestoPorPeriodo: reporte.manifiesto.porPeriodo,
             columnasObservadas: reporte.manifiesto.columnasObservadas,
