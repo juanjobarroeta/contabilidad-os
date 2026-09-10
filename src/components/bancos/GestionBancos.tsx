@@ -8,8 +8,11 @@
 // `vista` gatea qué secciones se pintan:
 //   · "cuentas"     — selector de cuentas, tarjeta con saldo/importar/auto,
 //                     resumen de importación y lotes recientes (deshacer).
-//   · "movimientos" — filtros, lista con búsqueda de coincidencias, similares,
-//                     selección en lote. El triage fino, uno por uno.
+//   · "movimientos" — EL ARCHIVO: todos los meses de corrido, con filtros por
+//                     estado y por tipo, el detalle de cada cruce, las
+//                     devoluciones y las comisiones. Busca y muestra; el
+//                     triage (resolver, categorizar, lote) es de la mesa, y
+//                     cada renglón se le entrega con «Resolver en la mesa».
 //   · "historico"   — la misma lista fijada en Conciliados: qué se casó con
 //                     qué, con Desconciliar a la mano.
 //
@@ -23,17 +26,15 @@
 import { Fragment, useEffect, useState, useCallback, useRef } from "react";
 import {
   Landmark, Upload, Sparkles, Loader2, Link2, Search, CheckCircle2,
-  AlertTriangle, ChevronDown, Plus, CheckSquare, X, Building2,
+  AlertTriangle, ChevronDown, Plus, X, Building2,
     ArrowLeftRight, SlidersHorizontal, Pencil, Trash2,
 } from "lucide-react";
+import Link from "next/link";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { RepresentacionImpresa } from "@/components/facturas/RepresentacionImpresa";
 import { Card, Money, Chip } from "@/components/ui";
 import { Alert, RetryButton } from "@/components/ui/feedback";
 import { etiquetaImpuesto } from "@/lib/conciliacion-impuestos";
-import { ResolverMovimiento, type RepSugerido } from "./ResolverMovimiento";
-import { AvisoRepSugerido } from "./AvisoRepSugerido";
-import { AccionesEnLote } from "./AccionesEnLote";
 import { fmtFechaCorta } from "./resolver-tipos";
 
 // ── Types (mirror /api/bancos) ────────────────────────────────────────────────
@@ -174,16 +175,8 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
   // a /facturas?q=<uuid>, una búsqueda que te saca del flujo (pedido del owner).
   const [verFacturaId, setVerFacturaId] = useState<string | null>(null);
   const [busy, setBusy] = useState<"" | "auto" | "upload">("");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [acting, setActing] = useState<string | null>(null);
   const [toast, setToast] = useState("");
-  // Sugerencia post-conciliación: el abono que acabas de conciliar paga una
-  // factura PPD → ofrecer emitir su complemento de pago (REP) de un toque con
-  // el monto y la fecha del propio movimiento.
-  const [repSugerido, setRepSugerido] = useState<RepSugerido | null>(null);
-  // Modo selección + lote
-  const [selectMode, setSelectMode] = useState(false);
-  const [picked, setPicked] = useState<Set<string>>(new Set());
   // Modal de cuenta: null=cerrado · {account:null}=agregar · {account:X}=editar
   const [accountModal, setAccountModal] = useState<{ account: BankAccount | null } | null>(null);
   // Resumen de la última importación cuando hubo filas descartadas o posibles
@@ -240,7 +233,7 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
 
   const loadTxs = useCallback(async () => {
     if (!selectedId) { setTxs([]); return; }
-    setLoading(true); setExpandedId(null);
+    setLoading(true);
     setErrorTxs("");
     try {
       const res = await fetch(`/api/bancos/${selectedId}?status=${filter}&page=1&pageSize=${PAGE_SIZE}${mes ? `&mes=${mes}` : ""}${selectedId === "todas" && activeCompany ? `&companyId=${activeCompany.id}` : ""}`);
@@ -323,8 +316,6 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
   useEffect(() => { loadAccounts(); }, [loadAccounts]);
   useEffect(() => { loadTxs(); }, [loadTxs]);
   useEffect(() => { loadLotes(); }, [loadLotes]);
-  // Salir del modo selección al cambiar de cuenta/filtro/mes.
-  useEffect(() => { setPicked(new Set()); }, [selectedId, filter, mes]);
   // Al cambiar de cuenta, el mes elegido puede no existir en la otra — reset.
   useEffect(() => { setMes(""); }, [selectedId]);
 
@@ -459,10 +450,11 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
     } finally { setBusy(""); e.target.value = ""; }
   }
 
-  /** Abre o cierra el panel del movimiento. La carga de candidatos, CEP y
-   *  búsqueda manual vive en `ResolverMovimiento`, que se monta al abrir. */
-  function expand(tx: BankTx) {
-    setExpandedId((actual) => (actual === tx.id ? null : tx.id));
+  /** El archivo entrega el movimiento a la mesa: su mes en el encabezado y él
+   *  seleccionado, para no volver a buscarlo del otro lado. */
+  function enlaceALaMesa(tx: BankTx) {
+    const [y, m] = String(tx.fecha).slice(0, 7).split("-");
+    return `/bancos?year=${y}&month=${Number(m)}&tx=${tx.id}`;
   }
 
   async function desconciliar(txId: string) {
@@ -521,18 +513,6 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
     if (res.ok) { showToast("Cuenta eliminada"); setSelectedId(null); await loadAccounts(); }
     else showToast("No se pudo eliminar la cuenta");
   }
-
-  // ── Selección en lote ──────────────────────────────────────────────────────
-  function togglePick(id: string) {
-    setPicked((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  }
-  const pickedIds = [...picked];
-  // Neto firmado (un reembolso resta) — coincide con el motor de conciliación.
-  const pickedSum = Math.abs(txs.filter((t) => picked.has(t.id)).reduce((s, t) => s + t.monto, 0));
-  // Cuántos de los palomeados ya están cruzados: categorizarlos rompe el
-  // vínculo, y la barra lo advierte antes de hacerlo.
-  const pickedConciliados = txs.filter((t) => picked.has(t.id) && t.status !== "UNMATCHED").length;
-
 
   function statusChip(tx: BankTx) {
     if (tx.status === "MATCHED") return <Chip status="conciliado" label="Conciliado" icon={<CheckCircle2 className="h-3 w-3" />} />;
@@ -800,13 +780,6 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
               <ChevronDown className={"h-3.5 w-3.5 transition-transform " + (showMore ? "rotate-180" : "")} />
             </button>
             )}
-            <span className="flex-1" />
-            {vista === "movimientos" && (
-            <button onClick={() => { setSelectMode((v) => !v); setPicked(new Set()); }}
-              className={"inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[13.5px] font-semibold " + (selectMode ? "bg-cos-ink text-cos-canvas" : "text-cos-ink-soft hover:bg-cos-paper")}>
-              <CheckSquare className="h-4 w-4" /> {selectMode ? "Salir de selección" : "Seleccionar"}
-            </button>
-            )}
           </div>
           )}
 
@@ -837,7 +810,6 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
             ) : txs.map((m, i) => {
               const matched = m.status === "MATCHED";
               const ignored = m.status === "IGNORED";
-              const isPicked = picked.has(m.id);
               // Separador de mes: solo en la vista "Todos los meses" (con un mes
               // elegido toda la lista es de ese mes y el separador estorba).
               const mesTx = String(m.fecha).slice(0, 7);
@@ -852,13 +824,6 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
                 )}
                 <Card className={"rounded-card p-4 shadow-card " + (matched ? "border-cos-jade-tint bg-cos-jade-tint/40" : "border-cos-line")}>
                   <div className="flex items-start gap-3">
-                    {selectMode && (
-                      <button onClick={() => togglePick(m.id)} className="mt-1 flex-none">
-                        {isPicked
-                          ? <CheckSquare className="h-[18px] w-[18px] text-cos-brand" />
-                          : <span className="block h-[18px] w-[18px] rounded-[5px] border-[1.5px] border-cos-line" />}
-                      </button>
-                    )}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-3">
                         <span className="font-mono text-[12.5px] text-cos-ink-faint">{fmtFechaCorta(m.fecha)}</span>
@@ -981,7 +946,7 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
                               cómo revertirse desde la pantalla, aunque la acción
                               `unmatch` existiera desde siempre. Equivocarse
                               conciliando es normal; no poder corregirlo, no. */}
-                          {!selectMode && (
+                          {(
                             <button onClick={() => desconciliar(m.id)} disabled={acting === m.id}
                               className="mt-2 text-[13px] font-semibold text-cos-red-ink hover:underline disabled:opacity-50">
                               {acting === m.id ? "…" : "Desconciliar"}
@@ -1001,7 +966,7 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
                               <>Este pago fue devuelto el <b>{new Date(m.devolucionPor!.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "short" })}</b> — no cuenta como pagado</>
                             )}
                           </div>
-                          {!selectMode && (
+                          {(
                             <button onClick={() => desvincularDevolucion(m.id)} disabled={acting === m.id}
                               className="mt-2 text-[13px] font-semibold text-cos-red-ink hover:underline disabled:opacity-50">
                               {acting === m.id ? "…" : "Desvincular"}
@@ -1020,7 +985,7 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
                             <span>· {new Date(m.sugerenciaDevolucion.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "short" })}</span>
                             <Money value={m.sugerenciaDevolucion.monto} size={13} muted />
                           </div>
-                          {!selectMode && (
+                          {(
                             <button onClick={() => vincularDevolucion(m.id, m.sugerenciaDevolucion!.origenId)} disabled={acting === m.id}
                               className="mt-1.5 text-[13px] font-bold text-cos-amber-ink underline disabled:opacity-50">
                               {acting === m.id ? "…" : "Vincular como devolución"}
@@ -1035,7 +1000,7 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
                           <div className="flex items-center gap-1.5 text-[13px] text-cos-jade-ink">
                             <Building2 className="h-[15px] w-[15px]" /> Pago de impuestos: <b>{etiquetaImpuesto(m.taxDeclaration.tipo, m.taxDeclaration.periodo)}</b>
                           </div>
-                          {!selectMode && (
+                          {(
                             <button onClick={() => desconciliar(m.id)} disabled={acting === m.id}
                               className="mt-2 text-[13px] font-semibold text-cos-red-ink hover:underline disabled:opacity-50">
                               {acting === m.id ? "…" : "Desconciliar"}
@@ -1061,7 +1026,7 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
                               </li>
                             ))}
                           </ul>
-                          {!selectMode && (
+                          {(
                             <button onClick={() => desconciliar(m.id)} disabled={acting === m.id}
                               className="mt-2 text-[13px] font-semibold text-cos-red-ink hover:underline disabled:opacity-50">
                               {acting === m.id ? "…" : "Desconciliar"}
@@ -1070,7 +1035,7 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
                         </div>
                       )}
 
-                      {ignored && !selectMode && (
+                      {ignored && (
                         <div className="mt-3 border-t border-dashed border-cos-line pt-3">
                           <button onClick={() => reabrir(m.id)} disabled={acting === m.id}
                             className="text-[13px] font-semibold text-cos-brand-ink hover:underline disabled:opacity-50">
@@ -1079,22 +1044,20 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
                         </div>
                       )}
 
-                      {!matched && !ignored && !selectMode && (
+                      {/* RESOLVER ES TRABAJO DE LA MESA. Aquí vivía una segunda
+                          copia del panel: el mismo componente, sí, pero abierto
+                          en otra pantalla — dos sitios donde hacer lo mismo, que
+                          es de donde venían las dos mesas. Este enlace lleva la
+                          mesa AL MES de este movimiento y lo deja seleccionado,
+                          con sus candidatos ya puntuados. */}
+                      {!matched && !ignored && (
                         <div className="mt-3 border-t border-dashed border-cos-line pt-3">
-                          <button onClick={() => expand(m)} className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-cos-brand-ink hover:underline">
-                            <Search className="h-[15px] w-[15px]" /> {expandedId === m.id ? "Ocultar" : "Buscar coincidencia"}
-                          </button>
-                          {expandedId === m.id && (
-                            <ResolverMovimiento
-                              tx={m}
-                              companyId={activeCompany.id}
-                              onCambio={() => Promise.all([loadTxs(), loadAccounts()]).then(() => {})}
-                              onToast={showToast}
-                              onVerFactura={setVerFacturaId}
-                              onRepSugerido={setRepSugerido}
-                              onResuelto={() => setExpandedId(null)}
-                            />
-                          )}
+                          <Link
+                            href={enlaceALaMesa(m)}
+                            className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-cos-brand-ink hover:underline"
+                          >
+                            <Search className="h-[15px] w-[15px]" /> Resolver en la mesa
+                          </Link>
                         </div>
                       )}
                     </div>
@@ -1125,21 +1088,6 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
             </div>
           )}
 
-          {/* Acciones en lote — el MISMO componente que la mesa monta bajo
-              su lista: los tres endpoints de lote viven una sola vez. */}
-          {selectMode && activeCompany && (
-            <AccionesEnLote
-              companyId={activeCompany.id}
-              txIds={pickedIds}
-              suma={pickedSum}
-              conciliados={pickedConciliados}
-              onToast={showToast}
-              onListo={async () => {
-                setPicked(new Set()); setSelectMode(false);
-                await Promise.all([loadTxs(), loadAccounts()]);
-              }}
-            />
-          )}
         </>
       )}
 
@@ -1153,15 +1101,6 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
       )}
 
       {toast && <div className="fixed bottom-6 left-1/2 z-[90] -translate-x-1/2 rounded-xl bg-cos-ink px-5 py-3 text-sm font-medium text-cos-canvas shadow-lg">{toast}</div>}
-      {repSugerido && activeCompany && (
-        <AvisoRepSugerido
-          rep={repSugerido}
-          companyId={activeCompany.id}
-          onCerrar={() => setRepSugerido(null)}
-          onToast={showToast}
-        />
-      )}
-
       {verFacturaId && (
         <RepresentacionImpresa invoiceId={verFacturaId} onClose={() => setVerFacturaId(null)} />
       )}

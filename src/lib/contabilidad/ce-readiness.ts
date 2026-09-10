@@ -218,7 +218,9 @@ export function evaluarChecks(input: ReadinessInputs): ReadinessResult {
         detalle:
           `${input.bankPendingClassificationCount === 1 ? "Queda un movimiento bancario" : `Quedan ${input.bankPendingClassificationCount} movimientos bancarios`} sin conciliar ni ` +
           "categorizar. Mientras no se resuelvan, no entran a la contabilidad y el mes no cierra.",
-        cta: { label: "Clasificar en Bancos", href: "/bancos?tab=movimientos" },
+        // A la MESA, no al archivo: el triage (conciliar y categorizar,
+        // uno o en lote) se hace ahí desde que /bancos abre con ella.
+        cta: { label: "Clasificar en Bancos", href: "/bancos" },
       });
     } else {
       checks.push({
