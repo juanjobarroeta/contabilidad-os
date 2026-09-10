@@ -177,6 +177,14 @@ model Company {
   cePresentadaRevisadaEn DateTime?
   cePresentadaRegistros  Int?
 
+  /// Monitoreo de la descarga de CE del SAT (worker Playwright headless, vista
+  /// operador): última corrida, si salió bien, cuántos períodos nuevos entraron
+  /// y un resumen legible (p.ej. "sinBuzón" o "error: …").
+  ceSatSyncEn     DateTime?
+  ceSatSyncOk     Boolean?
+  ceSatSyncNuevos Int?
+  ceSatSyncInfo   String?
+
   // Selected subscription plan (UI/trial only for now — no billing yet):
   // "BASICO" | "PROFESIONAL" | "DESPACHO".
   plan String?
