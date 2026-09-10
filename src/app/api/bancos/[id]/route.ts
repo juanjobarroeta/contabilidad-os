@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
+import { filtroBusquedaArchivo, mesesDelSelector } from "@/lib/bancos/busqueda-archivo";
 import {
   DEVOLUCION_VENTANA_DIAS,
   elegirOrigenDevolucion,
@@ -11,11 +12,14 @@ import {
 
 type Params = { params: Promise<{ id: string }> };
 
-// GET /api/bancos/[id]?status=UNMATCHED|MATCHED|IGNORED|PENDING&page=1&pageSize=50&mes=YYYY-MM
+// GET /api/bancos/[id]?status=UNMATCHED|MATCHED|IGNORED|PENDING&page=1&pageSize=50&mes=YYYY-MM&q=
 // PENDING = IGNORED rows with notes = "PENDING_MONTHLY_CFDI" (bank fees waiting
 // for the consolidated monthly CFDI from the bank).
 // mes acota movimientos Y conteos a ese mes calendario (UTC) — el workbench de
 // conciliación de ZionX trabaja mes por mes.
+// q busca en concepto, contraparte, RFC, referencia e importe exacto (ver
+// lib/bancos/busqueda-archivo). Acota la lista, su total, los conteos por
+// estado y por etiqueta, y los meses del selector: todo lo que se pinta junto.
 // Autz: sesión web O token de servicio (Bearer) — ZionX espeja los movimientos.
 export async function GET(req: Request, { params }: Params) {
   let user;
@@ -32,6 +36,10 @@ export async function GET(req: Request, { params }: Params) {
   const page     = parseInt(searchParams.get("page") ?? "1");
   const pageSize = parseInt(searchParams.get("pageSize") ?? "50");
   const mes      = searchParams.get("mes") ?? "";
+  // Búsqueda del archivo: concepto, contraparte, RFC, referencia e importe.
+  // Acota la lista Y TODOS los conteos — un chip que cuenta otra cosa que la
+  // lista que acompaña es una cifra que se contradice a la vista.
+  const q        = (searchParams.get("q") ?? "").trim();
   let fechaMes: { gte: Date; lt: Date } | undefined;
   if (/^\d{4}-\d{2}$/.test(mes)) {
     const [y, m] = mes.split("-").map(Number);
@@ -75,9 +83,14 @@ export async function GET(req: Request, { params }: Params) {
   const alcanceCuenta: Prisma.BankTransactionWhereInput = companyIdScope
     ? { bankAccount: { companyId: companyIdScope } }
     : { bankAccountId };
-  const scope: Prisma.BankTransactionWhereInput = fechaMes
-    ? { ...alcanceCuenta, fecha: fechaMes }
-    : { ...alcanceCuenta };
+  const busqueda = filtroBusquedaArchivo(q);
+  const scope: Prisma.BankTransactionWhereInput = {
+    ...alcanceCuenta,
+    ...(fechaMes ? { fecha: fechaMes } : {}),
+    // Va como AND para no chocar con el OR de «Ignorados» (notes null o de
+    // otra etiqueta), que también usa el nivel superior del where.
+    ...(busqueda ? { AND: [busqueda] } : {}),
+  };
   let where: Prisma.BankTransactionWhereInput = { ...scope };
   if (status && status in TAG_TABS) {
     where = { ...scope, status: "IGNORED", notes: TAG_TABS[status] };
@@ -188,10 +201,25 @@ export async function GET(req: Request, { params }: Params) {
     // Meses con movimientos (SIN el filtro de mes — alimenta el selector).
     // fecha se guarda como instante UTC en columna timestamp, así que to_char
     // directo coincide con el corte Date.UTC del filtro `mes` de arriba.
-    prisma.$queryRaw<{ mes: string; n: bigint }[]>`
+    //
+    // Dos caminos a propósito. Sin búsqueda, el histograma completo de la
+    // cuenta lo arma Postgres de un golpe. CON búsqueda hay que aplicarle el
+    // MISMO predicado que a la lista, y escribirlo otra vez en SQL sería una
+    // segunda copia que se separaría de la primera al primer campo nuevo: se
+    // traen las fechas que casan (una búsqueda que devuelve más de 5,000
+    // renglones no es una búsqueda) y se agrupan aquí.
+    busqueda
+      ? prisma.bankTransaction.findMany({
+          where: { ...alcanceCuenta, AND: [busqueda] },
+          select: { fecha: true },
+          take: 5000,
+        })
+      : prisma.$queryRaw<{ mes: string; n: bigint }[]>`
       SELECT to_char(fecha, 'YYYY-MM') AS mes, COUNT(*) AS n
       FROM "BankTransaction"
-      WHERE "bankAccountId" = ${bankAccountId}
+      WHERE ${companyIdScope
+        ? Prisma.sql`"companyId" = ${companyIdScope}`
+        : Prisma.sql`"bankAccountId" = ${bankAccountId}`}
       GROUP BY 1
       ORDER BY 1 DESC`,
   ]);
@@ -265,7 +293,7 @@ export async function GET(req: Request, { params }: Params) {
       sugerenciaDevolucion: sugerenciasDevolucion[t.id] ?? null,
     })),
     pagination: { page, pageSize, total, pages: Math.ceil(total / pageSize) },
-    meses: mesesRaw.map((m) => ({ mes: m.mes, count: Number(m.n) })),
+    meses: mesesDelSelector(mesesRaw),
     statusCounts: {
       UNMATCHED: statusCounts.UNMATCHED ?? 0,
       MATCHED:   statusCounts.MATCHED   ?? 0,
