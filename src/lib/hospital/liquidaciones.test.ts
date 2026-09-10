@@ -5,6 +5,7 @@ import {
   cobrosPendientes,
   comisionEsperada,
   cuadreDe,
+  depositoEsperado,
   sugerirDias,
   validarLiquidacion,
 } from "./liquidaciones";
@@ -44,7 +45,7 @@ describe("cuadreDe() — bruto − contracargos − comisión − IVA = neto", (
 
 describe("comisionEsperada() — la tasa pactada es para verificar, no para calcular", () => {
   it("aplica la tasa y le suma el IVA de la comisión", () => {
-    expect(comisionEsperada(BRUTO, 0.0195)).toEqual({ comision: COMISION, ivaComision: IVA, neto: NETO });
+    expect(comisionEsperada(BRUTO, 0.0195)).toEqual({ comision: COMISION, ivaComision: IVA });
   });
 
   it("débito y AMEX no pagan lo mismo que crédito", () => {
@@ -62,15 +63,34 @@ describe("comisionEsperada() — la tasa pactada es para verificar, no para calc
   });
 });
 
+describe("depositoEsperado() — cómo deposita no es cuánto cobra", () => {
+  it("en bruto: el depósito ES la suma del día, aunque haya tasa pactada", () => {
+    // Haltus: el reporte diario del adquirente cuadra al centavo con lo
+    // depositado y la tasa se cobra en cargos aparte.
+    expect(depositoEsperado(BRUTO, { liquidaEnBruto: true, tasa: 0.0195 })).toBe(BRUTO);
+    expect(depositoEsperado(BRUTO, { liquidaEnBruto: true, tasa: null })).toBe(BRUTO);
+  });
+
+  it("en neto: descuenta la comisión y su IVA", () => {
+    expect(depositoEsperado(BRUTO, { liquidaEnBruto: false, tasa: 0.0195 })).toBe(NETO);
+  });
+
+  it("neto sin tasa capturada no inventa un descuento", () => {
+    expect(depositoEsperado(BRUTO, { liquidaEnBruto: false, tasa: null })).toBe(BRUTO);
+  });
+});
+
 describe("sugerirDias() — propone, no adivina", () => {
   const cobros = [
     { id: "c1", fecha: new Date("2026-09-03T18:00:00Z"), monto: 4000 },
     { id: "c2", fecha: new Date("2026-09-03T20:00:00Z"), monto: 6000 },
     { id: "c3", fecha: new Date("2026-09-04T18:00:00Z"), monto: 2500 },
   ];
+  const NETO_MODO = { liquidaEnBruto: false, tasa: 0.0195 };
+  const BRUTO_MODO = { liquidaEnBruto: true, tasa: 0.0195 };
 
   it("agrupa por día de operación y pone primero el que explica el depósito", () => {
-    const dias = sugerirDias(cobros, NETO, 0.0195);
+    const dias = sugerirDias(cobros, NETO, NETO_MODO);
     expect(dias[0].dia).toBe("2026-09-03");
     expect(dias[0].bruto).toBe(BRUTO);
     expect(dias[0].cobroIds).toEqual(["c1", "c2"]);
@@ -78,15 +98,37 @@ describe("sugerirDias() — propone, no adivina", () => {
   });
 
   it("el día que no explica el depósito queda atrás, con su distancia a la vista", () => {
-    const dias = sugerirDias(cobros, NETO, 0.0195);
+    const dias = sugerirDias(cobros, NETO, NETO_MODO);
     expect(dias[1].dia).toBe("2026-09-04");
     expect(dias[1].distancia).toBeGreaterThan(0);
   });
 
-  it("sin tasa no ordena por cercanía inventada: deja los días como están", () => {
-    const dias = sugerirDias(cobros, NETO, null);
-    expect(dias.every((d) => d.distancia === null)).toBe(true);
-    expect(dias.map((d) => d.dia)).toEqual(["2026-09-03", "2026-09-04"]);
+  it("con adquirente que liquida en bruto, el día correcto queda en cero", () => {
+    // El caso de Haltus: el depósito ES la suma del día, sin comisión de por
+    // medio. Es el mismo lote de $10,000, pero el banco recibe $10,000.
+    const dias = sugerirDias(cobros, BRUTO, BRUTO_MODO);
+    expect(dias[0].dia).toBe("2026-09-03");
+    expect(dias[0].netoEsperado).toBe(BRUTO);
+    expect(dias[0].distancia).toBe(0);
+  });
+
+  it("restarle una comisión que nadie descontó esconde el día correcto", () => {
+    // Es el error que arreglamos: con la tasa aplicada a un adquirente que
+    // deposita en bruto, el día que explica el depósito deja de tener
+    // distancia cero y ya no se distingue del que no lo explica.
+    const conTasa = sugerirDias(cobros, BRUTO, NETO_MODO);
+    expect(conTasa[0].distancia).toBeGreaterThan(0);
+    const enBruto = sugerirDias(cobros, BRUTO, BRUTO_MODO);
+    expect(enBruto[0].distancia).toBe(0);
+  });
+
+  it("a igualdad de distancia manda el día más viejo: es el que ya debió depositarse", () => {
+    const empatados = [
+      { id: "a", fecha: new Date("2026-09-07T18:00:00Z"), monto: 500 },
+      { id: "b", fecha: new Date("2026-09-02T18:00:00Z"), monto: 500 },
+    ];
+    const dias = sugerirDias(empatados, 500, BRUTO_MODO);
+    expect(dias.map((d) => d.dia)).toEqual(["2026-09-02", "2026-09-07"]);
   });
 });
 

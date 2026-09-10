@@ -8288,10 +8288,23 @@ model HospAfiliacion {
   adquirente  String?
   activa      Boolean @default(true)
 
-  /// Tasa de referencia para VERIFICAR la liquidación, nunca para calcularla:
-  /// manda lo que el adquirente efectivamente depositó. Sirve para levantar la
-  /// mano cuando la comisión cobrada no se parece a la pactada.
+  /// Tasa de referencia para VERIFICAR la comisión, nunca para calcularla:
+  /// manda lo que el adquirente efectivamente cobró. Sirve para levantar la
+  /// mano cuando la comisión no se parece a la pactada. Es la tasa pactada en
+  /// los DOS modos de liquidación: en bruto también se cobra, sólo que aparte.
   tasa Decimal? @db.Decimal(6, 4)
+
+  /// CÓMO deposita el adquirente, que es distinto de cuánto cobra:
+  ///
+  ///   true  (bruto) — deposita la suma del día completa y cobra su comisión
+  ///                   en cargos aparte. Lo verificado en Haltus: el reporte
+  ///                   diario del adquirente cuadra al centavo con lo
+  ///                   depositado. Lo que se espera ver en el banco = bruto.
+  ///   false (neto)  — deposita ya descontada la comisión y su IVA.
+  ///
+  /// No se infiere de `tasa`: hay tasa pactada en los dos modos, y adivinarlo
+  /// haría que las sugerencias de lote busquen un depósito que no existe.
+  liquidaEnBruto Boolean @default(true)
 
   company       Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
   cobros        HospCobro[]

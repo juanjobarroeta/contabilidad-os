@@ -1,12 +1,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // La liquidación del adquirente: el lote que el banco sí ve.
 //
-// El adquirente no deposita cobro por cobro. Junta las operaciones de un día,
-// le resta su comisión más el IVA de esa comisión, le descuenta los
-// contracargos que hayan caído, y deposita UN neto dos días hábiles después.
-// Por eso el estado de cuenta del hospital tiene un movimiento de $312,480.55
-// que no se parece a ninguna factura: es la suma de treinta vouchers menos lo
-// que se quedó la terminal.
+// El adquirente no deposita cobro por cobro. Junta las operaciones de un día
+// y deposita el lote dos días hábiles después. Por eso el estado de cuenta del
+// hospital tiene un movimiento de $312,480.55 que no se parece a ninguna
+// factura: es la suma de treinta vouchers.
 //
 // La identidad que tiene que cerrar es una sola:
 //
@@ -15,6 +13,15 @@
 // y el neto es el movimiento bancario. Cuando cierra, treinta cobros quedan
 // explicados de un golpe; cuando no cierra, la diferencia tiene nombre y monto
 // en vez de ser «pendiente de aclarar».
+//
+// CÓMO DEPOSITA NO ES CUÁNTO COBRA, y confundirlos manda a buscar un depósito
+// que no existe. Hay adquirentes que descuentan la comisión antes de depositar
+// (entonces comisión > 0 en el lote) y otros que depositan el BRUTO del día y
+// cobran su tasa en cargos aparte (comisión = 0 aquí, y el gasto entra por la
+// conciliación como cualquier comisión bancaria). En Haltus está VERIFICADO
+// que es lo segundo: el reporte diario del adquirente cuadra al centavo con lo
+// depositado. Lo dice `HospAfiliacion.liquidaEnBruto`, no la tasa: hay tasa
+// pactada en los dos modos.
 //
 // LO QUE ESTE MÓDULO ASIENTA Y LO QUE NO. El movimiento bancario conciliado en
 // el hub carga BANCOS contra FONDOS_EN_TRANSITO por el NETO. Eso deja en
@@ -78,12 +85,38 @@ export function cuadreDe(c: CifrasLiquidacion): Cuadre {
   };
 }
 
-/** La comisión que TENDRÍA que cobrar el adquirente según la tasa pactada. */
-export function comisionEsperada(bruto: number, tasa: number | null | undefined): { comision: number; ivaComision: number; neto: number } | null {
+/**
+ * La comisión que TENDRÍA que cobrar el adquirente según la tasa pactada, la
+ * cobre descontándola del depósito o en un cargo aparte. Sirve para verificar,
+ * no para calcular: manda lo que efectivamente cobró. Null sin tasa capturada
+ * — sin tasa no hay nada contra qué comparar, y no se inventa una.
+ */
+export function comisionEsperada(bruto: number, tasa: number | null | undefined): { comision: number; ivaComision: number } | null {
   if (tasa == null || !(tasa > 0)) return null;
   const comision = r2(bruto * Number(tasa));
-  const ivaComision = r2(comision * IVA_COMISION);
-  return { comision, ivaComision, neto: r2(bruto - comision - ivaComision) };
+  return { comision, ivaComision: r2(comision * IVA_COMISION) };
+}
+
+/** Cómo deposita el adquirente de una afiliación. */
+export interface Adquirente {
+  liquidaEnBruto: boolean;
+  tasa: number | null;
+}
+
+/**
+ * Lo que TIENE que aparecer en el banco por un bruto dado. Es la otra
+ * pregunta, y la que ordena las sugerencias de lote:
+ *
+ *   · liquidaEnBruto → el depósito ES el bruto; la comisión va por su lado.
+ *   · neto           → el depósito trae descontada la comisión y su IVA.
+ *
+ * Un adquirente que deposita en bruto y una tasa capturada para verificarla
+ * conviven sin problema: la tasa no entra aquí.
+ */
+export function depositoEsperado(bruto: number, a: Adquirente): number {
+  if (a.liquidaEnBruto) return r2(bruto);
+  const c = comisionEsperada(bruto, a.tasa);
+  return c ? r2(bruto - c.comision - c.ivaComision) : r2(bruto);
 }
 
 // ─── Sugerir el lote ─────────────────────────────────────────────────────────
@@ -93,10 +126,10 @@ export interface DiaSugerido {
   dia: string;
   cobroIds: string[];
   bruto: number;
-  /** Neto que se esperaría con la tasa pactada; null si la afiliación no la trae. */
-  netoEsperado: number | null;
-  /** |netoEsperado − neto del banco|; null cuando no hay tasa con qué estimar. */
-  distancia: number | null;
+  /** Lo que este día tendría que haber depositado, según cómo liquida el adquirente. */
+  netoEsperado: number;
+  /** |netoEsperado − depósito del banco|. Cero es el día que lo explica. */
+  distancia: number;
 }
 
 type CobroPendiente = {
@@ -107,7 +140,11 @@ type CobroPendiente = {
 
 /**
  * Agrupa los cobros pendientes por día de operación y los ordena por qué tan
- * cerca queda su neto estimado del depósito que llegó al banco.
+ * cerca queda lo que ese día debió depositar del depósito que llegó al banco.
+ *
+ * Con un adquirente que liquida en bruto la distancia del día correcto es
+ * CERO, porque el depósito es la suma exacta de los vouchers. Con uno que
+ * liquida neto es cero salvo el redondeo del procesador.
  *
  * Es una SUGERENCIA, no una asignación: la liquidación la confirma una
  * persona. Es la misma regla que la conciliación bancaria del hub —lo que no
@@ -115,7 +152,7 @@ type CobroPendiente = {
  * importa el doble, porque un lote mal armado marca como depositados cobros
  * que el adquirente todavía no paga.
  */
-export function sugerirDias(cobros: CobroPendiente[], netoBanco: number, tasa: number | null | undefined): DiaSugerido[] {
+export function sugerirDias(cobros: CobroPendiente[], netoBanco: number, adquirente: Adquirente): DiaSugerido[] {
   const porDia = new Map<string, CobroPendiente[]>();
   for (const c of cobros) {
     const dia = claveDia(c.fecha);
@@ -124,22 +161,19 @@ export function sugerirDias(cobros: CobroPendiente[], netoBanco: number, tasa: n
 
   const dias: DiaSugerido[] = [...porDia.entries()].map(([dia, delDia]) => {
     const bruto = r2(delDia.reduce((s, c) => s + Number(c.monto), 0));
-    const esperado = comisionEsperada(bruto, tasa);
+    const netoEsperado = depositoEsperado(bruto, adquirente);
     return {
       dia,
       cobroIds: delDia.map((c) => c.id),
       bruto,
-      netoEsperado: esperado?.neto ?? null,
-      distancia: esperado ? r2(Math.abs(esperado.neto - r2(netoBanco))) : null,
+      netoEsperado,
+      distancia: r2(Math.abs(netoEsperado - r2(netoBanco))),
     };
   });
 
-  return dias.sort((a, b) => {
-    if (a.distancia == null && b.distancia == null) return a.dia.localeCompare(b.dia);
-    if (a.distancia == null) return 1;
-    if (b.distancia == null) return -1;
-    return a.distancia - b.distancia;
-  });
+  // Por cercanía y, a igualdad, por día: el más viejo primero, que es el que
+  // el adquirente ya debería haber depositado.
+  return dias.sort((a, b) => a.distancia - b.distancia || a.dia.localeCompare(b.dia));
 }
 
 /**

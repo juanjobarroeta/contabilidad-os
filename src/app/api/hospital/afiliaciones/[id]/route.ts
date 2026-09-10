@@ -18,6 +18,7 @@ const schema = z.object({
   descripcion: z.string().trim().max(120).nullable().optional(),
   adquirente: z.string().trim().max(60).nullable().optional(),
   tasa: z.number().min(0).max(0.2).nullable().optional(),
+  liquidaEnBruto: z.boolean().optional(),
   activa: z.boolean().optional(),
 });
 
