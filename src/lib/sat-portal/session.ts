@@ -1,27 +1,30 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Sesión autenticada al portal del SAT — el orquestador de auth.ts contra la
-// red real. Toma la FIEL de una empresa, resuelve el reto-respuesta y deja una
-// sesión (cookie) con la que las capas de declaraciones y CE piden sus páginas.
+// Sesión autenticada al portal del SAT — orquesta auth.ts contra el flujo REAL
+// del IdP (loginc, NetIQ Access Manager), mapeado con captura (HAR de
+// recon-sat-portal PORTAL=1, 2026-09). El login IDP-initiated deja una sesión
+// viva en loginc; las apps (CE, CSF…) federan contra ella. Flujo confirmado:
 //
-// LO QUE FALTA CONFIRMAR CON UNA CAPTURA. Las URLs de abajo son las públicas y
-// conocidas del portal, pero el flujo exacto —cuántos redirects, qué campos
-// extra pide el formulario, cómo se llama la cookie de sesión— sólo se fija con
-// UNA captura real (ver docs/sat-portal-captura.md). Hasta tenerla, iniciar
-// sesión lanza SatPortalCapturaPendiente en vez de adivinar contra el portal
-// vivo con la credencial de un cliente. La firma (auth.ts) ya está probada y no
-// cambia con la captura.
+//   GET  /nidp/jsp/main.jsp?id=FormCertiSAT   → JSESSIONID inicial (página CIEC)
+//   GET  /nidp/app/login?id=XACCertiSAT       → el certform e.firma (guid, urlApplet)
+//   POST /nidp/app/login?id=XACCertiSAT       → sobre firmado → JSESSIONID autenticado
+//   GET  /nidp/portal                         → portal autenticado (confirma la sesión)
+//
+// La firma (auth.ts) está probada offline y VERIFICADA contra la firma real
+// capturada (scripts/sat-login-verify.ts). El cert NO se manda: el SAT lo busca
+// por el RFC/serie que van dentro del token.
 // ─────────────────────────────────────────────────────────────────────────────
 import {
   extraerReto,
   firmarReto,
   cuerpoDeLogin,
-  extraerCookieSesion,
   SatPortalAuthError,
   type FirmanteFiel,
 } from "./auth";
 
-/** URL de arranque del login con e.firma. A confirmar con captura. */
-const URL_LOGIN_FIEL = "https://loginc.mat.sat.gob.mx/nidp/app/login?id=fiel";
+const LOGINC = "https://loginc.mat.sat.gob.mx";
+const URL_CIEC = `${LOGINC}/nidp/jsp/main.jsp?id=FormCertiSAT&sid=0`;
+const URL_CERTFORM = `${LOGINC}/nidp/app/login?id=XACCertiSAT&sid=0&option=credential`;
+const URL_PORTAL = `${LOGINC}/nidp/portal`;
 
 export interface SesionSat {
   /** Header `Cookie` para las peticiones autenticadas siguientes. */
@@ -34,66 +37,86 @@ export type FetchFn = (url: string, init?: RequestInit) => Promise<Response>;
 
 export interface AbrirSesionOpts {
   fetchFn?: FetchFn;
-  /** El firmante ya cargado (getFielForCompany). */
+  /** El firmante ya cargado (getFirmanteForCompany). */
   firmante: FirmanteFiel;
-  urlLogin?: string;
+  /** Log opcional de diagnóstico paso a paso. */
+  log?: (msg: string) => void;
 }
 
 /**
- * Abre una sesión: GET a la página de login → extrae el reto → lo firma →
- * POST del sobre → lee la cookie. Cada paso falla ruidosamente: un 200 sin
- * cookie es un login rechazado, no una sesión.
+ * Abre una sesión en loginc con la e.firma y devuelve la cookie autenticada.
+ * Cada paso falla ruidosamente: si el portal final aún pide login, la sesión no
+ * se estableció (login rechazado — ¿FIEL revocada, o cambió el formulario?).
  */
 export async function abrirSesionSat(opts: AbrirSesionOpts): Promise<SesionSat> {
-  if (!CAPTURA_LISTA) {
-    throw new SatPortalCapturaPendiente();
-  }
   const fetchFn = opts.fetchFn ?? (globalThis.fetch as FetchFn);
-  const urlLogin = opts.urlLogin ?? URL_LOGIN_FIEL;
+  const log = opts.log ?? (() => {});
+  const jar = new Map<string, string>();
 
-  const pagina = await fetchFn(urlLogin, { headers: { Accept: "text/html" } });
-  const html = await pagina.text();
-  const reto = extraerReto(html, urlLogin);
+  // 1. Página inicial → JSESSIONID.
+  const r0 = await fetchFn(URL_CIEC, { headers: { Accept: "text/html" }, redirect: "manual" });
+  guardarCookies(jar, r0);
+  log(`1) CIEC ${r0.status} · cookies=${jar.size}`);
 
+  // 2. Formulario e.firma (XACCertiSAT) → el reto (guid, urlApplet).
+  const rForm = await fetchFn(URL_CERTFORM, {
+    headers: { Accept: "text/html", Cookie: headerCookie(jar) },
+    redirect: "manual",
+  });
+  guardarCookies(jar, rForm);
+  const html = await rForm.text();
+  const reto = extraerReto(html, URL_CERTFORM);
+  log(`2) certform ${rForm.status} · guid=${reto.guid.slice(0, 12)}…`);
+
+  // 3. Firmar el reto (guid|RFC|serie, RSA-SHA1) y postear el sobre.
   const sobre = firmarReto(reto, opts.firmante);
-  const resLogin = await fetchFn(reto.actionUrl, {
+  const rLogin = await fetchFn(reto.actionUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
       Accept: "text/html",
-      Cookie: cookieDe(pagina),
+      Cookie: headerCookie(jar),
     },
-    body: cuerpoDeLogin(sobre),
+    body: cuerpoDeLogin(reto, sobre),
     redirect: "manual",
   });
+  guardarCookies(jar, rLogin);
+  log(`3) POST login ${rLogin.status} · cookies=${jar.size}`);
 
-  const cookie = extraerCookieSesion(setCookieDe(resLogin));
-  if (!cookie) {
+  // 4. Confirmar: el portal autenticado NO debe volver a servir el login.
+  const rPortal = await fetchFn(URL_PORTAL, {
+    headers: { Accept: "text/html", Cookie: headerCookie(jar) },
+    redirect: "manual",
+  });
+  guardarCookies(jar, rPortal);
+  const portalHtml = rPortal.status === 200 ? await rPortal.text() : "";
+  const cookie = headerCookie(jar);
+  const autenticado =
+    rPortal.status === 200 &&
+    !/id=FormCertiSAT|Ecom_User_ID|buttonFiel|iniciar sesi/i.test(portalHtml);
+  log(`4) portal ${rPortal.status} · autenticado=${autenticado}`);
+
+  if (!cookie || !autenticado) {
     throw new SatPortalAuthError(
-      `El SAT no entregó sesión para RFC ${opts.firmante.rfc()}: login rechazado ` +
-        `(¿FIEL revocada, o cambió el formulario del portal?).`,
+      `El SAT no dejó sesión viva para RFC ${opts.firmante.rfc()}: el portal sigue ` +
+        `pidiendo login (¿FIEL revocada/expirada, o cambió el certform?).`,
     );
   }
   return { cookie, rfc: opts.firmante.rfc() };
 }
 
-// Interruptor: se pone en true cuando la captura confirmó URLs y campos. Hasta
-// entonces la sesión no toca el portal — sólo la firma, que ya está probada,
-// corre en las pruebas.
-const CAPTURA_LISTA = false;
-
-export class SatPortalCapturaPendiente extends Error {
-  constructor() {
-    super(
-      "La automatización del portal SAT necesita una captura del flujo real " +
-        "de login antes de correr en vivo. Ver docs/sat-portal-captura.md.",
-    );
-    this.name = "SatPortalCapturaPendiente";
+function guardarCookies(jar: Map<string, string>, res: Response): void {
+  const sc = setCookieDe(res);
+  if (!sc) return;
+  for (const c of sc) {
+    const par = c.split(";")[0];
+    const eq = par.indexOf("=");
+    if (eq > 0) jar.set(par.slice(0, eq).trim(), par.slice(eq + 1).trim());
   }
 }
 
-function cookieDe(res: Response): string {
-  return extraerCookieSesion(setCookieDe(res)) ?? "";
+function headerCookie(jar: Map<string, string>): string {
+  return [...jar.entries()].map(([k, v]) => `${k}=${v}`).join("; ");
 }
 
 /** `getSetCookie` cuando existe (Node 18.14+/undici); si no, el header simple. */

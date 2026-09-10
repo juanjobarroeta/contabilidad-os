@@ -9,10 +9,9 @@ import {
   type FirmanteFiel,
 } from "./auth";
 
-// Un firmante de PRUEBA con crypto de Node — nunca una FIEL real. Firma de
-// verdad con una llave RSA generada en memoria, así que el manejo binario→base64
-// del sobre se ejerce contra una firma auténtica, offline y sin dependencias.
-// El certificado y la serie son fijos: su ENCODE es lo que probamos, no su RSA.
+// Firmante de PRUEBA con crypto de Node — nunca una FIEL real. Firma con una RSA
+// generada en memoria, así que el ENCODE del token se ejerce contra una firma
+// auténtica, offline. El cert/serie/vigencia son fijos: probamos su empaque.
 class FirmanteDePrueba implements FirmanteFiel {
   readonly priv: KeyObject;
   readonly pub: KeyObject;
@@ -24,14 +23,16 @@ class FirmanteDePrueba implements FirmanteFiel {
   sign(data: string, algorithm = "sha1"): string {
     const s = createSign(algorithm);
     s.update(data, "binary");
-    // Firma en cadena binaria — el mismo formato que devuelve Credential.sign().
     return s.sign(this.priv, "binary");
   }
-  rfc() { return "AAA010101AAA"; }
+  rfc() {
+    return "AAA010101AAA";
+  }
   certificate() {
     return {
       pemAsOneLine: () => "MIIDdummyCERToneLineBase64Content",
       serialNumber: () => ({ decimal: () => "30001000000400000123" }),
+      validTo: () => "290828004113Z",
     };
   }
   verifica(data: string, firmaBinaria: string, algorithm = "sha1"): boolean {
@@ -41,87 +42,85 @@ class FirmanteDePrueba implements FirmanteFiel {
   }
 }
 
+// El certform REAL (capturado en el HAR): guid + urlApplet + credentialsRequired
+// + ks + los campos del applet vacíos. El cliente rellena token y fert.
+const CERTFORM = `
+  <form role="form" method="post"></form>
+  <form name="certform" id="certform" method="post">
+    <input type="text" name="txtCertificate" value=""/>
+    <input type="password" name="privateKeyPassword"/>
+    <input type="hidden" name="token" value=""/>
+    <input type="hidden" name="credentialsRequired" value="CERT"/>
+    <input type="hidden" name="guid" value="7be082aa-2c44-468f-9e0c-e117f278abbe"/>
+    <input type="hidden" name="ks" value="null"/>
+    <input type="hidden" name="urlApplet" value="https://login.siat.sat.gob.mx/nidp/app/applet"/>
+    <input type="hidden" name="fert" value=""/>
+  </form>`;
+
 describe("extraerReto()", () => {
-  const base = "https://login.siat.sat.gob.mx/nidp/wsfed/ep";
+  const base = "https://login.siat.sat.gob.mx/nidp/idff/sso?id=fiel_Aviso";
 
-  it("saca el token y la action del formulario, por nombre no por posición", () => {
-    const html = `
-      <form method="post" action="/nidp/app/login?sid=0">
-        <input type="hidden" name="otraCosa" value="ruido"/>
-        <input type="hidden" name="tokenValue" value="RETO-ABC-123"/>
-      </form>`;
-    const r = extraerReto(html, base);
-    expect(r.token).toBe("RETO-ABC-123");
-    expect(r.actionUrl).toBe("https://login.siat.sat.gob.mx/nidp/app/login?sid=0");
+  it("saca guid, urlApplet, credentialsRequired y ks del certform, por nombre", () => {
+    const r = extraerReto(CERTFORM, base);
+    expect(r.guid).toBe("7be082aa-2c44-468f-9e0c-e117f278abbe");
+    expect(r.urlApplet).toContain("/nidp/app/applet");
+    expect(r.credentialsRequired).toBe("CERT");
+    expect(r.ks).toBe("null");
+    expect(r.actionUrl).toBe(base); // certform sin action → postea a su propia URL
   });
 
-  it("acepta `token` como nombre alterno del campo", () => {
-    const html = `<form action="x"><input name="token" value="Z9"/></form>`;
-    expect(extraerReto(html, base).token).toBe("Z9");
-  });
-
-  it("sin action, postea a la misma URL", () => {
-    const html = `<form><input name="tokenValue" value="Q"/></form>`;
-    expect(extraerReto(html, base).actionUrl).toBe(base);
-  });
-
-  it("falla RUIDOSAMENTE si no hay reto — un token vacío firmado miente", () => {
+  it("falla RUIDOSAMENTE si no hay guid — sin él no hay reto que firmar", () => {
     expect(() => extraerReto("<form></form>", base)).toThrow(SatPortalAuthError);
   });
 });
 
-describe("firmarReto()", () => {
+describe("firmarReto() — la receta verificada contra la captura real", () => {
   let f: FirmanteDePrueba;
-  beforeAll(() => { f = new FirmanteDePrueba(); });
+  beforeAll(() => {
+    f = new FirmanteDePrueba();
+  });
 
-  it("la firma del sobre verifica contra la llave que la produjo", () => {
-    const reto = { token: "RETO-XYZ", actionUrl: "https://x" };
+  it("token = base64( base64(guid|RFC|serie) # base64(base64(RSA-SHA1)) ), y la firma verifica", () => {
+    const reto = extraerReto(CERTFORM, "x");
     const sobre = firmarReto(reto, f);
-    const firmaBinaria = Buffer.from(sobre.firmaBase64, "base64").toString("binary");
-    expect(f.verifica(reto.token, firmaBinaria, "sha1")).toBe(true);
+    // Desanidar el token igual que lo haría el portal.
+    const inner = Buffer.from(sobre.token, "base64").toString("latin1");
+    const [partA, partB] = inner.split("#");
+    const desafio = Buffer.from(partA, "base64").toString("utf8");
+    expect(desafio).toBe("7be082aa-2c44-468f-9e0c-e117f278abbe|AAA010101AAA|30001000000400000123");
+    // partB es DOBLE base64 → firma de 256 bytes (RSA 2048).
+    const firmaBin = Buffer.from(Buffer.from(partB, "base64").toString("latin1"), "base64").toString("binary");
+    expect(Buffer.from(firmaBin, "binary").length).toBe(256);
+    expect(f.verifica(desafio, firmaBin, "sha1")).toBe(true);
+    // Es sobre el DESAFÍO y con SHA-1, no SHA-256.
+    expect(f.verifica(desafio, firmaBin, "sha256")).toBe(false);
   });
 
-  it("el sobre lleva certificado en una línea, serie decimal y RFC del titular", () => {
-    const sobre = firmarReto({ token: "T", actionUrl: "x" }, f);
-    expect(sobre.certificadoBase64).not.toContain("BEGIN CERTIFICATE");
-    expect(sobre.numeroSerie).toMatch(/^\d+$/);
-    expect(sobre.rfc).toBe("AAA010101AAA");
-  });
-
-  it("firmar el mismo token dos veces da la misma firma (RSA PKCS#1 determinista)", () => {
-    const a = firmarReto({ token: "IGUAL", actionUrl: "x" }, f);
-    const b = firmarReto({ token: "IGUAL", actionUrl: "x" }, f);
-    expect(a.firmaBase64).toBe(b.firmaBase64);
-  });
-
-  it("una firma SHA-256 no verifica como SHA-1: el algoritmo importa", () => {
-    const sobre = firmarReto({ token: "T", actionUrl: "x" }, f, "sha256");
-    const bin = Buffer.from(sobre.firmaBase64, "base64").toString("binary");
-    expect(f.verifica("T", bin, "sha256")).toBe(true);
-    expect(f.verifica("T", bin, "sha1")).toBe(false);
+  it("fert = la vigencia del cert (el campo que espera el POST)", () => {
+    const sobre = firmarReto(extraerReto(CERTFORM, "x"), f);
+    expect(sobre.fert).toBe("290828004113Z");
   });
 });
 
 describe("cuerpoDeLogin()", () => {
-  it("arma un form-urlencoded con los campos que espera el SAT", () => {
-    const cuerpo = cuerpoDeLogin({
-      token: "T T", firmaBase64: "Zg==", certificadoBase64: "Q0VSVA==",
-      numeroSerie: "12345", rfc: "AAA010101AAA",
-    });
-    const p = new URLSearchParams(cuerpo);
-    expect(p.get("tokenValue")).toBe("T T");
-    expect(p.get("firma")).toBe("Zg==");
-    expect(p.get("numeroSerie")).toBe("12345");
-    expect(p.get("rfc")).toBe("AAA010101AAA");
+  it("arma el form-urlencoded del certform; el certificado NO va", () => {
+    const reto = extraerReto(CERTFORM, "x");
+    const sobre = firmarReto(reto, new FirmanteDePrueba());
+    const p = new URLSearchParams(cuerpoDeLogin(reto, sobre));
+    expect(p.get("token")).toBe(sobre.token);
+    expect(p.get("credentialsRequired")).toBe("CERT");
+    expect(p.get("guid")).toBe(reto.guid);
+    expect(p.get("ks")).toBe("null");
+    expect(p.get("urlApplet")).toContain("/nidp/app/applet");
+    expect(p.get("fert")).toBe(sobre.fert);
+    expect(p.has("certificado")).toBe(false);
+    expect(p.has("firma")).toBe(false);
   });
 });
 
 describe("extraerCookieSesion()", () => {
   it("une los pares nombre=valor de varios set-cookie en un header Cookie", () => {
-    const c = extraerCookieSesion([
-      "JSESSIONID=abc123; Path=/; HttpOnly",
-      "IPCZQX=deadbeef; Secure",
-    ]);
+    const c = extraerCookieSesion(["JSESSIONID=abc123; Path=/; HttpOnly", "IPCZQX=deadbeef; Secure"]);
     expect(c).toBe("JSESSIONID=abc123; IPCZQX=deadbeef");
   });
 
