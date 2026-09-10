@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { resumenNegocio } from "./negocio";
+import { resolverEstadoCierre, type EstadoContableCierre } from "./estado-canonico";
 import type { CierreEvaluado, PasoConDecision } from "./evaluar";
 
 function paso(over: Partial<PasoConDecision>): PasoConDecision {
@@ -24,7 +25,7 @@ function paso(over: Partial<PasoConDecision>): PasoConDecision {
   } as PasoConDecision;
 }
 
-function cierre(pasos: PasoConDecision[]): CierreEvaluado {
+function cierre(pasos: PasoConDecision[], accountingStatus: EstadoContableCierre | null = "DRAFT"): CierreEvaluado {
   return {
     companyId: "c1",
     year: 2026,
@@ -34,6 +35,8 @@ function cierre(pasos: PasoConDecision[]): CierreEvaluado {
     responsableUserId: null,
     conversationId: null,
     cerradoAt: null,
+    accountingStatus,
+    estado: resolverEstadoCierre({ estadoContable: accountingStatus, pasos }),
     pasos,
     resumen: { total: pasos.length, aplican: pasos.length, listos: 0, atencion: 0, bloquean: 0, confirmados: 0, completo: false },
   };
@@ -61,6 +64,26 @@ describe("resumenNegocio — el mes contado al dueño", () => {
     expect(r.detienen).toBe(1);
   });
 
+  it("no dice al corriente si la declaración existe pero apareció un bloqueo", () => {
+    const r = resumenNegocio(
+      cierre([
+        paso({
+          clave: "declaracion",
+          estadoCalculado: "listo",
+          senales: [{ clave: "fx:declaracion-periodo", estado: "ok", resumen: "Presentada" }],
+        }),
+        paso({
+          estadoCalculado: "bloquea",
+          detalle: "Sin estado de cuenta",
+          senales: [{ clave: "x:cuentas_sin_estado", estado: "error", resumen: "Sin estado de cuenta" }],
+        }),
+      ], "CLOSED")
+    );
+    expect(r.declarado).toBe(true);
+    expect(r.alDia).toBe(false);
+    expect(r.detienen).toBe(1);
+  });
+
   it("no inventa que ya se declaró cuando el paso no tiene señales", () => {
     const r = resumenNegocio(cierre([paso({ clave: "declaracion", senales: [] })]));
     expect(r.declarado).toBe(false);
@@ -79,7 +102,7 @@ describe("resumenNegocio — el mes contado al dueño", () => {
     expect(r.aPagar).toBeNull();
   });
 
-  it("no cuenta como pendiente un paso que espera a otro", () => {
+  it("falla cerrado si recibe una espera sin el bloqueo que la originó", () => {
     const r = resumenNegocio(
       cierre([
         paso({
@@ -88,6 +111,7 @@ describe("resumenNegocio — el mes contado al dueño", () => {
         }),
       ])
     );
-    expect(r.alDia).toBe(true);
+    expect(r.alDia).toBe(false);
+    expect(r.detienen).toBe(1);
   });
 });

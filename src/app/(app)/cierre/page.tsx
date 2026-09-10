@@ -117,11 +117,12 @@ function CierrePageInner() {
     () => (cierre ? estadoDelPeriodo(cierre) : { declarado: false, detalle: null, pagado: false }),
     [cierre]
   );
+  const periodoCerrado = cierre?.estado.cerrado ?? false;
   const accion: AccionCierre | null = useMemo(() => {
-    if (periodo.declarado && !elegida) return null;
+    if (periodoCerrado && !elegida) return null;
     if (acciones.length === 0) return null;
     return acciones.find((a) => a.clave === elegida) ?? acciones.find((a) => a.paso === pasoElegido) ?? acciones[0];
-  }, [acciones, elegida, pasoElegido, periodo.declarado]);
+  }, [acciones, elegida, pasoElegido, periodoCerrado]);
 
   // El paso activo es el de la acción; sin acciones, el primero sin decidir.
   const pasoActivo: PasoConDecision | null = useMemo(() => {
@@ -327,7 +328,10 @@ function CierrePageInner() {
   }
 
   const decidido = pasoActivo?.estado === "CONFIRMADO" || pasoActivo?.estado === "OMITIDO";
-  const bloqueado = pasoActivo?.estadoCalculado === "bloquea" || pasoActivo?.estadoCalculado === "espera";
+  const bloqueado =
+    pasoActivo?.estadoCalculado === "bloquea" ||
+    pasoActivo?.estadoCalculado === "espera" ||
+    pasoActivo?.estadoCalculado === "sin_datos";
   const puedeConfirmar = pasoActivo?.requiereConfirmacion && !bloqueado && pasoActivo?.estadoCalculado !== "no_aplica";
   const pct = avance.total > 0 ? Math.round((avance.listos / avance.total) * 100) : 0;
   const siguen = acciones.filter((a) => a.clave !== accion?.clave);
@@ -364,7 +368,7 @@ function CierrePageInner() {
           {/* Avance: una sola barra, sin números repetidos. */}
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-cos-paper">
             <div
-              className={cn("h-full rounded-full transition-all", periodo.declarado ? "bg-cos-jade-ink" : "bg-cos-brand")}
+              className={cn("h-full rounded-full transition-all", periodoCerrado ? "bg-cos-jade-ink" : "bg-cos-brand")}
               style={{ width: `${pct}%` }}
             />
           </div>
@@ -453,7 +457,7 @@ function CierrePageInner() {
                   )}
                 </div>
               </>
-            ) : periodo.declarado ? (
+            ) : periodoCerrado ? (
               <>
                 <p className="font-mono text-[10.5px] uppercase tracking-wide text-cos-jade-ink">Mes cerrado</p>
                 <h2 className="mt-1 flex items-start gap-2 text-[17px] font-semibold leading-snug text-cos-ink sm:text-[19px]">
@@ -466,10 +470,21 @@ function CierrePageInner() {
                 </p>
                 {acciones.length > 0 && (
                   <p className="mt-2 text-[12.5px] text-cos-amber-ink">
-                    Quedaron {acciones.length} observacion{acciones.length === 1 ? "" : "es"} de contabilidad. No detienen
-                    nada: el mes ya está presentado.
+                    Quedaron {acciones.length} observacion{acciones.length === 1 ? "" : "es"} no bloqueante
+                    {acciones.length === 1 ? "" : "s"}. La evidencia vigente conserva el cierre.
                   </p>
                 )}
+              </>
+            ) : cierre.estado.fase === "BLOQUEADO" ? (
+              <>
+                <p className="font-mono text-[10.5px] uppercase tracking-wide text-cos-red-ink">Cierre bloqueado</p>
+                <h2 className="mt-1 flex items-start gap-2 text-[17px] font-semibold leading-snug text-cos-ink sm:text-[19px]">
+                  <Ban className="mt-0.5 h-5 w-5 shrink-0 text-cos-red-ink" />
+                  No hay evidencia suficiente para cerrar este mes.
+                </h2>
+                <p className="mt-1.5 text-[13.5px] leading-relaxed text-cos-ink-soft">
+                  {cierre.estado.bloqueos[0]?.detalle ?? "Vuelve a evaluar el periodo antes de continuar."}
+                </p>
               </>
             ) : (
               <>
@@ -478,7 +493,7 @@ function CierrePageInner() {
                 </p>
                 <h2 className="mt-1 text-[17px] font-semibold leading-snug text-cos-ink sm:text-[19px]">
                   {cierre.resumen.completo
-                    ? "El mes está cerrado: nada pendiente."
+                    ? "La revisión está completa: el mes está listo."
                     : decidido
                       ? "Esta parte ya quedó revisada."
                       : "Nada pendiente aquí: dalo por revisado."}
@@ -572,7 +587,7 @@ function CierrePageInner() {
           {siguen.length > 0 && (
             <section className="rounded-card border border-cos-line bg-cos-card">
               <p className="px-4 pt-3 text-[12px] font-medium uppercase tracking-wide text-cos-ink-faint">
-                {periodo.declarado ? "Observaciones del mes" : `Después de esto (${siguen.length})`}
+                {periodoCerrado ? "Observaciones del mes" : `Después de esto (${siguen.length})`}
               </p>
               <ul className="mt-1">
                 {siguen.map((a, i) => (
@@ -589,7 +604,7 @@ function CierrePageInner() {
                         <span className="block text-[13.5px] text-cos-ink">{a.hacer}</span>
                         <span className="block text-[12px] text-cos-ink-soft">{a.dato}</span>
                       </span>
-                      {a.urgencia === "bloquea" && !periodo.declarado && (
+                      {a.urgencia === "bloquea" && !periodoCerrado && (
                         <span className="mt-0.5 shrink-0 text-[10.5px] text-cos-red-ink">detiene</span>
                       )}
                     </button>

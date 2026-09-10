@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import JSZip from "jszip";
 import { AuthzError, requireMembership } from "@/lib/authz";
+import { evaluarCierre } from "@/lib/cierre/evaluar";
 import { evaluarReadinessCE } from "@/lib/contabilidad/ce-readiness";
 import { generateAuxiliarCtasXml, generateAuxiliarFoliosXml } from "@/lib/contabilidad/coe-auxiliares";
 import { generatePolizasXml } from "@/lib/contabilidad/coe-polizas";
@@ -16,7 +17,7 @@ import {
   type ArchivoPaquete,
   type TipoSolicitudPaquete,
 } from "@/lib/contabilidad/paquete";
-import { balanza, balanzaPreview, estadoResultados, estadoResultadosPreview } from "@/lib/contabilidad/posting";
+import { balanza, estadoResultados } from "@/lib/contabilidad/posting";
 import {
   clavePeriodo,
   hojaBalanceGeneral,
@@ -41,9 +42,9 @@ import { prisma } from "@/lib/prisma";
 // añade pólizas y sus dos auxiliares, que sólo aplican ante un requerimiento
 // —auditoría, devolución, compensación— y por eso exigen el folio del acto.
 //
-// No bloquea cuando la contabilidad no está lista: genera igual y lo DECLARA en
-// el manifiesto. Quien arma el paquete suele necesitar verlo justamente cuando
-// falta algo.
+// Es un ENTREGABLE definitivo: el mismo estado canónico del cierre exige un
+// ledger posteado y cero bloqueos duros. Los diagnósticos/previews viven en sus
+// pantallas; no se empaquetan como si fueran un cierre descargable.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const dynamic = "force-dynamic";
@@ -83,11 +84,22 @@ export async function GET(req: Request) {
     });
     if (!company) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
 
-    const period = await prisma.accountingPeriod.findUnique({
-      where: { companyId_year_month: { companyId, year, month } },
-      select: { status: true },
-    });
-    const posteado = period?.status === "POSTED" || period?.status === "CLOSED";
+    const cierre = await evaluarCierre(companyId, year, month, { fresco: true });
+    if (!cierre.estado.descargable) {
+      const detalle = cierre.estado.bloqueos[0]?.detalle;
+      return NextResponse.json(
+        {
+          code: "CIERRE_NO_DESCARGABLE",
+          error:
+            cierre.estado.fase === "BLOQUEADO"
+              ? `El periodo tiene bloqueos activos${detalle ? `: ${detalle}` : "."}`
+              : "Contabiliza el periodo antes de descargar el paquete definitivo.",
+          estado: cierre.estado,
+        },
+        { status: 409 }
+      );
+    }
+    const posteado = cierre.estado.posteado;
 
     const zip = new JSZip();
     const archivos: ArchivoPaquete[] = [];
@@ -167,12 +179,8 @@ export async function GET(req: Request) {
 
     // ── 2. Estados financieros, en UN libro ───────────────────────────────
     await intentar("Estados financieros (Excel)", async () => {
-      const filas = posteado
-        ? await balanza(companyId, year, month)
-        : await balanzaPreview(companyId, year, month);
-      const er = posteado
-        ? await estadoResultados(companyId, year, month)
-        : await estadoResultadosPreview(companyId, year, month);
+      const filas = await balanza(companyId, year, month);
+      const er = await estadoResultados(companyId, year, month);
 
       const entries = await prisma.accountingEntry.findMany({
         where: { companyId, year, month },
