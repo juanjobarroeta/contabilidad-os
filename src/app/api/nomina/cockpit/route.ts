@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { empresasAccesiblesIds } from "@/lib/authz";
 import { SALARIO_MINIMO_GENERAL } from "@/lib/nomina/constants";
+import { periodoMensualActual, rangoPeriodoMensual } from "@/lib/fiscal/periodo-operativo";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/nomina/cockpit — panel multi-RFC para el despacho de outsourcing.
@@ -38,8 +39,8 @@ export async function GET() {
   if (companyIds.length === 0) return NextResponse.json({ companies: [] });
 
   const now = new Date();
-  const monthFrom = new Date(now.getFullYear(), now.getMonth(), 1);
-  const monthTo = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const currentPeriod = periodoMensualActual(now);
+  const { from: monthFrom, to: monthTo } = rangoPeriodoMensual(currentPeriod);
 
   // ── Agregados por empresa (una consulta por métrica, no por empresa) ──────
   const [equipo, bajoMinimo, mes, sinTimbrar, ultimas] = await Promise.all([

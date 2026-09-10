@@ -2,6 +2,7 @@ import { prisma } from "./prisma";
 import { computeTaxPosition } from "./impuestos";
 import { sendWhatsappMessage, sendWhatsappTemplate } from "./whatsapp/twilio";
 import { formatCurrency } from "./utils";
+import { periodoMensualActual } from "./fiscal/periodo-operativo";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Post-sync IVA-change notice.
@@ -40,8 +41,9 @@ function periodoLabel(periodo: string): string {
 /** {year, month} for the last MONTHS_BACK months, newest first. */
 function recentPeriods(now: Date): Array<{ year: number; month: number; periodo: string }> {
   const out: Array<{ year: number; month: number; periodo: string }> = [];
+  const current = periodoMensualActual(now);
   for (let i = 0; i < MONTHS_BACK; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const d = new Date(current.year, current.month - 1 - i, 1);
     const year = d.getFullYear();
     const month = d.getMonth() + 1;
     out.push({ year, month, periodo: `${year}-${String(month).padStart(2, "0")}` });

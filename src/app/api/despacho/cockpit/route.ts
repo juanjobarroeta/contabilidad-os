@@ -4,8 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { empresasAccesiblesIds } from "@/lib/authz";
 import { coberturaConCotejo } from "@/lib/fiscal/cobertura-con-cotejo";
 import { resumenObligacionesPorEmpresa } from "@/lib/obligaciones-resumen";
-import { calcularVencimiento, fechaCalendarioIso } from "@/lib/obligaciones";
-import { fechaFiscalEnMexico, periodoMensualPorDefecto } from "@/lib/fiscal/periodo-operativo";
+import { contratoMensualFiscal } from "@/lib/fiscal/contrato-mensual";
 
 // GET /api/despacho/cockpit
 // Panel del despacho: una fila por empresa accesible con el estado del periodo
@@ -21,20 +20,12 @@ export async function GET(req: Request) {
   if (ids.length === 0) return NextResponse.json({ companies: [], cobertura: null });
 
   const now = new Date();
-  const hoyFiscal = fechaFiscalEnMexico(now);
-  const period = periodoMensualPorDefecto(now);
+  const mensual = contratoMensualFiscal(now);
+  const hoyFiscal = mensual.hoy;
+  const period = mensual.periodo;
   const { year, month } = period;
   const periodo = period.key;
-  const vencimiento = calcularVencimiento(
-    {
-      tipo: "FEDERAL_MENSUAL",
-      descripcion: "Declaración mensual",
-      periodicidad: "MENSUAL",
-      diaVencimiento: 17,
-    },
-    periodo,
-  );
-  const vencimientoKey = fechaCalendarioIso(vencimiento);
+  const vencimientoKey = mensual.fechaLimite;
 
   const companies = await prisma.company.findMany({
     where: { id: { in: ids }, isActive: true },
@@ -137,7 +128,7 @@ export async function GET(req: Request) {
 
   const FILED = ["FILED", "PAID"];
   // A deadline remains timely for the entire Mexico City calendar day.
-  const vencido = hoyFiscal.key > vencimientoKey;
+  const vencido = mensual.vencida;
 
   const rows = companies.map((c) => {
     const ds = declsBy.get(c.id) ?? [];
@@ -191,7 +182,7 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     periodo,
-    vencimiento: `${vencimientoKey}T00:00:00.000Z`,
+    vencimiento: vencimientoKey,
     vencido,
     companies: rows,
     resumen: {

@@ -140,7 +140,9 @@ export async function GET(req: Request) {
         return {
           periodo,
           label: periodoLabel(periodo, ob.periodicidad),
-          vencimiento: `${vencimientoKey}T00:00:00.000Z`,
+          // Fiscal deadlines are calendar dates, not instants. Consumers must
+          // not be able to shift September 17 to September 16 by timezone.
+          vencimiento: vencimientoKey,
           estado,
           declaracionStatus: declStatus ?? null,
         };

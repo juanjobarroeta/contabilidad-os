@@ -3,10 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { AuthzError, empresasAccesiblesIds, requireUser } from "@/lib/authz";
 import { armarCola, type SenalesEmpresa } from "@/lib/inicio/cola";
 import { calcularVencimiento, fechaCalendarioIso } from "@/lib/obligaciones";
+import { contratoMensualFiscal, OBLIGACION_FEDERAL_MENSUAL } from "@/lib/fiscal/contrato-mensual";
 import {
   diasEntreFechasCalendario,
-  fechaFiscalEnMexico,
-  periodoMensualPorDefecto,
+  periodoMensualActual,
+  rangoPeriodoMensual,
 } from "@/lib/fiscal/periodo-operativo";
 
 // GET /api/inicio/cola — el lente despacho del nuevo Inicio (rediseño Piloto).
@@ -33,18 +34,15 @@ export async function GET(req: Request) {
     if (ids.length === 0) return NextResponse.json({ filas: [], resumen: null, agenda: [] });
 
     const now = new Date();
-    const hoyFiscal = fechaFiscalEnMexico(now);
-    const period = periodoMensualPorDefecto(now);
+    const mensual = contratoMensualFiscal(now);
+    const hoyFiscal = mensual.hoy;
+    const period = mensual.periodo;
     const { year, month } = period;
     const periodo = period.key;
-    const federalConfig = {
-      tipo: "FEDERAL_MENSUAL",
-      descripcion: "IVA + ISR mensual",
-      periodicidad: "MENSUAL" as const,
-      diaVencimiento: 17,
-    };
+    const rangoMesActual = rangoPeriodoMensual(periodoMensualActual(now));
+    const federalConfig = OBLIGACION_FEDERAL_MENSUAL;
     const vencimiento = calcularVencimiento(federalConfig, periodo);
-    const vencido = hoyFiscal.key > fechaCalendarioIso(vencimiento);
+    const vencido = mensual.vencida;
     const periodoLabel = MESES[month - 1];
     const venceLabel = `${vencimiento.getDate()} ${MESES_CORTO[vencimiento.getMonth()]}`;
 
@@ -69,7 +67,7 @@ export async function GET(req: Request) {
           by: ["companyId"],
           where: {
             companyId: { in: companyIds },
-            fechaPago: { gte: new Date(now.getFullYear(), now.getMonth(), 1) },
+            fechaPago: { gte: rangoMesActual.from, lt: rangoMesActual.to },
           },
           _count: { id: true },
         }),
@@ -180,7 +178,10 @@ export async function GET(req: Request) {
       { f: siguienteVencimiento, label: `IVA + ISR ${MESES[siguienteDate.getMonth()]}`, detalle: `${empresasActivas} empresa${empresasActivas === 1 ? "" : "s"}` },
       { f: vencimiento, label: "SIPARE", detalle: "cuotas IMSS del mes" },
       { f: siguienteVencimiento, label: "SIPARE", detalle: "cuotas IMSS del mes" },
-      { f: new Date(hoyFiscal.year, hoyFiscal.month, 0), label: "DIOT", detalle: "informativa · 54 campos, se genera sola" },
+      // DIOT mensual shares the federal day-17 deadline. Month-end was a
+      // stale UI-only date that contradicted Taxes and Compliance.
+      { f: vencimiento, label: `DIOT ${periodoLabel}`, detalle: "informativa · 54 campos, se genera sola" },
+      { f: siguienteVencimiento, label: `DIOT ${MESES[siguienteDate.getMonth()]}`, detalle: "informativa · 54 campos, se genera sola" },
     ];
     const vistos = new Set<string>();
     const agenda = candidatos

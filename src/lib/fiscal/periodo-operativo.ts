@@ -18,6 +18,11 @@ export interface FechaFiscalMx {
   key: string;
 }
 
+export interface RangoPeriodoMensual {
+  from: Date;
+  to: Date;
+}
+
 /** Calendar date of an instant in the fiscal timezone. */
 export function fechaFiscalEnMexico(hoy: Date = new Date()): FechaFiscalMx {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -60,5 +65,26 @@ export function periodoMensualPorDefecto(hoy: Date = new Date()): PeriodoMensual
     year,
     month,
     key: `${year}-${String(month).padStart(2, "0")}`,
+  };
+}
+
+/** Current calendar month in Mexico City. */
+export function periodoMensualActual(hoy: Date = new Date()): PeriodoMensual {
+  const current = fechaFiscalEnMexico(hoy);
+  return {
+    year: current.year,
+    month: current.month,
+    key: `${current.year}-${String(current.month).padStart(2, "0")}`,
+  };
+}
+
+/**
+ * UTC database boundaries for a fiscal calendar month. This matches the
+ * accounting posting engine and keeps local development identical to Railway.
+ */
+export function rangoPeriodoMensual(periodo: Pick<PeriodoMensual, "year" | "month">): RangoPeriodoMensual {
+  return {
+    from: new Date(Date.UTC(periodo.year, periodo.month - 1, 1)),
+    to: new Date(Date.UTC(periodo.year, periodo.month, 1)),
   };
 }

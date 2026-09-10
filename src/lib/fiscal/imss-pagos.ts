@@ -1,5 +1,6 @@
 import { prisma } from "../prisma";
-import { calcularVencimiento } from "../obligaciones";
+import { calcularVencimiento, fechaCalendarioIso } from "../obligaciones";
+import { diasEntreFechasCalendario, fechaFiscalEnMexico } from "./periodo-operativo";
 import { elegirMovimientoSugerido, VENTANA_DIAS_SUGERENCIA } from "../conciliacion-impuestos";
 import type { DeclarationStatus } from "@prisma/client";
 
@@ -46,9 +47,10 @@ function periodoStr(year: number, month: number): string {
 
 /** Días (fechas calendario, sin horas) de `hoy` a `fecha`; negativo = vencida. */
 function diasPara(fecha: Date, hoy: Date): number {
-  const a = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
-  const b = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
-  return Math.round((a.getTime() - b.getTime()) / 86_400_000);
+  return diasEntreFechasCalendario(
+    fechaFiscalEnMexico(hoy).key,
+    fechaCalendarioIso(fecha),
+  );
 }
 
 // ── Periodo mensual ───────────────────────────────────────────────────────────
@@ -349,7 +351,7 @@ export async function estadoPagosImss(
 
   const mensual: EstadoImssMensual = {
     periodo,
-    fechaLimite: mensualPeriodo.fechaLimite.toISOString().slice(0, 10),
+    fechaLimite: fechaCalendarioIso(mensualPeriodo.fechaLimite),
     diasRestantes: diasMensual,
     vencida: diasMensual < 0,
     estimado: mensualPeriodo.estimado,
@@ -373,7 +375,7 @@ export async function estadoPagosImss(
       periodo: bim.periodo,
       meses: bim.meses,
       etiqueta: bim.etiqueta,
-      fechaLimite: bim.fechaLimite.toISOString().slice(0, 10),
+      fechaLimite: fechaCalendarioIso(bim.fechaLimite),
       diasRestantes: diasBim,
       vencida: diasBim < 0,
       estimado: estimadoBim,
