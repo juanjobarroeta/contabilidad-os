@@ -4,8 +4,8 @@ import { descargarBlob } from "@/lib/descargar";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Descarga de entregables del Anexo 24 con el error COMO GUÍA, no como archivo
-// roto. Desde la ola «CE confiable», el servidor valida fail-closed (422 con
-// detalles: CodAgrup fuera de la enum, póliza descuadrada, mes sin postear) —
+// roto. Desde la ola «CE confiable», el servidor valida fail-closed (409 para
+// el cierre canónico; 422 para XML inválido, póliza descuadrada, etc.) —
 // con un <a href> pelón ese JSON se descargaba como un .XML corrupto. Aquí el
 // fetch intercepta el error y lo pinta accionable; el archivo bueno se entrega
 // con el nombre exacto del Content-Disposition (convención SAT).
@@ -71,7 +71,7 @@ export function useDescargaXml() {
   return { descargar, descargando, error, diagnostico, limpiarError: () => setError(null) };
 }
 
-/** El 422 del validador, pintado como lista accionable. */
+/** El rechazo 409/422 del servidor, pintado como guía accionable. */
 export function ErroresDeValidacion({ error }: { error: ErrorDescarga | null }) {
   if (!error) return null;
   return (

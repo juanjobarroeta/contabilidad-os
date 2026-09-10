@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { AuthzError, requireMembership } from "@/lib/authz";
+import { evaluarCompuertaEntregable } from "@/lib/cierre/compuerta-entregables";
 import { generateBalanzaXml } from "@/lib/contabilidad/coe-xml";
 import { prisma } from "@/lib/prisma";
 import { validarBalanzaXml } from "@/lib/contabilidad/coe-validador";
@@ -28,6 +29,9 @@ export async function GET(req: Request) {
       select: { rfc: true },
     });
     if (!company) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
+
+    const compuerta = await evaluarCompuertaEntregable(companyId, year, month);
+    if (!compuerta.ok) return NextResponse.json(compuerta.body, { status: compuerta.status });
 
     const { xml, tipoEnvio } = await generateBalanzaXml({ companyId, year, month, tipoEnvio: tipoOverride });
     const val = validarBalanzaXml(xml);

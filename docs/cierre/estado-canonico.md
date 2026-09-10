@@ -31,13 +31,14 @@ The physical ledger status remains in `estadoContable` for diagnostics. If it sa
 
 An external historical close is a separate fact. It can remain `CERRADO` while local reconstruction observations are visible. `contabilizado` and `descargable` stay false until the local ledger exists and passes the current blockers, so the label cannot be mistaken for a ContabilidadOS-generated accounting package.
 
-## Consumers in REL-002A
+## Consumers across REL-002
 
 - `/api/cierre/estado` returns the canonical state with the existing step detail.
 - The accountant close page does not hide blockers merely because a declaration exists.
 - The owner summary and AI close context use the same blocker count and phase.
 - The daily pass only caches an internal `cerradoAt` after declaration, ledger generation, and zero hard blockers; changed evidence reopens a cached close.
 - `/api/contabilidad/paquete` returns `409 CIERRE_NO_DESCARGABLE` for a blocked period or one without a finalized ledger and no longer builds a preliminary ZIP.
+- The five individual Anexo 24 routes use the same fresh canonical gate before generating catálogo, balanza, pólizas, auxiliar de cuentas, or auxiliar de folios. Month 13 stays on its separate annual-close path because it has no monthly declaration workflow.
 
 ## Historical close provenance in REL-002B
 
@@ -51,7 +52,6 @@ An external historical close is a separate fact. It can remain `CERRADO` while l
 ## Remaining REL-002 work
 
 - Put the same transition guard in every manual, batch, and automatic monthly-accounting entry point. This touches the accounting engine and remains a separately reviewed no-go change.
-- Inventory and guard individual accounting-electronic download routes so none bypasses the canonical package gate after a new blocker appears.
 - Add production smoke evidence and confirm the daily reopen/close behavior against representative periods before marking REL-002 done.
 
 ## Verification

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import JSZip from "jszip";
 import { AuthzError, requireMembership } from "@/lib/authz";
+import { compuertaParaEstado } from "@/lib/cierre/compuerta-entregables";
 import { evaluarCierre } from "@/lib/cierre/evaluar";
 import { evaluarReadinessCE } from "@/lib/contabilidad/ce-readiness";
 import { generateAuxiliarCtasXml, generateAuxiliarFoliosXml } from "@/lib/contabilidad/coe-auxiliares";
@@ -85,20 +86,8 @@ export async function GET(req: Request) {
     if (!company) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
 
     const cierre = await evaluarCierre(companyId, year, month, { fresco: true });
-    if (!cierre.estado.descargable) {
-      const detalle = cierre.estado.bloqueos[0]?.detalle;
-      return NextResponse.json(
-        {
-          code: "CIERRE_NO_DESCARGABLE",
-          error:
-            cierre.estado.bloqueos.length > 0
-              ? `El periodo tiene bloqueos activos${detalle ? `: ${detalle}` : "."}`
-              : "Contabiliza el periodo antes de descargar el paquete definitivo.",
-          estado: cierre.estado,
-        },
-        { status: 409 }
-      );
-    }
+    const compuerta = compuertaParaEstado(cierre.estado);
+    if (!compuerta.ok) return NextResponse.json(compuerta.body, { status: compuerta.status });
     const contabilizado = cierre.estado.contabilizado;
 
     const zip = new JSZip();
