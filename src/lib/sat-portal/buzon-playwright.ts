@@ -82,7 +82,10 @@ export async function abrirBuzonSat<T>(
   const log = opts.log ?? (() => {});
   const browser = await chromium.launch({
     headless: opts.headless ?? true,
-    args: ["--ignore-certificate-errors"],
+    // --no-sandbox/--disable-setuid-sandbox: obligatorios al correr Chromium como
+    // root en un contenedor (Railway); en la Mac no hacen falta. --disable-dev-shm-usage
+    // evita el /dev/shm chico del contenedor. Sin esto, launch() falla en el worker.
+    args: ["--ignore-certificate-errors", "--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
   });
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), `fiel-${fiel.rfc}-`));
   const cerPath = path.join(dir, "e.cer");
