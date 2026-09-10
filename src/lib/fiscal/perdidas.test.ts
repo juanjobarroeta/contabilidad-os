@@ -19,7 +19,7 @@ describe("factorInpc()", () => {
   });
 
   it("falls back to nominal (1, completo false) when an INPC is missing", () => {
-    expect(factorInpc({ year: 2023, month: 12 }, { year: 2026, month: 8 })).toEqual({
+    expect(factorInpc({ year: 2023, month: 12 }, { year: 2026, month: 9 })).toEqual({
       factor: 1,
       completo: false,
     });

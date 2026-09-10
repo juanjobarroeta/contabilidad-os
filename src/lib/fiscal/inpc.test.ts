@@ -1,15 +1,21 @@
 import { describe, it, expect } from "vitest";
-import { inpc, coberturaInpc, factorActualizacionDepreciacion } from "./inpc";
+import {
+  INPC_ULTIMO_PERIODO_PROVENIENCIA,
+  coberturaInpc,
+  factorActualizacionDepreciacion,
+  inpc,
+} from "./inpc";
 
 describe("inpc()", () => {
   it("returns loaded values (incl. sep–dic now seeded)", () => {
     expect(inpc(2025, 1)).toBe(138.343);
     expect(inpc(2023, 12)).toBe(132.373);
     expect(inpc(2024, 6)).toBe(134.594);
+    expect(inpc(2026, 8)).toBe(145.462);
   });
 
   it("returns null for unloaded or out-of-range months", () => {
-    expect(inpc(2026, 8)).toBeNull(); // agosto 2026 aún no publicado (~10-sep)
+    expect(inpc(2026, 9)).toBeNull();
     expect(inpc(2025, 13)).toBeNull();
     expect(inpc(2025, 0)).toBeNull();
     expect(inpc(1999, 1)).toBeNull();
@@ -18,7 +24,18 @@ describe("inpc()", () => {
 
 describe("coberturaInpc()", () => {
   it("reports the latest loaded month", () => {
-    expect(coberturaInpc()).toEqual({ year: 2026, month: 7 });
+    expect(coberturaInpc()).toEqual({ year: 2026, month: 8 });
+  });
+
+  it("keeps the latest seed tied to its official publication evidence", () => {
+    expect(INPC_ULTIMO_PERIODO_PROVENIENCIA).toMatchObject({
+      periodo: "2026-08",
+      valor: inpc(2026, 8),
+      autoridad: "INEGI",
+      documento: "Boletín de Indicador 586/26",
+      publicadoEl: "2026-09-09",
+    });
+    expect(INPC_ULTIMO_PERIODO_PROVENIENCIA.url).toMatch(/^https:\/\/www\.inegi\.org\.mx\//);
   });
 });
 
@@ -49,7 +66,7 @@ describe("factorActualizacionDepreciacion() — Art. 31 LISR", () => {
 
   it("falls back to nominal (factor 1, completo false) when an INPC is missing", () => {
     const r = factorActualizacionDepreciacion({
-      fechaAdquisicion: new Date(2026, 7, 1), // ago-2026 no está cargado (~10-sep)
+      fechaAdquisicion: new Date(2026, 8, 1), // sep-2026 no está cargado
       ejercicio: 2026,
       startMonthIndex: 0,
       mesesUso: 4,

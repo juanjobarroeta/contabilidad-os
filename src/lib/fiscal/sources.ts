@@ -389,9 +389,9 @@ export const FUENTES: FuenteFiscal[] = [
     cadencia: "mensual",
     metodo: "semiauto",
     estado: "activo",
-    refresco: "PR a src/lib/fiscal/inpc.ts (+ suplemento en actualizacion.ts) con el INPC del mes (~día 10); el cron inpc-refresh.yml avisa si se atrasa.",
-    autoridad: "INEGI (DOF)",
-    notas: "Publicado ~día 10 y 25. Base de la actualización por inflación (depreciación, pérdidas, CUFIN).",
+    refresco: "PR a src/lib/fiscal/inpc.ts con el INPC mensual publicado por INEGI normalmente a más tardar el día 9; el cron inpc-refresh.yml avisa si se atrasa.",
+    autoridad: "INEGI; cotejo histórico Banxico SIE SP1",
+    notas: "INEGI difunde el dato mensual según su calendario, normalmente a más tardar el día 9; el DOF lo publica el día 10 o hábil previo. Base de la actualización por inflación (depreciación, pérdidas, CUFIN).",
   },
   {
     clave: "TIPO-CAMBIO-DOF",
