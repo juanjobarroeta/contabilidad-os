@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { AuthzError, requireMembership } from "@/lib/authz";
+import { evaluarCompuertaEntregable } from "@/lib/cierre/compuerta-entregables";
 import { generateCatalogoXml } from "@/lib/contabilidad/coe-xml";
 import { prisma } from "@/lib/prisma";
 import { validarCatalogoXml } from "@/lib/contabilidad/coe-validador";
@@ -25,6 +26,9 @@ export async function GET(req: Request) {
       select: { rfc: true },
     });
     if (!company) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
+
+    const compuerta = await evaluarCompuertaEntregable(companyId, year, month);
+    if (!compuerta.ok) return NextResponse.json(compuerta.body, { status: compuerta.status });
 
     const xml = await generateCatalogoXml({ companyId, year, month });
     // Fail-closed: un CodAgrup fuera de la enum del SAT rebota el archivo —

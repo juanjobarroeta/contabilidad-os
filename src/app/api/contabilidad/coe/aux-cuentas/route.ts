@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { AuthzError, requireMembership } from "@/lib/authz";
+import { evaluarCompuertaEntregable } from "@/lib/cierre/compuerta-entregables";
 import { prisma } from "@/lib/prisma";
 import { generateAuxiliarCtasXml } from "@/lib/contabilidad/coe-auxiliares";
 import type { TipoSolicitud } from "@/lib/contabilidad/coe-polizas";
@@ -22,6 +23,9 @@ export async function GET(req: Request) {
     await requireMembership(companyId);
     const company = await prisma.company.findUnique({ where: { id: companyId }, select: { rfc: true } });
     if (!company) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
+
+    const compuerta = await evaluarCompuertaEntregable(companyId, year, month);
+    if (!compuerta.ok) return NextResponse.json(compuerta.body, { status: compuerta.status });
 
     const xml = await generateAuxiliarCtasXml({ companyId, year, month, tipoSolicitud, numOrden, numTramite });
     const filename = `${company.rfc}${year}${String(month).padStart(2, "0")}XC.XML`;

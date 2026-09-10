@@ -75,9 +75,9 @@ export function ContabilidadElectronicaPanel({
   }, [qs]);
 
   const { descargar, descargando, error: errorDescarga } = useDescargaXml();
-  // Compuerta espejo del servidor: un mes sin postear responde 422 en
-  // balanza/pólizas/auxiliares — mejor deshabilitar con la razón aquí que
-  // dejar que el click choque contra el candado.
+  // Compuerta rápida para el caso obvio. El servidor vuelve a evaluar el
+  // cierre canónico en cada descarga y puede devolver un 409 por evidencia
+  // nueva, aunque esta tarjeta todavía muestre el estado anterior.
   const mesSinPostear = readiness != null &&
     readiness.checks.find((c) => c.clave === "posteo")?.estado !== "ok";
 
