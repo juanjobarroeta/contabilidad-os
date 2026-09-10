@@ -392,7 +392,17 @@ export async function validarClavesSaeh(
       const abreviatura = (fila.datos as { abreviatura?: string } | null)?.abreviatura;
       const entidadCurp = curp && curp.length === 18 ? curp.slice(11, 13) : null;
       if (abreviatura && entidadCurp && abreviatura !== entidadCurp) {
-        return { ok: false, status: 400, error: `La entidad de nacimiento ${v} (${abreviatura}) no coincide con la de la CURP (${entidadCurp})` };
+        // Decir cuál SÍ es. El mensaje viejo enfrentaba dos claves y dos
+        // abreviaturas sin nombrar la salida, y quien lo leía en un teléfono
+        // no tenía cómo saber que «NE» de la CURP es el 00 del catálogo y no
+        // el 88. Con la clave esperada, el error se corrige de una vez.
+        const esperada = ENTIDAD_DGIS_POR_CURP[entidadCurp];
+        const cual = esperada ? ` La CURP dice ${entidadCurp}, que en el catálogo es la ${esperada}.` : "";
+        return {
+          ok: false,
+          status: 400,
+          error: `La entidad de nacimiento ${v} (${abreviatura}) no coincide con la de la CURP (${entidadCurp}).${cual} Corrige la entidad o la CURP.`,
+        };
       }
     }
     datos.entidadNacimientoClave = v;
