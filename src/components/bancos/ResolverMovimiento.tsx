@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { Money } from "@/components/ui/Money";
 import { Chip } from "@/components/ui";
+import type { SugerenciaMovimiento } from "@/lib/bancos/inferir-movimiento";
 import {
   CONF_TONO, FAMILIA_LOTE, fmtFechaCorta, tokenDeDescripcion,
   type CandidatoFactura, type CandidatoImpuesto, type CepMovimiento,
@@ -82,6 +83,9 @@ export function ResolverMovimiento({
   const [pagoJunto, setPagoJunto] = useState<PagoJuntoSugerido | null>(null);
   const [impuestos, setImpuestos] = useState<CandidatoImpuesto[]>([]);
   const [cep, setCep] = useState<CepMovimiento | null>(null);
+  // Categoría SUGERIDA por el servidor, con su evidencia. Vivía sólo en la
+  // mesa; al compartir el panel la gana también la lista de Movimientos.
+  const [sugerencia, setSugerencia] = useState<SugerenciaMovimiento | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [multiOcupado, setMultiOcupado] = useState(false);
   const [seleccion, setSeleccion] = useState<SeleccionFactura[]>([]);
@@ -109,6 +113,7 @@ export function ResolverMovimiento({
     let vivo = true;
     setCargando(true);
     setCandidatos([]); setImpuestos([]); setPagoJunto(null); setCep(null); setSeleccion([]);
+    setSugerencia(null);
     setManualAbierta(false); setManualQuery(""); setManualResultados([]);
     setManualTipo(tx.monto < 0 ? "EGRESO" : "INGRESO");
     setSimilaresAbierto(false); setSimilarToken(""); setSimilarCount(null);
@@ -125,6 +130,7 @@ export function ResolverMovimiento({
         setCandidatos(data.candidates ?? []);
         setImpuestos(data.impuestos ?? []);
         setPagoJunto(data.pagoJunto ?? null);
+        setSugerencia(data.sugerencia ?? null);
       })
       .catch(() => {})
       .finally(() => { if (vivo) setCargando(false); });
@@ -573,6 +579,27 @@ export function ResolverMovimiento({
         <span className="text-[12px] text-cos-ink-faint">o categoriza sin factura</span>
         <span className="h-px flex-1 bg-cos-line-soft" />
       </div>
+
+      {/* LA EVIDENCIA JUNTO AL VEREDICTO: el usuario decide con ella, no con fe
+          en el sistema. Por eso la sugerencia dice POR QUÉ y con qué confianza,
+          y el botón aplica esa categoría de un toque. */}
+      {sugerencia && (
+        <div className="flex flex-wrap items-center gap-2 rounded-control bg-cos-brand-tint px-3.5 py-2.5">
+          <span className="min-w-[200px] flex-1 text-[13px] text-cos-ink">
+            Parece <b>{sugerencia.etiqueta}</b> — {sugerencia.porQue}.
+          </span>
+          <span className={"rounded-full px-2 py-0.5 text-[11px] font-semibold " +
+            (sugerencia.confianza === "alta"
+              ? "bg-cos-jade-tint text-cos-jade-ink"
+              : "bg-cos-amber-tint text-cos-amber-ink")}>
+            {sugerencia.confianza}
+          </span>
+          <button onClick={() => categorizar(sugerencia.tag, sugerencia.etiqueta)} disabled={ocupado}
+            className="rounded-control bg-cos-brand px-3 py-1.5 text-[13px] font-medium text-white hover:bg-cos-brand-deep disabled:opacity-50">
+            Aplicar
+          </button>
+        </div>
+      )}
       <div className="flex flex-wrap gap-2">
         {CATEGORIAS.map(({ tag, label, icon: Icon }) => (
           <button key={label} onClick={() => categorizar(tag, label)} disabled={ocupado}

@@ -140,6 +140,7 @@ export async function conciliacionDelMes(
       select: {
         id: true, fecha: true, descripcion: true, monto: true, status: true, bankAccountId: true,
         contraparteNombre: true, contraparteRfc: true, conceptoPago: true, claveRastreo: true,
+        contraparteClabe: true,
       },
       orderBy: { fecha: "asc" },
     }),
@@ -261,6 +262,7 @@ export async function conciliacionDelMes(
     contraparteRfc: t.contraparteRfc,
     conceptoPago: t.conceptoPago,
     claveRastreo: t.claveRastreo,
+    contraparteClabe: t.contraparteClabe,
   }));
 
   // Saldo del estado por cuenta: el capturado gana; si no hay, se propone el
