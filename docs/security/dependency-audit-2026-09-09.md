@@ -86,7 +86,7 @@ SEC-DEP-001C verification:
 - `npm ls xlsx --depth=0`: `xlsx@0.20.3`
 - Focused spreadsheet suite: 5 test files, 58 tests passed
 - `npm audit --omit=dev`: 0 critical, 7 high, 2 moderate
-- `npm test`: 334 test files, 3,681 tests passed
+- `npm test`: 334 test files, 3,677 tests passed
 - `npx tsc --noEmit`: passed
 - `npm run build`: production compilation, type validation, and 374 static pages passed
 
