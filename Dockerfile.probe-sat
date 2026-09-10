@@ -1,0 +1,34 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Probe del horizonte / manifiesto del SAT (descarga masiva, HTTP puro).
+#
+# Corre en un SERVICIO WORKER de Railway de un solo tiro — igual que ce-worker,
+# y por la MISMA razón: descifra la e.firma con CREDENTIALS_ENCRYPTION_KEY, que
+# vive en el env de Railway y NO sale de ahí. Por eso el probe no se corre desde
+# una laptop aunque sólo lea.
+#
+# A diferencia de ce-worker, aquí NO hace falta Chromium: la descarga masiva es
+# un web service SOAP, sin portal ni navegador. Imagen node slim y ya.
+#
+# Se dispara redesplegando el servicio a mano (sin cron): es una medición
+# deliberada que GASTA cuota 5002 de por vida cuando PROBE_APLICAR=1.
+# ─────────────────────────────────────────────────────────────────────────────
+FROM node:22-slim
+
+WORKDIR /app
+ENV CI=1
+
+# openssl lo necesita el engine de Prisma en las imágenes slim.
+RUN apt-get update && apt-get install -y --no-install-recommends openssl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Dependencias (incluye devDeps: ahí vive tsx).
+COPY package*.json ./
+RUN npm ci --include=dev
+
+# Código + cliente de Prisma.
+COPY . .
+RUN npx prisma generate
+
+# Sondea y termina. Las env (DATABASE_URL, CREDENTIALS_ENCRYPTION_KEY) las
+# inyecta el servicio; RFC/ANIOS/PROBE_APLICAR se fijan por corrida.
+CMD ["npm", "run", "probe:sat"]

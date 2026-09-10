@@ -539,6 +539,55 @@ async function main(): Promise<void> {
   };
   writeFileSync(rutaReporte, JSON.stringify(reporte, null, 2));
 
+  // PERSISTIR EL HALLAZGO, no sólo imprimirlo. En Railway esto corre en un
+  // contenedor de un solo tiro, y de ésos los logs salen VACÍOS (medido con
+  // ce-worker; de ahí nació el panel del operador). Si el reporte vive sólo en
+  // stdout y en un archivo del contenedor, la corrida se pierde — y ésta gasta
+  // cuota 5002 IRREVERSIBLE, así que perderla es perder el gasto.
+  //
+  // Va en AuditLog: append-only, sin FK, `detalle` es «sólo metadatos, nunca
+  // secretos». Se guardan agregados (tiempos, códigos, conteos por periodo),
+  // NO la lista completa de UUIDs: una empresa grande la haría enorme y ése es
+  // el trabajo de la tabla de manifiesto de la Ola 2, no de una bitácora.
+  const faltantesPorPeriodo = [...faltantes.reduce(
+    (m, f) => m.set(f.periodo, (m.get(f.periodo) ?? 0) + 1),
+    new Map<string, number>(),
+  )]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([periodo, n]) => ({ periodo, n }));
+
+  try {
+    await prisma.auditLog.create({
+      data: {
+        companyId: company.id,
+        accion: "sat.probe-horizonte",
+        entidad: "Company",
+        entidadId: company.id,
+        // Round-trip por JSON a propósito, no sólo para el tipo de Prisma:
+        // garantiza que lo guardado es JSON de verdad. Las consultas crudas de
+        // la Fase 0 devuelven `bigint`, que `JSON.stringify` rechaza — mejor
+        // que reviente aquí, en el try, que escribir una fila corrupta.
+        detalle: JSON.parse(
+          JSON.stringify({
+            rfc: company.rfc,
+            aplicar: APLICAR,
+            aniosSondeados: anios,
+            inventarioPropio: inventario,
+            solicitudes,
+            manifiestoPorPeriodo: reporte.manifiesto.porPeriodo,
+            columnasObservadas: reporte.manifiesto.columnasObservadas,
+            faltantesTotal: faltantes.length,
+            faltantesPorPeriodo,
+          }),
+        ),
+      },
+    });
+    console.log("   reporte persistido en AuditLog (accion = sat.probe-horizonte)");
+  } catch (e) {
+    // No se pierde la corrida por esto: el archivo y stdout siguen ahí.
+    console.error("   ⚠ no se pudo persistir en AuditLog:", e instanceof Error ? e.message : e);
+  }
+
   // ── Lo que vinimos a medir ────────────────────────────────────────────────
   console.log("\n══ RESUMEN");
   const conTiempo = solicitudes.filter((s) => s.msAFinished != null);

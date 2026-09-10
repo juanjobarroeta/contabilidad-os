@@ -18,6 +18,7 @@
     "db:seed": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts",
     "rotate:key": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/rotate-encryption-key.ts",
     "ce:worker": "tsx scripts/ce-worker.ts",
+    "probe:sat": "tsx scripts/probe-sat-horizonte.ts",
     "backfill:rep-iva": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/backfill-rep-iva.ts",
     "validate:iva-rep": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/validate-iva-rep.ts",
     "fiscal:setup": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-setup.ts",
