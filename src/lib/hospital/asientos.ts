@@ -30,9 +30,15 @@
 //     cuando el honorario queda firme; el pago (banco) lo concilia el hub.
 //
 //   · Depósito del paciente:
-//         RECIBIDO  CARGO CAJA (efectivo) o BANCOS / ABONO ANTICIPOS_PACIENTES 206.01
+//         RECIBIDO  CARGO CAJA (efectivo) o FONDOS_EN_TRANSITO / ABONO ANTICIPOS_PACIENTES 206.01
 //         APLICADO  CARGO ANTICIPOS_PACIENTES / ABONO CLIENTES 105.01
-//         DEVUELTO  CARGO ANTICIPOS_PACIENTES / ABONO CAJA o BANCOS
+//         DEVUELTO  CARGO ANTICIPOS_PACIENTES / ABONO CAJA o FONDOS_EN_TRANSITO
+//
+//   · Cobro de caja y liquidación del adquirente (cobros.ts, liquidaciones.ts):
+//         COBRADO        CARGO CAJA o FONDOS_EN_TRANSITO / ABONO CLIENTES 105.01
+//         CONTRACARGADO  reversa: CARGO CLIENTES / ABONO FONDOS_EN_TRANSITO
+//         LIQUIDACION    CARGO COMISION_TERMINAL 701.10 + IVA_ACREDITABLE 118.01
+//                        ABONO FONDOS_EN_TRANSITO — el residuo que el banco no trae
 //         CANCELADO (sólo si RECIBIDO ya estaba en el libro): reversa del recibido
 //
 // Idempotencia: cada asiento es un par CARGO/ABONO con (referencia,
@@ -44,7 +50,7 @@
 // postBalancedEntry y postMonth.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { HospDepositoEstado, HospFormaPago, HospMovimientoTipo, Prisma, PrismaClient } from "@prisma/client";
+import type { HospCobroEstado, HospDepositoEstado, HospFormaPago, HospMovimientoTipo, Prisma, PrismaClient } from "@prisma/client";
 import { assertPeriodoAbierto } from "../contabilidad/candado";
 import { PeriodoCerradoError } from "../contabilidad/ejercicio";
 import {
@@ -71,6 +77,12 @@ export const TIPO_ASIENTO = {
   DEPOSITO_APLICADO: "HOSP_DEPOSITO_APLICADO",
   DEPOSITO_DEVUELTO: "HOSP_DEPOSITO_DEVUELTO",
   DEPOSITO_CANCELADO: "HOSP_DEPOSITO_CANCELADO",
+  COBRO_RECIBIDO: "HOSP_COBRO_RECIBIDO",
+  COBRO_CONTRACARGO: "HOSP_COBRO_CONTRACARGO",
+  COBRO_RECUPERADO: "HOSP_COBRO_RECUPERADO",
+  COBRO_CANCELADO: "HOSP_COBRO_CANCELADO",
+  LIQUIDACION_COMISION: "HOSP_LIQUIDACION_COMISION",
+  LIQUIDACION_IVA_COMISION: "HOSP_LIQUIDACION_IVA_COMISION",
 } as const;
 
 export const TASA_RETENCION_ISR_HONORARIOS = 0.1;
@@ -444,6 +456,196 @@ export async function asentarDeposito(
   return n;
 }
 
+// ─── Cobros de caja ──────────────────────────────────────────────────────────
+
+export interface CobroParaAsiento {
+  id: string;
+  companyId: string;
+  fecha: Date;
+  monto: number | { toString(): string };
+  formaPago: HospFormaPago;
+  estado: HospCobroEstado;
+  /** Cuando el cobro es el instrumento de un anticipo, el asiento lo lleva el depósito. */
+  depositoId?: string | null;
+  contracargoAt?: Date | null;
+  recuperadoAt?: Date | null;
+  /** Folio del episodio, para la descripción. */
+  folio?: string | null;
+}
+
+/**
+ * Las etapas del cobro que tocan el libro.
+ *
+ * UN COBRO LIGADO A UN DEPÓSITO NO ASIENTA NADA. El anticipo ya llevó el
+ * dinero a CAJA/FONDOS_EN_TRANSITO contra ANTICIPOS_PACIENTES cuando se
+ * recibió; si el cobro volviera a asentarlo, el mismo billete entraría dos
+ * veces. Ahí el cobro existe sólo para cargar los datos de la terminal y poder
+ * cuadrar contra la liquidación.
+ *
+ * El contracargo REVERSA el cobro: el dinero se fue y el paciente vuelve a
+ * deber. Se asienta contra FONDOS_EN_TRANSITO aunque el depósito ya hubiera
+ * llegado al banco, porque el adquirente no lo cobra por separado: lo descuenta
+ * del lote del día, y ese lote vuelve a pasar por 107.05. Es lo que mantiene
+ * la regla de que este módulo nunca carga ni abona BANCOS.
+ */
+export function planesCobro(c: CobroParaAsiento, opts: { rango?: { desde: Date; hasta: Date }; ahora?: Date; reversarCancelado?: boolean } = {}): AsientoPlan[] {
+  if (c.depositoId) return [];
+  const monto = r2(Number(c.monto));
+  if (!(monto > 0.005)) return [];
+  const ahora = opts.ahora ?? new Date();
+  const efectivo = cuentaDeFormaPago(c.formaPago);
+  const quien = c.folio ? ` · ${c.folio}` : "";
+  const marcar = (tx: Db, at: Date) => tx.hospCobro.update({ where: { id: c.id }, data: { asientoAt: at } }).then(() => undefined);
+  const planes: AsientoPlan[] = [];
+
+  if (c.estado !== "CANCELADO" && enRango(c.fecha, opts.rango)) {
+    planes.push({
+      fecha: c.fecha,
+      descripcion: `Cobro en caja${quien}`,
+      monto,
+      referencia: c.id,
+      referenciaTipo: TIPO_ASIENTO.COBRO_RECIBIDO,
+      cargo: efectivo,
+      abono: "CLIENTES",
+      marcar,
+    });
+  }
+  if (c.estado === "CONTRACARGADO" || c.estado === "RECUPERADO") {
+    const fecha = c.contracargoAt ?? ahora;
+    if (enRango(fecha, opts.rango)) {
+      planes.push({
+        fecha,
+        descripcion: `Contracargo del cobro${quien}`,
+        monto,
+        referencia: c.id,
+        referenciaTipo: TIPO_ASIENTO.COBRO_CONTRACARGO,
+        cargo: "CLIENTES",
+        abono: "FONDOS_EN_TRANSITO",
+        marcar,
+      });
+    }
+  }
+  if (c.estado === "RECUPERADO") {
+    const fecha = c.recuperadoAt ?? ahora;
+    if (enRango(fecha, opts.rango)) {
+      planes.push({
+        fecha,
+        descripcion: `Contracargo recuperado${quien}`,
+        monto,
+        referencia: c.id,
+        referenciaTipo: TIPO_ASIENTO.COBRO_RECUPERADO,
+        cargo: "FONDOS_EN_TRANSITO",
+        abono: "CLIENTES",
+        marcar,
+      });
+    }
+  }
+  if (c.estado === "CANCELADO" && opts.reversarCancelado && enRango(ahora, opts.rango)) {
+    planes.push({
+      fecha: ahora,
+      descripcion: `Cobro cancelado (reversa)${quien}`,
+      monto,
+      referencia: c.id,
+      referenciaTipo: TIPO_ASIENTO.COBRO_CANCELADO,
+      cargo: "CLIENTES",
+      abono: efectivo,
+      marcar,
+    });
+  }
+  return planes;
+}
+
+/** Hook de POST/PATCH cobros: asienta las etapas que falten en el libro. */
+export async function asentarCobro(
+  tx: Db,
+  cobro: CobroParaAsiento,
+  opts: { ctx?: ContextoAsientos; rango?: { desde: Date; hasta: Date }; ahora?: Date } = {}
+): Promise<number> {
+  const c = opts.ctx ?? (await contextoAsientos(tx, cobro.companyId));
+  if (!c.config.activa) return 0;
+  const reversarCancelado =
+    cobro.estado === "CANCELADO" && (await yaAsentado(tx, cobro.companyId, cobro.id, TIPO_ASIENTO.COBRO_RECIBIDO));
+  let n = 0;
+  for (const plan of planesCobro(cobro, { rango: opts.rango, ahora: opts.ahora, reversarCancelado })) {
+    if (await ejecutarPlan(tx, c, plan, opts.ahora)) n++;
+  }
+  return n;
+}
+
+// ─── Liquidación del adquirente ──────────────────────────────────────────────
+
+export interface LiquidacionParaAsiento {
+  id: string;
+  companyId: string;
+  fecha: Date;
+  comision: number | { toString(): string };
+  ivaComision: number | { toString(): string };
+  /** Número de afiliación, para la descripción. */
+  afiliacion?: string | null;
+}
+
+/**
+ * De la liquidación, el módulo asienta ÚNICAMENTE la comisión y su IVA.
+ *
+ * El movimiento bancario conciliado en el hub ya carga BANCOS contra
+ * FONDOS_EN_TRANSITO por el NETO. Eso deja en 107.05 un residuo exacto —lo que
+ * se quedó el adquirente y nunca pasó por el banco— y estos dos asientos son
+ * los que lo limpian. Sumados a los cobros del lote, 107.05 vuelve a cero.
+ *
+ * Los CONTRACARGOS del lote NO se asientan aquí: cada cobro contracargado
+ * lleva su propia reversa (`planesCobro`). Asentarlos también en la
+ * liquidación los contaría dos veces.
+ */
+export function planesLiquidacion(l: LiquidacionParaAsiento, opts: { rango?: { desde: Date; hasta: Date } } = {}): AsientoPlan[] {
+  if (!enRango(l.fecha, opts.rango)) return [];
+  const quien = l.afiliacion ? ` · afiliación ${l.afiliacion}` : "";
+  const marcar = (tx: Db, at: Date) => tx.hospLiquidacion.update({ where: { id: l.id }, data: { asientoAt: at } }).then(() => undefined);
+  const planes: AsientoPlan[] = [];
+
+  const comision = r2(Number(l.comision));
+  if (comision > 0.005) {
+    planes.push({
+      fecha: l.fecha,
+      descripcion: `Comisión del adquirente${quien}`,
+      monto: comision,
+      referencia: l.id,
+      referenciaTipo: TIPO_ASIENTO.LIQUIDACION_COMISION,
+      cargo: "COMISION_TERMINAL",
+      abono: "FONDOS_EN_TRANSITO",
+      marcar,
+    });
+  }
+  const iva = r2(Number(l.ivaComision));
+  if (iva > 0.005) {
+    planes.push({
+      fecha: l.fecha,
+      descripcion: `IVA de la comisión del adquirente${quien}`,
+      monto: iva,
+      referencia: l.id,
+      referenciaTipo: TIPO_ASIENTO.LIQUIDACION_IVA_COMISION,
+      cargo: "IVA_ACREDITABLE",
+      abono: "FONDOS_EN_TRANSITO",
+      marcar,
+    });
+  }
+  return planes;
+}
+
+/** Hook de POST liquidaciones: asienta la comisión y su IVA. */
+export async function asentarLiquidacion(
+  tx: Db,
+  liquidacion: LiquidacionParaAsiento,
+  opts: { ctx?: ContextoAsientos; rango?: { desde: Date; hasta: Date }; ahora?: Date } = {}
+): Promise<number> {
+  const c = opts.ctx ?? (await contextoAsientos(tx, liquidacion.companyId));
+  if (!c.config.activa) return 0;
+  let n = 0;
+  for (const plan of planesLiquidacion(liquidacion, { rango: opts.rango })) {
+    if (await ejecutarPlan(tx, c, plan, opts.ahora)) n++;
+  }
+  return n;
+}
+
 // ─── Mes: previsualizar y asentar lo pendiente ───────────────────────────────
 
 export function rangoMesUtc(anio: number, mes: number): { desde: Date; hasta: Date } {
@@ -461,7 +663,7 @@ export function periodoDeQuery(searchParams: URLSearchParams, hoy: Date = new Da
 /** Todo lo del mes que tocaría el libro con fuente HOSPITAL, esté o no asentado ya. */
 export async function planesDelMes(db: Db, companyId: string, anio: number, mes: number, ctx: ContextoAsientos, ahora: Date = new Date()): Promise<AsientoPlan[]> {
   const rango = rangoMesUtc(anio, mes);
-  const [movimientos, cargos, depositos] = await Promise.all([
+  const [movimientos, cargos, depositos, cobros, liquidaciones] = await Promise.all([
     db.hospMovimientoInsumo.findMany({
       where: { companyId, tipo: "SALIDA_APLICACION", asientoAt: null, fecha: { gte: rango.desde, lt: rango.hasta } },
       select: {
@@ -509,6 +711,26 @@ export async function planesDelMes(db: Db, companyId: string, anio: number, mes:
       include: { episodio: { select: { folio: true } } },
       orderBy: { fecha: "asc" },
     }),
+    // Los cobros ligados a un depósito los asienta el depósito: aquí sobran.
+    db.hospCobro.findMany({
+      where: {
+        companyId,
+        depositoId: null,
+        estado: { not: "CANCELADO" },
+        OR: [
+          { fecha: { gte: rango.desde, lt: rango.hasta } },
+          { contracargoAt: { gte: rango.desde, lt: rango.hasta } },
+          { recuperadoAt: { gte: rango.desde, lt: rango.hasta } },
+        ],
+      },
+      include: { episodio: { select: { folio: true } } },
+      orderBy: { fecha: "asc" },
+    }),
+    db.hospLiquidacion.findMany({
+      where: { companyId, fecha: { gte: rango.desde, lt: rango.hasta } },
+      include: { afiliacion: { select: { numero: true } } },
+      orderBy: { fecha: "asc" },
+    }),
   ]);
 
   const planes: AsientoPlan[] = [];
@@ -524,6 +746,8 @@ export async function planesDelMes(db: Db, companyId: string, anio: number, mes:
   }
   for (const g of porEpisodio.values()) planes.push(...planesHonorarios(g.episodio, g.cargos, ctx.config.empresaRetiene, ahora));
   for (const d of depositos) planes.push(...planesDeposito({ ...d, folio: d.episodio.folio }, { rango, ahora }));
+  for (const c of cobros) planes.push(...planesCobro({ ...c, folio: c.episodio?.folio ?? null }, { rango, ahora }));
+  for (const l of liquidaciones) planes.push(...planesLiquidacion({ ...l, afiliacion: l.afiliacion.numero }, { rango }));
   return planes.sort((a, b) => a.fecha.getTime() - b.fecha.getTime());
 }
 

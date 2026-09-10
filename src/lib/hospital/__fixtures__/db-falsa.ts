@@ -25,6 +25,11 @@ export function coincide(fila: Fila, where: Fila | undefined, db: DbFalsa): bool
       if (!inv || !coincide(inv, v as Fila, db)) return false;
       continue;
     }
+    if (k === "liquidacion") {
+      const liq = db.liquidaciones.find((l) => l.id === fila.liquidacionId);
+      if (!liq || !coincide(liq, v as Fila, db)) return false;
+      continue;
+    }
     const actual = fila[k];
     if (v === null) {
       if (actual != null) return false;
@@ -41,7 +46,9 @@ export function coincide(fila: Fila, where: Fila | undefined, db: DbFalsa): bool
       if (cond.not === null ? actual == null : valor(actual) === valor(cond.not)) return false;
     }
     if ("gte" in cond && !((valor(actual) as number) >= (valor(cond.gte) as number))) return false;
+    if ("gt" in cond && !((valor(actual) as number) > (valor(cond.gt) as number))) return false;
     if ("lt" in cond && !((valor(actual) as number) < (valor(cond.lt) as number))) return false;
+    if ("lte" in cond && !((valor(actual) as number) <= (valor(cond.lte) as number))) return false;
     if ("startsWith" in cond && !String(actual).startsWith(String(cond.startsWith))) return false;
   }
   return true;
@@ -88,6 +95,9 @@ export class DbFalsa {
   insumos: Fila[] = [];
   lotes: Fila[] = [];
   invoices: Fila[] = [];
+  cobros: Fila[] = [];
+  liquidaciones: Fila[] = [];
+  afiliaciones: Fila[] = [];
 
   /** Siembra cuentas del catálogo del SAT por código. */
   sembrar(codigos: string[], companyId = this.companyId) {
@@ -128,6 +138,8 @@ export class DbFalsa {
       out.lote = this.lotes.find((l) => l.id === fila.loteId) ?? null;
     }
     if (tabla === "depositos") out.episodio = this.episodios.find((e) => e.id === fila.episodioId) ?? { folio: "?" };
+    if (tabla === "cobros") out.episodio = this.episodios.find((e) => e.id === fila.episodioId) ?? null;
+    if (tabla === "liquidaciones") out.afiliacion = this.afiliaciones.find((a) => a.id === fila.afiliacionId) ?? { numero: "?" };
     if (tabla === "asientos") out.chartAccount = this.cuentas.find((c) => c.id === fila.chartAccountId) ?? null;
     return out;
   }
@@ -250,6 +262,15 @@ export class DbFalsa {
   }
   get hospDeposito() {
     return this.tabla("depositos", this.depositos);
+  }
+  get hospCobro() {
+    return this.tabla("cobros", this.cobros);
+  }
+  get hospLiquidacion() {
+    return this.tabla("liquidaciones", this.liquidaciones);
+  }
+  get hospAfiliacion() {
+    return this.tabla("afiliaciones", this.afiliaciones);
   }
   get hospEpisodio() {
     return this.tabla("episodios", this.episodios);

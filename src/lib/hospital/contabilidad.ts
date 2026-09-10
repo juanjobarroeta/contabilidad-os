@@ -58,6 +58,8 @@ export const CLAVES_MOTOR = [
   "BANCOS",
   "FONDOS_EN_TRANSITO",
   "CLIENTES",
+  "COMISION_TERMINAL",
+  "IVA_ACREDITABLE",
 ] as const;
 
 export type ClaveMotor = (typeof CLAVES_MOTOR)[number];
@@ -94,6 +96,8 @@ export const MAPA_DEFAULT: Record<ClaveMotor, DefinicionClave> = {
   BANCOS: { clave: "BANCOS", descripcion: "Bancos", cuentaSAT: "102.01", tipo: "ACTIVO" },
   FONDOS_EN_TRANSITO: { clave: "FONDOS_EN_TRANSITO", descripcion: "Cobros en tránsito (tarjeta, transferencia o cheque que el banco todavía no deposita)", cuentaSAT: "107.05", tipo: "ACTIVO" },
   CLIENTES: { clave: "CLIENTES", descripcion: "Clientes (cuenta por cobrar del paciente o pagador)", cuentaSAT: "105.01", tipo: "ACTIVO" },
+  COMISION_TERMINAL: { clave: "COMISION_TERMINAL", descripcion: "Comisión del adquirente por cobros con terminal", cuentaSAT: "701.10", tipo: "GASTO" },
+  IVA_ACREDITABLE: { clave: "IVA_ACREDITABLE", descripcion: "IVA acreditable pagado (comisión de la terminal)", cuentaSAT: "118.01", tipo: "ACTIVO" },
 };
 
 export function esClaveMotor(s: unknown): s is ClaveMotor {
