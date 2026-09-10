@@ -38,12 +38,16 @@ export interface CepMovimiento {
   estado: string | null;
   fechaOperacion: string | null;
   concepto: string | null;
+  /** Lo que Banxico dice que se pagó — no lo que dice el estado de cuenta. */
+  monto: number | null;
   ordenanteNombre: string | null;
   ordenanteRfc: string | null;
   ordenanteBanco: string | null;
+  ordenanteCuenta: string | null;
   beneficiarioNombre: string | null;
   beneficiarioRfc: string | null;
   beneficiarioBanco: string | null;
+  beneficiarioCuenta: string | null;
 }
 
 /** Varias facturas de la misma contraparte que suman EXACTO el movimiento. */
@@ -72,6 +76,27 @@ export interface SeleccionFactura {
   label: string;
   total: number;
   monto: string;
+}
+
+/** El CFDI con el que un movimiento YA quedó cruzado, con su porción. */
+export interface FacturaCruzada {
+  id: string;
+  uuid: string | null;
+  folio: string | null;
+  fecha: string;
+  total: number;
+  tipo: string;
+  cliente: string | null;
+  rfc: string | null;
+  /** Lo que se aplicó de ESTE movimiento a ESA factura (1:1 = el total). */
+  montoAsignado: number;
+}
+
+/** Contra qué quedó conciliado un movimiento: facturas, un pago de impuestos,
+ *  o nada (sin cruzar, o categorizado sin comprobante). */
+export interface CruceMovimiento {
+  facturas: FacturaCruzada[];
+  impuesto: { id: string; etiqueta: string; status: string } | null;
 }
 
 export interface FacturaBuscada {

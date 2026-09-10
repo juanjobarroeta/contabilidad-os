@@ -82,9 +82,67 @@ export async function GET(req: Request, { params }: Params) {
   const member = await getEffectiveCompanyMembership(user.id, account.companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
-  const txRow = await prisma.bankTransaction.findUnique({ where: { id: txId } });
+  // CON su cruce: cuando el movimiento YA está conciliado, el panel no tiene
+  // candidatos que ofrecer — lo que hace falta es ver CONTRA QUÉ quedó, y poder
+  // abrir ese CFDI. Sin esto, la mesa decía «ya está conciliado» y no enseñaba
+  // con qué: para investigarlo había que irse al archivo.
+  const txRow = await prisma.bankTransaction.findUnique({
+    where: { id: txId },
+    include: {
+      invoice: {
+        select: {
+          id: true, uuid: true, serie: true, folio: true, fecha: true, total: true, tipo: true,
+          customer: { select: { razonSocial: true, rfc: true } },
+        },
+      },
+      conciliacionDetalles: {
+        select: {
+          id: true, montoAsignado: true,
+          invoice: {
+            select: {
+              id: true, uuid: true, serie: true, folio: true, fecha: true, total: true, tipo: true,
+              customer: { select: { razonSocial: true, rfc: true } },
+            },
+          },
+        },
+      },
+      taxDeclaration: { select: { id: true, tipo: true, periodo: true, status: true } },
+    },
+  });
   if (!txRow) return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 });
-  const tx = { ...txRow, monto: Number(txRow.monto) };
+  const { invoice, conciliacionDetalles, taxDeclaration, ...txPlano } = txRow;
+  const tx = { ...txPlano, monto: Number(txRow.monto) };
+
+  const facturaCruzada = (f: NonNullable<typeof invoice>) => ({
+    id: f.id,
+    uuid: f.uuid,
+    folio: [f.serie ?? "", f.folio ?? ""].join("") || null,
+    fecha: f.fecha.toISOString().slice(0, 10),
+    total: Number(f.total),
+    tipo: f.tipo,
+    cliente: f.customer?.razonSocial ?? null,
+    rfc: f.customer?.rfc ?? null,
+  });
+  // Una sola forma para los dos caminos del motor: el match 1:1 (invoiceId) y
+  // el 1:N con porciones (ConciliacionDetalle). Quien lo pinta no tiene por qué
+  // saber cuál de los dos fue.
+  const cruce = {
+    facturas: conciliacionDetalles.length > 0
+      ? conciliacionDetalles.map((d) => ({
+          ...facturaCruzada(d.invoice),
+          montoAsignado: Number(d.montoAsignado),
+        }))
+      : invoice
+        ? [{ ...facturaCruzada(invoice), montoAsignado: Math.abs(Number(txRow.monto)) }]
+        : [],
+    impuesto: taxDeclaration
+      ? {
+          id: taxDeclaration.id,
+          etiqueta: etiquetaImpuesto(taxDeclaration.tipo, taxDeclaration.periodo),
+          status: taxDeclaration.status,
+        }
+      : null,
+  };
 
   const companyId   = account.companyId;
   const absAmount   = Math.abs(tx.monto);
@@ -625,5 +683,5 @@ export async function GET(req: Request, { params }: Params) {
     }
   }
 
-  return NextResponse.json({ transaction: tx, candidates: scored, impuestos, sugerencia, pagoJunto });
+  return NextResponse.json({ transaction: tx, candidates: scored, impuestos, sugerencia, pagoJunto, cruce });
 }
