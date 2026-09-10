@@ -285,7 +285,7 @@ export default function AjustesPage() {
         }
         actions={
           <span className="rounded-full bg-cos-brand-tint px-3 py-1.5 text-[12px] font-medium text-cos-brand-ink">
-            Fuente MANUAL — el re-posteo nunca la pisa
+            Fuente MANUAL — volver a contabilizar nunca la reemplaza
           </span>
         }
       />
@@ -506,7 +506,7 @@ export default function AjustesPage() {
         ) : manuales.length === 0 ? (
           <p className="px-5 py-6 text-sm text-cos-ink-soft">
             Sin pólizas manuales este mes. Los ajustes que captures arriba aparecerán aquí — y
-            sobreviven al re-posteo.
+            se conservan al volver a contabilizar.
           </p>
         ) : (
           <div className="overflow-x-auto"><table className="w-full text-[13px]">

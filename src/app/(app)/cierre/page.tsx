@@ -118,6 +118,8 @@ function CierrePageInner() {
     [cierre]
   );
   const periodoCerrado = cierre?.estado.cerrado ?? false;
+  const cerradoFueraDeContabilidadOS = cierre?.estado.origenCierre === "FUERA_DE_CONTABILIDAD_OS";
+  const tieneLibroLocal = cierre?.accountingStatus === "POSTED" || cierre?.accountingStatus === "CLOSED";
   const accion: AccionCierre | null = useMemo(() => {
     if (periodoCerrado && !elegida) return null;
     if (acciones.length === 0) return null;
@@ -459,15 +461,26 @@ function CierrePageInner() {
               </>
             ) : periodoCerrado ? (
               <>
-                <p className="font-mono text-[10.5px] uppercase tracking-wide text-cos-jade-ink">Mes cerrado</p>
+                <p className="font-mono text-[10.5px] uppercase tracking-wide text-cos-jade-ink">
+                  {cerradoFueraDeContabilidadOS
+                    ? "Declarado · cerrado fuera de ContabilidadOS"
+                    : "Mes cerrado"}
+                </p>
                 <h2 className="mt-1 flex items-start gap-2 text-[17px] font-semibold leading-snug text-cos-ink sm:text-[19px]">
                   <Check className="mt-0.5 h-5 w-5 shrink-0 text-cos-jade-ink" />
-                  Este mes ya se declaró ante el SAT.
+                  {cerradoFueraDeContabilidadOS
+                    ? "Este mes llegó como parte del historial de la empresa."
+                    : "Este mes ya se declaró ante el SAT."}
                 </h2>
                 <p className="mt-1.5 text-[13.5px] leading-relaxed text-cos-ink-soft">
                   {periodo.detalle ?? "La declaración del periodo está presentada."}
                   {periodo.pagado ? " El pago está ligado a su movimiento del banco." : ""}
                 </p>
+                {cerradoFueraDeContabilidadOS && !tieneLibroLocal && (
+                  <p className="mt-2 text-[12.5px] text-cos-ink-soft">
+                    El cierre ocurrió antes de operar en ContabilidadOS. Aquí no se han generado las pólizas ni el paquete contable de ese periodo.
+                  </p>
+                )}
                 {acciones.length > 0 && (
                   <p className="mt-2 text-[12.5px] text-cos-amber-ink">
                     Quedaron {acciones.length} observacion{acciones.length === 1 ? "" : "es"} no bloqueante

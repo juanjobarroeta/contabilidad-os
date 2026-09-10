@@ -122,6 +122,42 @@ export interface CierreEvaluado {
   };
 }
 
+const TIPOS_DECLARACION_MENSUAL = [
+  "IVA_MENSUAL",
+  "ISR_PROVISIONAL",
+  "RETENCIONES_ISR",
+  "IEPS_MENSUAL",
+] as const;
+
+/**
+ * Lee los dos hechos persistidos que complementan la evaluación de los pasos:
+ * el estado del libro y si el cierre llegó como historia desde fuera del
+ * producto. `isHistorical` nunca fabrica pólizas; sólo conserva la procedencia.
+ */
+async function leerBaseEstadoCierre(companyId: string, year: number, month: number) {
+  const periodo = periodoStr(year, month);
+  const [periodoContable, declaracionExterna] = await Promise.all([
+    prisma.accountingPeriod.findUnique({
+      where: { companyId_year_month: { companyId, year, month } },
+      select: { status: true },
+    }),
+    prisma.taxDeclaration.findFirst({
+      where: {
+        companyId,
+        periodo,
+        tipo: { in: [...TIPOS_DECLARACION_MENSUAL] },
+        status: { in: ["FILED", "PAID"] },
+        isHistorical: true,
+      },
+      select: { id: true },
+    }),
+  ]);
+  return {
+    accountingStatus: periodoContable?.status ?? null,
+    declaracionExterna: declaracionExterna != null,
+  };
+}
+
 /** Reúne los hechos del periodo. Una fuente por cifra, para que el hash no oscile. */
 export async function cargarHechosCierre(
   companyId: string,
@@ -319,17 +355,22 @@ export async function evaluarCierre(
   if (opts.persistir) {
     return sincronizarCierre(companyId, year, month, evaluados);
   }
-  const [existente, periodoContable] = await Promise.all([
+  const [existente, baseEstado] = await Promise.all([
     prisma.cierrePeriodo.findUnique({
       where: { companyId_year_month: { companyId, year, month } },
       include: { pasos: true },
     }),
-    prisma.accountingPeriod.findUnique({
-      where: { companyId_year_month: { companyId, year, month } },
-      select: { status: true },
-    }),
+    leerBaseEstadoCierre(companyId, year, month),
   ]);
-  return armarResultado(companyId, year, month, evaluados, existente, periodoContable?.status ?? null);
+  return armarResultado(
+    companyId,
+    year,
+    month,
+    evaluados,
+    existente,
+    baseEstado.accountingStatus,
+    baseEstado.declaracionExterna
+  );
 }
 
 type CierreConPasos = Prisma.CierrePeriodoGetPayload<{ include: { pasos: true } }>;
@@ -340,7 +381,8 @@ function armarResultado(
   month: number,
   evaluados: PasoEvaluado[],
   cierre: CierreConPasos | null,
-  accountingStatus: EstadoContableCierre | null
+  accountingStatus: EstadoContableCierre | null,
+  declaracionExterna: boolean
 ): CierreEvaluado {
   const porClave = new Map((cierre?.pasos ?? []).map((p) => [p.clave, p]));
   const pasos: PasoConDecision[] = evaluados.map((ev) => {
@@ -361,7 +403,7 @@ function armarResultado(
   });
   const aplican = pasos.filter((p) => p.estadoCalculado !== "no_aplica");
   const requieren = aplican.filter((p) => p.requiereConfirmacion);
-  const estado = resolverEstadoCierre({ estadoContable: accountingStatus, pasos });
+  const estado = resolverEstadoCierre({ estadoContable: accountingStatus, declaracionExterna, pasos });
   return {
     companyId,
     year,
@@ -461,13 +503,19 @@ export async function sincronizarCierre(
     });
   }
 
-  // La fase canónica necesita el estado físico del ledger. Las decisiones
-  // humanas no se releen: el paso a REVISAR se deriva del hash vigente.
-  const periodoContable = await prisma.accountingPeriod.findUnique({
-    where: { companyId_year_month: { companyId, year, month } },
-    select: { status: true },
-  });
-  return armarResultado(companyId, year, month, evaluados, cierre, periodoContable?.status ?? null);
+  // La fase canónica necesita el estado físico del ledger y la procedencia de
+  // una declaración histórica. Las decisiones humanas no se releen: el paso a
+  // REVISAR se deriva del hash vigente.
+  const baseEstado = await leerBaseEstadoCierre(companyId, year, month);
+  return armarResultado(
+    companyId,
+    year,
+    month,
+    evaluados,
+    cierre,
+    baseEstado.accountingStatus,
+    baseEstado.declaracionExterna
+  );
 }
 
 // ── La decisión humana ───────────────────────────────────────────────────────
@@ -591,7 +639,15 @@ async function decidir(
   const evaluados: PasoEvaluado[] = cierre.pasos.map(({ estado: _e, confirmadoAt: _c, confirmadoByUserId: _u, nota: _n, ...ev }) => ev);
   return {
     ok: true,
-    cierre: armarResultado(a.companyId, a.year, a.month, evaluados, fresco, cierre.accountingStatus),
+    cierre: armarResultado(
+      a.companyId,
+      a.year,
+      a.month,
+      evaluados,
+      fresco,
+      cierre.accountingStatus,
+      cierre.estado.origenCierre === "FUERA_DE_CONTABILIDAD_OS"
+    ),
   };
 }
 

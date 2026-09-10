@@ -245,7 +245,7 @@ export default function CierrePage() {
     }
   }
 
-  /** Postear de una vez todos los meses pendientes del año (post-pending). */
+  /** Contabilizar de una vez todos los meses pendientes del año (post-pending). */
   async function postearPendientes() {
     if (!activeCompany) return;
     setPendientesLoading(true); setError(""); setAviso("");
@@ -258,7 +258,7 @@ export default function CierrePage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Error al actualizar los meses pendientes");
       const partes: string[] = [
-        `${data.posted} ${data.posted === 1 ? "mes cerrado" : "meses cerrados"}`,
+        `${data.posted} ${data.posted === 1 ? "mes contabilizado" : "meses contabilizados"}`,
       ];
       if (data.errors?.length > 0) partes.push(`${data.errors.length} con error`);
       setAviso(`Meses pendientes ${year}: ${partes.join(" · ")}.`);
@@ -334,7 +334,7 @@ export default function CierrePage() {
     : periodo.status === "DRAFT"
       ? { t: "BORRADOR", cls: "bg-cos-amber-tint text-cos-amber-ink" }
       : periodo.status === "POSTED"
-        ? { t: "POSTEADO", cls: "bg-cos-brand-tint text-cos-brand-ink" }
+        ? { t: "CONTABILIZADO", cls: "bg-cos-brand-tint text-cos-brand-ink" }
         : { t: "CERRADO", cls: "bg-cos-jade-tint text-cos-jade-ink" };
 
   const liga = "inline-flex items-center gap-1 text-[13px] font-medium text-cos-brand-ink hover:underline";
@@ -688,7 +688,7 @@ export default function CierrePage() {
                     <button
                       key={i}
                       role="listitem"
-                      title={`${MESES[i]} ${year}${p ? ` · ${p.status}` : " · sin iniciar"}`}
+                      title={`${MESES[i]} ${year}${p ? ` · ${p.status === "POSTED" ? "contabilizado" : p.status === "CLOSED" ? "cerrado" : "borrador"}` : " · sin iniciar"}`}
                       onClick={() => setPeriod(year, i + 1)}
                       className={cn(
                         "h-9 flex-1 rounded-sm transition-transform hover:scale-y-110",
@@ -709,7 +709,7 @@ export default function CierrePage() {
                 className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-control border border-cos-line bg-cos-card px-3 py-2 text-[13px] font-medium text-cos-ink hover:bg-cos-paper disabled:opacity-50"
               >
                 {pendientesLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                Postear meses pendientes de {year}
+                Contabilizar meses pendientes de {year}
               </button>
             </div>
           </section>

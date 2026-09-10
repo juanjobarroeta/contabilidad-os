@@ -91,7 +91,7 @@ export async function GET(req: Request) {
         {
           code: "CIERRE_NO_DESCARGABLE",
           error:
-            cierre.estado.fase === "BLOQUEADO"
+            cierre.estado.bloqueos.length > 0
               ? `El periodo tiene bloqueos activos${detalle ? `: ${detalle}` : "."}`
               : "Contabiliza el periodo antes de descargar el paquete definitivo.",
           estado: cierre.estado,
@@ -99,7 +99,7 @@ export async function GET(req: Request) {
         { status: 409 }
       );
     }
-    const posteado = cierre.estado.posteado;
+    const contabilizado = cierre.estado.contabilizado;
 
     const zip = new JSZip();
     const archivos: ArchivoPaquete[] = [];
@@ -213,7 +213,7 @@ export async function GET(req: Request) {
       agregar(
         `${CARPETA.estados}/Estados financieros ${clavePeriodo(year, month)}.xlsx`,
         new Uint8Array(libro),
-        `Balanza, estado de resultados, balance general y libro diario${posteado ? "" : " (PRELIMINARES)"}.`
+        `Balanza, estado de resultados, balance general y libro diario${contabilizado ? "" : " (PRELIMINARES)"}.`
       );
     });
 
@@ -246,7 +246,7 @@ export async function GET(req: Request) {
         razonSocial: company.razonSocial,
         year,
         month,
-        posteado,
+        posteado: contabilizado,
         readiness,
         archivos,
         omitidos,

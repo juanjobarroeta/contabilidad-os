@@ -57,7 +57,7 @@ export async function GET(req: Request) {
       await Promise.all([
         prisma.taxDeclaration.findMany({
           where: { companyId: { in: companyIds }, tipo: { in: ["IVA_MENSUAL", "ISR_PROVISIONAL"] }, periodo },
-          select: { companyId: true, tipo: true, status: true, ivaPagar: true, isrPagar: true },
+          select: { companyId: true, tipo: true, status: true, isHistorical: true, ivaPagar: true, isrPagar: true },
         }),
         prisma.payrollRun.findMany({
           where: { companyId: { in: companyIds }, status: "CALCULATED" },
@@ -130,6 +130,9 @@ export async function GET(req: Request) {
       const isr = ds.find((d) => d.tipo === "ISR_PROVISIONAL");
       const algunaGuardada = ds.length > 0;
       const todasPresentadas = algunaGuardada && ds.every((d) => FILED.includes(d.status ?? ""));
+      const cerradoFueraDeContabilidadOS = ds.some(
+        (d) => d.isHistorical && FILED.includes(d.status ?? "")
+      );
       const estado = todasPresentadas
         ? ("presentada" as const)
         : algunaGuardada
@@ -153,7 +156,11 @@ export async function GET(req: Request) {
           setupCompleto: !!(c.registroPatronal && c.facturapiApiKey),
         },
         banco: { sinClasificar: bancoBy.get(c.id) ?? 0 },
-        cierre: { mesAnteriorPosteado: (periodoBy.get(c.id) ?? "DRAFT") !== "DRAFT", label: periodoLabel },
+        cierre: {
+          mesAnteriorContabilizado: (periodoBy.get(c.id) ?? "DRAFT") !== "DRAFT",
+          cerradoFueraDeContabilidadOS,
+          label: periodoLabel,
+        },
         hallazgosCriticos: criticosBy.get(c.id) ?? 0,
       };
     });

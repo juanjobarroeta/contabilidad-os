@@ -146,9 +146,9 @@ export function accionesDelCierre(cierre: CierreEvaluado): AccionCierre[] {
  * Pasos que aplican y ya no piden nada: sirven para el avance honesto («3 de 9
  * listos») sin contar los que no aplican a la empresa.
  *
- * Un mes canónicamente CERRADO cuenta completo. La mera presentación ya no
- * tapa un bloqueo: además debe existir contabilidad posteada y evidencia
- * vigente sin bloqueos duros.
+ * Un mes canónicamente CERRADO cuenta completo. Si se cerró dentro del
+ * producto exige contabilidad contabilizada y evidencia vigente; si llegó
+ * como declaración histórica, el origen externo queda explícito en el estado.
  */
 export function avanceDelCierre(cierre: CierreEvaluado): { listos: number; total: number } {
   const aplican = cierre.pasos.filter((p) => p.estadoCalculado !== "no_aplica");

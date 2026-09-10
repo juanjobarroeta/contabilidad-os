@@ -130,10 +130,9 @@ export async function avanzarCierreEmpresa(
       where: { companyId_year_month: { companyId: company.id, year, month } },
       select: { id: true, snapshotAvance: true, responsableUserId: true, cerradoAt: true },
     });
-    // La declaración sola ya no puede esconder un bloqueo ni un ledger sin
-    // postear. El estado canónico exige presentación + posteo + cero bloqueos.
-    // Si evidencia nueva invalida una marca previa, el periodo vuelve a la
-    // cola y conserva la discrepancia visible hasta resolverla.
+    // Un cierre hecho dentro del producto exige declaración, contabilización
+    // y cero bloqueos. Una declaración histórica conserva su cierre externo
+    // sin fabricar pólizas ni entregables de ContabilidadOS.
     let cerradoAt = fila.cerradoAt;
     if (cerradoAt && !cierre.estado.cerrado) {
       await prisma.cierrePeriodo.update({
@@ -162,7 +161,11 @@ export async function avanzarCierreEmpresa(
         entidadId: fila.id,
         detalle: {
           periodo,
-          motivo: "declaración presentada, contabilidad posteada y cero bloqueos duros",
+          motivo:
+            cierre.estado.origenCierre === "FUERA_DE_CONTABILIDAD_OS"
+              ? "declarado y cerrado fuera de ContabilidadOS"
+              : "declaración presentada, pólizas generadas y cero bloqueos duros",
+          origenCierre: cierre.estado.origenCierre,
         },
       });
       out.periodos.push({ periodo, deltas: 0, avisos: 0, mejoras: 0 });

@@ -58,6 +58,9 @@ export function bloqueCierre(cierre: CierreEvaluado, activo: PasoConDecision | n
   partes.push(
     `El contador está cerrando el periodo ${cierre.periodo} de esta empresa en la pantalla /cierre. ` +
       `Estado canónico: ${cierre.estado.fase}. ` +
+      (cierre.estado.origenCierre === "FUERA_DE_CONTABILIDAD_OS"
+        ? "Origen: declaración histórica; el periodo se cerró fuera de ContabilidadOS y eso no implica que aquí se hayan generado pólizas o entregables. "
+        : "") +
       `Van ${cierre.resumen.confirmados} de ${cierre.resumen.aplican} pasos confirmados` +
       (cierre.estado.bloqueos.length > 0 ? `; ${cierre.estado.bloqueos.length} bloqueo(s) duro(s).` : ".")
   );

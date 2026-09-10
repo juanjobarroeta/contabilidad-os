@@ -37,11 +37,12 @@ describe("GET /api/contabilidad/paquete — compuerta canónica", () => {
         fase: "LISTO",
         estadoContable: "DRAFT",
         declarado: false,
+        origenCierre: null,
         listo: true,
-        posteado: false,
+        contabilizado: false,
         cerrado: false,
         descargable: false,
-        puedePostear: true,
+        puedeContabilizar: true,
         bloqueos: [],
       },
     });
@@ -61,11 +62,12 @@ describe("GET /api/contabilidad/paquete — compuerta canónica", () => {
         fase: "BLOQUEADO",
         estadoContable: "CLOSED",
         declarado: true,
+        origenCierre: null,
         listo: false,
-        posteado: false,
+        contabilizado: false,
         cerrado: false,
         descargable: false,
-        puedePostear: false,
+        puedeContabilizar: false,
         bloqueos: [
           { paso: "banco", titulo: "Bancos", tipo: "MOTOR", detalle: "Sin estado de cuenta" },
         ],
@@ -78,6 +80,30 @@ describe("GET /api/contabilidad/paquete — compuerta canónica", () => {
       code: "CIERRE_NO_DESCARGABLE",
       error: expect.stringContaining("Sin estado de cuenta"),
       estado: { fase: "BLOQUEADO", estadoContable: "CLOSED" },
+    });
+  });
+
+  it("un cierre histórico externo no inventa el paquete contable", async () => {
+    mocks.evaluarCierre.mockResolvedValue({
+      estado: {
+        fase: "CERRADO",
+        estadoContable: null,
+        declarado: true,
+        origenCierre: "FUERA_DE_CONTABILIDAD_OS",
+        listo: true,
+        contabilizado: false,
+        cerrado: true,
+        descargable: false,
+        puedeContabilizar: true,
+        bloqueos: [],
+      },
+    });
+
+    const res = await GET(new Request("http://localhost/api/contabilidad/paquete?companyId=c1&year=2026&month=7"));
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toMatchObject({
+      code: "CIERRE_NO_DESCARGABLE",
+      estado: { fase: "CERRADO", origenCierre: "FUERA_DE_CONTABILIDAD_OS", descargable: false },
     });
   });
 });

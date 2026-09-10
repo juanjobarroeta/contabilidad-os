@@ -63,9 +63,9 @@ describe("renderManifiesto", () => {
 
   it("dice si las cifras son definitivas o preliminares", () => {
     // Es la diferencia entre poder mandarlo al SAT y no poder.
-    expect(renderManifiesto(resumen({ posteado: true }))).toMatch(/POSTEADO/);
+    expect(renderManifiesto(resumen({ posteado: true }))).toMatch(/CONTABILIZADO/);
     const sinPostear = renderManifiesto(resumen({ posteado: false }));
-    expect(sinPostear).toMatch(/SIN POSTEAR/);
+    expect(sinPostear).toMatch(/SIN CONTABILIZAR/);
     expect(sinPostear).toMatch(/PRELIMINARES/);
   });
 

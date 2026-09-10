@@ -13,8 +13,12 @@ function paso(over: Partial<PasoParaEstadoCierre> = {}): PasoParaEstadoCierre {
   };
 }
 
-function resolver(estadoContable: EstadoContableCierre | null, pasos: PasoParaEstadoCierre[]) {
-  return resolverEstadoCierre({ estadoContable, pasos });
+function resolver(
+  estadoContable: EstadoContableCierre | null,
+  pasos: PasoParaEstadoCierre[],
+  declaracionExterna = false
+) {
+  return resolverEstadoCierre({ estadoContable, pasos, declaracionExterna });
 }
 
 const presentada = paso({
@@ -24,25 +28,25 @@ const presentada = paso({
 });
 
 describe("resolverEstadoCierre", () => {
-  it("avanza LISTO → POSTEADO → CERRADO desde una sola fuente", () => {
+  it("avanza LISTO → CONTABILIZADO → CERRADO desde una sola fuente", () => {
     expect(resolver("DRAFT", [paso()])).toMatchObject({
       fase: "LISTO",
       listo: true,
-      posteado: false,
+      contabilizado: false,
       cerrado: false,
       descargable: false,
-      puedePostear: true,
+      puedeContabilizar: true,
     });
     expect(resolver("POSTED", [paso()])).toMatchObject({
-      fase: "POSTEADO",
-      posteado: true,
+      fase: "CONTABILIZADO",
+      contabilizado: true,
       cerrado: false,
       descargable: true,
     });
     expect(resolver("POSTED", [paso(), presentada])).toMatchObject({
       fase: "CERRADO",
       declarado: true,
-      posteado: true,
+      contabilizado: true,
       cerrado: true,
       descargable: true,
     });
@@ -59,10 +63,10 @@ describe("resolverEstadoCierre", () => {
       estadoContable: "CLOSED",
       declarado: true,
       listo: false,
-      posteado: false,
+      contabilizado: false,
       cerrado: false,
       descargable: false,
-      puedePostear: false,
+      puedeContabilizar: false,
     });
     expect(r.bloqueos).toEqual([
       expect.objectContaining({ paso: "banco", tipo: "MOTOR", detalle: "43 movimientos sin clasificar" }),
@@ -82,8 +86,34 @@ describe("resolverEstadoCierre", () => {
 
   it("la atención no es un bloqueo duro", () => {
     const r = resolver("POSTED", [paso({ estadoCalculado: "atencion", detalle: "Revisar un aviso" })]);
-    expect(r).toMatchObject({ fase: "POSTEADO", listo: true, descargable: true });
+    expect(r).toMatchObject({ fase: "CONTABILIZADO", listo: true, descargable: true });
     expect(r.bloqueos).toEqual([]);
+  });
+
+  it("una declaración histórica cierra fuera de ContabilidadOS sin inventar pólizas ni paquete", () => {
+    const r = resolver("DRAFT", [paso({ estadoCalculado: "sin_datos" })], true);
+    expect(r).toMatchObject({
+      fase: "CERRADO",
+      declarado: true,
+      origenCierre: "FUERA_DE_CONTABILIDAD_OS",
+      listo: false,
+      contabilizado: false,
+      cerrado: true,
+      descargable: false,
+      puedeContabilizar: false,
+    });
+    expect(r.bloqueos).toHaveLength(1);
+  });
+
+  it("conserva el origen externo aunque después se reconstruya el libro local", () => {
+    const r = resolver("POSTED", [paso(), presentada], true);
+    expect(r).toMatchObject({
+      fase: "CERRADO",
+      origenCierre: "FUERA_DE_CONTABILIDAD_OS",
+      contabilizado: true,
+      cerrado: true,
+      descargable: true,
+    });
   });
 
   it("un paso no aplicable no aporta bloqueo ni declaración", () => {

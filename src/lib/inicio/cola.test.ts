@@ -9,14 +9,14 @@ function empresa(over: Partial<SenalesEmpresa> = {}): SenalesEmpresa {
     declaracion: { estado: "presentada", aPagar: null, periodoLabel: "julio", venceLabel: "17 ago" },
     nomina: { runsSinTimbrar: [], corridasDelMes: 1, empleadosActivos: 10, setupCompleto: true },
     banco: { sinClasificar: 0 },
-    cierre: { mesAnteriorPosteado: true, label: "julio" },
+    cierre: { mesAnteriorContabilizado: true, cerradoFueraDeContabilidadOS: false, label: "julio" },
     hallazgosCriticos: 0,
     ...over,
   };
 }
 
 describe("filasDeEmpresa — una acción por problema, en orden", () => {
-  it("empresa limpia y posteada: cola vacía", () => {
+  it("empresa limpia y contabilizada: cola vacía", () => {
     expect(filasDeEmpresa(empresa(), { diaDelMes: 20 })).toEqual([]);
   });
 
@@ -63,19 +63,30 @@ describe("filasDeEmpresa — una acción por problema, en orden", () => {
   });
 
   it("cerrar mes sólo con la fila limpia: presentada + banco al día + nada por timbrar", () => {
-    const lista = empresa({ cierre: { mesAnteriorPosteado: false, label: "julio" } });
+    const lista = empresa({ cierre: { mesAnteriorContabilizado: false, cerradoFueraDeContabilidadOS: false, label: "julio" } });
     expect(filasDeEmpresa(lista, { diaDelMes: 27 })[0]).toMatchObject({
       categoria: "CIERRE",
       urgencia: "cuando_quieras",
       cta: { label: "Cerrar mes", href: "/contabilidad/cierre" },
     });
     const sucia = empresa({
-      cierre: { mesAnteriorPosteado: false, label: "julio" },
+      cierre: { mesAnteriorContabilizado: false, cerradoFueraDeContabilidadOS: false, label: "julio" },
       banco: { sinClasificar: 3 },
     });
     const filas = filasDeEmpresa(sucia, { diaDelMes: 27 });
     expect(filas.some((f) => f.categoria === "CIERRE")).toBe(false);
     expect(filas[0].categoria).toBe("BANCOS");
+  });
+
+  it("no vuelve a pedir el cierre de una declaración histórica externa", () => {
+    const historica = empresa({
+      cierre: {
+        mesAnteriorContabilizado: false,
+        cerradoFueraDeContabilidadOS: true,
+        label: "julio",
+      },
+    });
+    expect(filasDeEmpresa(historica, { diaDelMes: 27 })).toEqual([]);
   });
 });
 

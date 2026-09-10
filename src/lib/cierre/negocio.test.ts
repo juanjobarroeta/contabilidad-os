@@ -25,7 +25,11 @@ function paso(over: Partial<PasoConDecision>): PasoConDecision {
   } as PasoConDecision;
 }
 
-function cierre(pasos: PasoConDecision[], accountingStatus: EstadoContableCierre | null = "DRAFT"): CierreEvaluado {
+function cierre(
+  pasos: PasoConDecision[],
+  accountingStatus: EstadoContableCierre | null = "DRAFT",
+  declaracionExterna = false
+): CierreEvaluado {
   return {
     companyId: "c1",
     year: 2026,
@@ -36,7 +40,7 @@ function cierre(pasos: PasoConDecision[], accountingStatus: EstadoContableCierre
     conversationId: null,
     cerradoAt: null,
     accountingStatus,
-    estado: resolverEstadoCierre({ estadoContable: accountingStatus, pasos }),
+    estado: resolverEstadoCierre({ estadoContable: accountingStatus, pasos, declaracionExterna }),
     pasos,
     resumen: { total: pasos.length, aplican: pasos.length, listos: 0, atencion: 0, bloquean: 0, confirmados: 0, completo: false },
   };
@@ -87,6 +91,22 @@ describe("resumenNegocio — el mes contado al dueño", () => {
   it("no inventa que ya se declaró cuando el paso no tiene señales", () => {
     const r = resumenNegocio(cierre([paso({ clave: "declaracion", senales: [] })]));
     expect(r.declarado).toBe(false);
+  });
+
+  it("presenta un cierre histórico externo como al corriente sin trasladar su reconstrucción al dueño", () => {
+    const r = resumenNegocio(
+      cierre([
+        paso({ clave: "declaracion", estadoCalculado: "sin_datos", senales: [] }),
+        paso({ estadoCalculado: "bloquea", detalle: "Sin estado de cuenta" }),
+      ], null, true)
+    );
+    expect(r).toMatchObject({
+      alDia: true,
+      declarado: true,
+      cerradoFueraDeContabilidadOS: true,
+      detienen: 0,
+      falta: [],
+    });
   });
 
   it("toma las cifras del paso de declaración tal cual, sin recalcular", () => {

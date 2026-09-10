@@ -5,7 +5,7 @@
 // cada pantalla elegía uno y podía llamar «cerrado» a un mes con un bloqueo
 // activo. Este contrato impone una sola precedencia:
 //
-//   bloqueo / evidencia desconocida > cerrado > posteado > listo
+//   cierre externo > bloqueo / evidencia desconocida > cerrado > contabilizado > listo
 //
 // Un estado físico POSTED/CLOSED se conserva como dato (`estadoContable`), pero
 // nunca se expone como fase operativa ni habilita entregables si hoy existe un
@@ -17,7 +17,8 @@ import type { ClavePasoCierre } from "./claves";
 import type { EstadoCalculado, SenalPaso } from "./workflow";
 
 export type EstadoContableCierre = "DRAFT" | "POSTED" | "CLOSED";
-export type FaseCierreCanonica = "BLOQUEADO" | "LISTO" | "POSTEADO" | "CERRADO";
+export type FaseCierreCanonica = "BLOQUEADO" | "LISTO" | "CONTABILIZADO" | "CERRADO";
+export type OrigenCierre = "CONTABILIDAD_OS" | "FUERA_DE_CONTABILIDAD_OS" | null;
 export type TipoBloqueoCierre = "MOTOR" | "SIN_DATOS" | "EVIDENCIA_CAMBIO" | "DEPENDENCIA";
 
 export interface PasoParaEstadoCierre {
@@ -42,21 +43,25 @@ export interface EstadoCierreCanonico {
   estadoContable: EstadoContableCierre | null;
   /** Hecho externo: existe evidencia de presentación del periodo. */
   declarado: boolean;
+  /** Dónde se cerró el periodo; evita atribuir a ContabilidadOS un cierre importado. */
+  origenCierre: OrigenCierre;
   /** Sin bloqueo duro en la evidencia vigente. */
   listo: boolean;
-  /** Ledger posteado y sin bloqueo vigente. */
-  posteado: boolean;
-  /** Periodo cerrado y sin bloqueo vigente. */
+  /** Pólizas generadas en el ledger y sin bloqueo vigente. */
+  contabilizado: boolean;
+  /** Periodo cerrado aquí o importado como cierre histórico externo. */
   cerrado: boolean;
-  /** Los entregables definitivos sólo existen desde POSTEADO. */
+  /** Los entregables definitivos sólo existen con el ledger contabilizado. */
   descargable: boolean;
   /** Transición admitida por el contrato; el motor aplica sus guardas adicionales. */
-  puedePostear: boolean;
+  puedeContabilizar: boolean;
   bloqueos: BloqueoCierre[];
 }
 
 export interface EntradaEstadoCierre {
   estadoContable: EstadoContableCierre | null;
+  /** Declaración FILED/PAID importada como historia, cerrada antes de operar aquí. */
+  declaracionExterna?: boolean;
   pasos: ReadonlyArray<PasoParaEstadoCierre>;
 }
 
@@ -108,34 +113,43 @@ export function resolverEstadoCierre(input: EntradaEstadoCierre): EstadoCierreCa
     }
   }
 
-  const declarado = aplican.some(
+  const declaradoEnPasos = aplican.some(
     (p) =>
       p.clave === "declaracion" &&
       p.senales.some((s) => s.clave === "fx:declaracion-periodo" && s.estado === "ok")
   );
+  const cierreExterno = input.declaracionExterna === true;
+  const declarado = cierreExterno || declaradoEnPasos;
   const sinBloqueos = bloqueos.length === 0;
-  const estadoContablePosteado = input.estadoContable === "POSTED" || input.estadoContable === "CLOSED";
-  const posteado = sinBloqueos && estadoContablePosteado;
-  const cerrado =
+  const estadoContableContabilizado = input.estadoContable === "POSTED" || input.estadoContable === "CLOSED";
+  const contabilizado = sinBloqueos && estadoContableContabilizado;
+  const cerradoEnContabilidadOS =
     sinBloqueos &&
     (input.estadoContable === "CLOSED" || (input.estadoContable === "POSTED" && declarado));
-  const fase: FaseCierreCanonica = !sinBloqueos
-    ? "BLOQUEADO"
-    : cerrado
-      ? "CERRADO"
-      : posteado
-        ? "POSTEADO"
-        : "LISTO";
+  // Una declaración histórica importada prueba que el periodo se cerró fuera
+  // del producto. No inventa pólizas ni abre entregables: esos dos hechos
+  // siguen dependiendo del ledger y de sus bloqueos vigentes.
+  const cerrado = cierreExterno || cerradoEnContabilidadOS;
+  const fase: FaseCierreCanonica = cierreExterno
+    ? "CERRADO"
+    : !sinBloqueos
+      ? "BLOQUEADO"
+      : cerradoEnContabilidadOS
+        ? "CERRADO"
+        : contabilizado
+          ? "CONTABILIZADO"
+          : "LISTO";
 
   return {
     fase,
     estadoContable: input.estadoContable,
     declarado,
+    origenCierre: cierreExterno ? "FUERA_DE_CONTABILIDAD_OS" : cerradoEnContabilidadOS ? "CONTABILIDAD_OS" : null,
     listo: sinBloqueos,
-    posteado,
+    contabilizado,
     cerrado,
-    descargable: posteado,
-    puedePostear: sinBloqueos && !estadoContablePosteado,
+    descargable: contabilizado,
+    puedeContabilizar: sinBloqueos && !estadoContableContabilizado,
     bloqueos,
   };
 }

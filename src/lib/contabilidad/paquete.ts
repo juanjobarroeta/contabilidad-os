@@ -85,12 +85,12 @@ export function renderManifiesto(r: ResumenPaquete): string {
   l.push(`Generado:   ${r.generadoEn}`);
   l.push("");
 
-  // El estado del periodo cambia lo que significan las cifras: sin postear son
+  // El estado del periodo cambia lo que significan las cifras: sin contabilizar son
   // preliminares y no deben mandarse al SAT como definitivas.
   l.push(
     r.posteado
-      ? "Periodo POSTEADO: las cifras salen del ledger."
-      : "Periodo SIN POSTEAR: las cifras son PRELIMINARES, derivadas de los CFDIs."
+      ? "Periodo CONTABILIZADO: las cifras salen del libro contable."
+      : "Periodo SIN CONTABILIZAR: las cifras son PRELIMINARES, derivadas de los CFDI."
   );
   const semaforo = {
     lista: "Contabilidad electrónica LISTA para enviar.",
