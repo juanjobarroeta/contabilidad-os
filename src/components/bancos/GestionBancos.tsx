@@ -165,6 +165,16 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
   // "YYYY-MM" acota movimientos Y conteos a ese mes (el backend ya lo soporta).
   const [mes, setMes] = useState("");
   const [meses, setMeses] = useState<{ mes: string; count: number }[]>([]);
+  // BÚSQUEDA DEL ARCHIVO. Va al servidor, no al arreglo cargado: buscar sólo
+  // en la página que ya se trajo diría «sin resultados» sobre un movimiento
+  // que sí existe tres meses atrás. `q` es lo tecleado; `qDebounced` lo que
+  // viaja, para no disparar una consulta por letra.
+  const [q, setQ] = useState("");
+  const [qDebounced, setQDebounced] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setQDebounced(q.trim()), 300);
+    return () => clearTimeout(t);
+  }, [q]);
   // Paginación de la lista: se carga de a poco y se puede seguir hacia atrás.
   const [pagina, setPagina] = useState(1);
   const [paginas, setPaginas] = useState(1);
@@ -231,12 +241,22 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
     }
   }, [activeCompany]);
 
+  /** La query de la lista, UNA sola vez: la primera página y «Cargar más»
+   *  tienen que pedir exactamente lo mismo o la lista mezcla dos búsquedas. */
+  const consulta = useCallback(() => {
+    const p = new URLSearchParams({ status: filter, pageSize: String(PAGE_SIZE) });
+    if (mes) p.set("mes", mes);
+    if (qDebounced) p.set("q", qDebounced);
+    if (selectedId === "todas" && activeCompany) p.set("companyId", activeCompany.id);
+    return `?${p}`;
+  }, [filter, mes, qDebounced, selectedId, activeCompany]);
+
   const loadTxs = useCallback(async () => {
     if (!selectedId) { setTxs([]); return; }
     setLoading(true);
     setErrorTxs("");
     try {
-      const res = await fetch(`/api/bancos/${selectedId}?status=${filter}&page=1&pageSize=${PAGE_SIZE}${mes ? `&mes=${mes}` : ""}${selectedId === "todas" && activeCompany ? `&companyId=${activeCompany.id}` : ""}`);
+      const res = await fetch(`/api/bancos/${selectedId}${consulta()}&page=1`);
       const data = await res.json();
       // Un error del API no es "no hay movimientos": sin array real, es fallo.
       if (!res.ok || !Array.isArray(data?.transactions)) throw new Error();
@@ -252,7 +272,7 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
       setErrorTxs("No se pudieron cargar los movimientos. Revisa tu conexión e inténtalo de nuevo.");
       setTxs([]);
     } finally { setLoading(false); }
-  }, [selectedId, filter, mes]);
+  }, [selectedId, filter, mes, qDebounced, consulta]);
 
   /** Trae la página siguiente y la AGREGA (no reemplaza): la lista crece. */
   const cargarMas = useCallback(async () => {
@@ -260,12 +280,12 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
     setCargandoMas(true);
     try {
       const sig = pagina + 1;
-      const res = await fetch(`/api/bancos/${selectedId}?status=${filter}&page=${sig}&pageSize=${PAGE_SIZE}${mes ? `&mes=${mes}` : ""}${selectedId === "todas" && activeCompany ? `&companyId=${activeCompany.id}` : ""}`);
+      const res = await fetch(`/api/bancos/${selectedId}${consulta()}&page=${sig}`);
       const data = await res.json();
       setTxs((prev) => [...prev, ...(data.transactions ?? [])]);
       setPagina(sig);
     } finally { setCargandoMas(false); }
-  }, [selectedId, filter, mes, pagina, paginas, cargandoMas]);
+  }, [selectedId, filter, mes, pagina, paginas, cargandoMas, consulta]);
 
   /** Deshace un lote: borra sus movimientos SIN conciliar y conserva los que ya
    *  se casaron con un CFDI — deshacer nunca destruye trabajo fiscal hecho. */
@@ -780,7 +800,39 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
               <ChevronDown className={"h-3.5 w-3.5 transition-transform " + (showMore ? "rotate-180" : "")} />
             </button>
             )}
+            {/* La caja de búsqueda del ARCHIVO: la mesa buscaba dentro de su
+                mes desde #970 y aquí no había ninguna, que es justo lo que un
+                archivo tiene que saber hacer. Pega al servidor, así que
+                alcanza los meses que todavía no se han traído. */}
+            <div className="ml-auto flex min-w-[240px] flex-1 items-center gap-2 rounded-full border border-cos-line bg-cos-card px-3.5 py-2 focus-within:border-cos-brand">
+              <Search className="h-4 w-4 flex-none text-cos-ink-faint" />
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Buscar concepto, contraparte, RFC, referencia o importe…"
+                className="w-full bg-transparent text-[13.5px] text-cos-ink outline-none placeholder:text-cos-ink-faint"
+              />
+              {q && (
+                <button onClick={() => setQ("")} aria-label="Limpiar búsqueda" className="flex-none text-cos-ink-faint hover:text-cos-ink">
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
           </div>
+          )}
+          {/* Qué se está mirando, con hechos: el archivo cuenta los meses de
+              corrido y una búsqueda sin resultados tiene que decir que la
+              búsqueda no encontró — no que no hay movimientos. */}
+          {vista !== "cuentas" && qDebounced && !loading && !errorTxs && (
+            <p className="mt-2.5 text-[13px] text-cos-ink-soft">
+              {counts.total === 0
+                ? <>Ningún movimiento coincide con <b>{qDebounced}</b>{mes ? ` en ${fmtMes(mes)}` : ""}.</>
+                : <>
+                    {counts.total?.toLocaleString("es-MX")}{" "}
+                    {counts.total === 1 ? "movimiento coincide" : "movimientos coinciden"} con <b>{qDebounced}</b>
+                    {mes ? ` en ${fmtMes(mes)}` : meses.length > 1 ? ` en ${meses.length} meses` : ""}.
+                  </>}
+            </p>
           )}
 
           {/* secondary type filters */}
@@ -806,7 +858,11 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
                  leerse como "no hay movimientos". */
               <Alert tone="danger" action={<RetryButton onClick={loadTxs} />}>{errorTxs}</Alert>
             ) : txs.length === 0 ? (
-              <Card className="rounded-card border-cos-line p-10 text-center text-cos-ink-faint shadow-card">No hay movimientos con ese filtro.</Card>
+              <Card className="rounded-card border-cos-line p-10 text-center text-cos-ink-faint shadow-card">
+                {qDebounced
+                  ? <>Nada coincide con <b>{qDebounced}</b>{mes ? <> en {fmtMes(mes)}</> : ""}. Prueba con otra palabra{mes ? ", o quita el corte por mes" : ""}.</>
+                  : "No hay movimientos con ese filtro."}
+              </Card>
             ) : txs.map((m, i) => {
               const matched = m.status === "MATCHED";
               const ignored = m.status === "IGNORED";
