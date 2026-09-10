@@ -100,6 +100,12 @@ export interface MovimientoParaConciliar {
    *  movimientos ya estén conciliados — confundirlos hacía que la mesa
    *  gritara «27 sin conciliar» con 11 ya conciliados (revisión pág. 9). */
   conciliado: boolean;
+  /** Estado crudo, para que la mesa pueda filtrar como la lista de
+   *  Movimientos: `conciliado` junta MATCHED e IGNORED y ahí se pierde la
+   *  diferencia entre «tiene factura» y «se categorizó sin factura». */
+  status?: "UNMATCHED" | "MATCHED" | "IGNORED";
+  /** Tag de la categoría cuando es IGNORED (TAX_PAYMENT, ANTICIPO_CLIENTE…). */
+  notes?: string | null;
   // Contraparte extraída de la descripción (spei-descripcion.ts). Opcional:
   // el motor no la usa para conciliar — la ARRASTRA para que la mesa enseñe
   // quién pagó en vez de la sintaxis del banco.

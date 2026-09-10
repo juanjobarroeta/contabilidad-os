@@ -138,7 +138,7 @@ export async function conciliacionDelMes(
       // y a la mesa: sin estas columnas, la mesa enseñaba la sintaxis cruda del
       // banco («SPEI RECIBIDO, BCO:0014 …») teniendo el QUIÉN ya guardado.
       select: {
-        id: true, fecha: true, descripcion: true, monto: true, status: true, bankAccountId: true,
+        id: true, fecha: true, descripcion: true, monto: true, status: true, notes: true, bankAccountId: true,
         contraparteNombre: true, contraparteRfc: true, conceptoPago: true, claveRastreo: true,
         contraparteClabe: true,
       },
@@ -258,6 +258,8 @@ export async function conciliacionDelMes(
     cuentaBancariaId: t.bankAccountId,
     registrado: conAsiento.has(t.id) || t.status === "IGNORED",
     conciliado: t.status !== "UNMATCHED",
+    status: t.status as "UNMATCHED" | "MATCHED" | "IGNORED",
+    notes: t.notes,
     contraparteNombre: t.contraparteNombre,
     contraparteRfc: t.contraparteRfc,
     conceptoPago: t.conceptoPago,

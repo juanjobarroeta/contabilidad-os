@@ -59,6 +59,9 @@ interface Movimiento {
   cuentaBancariaId: string;
   /** status ≠ UNMATCHED (conciliado o clasificado). */
   conciliado?: boolean;
+  /** ¿Llegó al libro? Los UNMATCHED no se postean. Un IGNORED cuenta como
+   *  registrado: se categorizó y el cierre lo asienta con su tag. */
+  registrado?: boolean;
   // Contraparte extraída de la descripción (spei-descripcion.ts + su barrido).
   // La misma regla que el tab Movimientos: cuando el banco nos dijo QUIÉN, ése
   // es el titular del renglón — no la sintaxis del banco.
@@ -67,6 +70,10 @@ interface Movimiento {
   conceptoPago?: string | null;
   contraparteClabe?: string | null;
   claveRastreo?: string | null;
+  /** Crudo: `conciliado` junta MATCHED e IGNORED y ahí se pierde la diferencia
+   *  entre «tiene factura» y «se categorizó sin factura». */
+  status?: "UNMATCHED" | "MATCHED" | "IGNORED";
+  notes?: string | null;
 }
 interface Cuenta {
   bankAccountId: string;
@@ -83,7 +90,7 @@ interface CuentaDetalle {
 interface ConciliacionMes {
   /** TODOS los movimientos del mes (el feed ya manda el objeto completo); la
    *  cuenta permite calcular el % conciliado POR CUENTA sin otra consulta. */
-  movimientosBanco: { id: string; cuentaBancariaId: string; conciliado?: boolean }[];
+  movimientosBanco: Movimiento[];
   movimientosNoRegistrados: Movimiento[];
   totalNoRegistrados: number;
   cuentas: Cuenta[];
@@ -111,6 +118,11 @@ export function ConciliacionWorkbench({
   const [cargando, setCargando] = useState(true);
   const [selTx, setSelTx] = useState<Movimiento | null>(null);
   const [autoCorriendo, setAutoCorriendo] = useState(false);
+  // Filtro y búsqueda de la LISTA — lo que sólo tenía el tab Movimientos. La
+  // mesa mostraba nada más los pendientes, así que revisar algo ya conciliado
+  // obligaba a cambiar de pestaña, que es de donde venía la doble mesa.
+  const [filtro, setFiltro] = useState<"PENDIENTES" | "MATCHED" | "IGNORED" | "TODOS">("PENDIENTES");
+  const [buscar, setBuscar] = useState("");
 
   // Anticipos sin CFDI: obligaciones abiertas con dinero encima. Se cargan
   // aparte del mes porque no dependen del periodo — un anticipo de hace tres
@@ -248,9 +260,31 @@ export function ConciliacionWorkbench({
   // Los sin conciliar (trabajo real) arriba; los «por contabilizar» al final. El
   // sort es estable, así que dentro de cada grupo se conserva el orden por
   // fecha con el que llegan del API.
-  const pendientes = [...deLaCuenta(data.movimientosNoRegistrados)].sort(
-    (a, b) => Number(a.conciliado ?? false) - Number(b.conciliado ?? false),
-  );
+  // La lista sale de TODOS los movimientos del mes, no sólo de los pendientes:
+  // con el filtro se elige qué mirar. «Pendientes» sigue siendo lo primero que
+  // se ve, porque es el trabajo real.
+  const delMes = deLaCuenta(data.movimientosBanco);
+  const cuenta = {
+    PENDIENTES: delMes.filter((m) => !m.registrado).length,
+    MATCHED: delMes.filter((m) => m.status === "MATCHED").length,
+    IGNORED: delMes.filter((m) => m.status === "IGNORED").length,
+    TODOS: delMes.length,
+  };
+  const q = buscar.trim().toLowerCase();
+  const pendientes = delMes
+    .filter((m) =>
+      filtro === "TODOS" ? true
+      : filtro === "PENDIENTES" ? !m.registrado
+      : m.status === filtro,
+    )
+    .filter((m) =>
+      !q ? true
+      : [m.descripcion, m.contraparteNombre ?? "", m.contraparteRfc ?? "", String(Math.abs(m.monto))]
+          .some((v) => v.toLowerCase().includes(q)),
+    )
+    // Los sin conciliar (trabajo real) arriba; los «por contabilizar» al final.
+    // El sort es estable: dentro de cada grupo se conserva el orden por fecha.
+    .sort((a, b) => Number(a.conciliado ?? false) - Number(b.conciliado ?? false));
   const total = deLaCuenta(data.movimientosBanco).length;
   // «Sin conciliar» = status UNMATCHED (el MISMO número que el paso 2 del
   // Inicio); los conciliados de un mes sin postear sólo esperan el posteo.
@@ -474,14 +508,38 @@ export function ConciliacionWorkbench({
               <p className="border-b border-cos-line-soft px-5 py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-cos-ink-faint">
                 Movimientos del banco · {sinConciliar} sin conciliar{esperanPosteo > 0 ? ` · ${esperanPosteo} por contabilizar` : ""}{cuentaSel ? " en esta cuenta" : ""}
               </p>
-              {/* La lista CRECE hasta donde llegue la fila del grid. Con una
-                  altura fija, cuando la columna derecha era más alta (la que
-                  manda, porque el grid estira las dos), quedaba un hueco en
-                  blanco enorme debajo del último movimiento y parecía que la
-                  mesa se cortaba. Ahora ese espacio se usa para enseñar más
-                  movimientos, que es justo lo que hace falta ahí. En móvil,
-                  donde las columnas se apilan y no hay nada que estirar, se
-                  mantiene el tope para que la lista no empuje todo hacia abajo. */}
+              <div className="flex flex-wrap items-center gap-1.5 border-b border-cos-line-soft px-5 py-2">
+                {([
+                  ["PENDIENTES", "Pendientes"],
+                  ["MATCHED", "Conciliados"],
+                  ["IGNORED", "Categorizados"],
+                  ["TODOS", "Todos"],
+                ] as const).map(([id, label]) => (
+                  <button
+                    key={id}
+                    onClick={() => setFiltro(id)}
+                    className={cn(
+                      "rounded-full px-2.5 py-1 text-[12px] font-medium",
+                      filtro === id
+                        ? "bg-cos-brand text-white"
+                        : "bg-cos-paper text-cos-ink-soft hover:bg-cos-line-soft",
+                    )}
+                  >
+                    {label} <span className="tabular-nums opacity-70">{cuenta[id]}</span>
+                  </button>
+                ))}
+                <input
+                  value={buscar}
+                  onChange={(e) => setBuscar(e.target.value)}
+                  placeholder="Buscar concepto, contraparte, RFC o importe…"
+                  className="ml-auto min-w-[180px] flex-1 rounded-control border border-cos-line bg-cos-paper px-2.5 py-1 text-[12.5px] text-cos-ink placeholder:text-cos-ink-faint focus:border-cos-brand focus:outline-none"
+                />
+              </div>
+              {/* Cada columna con su propio scroll. Antes la lista crecía sin
+                  tope en escritorio para no dejar un hueco cuando la columna
+                  derecha era más alta —el grid estiraba las dos—, pero con el
+                  panel pegado (`self-start`) ya no se estira, y sin tope la
+                  página entera hacía scroll y el panel se iba de vista. */}
               <ul className="max-h-[430px] flex-1 overflow-y-auto lg:max-h-screen lg:min-h-[430px]">
                 {pendientes.map((m) => {
                   const activo = selTx?.id === m.id;
