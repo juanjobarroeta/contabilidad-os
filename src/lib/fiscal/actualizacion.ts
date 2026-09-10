@@ -5,20 +5,11 @@
 // de activos). Ese módulo expone inpc(year, month) y un factor específico de
 // depreciación (Art. 31). Aquí se agrega el factor GENÉRICO (Art. 17-A CFF) con
 // entradas "YYYY-MM" para el resto de actualizaciones: pérdidas fiscales, CUFIN/
-// CUCA, saldos a favor, dic→dic, etc. No se toca el módulo inpc.
-//
-// Suplemento: el módulo INPC aún carga sólo ene–ago de cada año (+ ene–may 2026);
-// para habilitar la actualización general (que usa diciembre, etc.) se completan
-// aquí los meses faltantes. Cuando ./inpc los incluya, su valor tiene precedencia.
+// CUCA, saldos a favor, dic→dic, etc. No duplica valores: ./inpc es la única
+// serie versionada y cualquier periodo ausente falla cerrado con null.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { coberturaInpc, inpc as inpcYM } from "./inpc";
-
-/** Meses aún no cargados en ./inpc, necesarios para la actualización general. */
-const SUPLEMENTO_INPC: Record<string, number> = {
-  "2024-09": 136.080, "2024-10": 136.828, "2024-11": 137.424, "2024-12": 137.949,
-  "2025-09": 141.197, "2025-10": 141.708, "2025-11": 142.645, "2025-12": 143.042,
-};
 
 function parsePeriodo(periodo: string): [number, number] | null {
   const m = /^(\d{4})-(\d{2})$/.exec(periodo);
@@ -26,11 +17,11 @@ function parsePeriodo(periodo: string): [number, number] | null {
   return [Number(m[1]), Number(m[2])];
 }
 
-/** INPC de un periodo "YYYY-MM" (serie ./inpc, con suplemento de respaldo). */
+/** INPC de un periodo "YYYY-MM" from the canonical versioned series. */
 export function inpcPeriodo(periodo: string): number | null {
   const p = parsePeriodo(periodo);
   if (!p) return null;
-  return inpcYM(p[0], p[1]) ?? SUPLEMENTO_INPC[periodo] ?? null;
+  return inpcYM(p[0], p[1]);
 }
 
 const r4 = (n: number) => Math.round(n * 10000) / 10000;

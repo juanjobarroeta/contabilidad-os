@@ -3,17 +3,28 @@
 //
 // Lo usa la actualización de la depreciación (Art. 31 LISR) y otros cálculos
 // inflacionarios. Versionado/git-tracked como las tarifas; `verificado: false`
-// hasta cotejar contra la fuente oficial (INEGI / DOF).
+// hasta que el cotejo completo contra Banxico SIE confirme toda la serie.
 //
-// COBERTURA ACTUAL: ene–dic 2016–2025 (años completos) + ene–jul 2026 (agosto
-// se publica ~10-sep). Cubre los meses que pide la actualización de pérdidas
+// COBERTURA ACTUAL: ene–dic 2016–2025 (años completos) + ene–ago 2026. Cubre
+// los meses que pide la actualización de pérdidas
 // (Art. 57: jul, dic del origen; jun de aplicación) y de la depreciación. Para
 // meses no cargados `inpc()` devuelve null y el factor cae a 1.0 (nominal).
-// Valores cotejados contra Banxico SIE serie SP1 (redondeo a 3 decimales).
+// La serie histórica fue cotejada contra Banxico SIE SP1. El último periodo se
+// cotejó directamente contra el boletín mensual del INEGI indicado abajo.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const INPC_VERIFICADO = false;
-export const INPC_FUENTE = "INEGI, INPC base 2ª quincena jul-2018 = 100 (histórico 2016-2026)";
+export const INPC_FUENTE = "INEGI, INPC base 2ª quincena jul-2018 = 100; histórico: Banxico SIE SP1";
+
+/** Provenance for the newest code-reviewed monthly seed. */
+export const INPC_ULTIMO_PERIODO_PROVENIENCIA = {
+  periodo: "2026-08",
+  valor: 145.462,
+  autoridad: "INEGI",
+  documento: "Boletín de Indicador 586/26",
+  publicadoEl: "2026-09-09",
+  url: "https://www.inegi.org.mx/contenidos/saladeprensa/boletines/2026/inpc/inpc_2q2026_09.pdf",
+} as const;
 
 // [ene, feb, mar, abr, may, jun, jul, ago, sep, oct, nov, dic]; null = no cargado.
 type Fila = (number | null)[];
@@ -29,7 +40,7 @@ const INPC: Record<number, Fila> = {
   2023: [127.336, 128.046, 128.389, 128.363, 128.084, 128.214, 128.832, 129.545, 130.120, 130.609, 131.445, 132.373],
   2024: [133.555, 133.681, 134.065, 134.336, 134.087, 134.594, 136.003, 136.013, 136.080, 136.828, 137.424, 137.949],
   2025: [138.343, 138.726, 139.161, 139.620, 140.012, 140.405, 140.780, 140.867, 141.197, 141.708, 142.645, 143.042],
-  2026: [143.588, 144.307, 145.544, 145.831, 145.527, 145.131, 145.169, null, null, null, null, null],
+  2026: [143.588, 144.307, 145.544, 145.831, 145.527, 145.131, 145.169, 145.462, null, null, null, null],
 };
 
 /** INPC de un (año, mes 1-12). Null si no está cargado. */

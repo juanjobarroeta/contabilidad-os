@@ -1,11 +1,10 @@
 name: INPC freshness (monthly)
 
-# The INPC series lives in code (src/lib/fiscal/inpc.ts, + suplemento en
-# actualizacion.ts) and is updated by PR. This monthly job runs the freshness
-# check in --strict mode, so it goes RED when the series falls behind (INEGI
-# publishes each month's INPC ~day 10 in the DOF) — a standing reminder to add
-# the new month. It does not auto-edit values; correctness-critical numbers stay
-# in code review.
+# The canonical INPC series lives in src/lib/fiscal/inpc.ts and is updated by
+# PR. This monthly job runs the freshness check in --strict mode, so it goes RED
+# when the series falls behind INEGI's publication calendar (normally by day 9;
+# DOF publishes on day 10 or the prior business day). It does not auto-edit
+# values; correctness-critical numbers stay in code review.
 #
 # NOTE: GitHub only runs `schedule:` from the DEFAULT branch (main).
 
@@ -42,5 +41,5 @@ jobs:
           if [ "$existing" = "0" ]; then
             gh issue create --repo "$GITHUB_REPOSITORY" \
               --title "INPC atrasado — falta el mes publicado" \
-              --body "El check mensual de frescura (--strict) falló: falta cargar el INPC del mes en src/lib/fiscal/inpc.ts. INEGI lo publica ~día 10 (DOF); Banxico SIE serie SP1 lo tiene el mismo día. Corre: npm run fiscal:actualizacion-check"
+              --body "El check mensual de frescura (--strict) falló: falta cargar el INPC del mes en src/lib/fiscal/inpc.ts. INEGI lo publica normalmente a más tardar el día 9; el DOF, el día 10 o hábil previo. Corre: npm run fiscal:actualizacion-check"
           fi

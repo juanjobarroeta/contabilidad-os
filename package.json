@@ -28,7 +28,7 @@
     "fiscal:isn-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-isn-check.ts",
     "fiscal:sources-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-sources-check.ts",
     "fiscal:agapes-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-agapes-check.ts",
-    "fiscal:actualizacion-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-actualizacion-check.ts",
+    "fiscal:actualizacion-check": "tsx scripts/fiscal-actualizacion-check.ts",
     "fiscal:frescura-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-frescura-check.ts",
     "fiscal:cumplimiento-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-cumplimiento-check.ts",
     "fiscal:efos-check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/fiscal-efos-check.ts",
