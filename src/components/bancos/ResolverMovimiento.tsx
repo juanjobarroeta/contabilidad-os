@@ -29,9 +29,10 @@ import type { SugerenciaMovimiento } from "@/lib/bancos/inferir-movimiento";
 import {
   CONF_TONO, FAMILIA_LOTE, fmtFechaCorta, tokenDeDescripcion,
   type CandidatoFactura, type CandidatoImpuesto, type CepMovimiento,
-  type FacturaBuscada, type MovimientoResoluble, type PagoJuntoSugerido,
-  type SeleccionFactura,
+  type CruceMovimiento, type FacturaBuscada, type MovimientoResoluble,
+  type PagoJuntoSugerido, type SeleccionFactura,
 } from "./resolver-tipos";
+import { VisorCep } from "./VisorCep";
 
 /** Categorías sin factura: un toque las ignora CON su tag, que es lo que
  *  `postMonth` sabe postear. Deben ser las mismas en toda la aplicación. */
@@ -83,6 +84,10 @@ export function ResolverMovimiento({
   const [pagoJunto, setPagoJunto] = useState<PagoJuntoSugerido | null>(null);
   const [impuestos, setImpuestos] = useState<CandidatoImpuesto[]>([]);
   const [cep, setCep] = useState<CepMovimiento | null>(null);
+  const [cepAbierto, setCepAbierto] = useState(false);
+  // Contra qué quedó cruzado el movimiento (facturas con su porción, o el pago
+  // de impuestos). Para uno sin conciliar viene vacío.
+  const [cruce, setCruce] = useState<CruceMovimiento | null>(null);
   // Categoría SUGERIDA por el servidor, con su evidencia. Vivía sólo en la
   // mesa; al compartir el panel la gana también la lista de Movimientos.
   const [sugerencia, setSugerencia] = useState<SugerenciaMovimiento | null>(null);
@@ -113,6 +118,7 @@ export function ResolverMovimiento({
     let vivo = true;
     setCargando(true);
     setCandidatos([]); setImpuestos([]); setPagoJunto(null); setCep(null); setSeleccion([]);
+    setCruce(null); setCepAbierto(false);
     setSugerencia(null);
     setManualAbierta(false); setManualQuery(""); setManualResultados([]);
     setManualTipo(tx.monto < 0 ? "EGRESO" : "INGRESO");
@@ -131,6 +137,7 @@ export function ResolverMovimiento({
         setImpuestos(data.impuestos ?? []);
         setPagoJunto(data.pagoJunto ?? null);
         setSugerencia(data.sugerencia ?? null);
+        setCruce(data.cruce ?? null);
       })
       .catch(() => {})
       .finally(() => { if (vivo) setCargando(false); });
@@ -312,8 +319,57 @@ export function ResolverMovimiento({
   const excede = asignado > abs * 1.01;
   const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
 
+  const cruzado = (cruce?.facturas.length ?? 0) > 0 || cruce?.impuesto != null;
+
   return (
     <div className="mt-3 flex flex-col gap-3">
+      {/* CONTRA QUÉ QUEDÓ. Va primero: en un movimiento ya conciliado no hay
+          candidatos que ofrecer, y lo que se necesita es abrir ESE CFDI y
+          leerlo. La mesa decía «ya está conciliado» sin decir con qué — para
+          investigarlo había que irse al archivo. */}
+      {cruzado && (
+        <div className="rounded-control border border-cos-jade-ink/25 bg-cos-jade-tint/50 px-3 py-2.5">
+          <p className="text-[12.5px] font-semibold text-cos-jade-ink">
+            {cruce!.impuesto
+              ? "Pago de impuestos conciliado"
+              : cruce!.facturas.length === 1
+                ? "Conciliado con esta factura"
+                : `Conciliado con ${cruce!.facturas.length} facturas`}
+          </p>
+          {cruce!.impuesto && (
+            <p className="mt-1 text-[13px] text-cos-ink">
+              {cruce!.impuesto.etiqueta}
+              <span className="ml-1.5 font-mono text-[11.5px] text-cos-ink-faint">{cruce!.impuesto.status}</span>
+            </p>
+          )}
+          <ul className="mt-1 flex flex-col gap-1">
+            {cruce!.facturas.map((f) => (
+              <li key={f.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[12.5px]">
+                <span className="min-w-0 flex-1 truncate text-cos-ink">{f.cliente ?? "(sin cliente)"}</span>
+                {/* La porción, no el total de la factura: en un pago junto son
+                    números distintos y confundirlos es cuadrar de más. */}
+                <Money value={f.montoAsignado} size={12.5} />
+                <span className="w-full font-mono text-[11px] text-cos-ink-faint">
+                  {f.folio ? `${f.folio} · ` : ""}{fmtFechaCorta(f.fecha)}
+                  {f.rfc ? ` · ${f.rfc}` : ""}
+                  {cruce!.facturas.length > 1 || f.montoAsignado !== f.total
+                    ? <> · factura por <Money value={f.total} size={11} muted /></>
+                    : null}
+                  {onVerFactura && (
+                    <button
+                      onClick={() => onVerFactura(f.id)}
+                      className="ml-1.5 font-sans font-semibold text-cos-brand-ink hover:underline"
+                    >
+                      Ver CFDI
+                    </button>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* El detalle fino y la cadena CRUDA del banco. Nunca se esconde: el
           estado de cuenta es la fuente de verdad y quien concilia a mano
           necesita poder leerla tal cual. */}
@@ -351,10 +407,10 @@ export function ResolverMovimiento({
                 </span>
               )}
             </p>
-            <a href={`/api/bancos/transactions/${tx.id}/cep?xml=1`}
+            <button onClick={() => setCepAbierto(true)}
               className="flex-none text-[12.5px] font-semibold text-cos-brand-ink hover:underline">
-              Descargar XML
-            </a>
+              Ver comprobante
+            </button>
           </div>
           <div className="mt-1.5 grid gap-1 border-t border-cos-line pt-1.5 text-cos-ink-soft sm:grid-cols-2">
             <div>
@@ -368,12 +424,26 @@ export function ResolverMovimiento({
               <p className="font-mono text-[11.5px]">{cep.beneficiarioRfc ?? "—"}{cep.beneficiarioBanco ? ` · ${cep.beneficiarioBanco}` : ""}</p>
             </div>
           </div>
+          {/* Importe y fecha DE BANXICO, no los del estado de cuenta: cuando
+              no coinciden es justo lo que hay que ver (una comisión aparte, un
+              importe devuelto, una clave de rastreo que era de otro pago). */}
+          {(cep.monto != null || cep.fechaOperacion) && (
+            <p className="mt-1.5 border-t border-cos-line pt-1.5 text-[12px] text-cos-ink-soft">
+              {cep.monto != null && <>Importe <Money value={cep.monto} size={12} /></>}
+              {cep.monto != null && cep.fechaOperacion ? " · " : ""}
+              {cep.fechaOperacion && <>operación del {cep.fechaOperacion}</>}
+            </p>
+          )}
           {cep.concepto && (
             <p className="mt-1.5 border-t border-cos-line pt-1.5 text-[11.5px] text-cos-ink-faint">
               Concepto: {cep.concepto}
             </p>
           )}
         </div>
+      )}
+
+      {cepAbierto && cep && (
+        <VisorCep cep={cep} txId={tx.id} montoMovimiento={tx.monto} onClose={() => setCepAbierto(false)} />
       )}
 
       {/* Pago junto: N facturas de la MISMA contraparte suman exacto el
@@ -383,8 +453,19 @@ export function ResolverMovimiento({
           <p className="text-[13px] font-semibold text-cos-brand-ink">
             Pago junto: {pagoJunto.facturas.length} facturas de {pagoJunto.cliente} suman exacto <Money value={pagoJunto.suma} size={13} />
           </p>
-          <p className="mt-0.5 text-[12px] text-cos-ink-soft">
-            {pagoJunto.facturas.map((f) => `${f.folio} (${f.monto.toLocaleString("es-MX", { style: "currency", currency: "MXN" })})`).join(" + ")}
+          <p className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5 text-[12px] text-cos-ink-soft">
+            {pagoJunto.facturas.map((f, i) => (
+              <span key={f.invoiceId}>
+                {i > 0 && <span className="mr-1.5">+</span>}
+                {f.folio} ({f.monto.toLocaleString("es-MX", { style: "currency", currency: "MXN" })})
+                {onVerFactura && (
+                  <button onClick={() => onVerFactura(f.invoiceId)}
+                    className="ml-1 font-semibold text-cos-brand-ink hover:underline">
+                    ver
+                  </button>
+                )}
+              </span>
+            ))}
           </p>
           <button onClick={aplicarPagoJunto} disabled={multiOcupado}
             className="mt-2 rounded-control bg-cos-brand px-3 py-1.5 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
@@ -411,6 +492,15 @@ export function ResolverMovimiento({
                 </div>
                 <div className="flex flex-none items-center gap-2">
                   <Chip tone={CONF_TONO[c.confidence]} label={c.confidence} />
+                  {/* Ver ANTES de conciliar: el score propone por identidad,
+                      monto y fecha, pero quién decide necesita poder abrir el
+                      comprobante y leer sus conceptos. */}
+                  {onVerFactura && (
+                    <button onClick={() => onVerFactura(c.id)} title="Ver el CFDI"
+                      className="rounded-control px-2 py-1.5 text-[13px] font-semibold text-cos-brand-ink hover:bg-cos-brand-tint">
+                      Ver
+                    </button>
+                  )}
                   <button onClick={() => alternar({ id: c.id, label: c.cliente, total: c.total })}
                     className={"rounded-control border px-3 py-1.5 text-[13px] font-semibold " + (seleccion.some((s) => s.id === c.id) ? "border-cos-brand bg-cos-brand-tint text-cos-brand-ink" : "border-cos-line bg-cos-card text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink")}>
                     {seleccion.some((s) => s.id === c.id) ? "Quitar" : "Agregar"}
