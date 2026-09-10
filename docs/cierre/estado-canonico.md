@@ -62,7 +62,28 @@ An external historical close is a separate fact. It can remain `CERRADO` while l
 
 ## Remaining REL-002 work
 
-- Add production smoke evidence and confirm the daily reopen/close behavior against representative periods before marking REL-002 done.
+- Observe the next production daily-pass cycle and retain its reopen/close telemetry.
+- Exercise the full ready → contabilizado → declaration close → explicit reopen path in a disposable or dedicated test company. The representative production company was kept read-only.
+- Obtain licensed-accountant acceptance before marking the parent REL-002 item done.
+
+## Production smoke — 2026-09-10
+
+Deployment evidence:
+
+- PR `#971` merged as `4cff7ba25bc338a4ae510881a40c3661b1515dee`.
+- Railway deployment `9bca0500-15a3-4d84-bc3c-0a7c3010e7c1` completed successfully with the repository's Nixpacks and `scripts/deploy-db.mjs` configuration.
+- GitHub marked the production deployment successful at `2026-09-10T18:11:00Z`.
+- The production root returned HTTP `200`; the smoke requests were served by deployment `9bca0500-15a3-4d84-bc3c-0a7c3010e7c1`.
+
+Representative-period evidence, collected through authenticated read-only requests:
+
+| Period | Evidence | Canonical result |
+|---|---|---|
+| `2026-07` historical baseline | Submitted historical declaration, no `AccountingPeriod`, and no local `cerradoAt` | `CERRADO`, `origenCierre=FUERA_DE_CONTABILIDAD_OS`, `contabilizado=false`, and `descargable=false`; local reconstruction observations remain visible without fabricating a ledger or package |
+| `2026-08` locally managed | Physical ledger is `POSTED`, `cerradoAt=null`, and one bank movement is not classified | Fresh evaluation returns `BLOQUEADO`; `ce:sin_clasificar` is an error and `contabilizado`, `cerrado`, `descargable`, and `puedeContabilizar` are false |
+| `2026-08` monthly package | Authenticated `GET /api/contabilidad/paquete` against the blocked period | HTTP `409 CIERRE_NO_DESCARGABLE`; no package is generated |
+
+No declaration, accounting transition, close, or reopen was performed against the production company during this smoke. Mutating transition behavior remains covered by the automated engine and route tests until a disposable or dedicated test company is available.
 
 ## Verification
 
@@ -70,4 +91,5 @@ An external historical close is a separate fact. It can remain `CERRADO` while l
 - `npx tsc --noEmit` passes.
 - Full suite: 341 files, 3,712 tests passed.
 - Production build: compilation, type validation, and 374 static pages passed.
-- CI and deployment smoke remain.
+- All five pull-request checks passed, including the real-Postgres authorization job.
+- Production deployment and the read-only representative-period smoke passed on 2026-09-10.
