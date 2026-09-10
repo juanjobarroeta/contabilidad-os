@@ -21,28 +21,20 @@ import { chromium, type Page } from "playwright";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import * as crypto from "crypto";
+import { decryptSecret } from "../src/lib/crypto";
 
 // La empresa cuya FIEL usa el recon. ZIONX sirvió para PROBAR el login (funciona
 // en los dos realms), pero no tiene Contabilidad Electrónica — para mapear CE
 // hay que usar una que sí la presente, como MARGOM (16,053 renglones CE).
 const RFC_OBJETIVO = process.env.RFC || "ZIO190321JI6";
-const OUT = path.join(os.homedir(), ".claude/jobs/b2a65a05/tmp/recon");
+const OUT = process.env.RECON_OUT || path.join(process.cwd(), "tmp/recon-sat");
 // El recon 1 reveló el mapa: el portal general (loginc) ofrece cinco métodos
 // como menú; el de subir .cer/.key es FormCertiSAT (el CertiSAT clásico).
 const URL_LOGIN_FIEL =
   "https://loginc.mat.sat.gob.mx/nidp/jsp/main.jsp?id=FormCertiSAT&sid=0";
 
-// ── Descifrado igual que src/lib/crypto.ts: "enc:v1:iv:tag:ct" en base64 ──
-function decryptSecret(stored: string): string {
-  if (!stored.startsWith("enc:v1:")) return stored; // legacy en claro
-  const keyB64 = fs.readFileSync(path.join(OUT, "..", ".credkey"), "utf8").trim();
-  const key = Buffer.from(keyB64, "base64");
-  const [, , ivB64, tagB64, ctB64] = stored.split(":");
-  const d = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(ivB64, "base64"));
-  d.setAuthTag(Buffer.from(tagB64, "base64"));
-  return Buffer.concat([d.update(Buffer.from(ctB64, "base64")), d.final()]).toString("utf8");
-}
+// El descifrado usa el mismo src/lib/crypto.ts del app: la llave viene de
+// CREDENTIALS_ENCRYPTION_KEY en el entorno (no de un archivo .credkey).
 
 const log: string[] = [];
 const paso = (m: string) => {
@@ -194,6 +186,42 @@ async function main() {
         }
         await shot(page, n++, nombre);
         paso(`  URL final ${nombre}: ${page.url()}`);
+      }
+
+      // ── Ya autenticados: obtener lo que falta ───────────────────────────
+      // (1) Reintentar CE con la sesión YA viva: el deep-link en frío perdía el
+      //     target en el rebote SSO (accesoC?url= vacío → error.seg.0001). Si con
+      //     sesión viva SÍ entra, ese era el bug. (2) Volcar el menú autenticado
+      //     para hallar el enlace REAL a CE (el que clickea un humano).
+      const CE_URL = secciones[0][1];
+      paso("reintento CE con sesión ya viva…");
+      await page.goto(CE_URL, { waitUntil: "networkidle" }).catch((e) => paso(`  reintento goto: ${e.message}`));
+      await page.waitForTimeout(3500);
+      await shot(page, n++, "ce-reintento");
+      paso(`  URL CE reintento: ${page.url()}`);
+
+      for (const home of [
+        "https://wwwmat.sat.gob.mx/personas",
+        "https://wwwmat.sat.gob.mx/personas/directorio?orgActual=SAT",
+      ]) {
+        paso(`menú autenticado: ${home}`);
+        await page.goto(home, { waitUntil: "networkidle" }).catch((e) => paso(`  goto: ${e.message}`));
+        await page.waitForTimeout(2500);
+        await shot(page, n++, "menu");
+        const links = await page
+          .$$eval("a[href]", (as) =>
+            as
+              .map((a) => ({
+                href: (a as HTMLAnchorElement).href,
+                text: (a.textContent || "").replace(/\s+/g, " ").trim().slice(0, 70),
+              }))
+              .filter((l) => l.href && !l.href.startsWith("javascript")),
+          )
+          .catch(() => [] as { href: string; text: string }[]);
+        fs.writeFileSync(path.join(OUT, `links-${n}.json`), JSON.stringify(links, null, 2));
+        const ce = links.filter((l) => /contabilidad|electr[oó]nica|acuse|anexo.?24|16203/i.test(l.text + " " + l.href));
+        paso(`  ${links.length} links · CE candidatos (${ce.length}):`);
+        for (const l of ce.slice(0, 12)) paso(`    ${l.text} → ${l.href}`);
       }
     } finally {
       await context.close(); // vuelca el HAR

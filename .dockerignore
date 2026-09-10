@@ -1,0 +1,10 @@
+node_modules
+.next
+.git
+tmp
+.claude
+*.log
+.env
+.env.*
+npm-debug.log*
+.DS_Store
