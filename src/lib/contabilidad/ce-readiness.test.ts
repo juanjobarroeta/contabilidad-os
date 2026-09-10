@@ -139,8 +139,9 @@ describe("evaluarChecks — sin clasificar", () => {
     expect(c?.estado).toBe("error");
     expect(c?.titulo).toMatch(/4 movimiento/);
     expect(r.status).toBe("incompleta");
-    // El triage (conciliar/categorizar) vive en el tab Movimientos.
-    expect(c?.cta?.href).toBe("/bancos?tab=movimientos");
+    // El triage (conciliar/categorizar) vive en la mesa, que es lo que abre
+    // /bancos; el tab Movimientos quedó como archivo de todos los meses.
+    expect(c?.cta?.href).toBe("/bancos");
   });
 
   it("sin banco → el check no aplica", () => {

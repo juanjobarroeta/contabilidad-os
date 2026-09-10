@@ -17,7 +17,7 @@
 // advertencia y aquí se muestra.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Check, CheckSquare, Landmark, Loader2, Sparkles, X } from "lucide-react";
 import { Money } from "@/components/ui/Money";
@@ -108,15 +108,42 @@ const fFecha = (s: string) =>
 /** Renglones que se pintan de una vez; «Ver más» agrega otro tanto. */
 const PAGINA = 80;
 
+type Filtro = "PENDIENTES" | "MATCHED" | "IGNORED" | "TODOS";
+
+/** La lista tal como se pinta: filtrada, buscada y con los pendientes arriba.
+ *  Pura y a nivel de módulo — no toca el closure, y el orden de la izquierda
+ *  se lee entero de un vistazo en vez de repartido por el cuerpo del render. */
+function armarLista(movs: Movimiento[], filtro: Filtro, buscar: string): Movimiento[] {
+  const q = buscar.trim().toLowerCase();
+  return movs
+    .filter((m) =>
+      filtro === "TODOS" ? true
+      : filtro === "PENDIENTES" ? !m.registrado
+      : m.status === filtro,
+    )
+    .filter((m) =>
+      !q ? true
+      : [m.descripcion, m.contraparteNombre ?? "", m.contraparteRfc ?? "", String(Math.abs(m.monto))]
+          .some((v) => v.toLowerCase().includes(q)),
+    )
+    // Los sin conciliar (trabajo real) arriba; los «por contabilizar» al final.
+    // El sort es estable: dentro de cada grupo se conserva el orden por fecha.
+    .sort((a, b) => Number(a.conciliado ?? false) - Number(b.conciliado ?? false));
+}
+
 export function ConciliacionWorkbench({
   companyId,
   year,
   month,
+  txInicial,
   onApplied,
 }: {
   companyId: string;
   year: number;
   month: number;
+  /** Movimiento que el archivo entrega por `?tx=`: se selecciona al llegar el
+   *  mes, con el filtro que lo contiene. */
+  txInicial?: string | null;
   /** Se llama tras aplicar una conciliación (para refrescar el papel de abajo). */
   onApplied?: () => void;
 }) {
@@ -127,7 +154,7 @@ export function ConciliacionWorkbench({
   // Filtro y búsqueda de la LISTA — lo que sólo tenía el tab Movimientos. La
   // mesa mostraba nada más los pendientes, así que revisar algo ya conciliado
   // obligaba a cambiar de pestaña, que es de donde venía la doble mesa.
-  const [filtro, setFiltro] = useState<"PENDIENTES" | "MATCHED" | "IGNORED" | "TODOS">("PENDIENTES");
+  const [filtro, setFiltro] = useState<Filtro>("PENDIENTES");
   const [buscar, setBuscar] = useState("");
   // Selección en lote — lo último que sólo existía en el tab Movimientos.
   // Veinte comisiones se categorizan de un golpe sin salir de la mesa.
@@ -140,6 +167,8 @@ export function ConciliacionWorkbench({
   const [verFacturaId, setVerFacturaId] = useState<string | null>(null);
   /** id del movimiento cuyo cruce se está deshaciendo. */
   const [deshaciendo, setDeshaciendo] = useState<string | null>(null);
+  /** El `?tx=` ya honrado: la entrega desde el archivo ocurre una sola vez. */
+  const entregado = useRef<string | null>(null);
   // Tope de RENDERIZADO, no de datos: el feed trae el mes completo (un hospital
   // pasa de 300 movimientos) y pintarlos todos deja la lista pesada y sin fondo
   // visible. Los filtros y la búsqueda corren sobre TODO el mes; esto sólo
@@ -223,6 +252,26 @@ export function ConciliacionWorkbench({
   // nuevos y esto avanza solo al siguiente pendiente.
   useEffect(() => {
     if (!data) return;
+    // ENTREGA DESDE EL ARCHIVO (`?tx=`). Manda sobre el auto-seleccionado, y
+    // una sola vez por id: después el usuario navega sin que el enlace lo
+    // devuelva al mismo renglón. El filtro se acomoda al movimiento — llegar
+    // con «Pendientes» a uno ya conciliado lo dejaría fuera de la lista. De
+    // que se vea aunque caiga en el renglón 300 se encarga el render (`hasta`).
+    if (txInicial && entregado.current !== txInicial) {
+      const m = data.movimientosBanco.find((x) => x.id === txInicial);
+      if (m) {
+        const f: Filtro = !m.registrado ? "PENDIENTES" : m.status === "MATCHED" ? "MATCHED" : "IGNORED";
+        entregado.current = txInicial;
+        setFiltro(f);
+        setBuscar("");
+        setCuentaSel(null);
+        setSelTx(m);
+        return;
+      }
+      // El mes llegó sin ese movimiento (se borró, o el enlace venía torcido):
+      // no se insiste en cada recarga.
+      entregado.current = txInicial;
+    }
     const lista = cuentaSel
       ? data.movimientosNoRegistrados.filter((m) => m.cuentaBancariaId === cuentaSel)
       : data.movimientosNoRegistrados;
@@ -230,7 +279,7 @@ export function ConciliacionWorkbench({
     // pide trabajo y abriría la mesa sobre algo que no hay que tocar.
     const primero = lista.find((m) => !m.conciliado) ?? lista[0] ?? null;
     setSelTx((prev) => (prev && lista.some((m) => m.id === prev.id) ? prev : primero));
-  }, [data, cuentaSel]);
+  }, [data, cuentaSel, txInicial]);
 
   // Búsqueda del humano sobre los candidatos (con debounce): cuando el
   // contador YA sabe qué factura es, tecleársela gana a cualquier score. El
@@ -336,21 +385,12 @@ export function ConciliacionWorkbench({
     IGNORED: delMes.filter((m) => m.status === "IGNORED").length,
     TODOS: delMes.length,
   };
-  const q = buscar.trim().toLowerCase();
-  const lista = delMes
-    .filter((m) =>
-      filtro === "TODOS" ? true
-      : filtro === "PENDIENTES" ? !m.registrado
-      : m.status === filtro,
-    )
-    .filter((m) =>
-      !q ? true
-      : [m.descripcion, m.contraparteNombre ?? "", m.contraparteRfc ?? "", String(Math.abs(m.monto))]
-          .some((v) => v.toLowerCase().includes(q)),
-    )
-    // Los sin conciliar (trabajo real) arriba; los «por contabilizar» al final.
-    // El sort es estable: dentro de cada grupo se conserva el orden por fecha.
-    .sort((a, b) => Number(a.conciliado ?? false) - Number(b.conciliado ?? false));
+  const lista = armarLista(delMes, filtro, buscar);
+  // El seleccionado SIEMPRE se pinta. Sin esto, el movimiento que el archivo
+  // entrega (o el que quedó elegido al ampliar la lista) puede caer más allá
+  // del tope: el panel lo resuelve a la derecha y la izquierda no lo muestra.
+  const idxSel = selTx ? lista.findIndex((m) => m.id === selTx.id) : -1;
+  const hasta = idxSel >= visibles ? Math.ceil((idxSel + 1) / PAGINA) * PAGINA : visibles;
   // Lo palomeado se deriva de la lista FILTRADA, no del Set suelto: así el lote
   // nunca puede tocar un movimiento que el filtro de hoy ya no muestra.
   const escogidos = lista.filter((m) => picked.has(m.id));
@@ -644,7 +684,7 @@ export function ConciliacionWorkbench({
                   panel pegado (`self-start`) ya no se estira, y sin tope la
                   página entera hacía scroll y el panel se iba de vista. */}
               <ul className="max-h-[430px] flex-1 overflow-y-auto lg:max-h-screen lg:min-h-[430px]">
-                {lista.slice(0, visibles).map((m) => {
+                {lista.slice(0, hasta).map((m) => {
                   const activo = selTx?.id === m.id;
                   const palomeado = picked.has(m.id);
                   return (
@@ -702,16 +742,16 @@ export function ConciliacionWorkbench({
                     </li>
                   );
                 })}
-                {lista.length > visibles && (
+                {lista.length > hasta && (
                   <li className="flex flex-wrap items-center justify-between gap-2 px-5 py-2.5">
                     <button
-                      onClick={() => setVisibles((v) => v + PAGINA)}
+                      onClick={() => setVisibles(hasta + PAGINA)}
                       className="rounded-control border border-cos-line px-3 py-1.5 text-[12.5px] font-medium text-cos-ink hover:border-cos-brand hover:text-cos-brand-ink"
                     >
-                      Ver {Math.min(PAGINA, lista.length - visibles)} más
+                      Ver {Math.min(PAGINA, lista.length - hasta)} más
                     </button>
                     <span className="text-[11.5px] text-cos-ink-faint tabular-nums">
-                      {visibles} de {lista.length.toLocaleString("es-MX")}
+                      {hasta} de {lista.length.toLocaleString("es-MX")}
                     </span>
                   </li>
                 )}
