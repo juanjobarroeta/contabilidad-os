@@ -15,7 +15,7 @@ function base(): ReadinessInputs {
     lastSyncAt: new Date("2026-06-28T00:00:00Z"),
     now: new Date("2026-06-29T00:00:00Z"),
     bankTxCount: 30,
-    bankUnmatchedCount: 0,
+    bankPendingClassificationCount: 0,
     sinActividadBancariaConfirmada: false,
     totalCargos: 100000,
     totalAbonos: 100000,

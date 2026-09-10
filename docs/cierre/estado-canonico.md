@@ -1,7 +1,7 @@
 # Canonical monthly-close state contract
 
-Date: 2026-09-09  
-Roadmap: REL-002A / REL-002B
+Date: 2026-09-10
+Roadmap: REL-002A / REL-002B / REL-002C / REL-002D
 
 ## Purpose
 
@@ -11,7 +11,7 @@ The close workflow previously exposed three independent answers:
 - `AccountingPeriod.status` (`DRAFT`, `POSTED`, or `CLOSED`);
 - evidence that the tax declaration had been submitted.
 
-A submitted declaration created inside ContabilidadOS could hide later SAT, bank, or accounting blockers, and the monthly ZIP intentionally generated preliminary files. REL-002A establishes one fail-closed operational state without changing monetary calculations or the database schema. REL-002B adds explicit provenance for declarations imported as historical baseline: they prove the period was closed outside ContabilidadOS, but never claim that ContabilidadOS generated its ledger or package.
+A submitted declaration created inside ContabilidadOS could hide later SAT, bank, or accounting blockers, and the monthly ZIP intentionally generated preliminary files. REL-002A establishes one fail-closed operational state without changing monetary calculations or the database schema. REL-002B adds explicit provenance for declarations imported as historical baseline: they prove the period was closed outside ContabilidadOS, but never claim that ContabilidadOS generated its ledger or package. REL-002C protects every individual Anexo 24 artifact, and REL-002D moves the same fresh-evidence check to the accounting engine boundary.
 
 ## Precedence
 
@@ -39,6 +39,17 @@ An external historical close is a separate fact. It can remain `CERRADO` while l
 - The daily pass only caches an internal `cerradoAt` after declaration, ledger generation, and zero hard blockers; changed evidence reopens a cached close.
 - `/api/contabilidad/paquete` returns `409 CIERRE_NO_DESCARGABLE` for a blocked period or one without a finalized ledger and no longer builds a preliminary ZIP.
 - The five individual Anexo 24 routes use the same fresh canonical gate before generating catálogo, balanza, pólizas, auxiliar de cuentas, or auxiliar de folios. Month 13 stays on its separate annual-close path because it has no monthly declaration workflow.
+- `postMonth` evaluates the fresh canonical state before touching the ledger. Because the manual route, batch route, SAT auto-import, and accounting repair all converge there, none can bypass the transition gate.
+
+## Accounting transitions in REL-002D
+
+- A new or `DRAFT` period needs `puedeContabilizar=true`.
+- An open `POSTED` period can be regenerated only while current evidence remains blocker-free and no declaration has closed it.
+- A period already closed by a declaration must be reopened explicitly before its generated entries can change.
+- A historical external close without a local ledger can be reconstructed once the current evidence is sufficient; its `origenCierre` remains `FUERA_DE_CONTABILIDAD_OS`.
+- `UNMATCHED` bank movements and `IGNORED` movements without a valid accounting category are hard readiness blockers, matching the journal engine's existing rule.
+- Rejections return `409 CIERRE_NO_CONTABILIZABLE` with the canonical state and first actionable blocker.
+- The engine invalidates the in-process close memo after a successful transition so the next reader sees the new `POSTED` fact.
 
 ## Historical close provenance in REL-002B
 
@@ -51,13 +62,12 @@ An external historical close is a separate fact. It can remain `CERRADO` while l
 
 ## Remaining REL-002 work
 
-- Put the same transition guard in every manual, batch, and automatic monthly-accounting entry point. This touches the accounting engine and remains a separately reviewed no-go change.
 - Add production smoke evidence and confirm the daily reopen/close behavior against representative periods before marking REL-002 done.
 
 ## Verification
 
-- Focused close and package-gate suite: 6 files, 61 tests.
+- Focused transition and close suite: 7 files, 81 tests.
 - `npx tsc --noEmit` passes.
-- Full suite: 336 files, 3,687 tests passed.
+- Full suite: 341 files, 3,712 tests passed.
 - Production build: compilation, type validation, and 374 static pages passed.
 - CI and deployment smoke remain.

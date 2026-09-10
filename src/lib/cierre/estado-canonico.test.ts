@@ -84,6 +84,24 @@ describe("resolverEstadoCierre", () => {
     expect(r.bloqueos[0].tipo).toBe("DEPENDENCIA");
   });
 
+  it("Entregables en espera no bloquea la contabilización que lo habilita", () => {
+    const r = resolver("DRAFT", [
+      paso(),
+      paso({
+        clave: "entregables",
+        titulo: "Entregables",
+        estadoCalculado: "espera",
+        detalle: "Se generan al contabilizar y declarar el mes",
+      }),
+    ]);
+    expect(r).toMatchObject({
+      fase: "LISTO",
+      listo: true,
+      puedeContabilizar: true,
+      bloqueos: [],
+    });
+  });
+
   it("la atención no es un bloqueo duro", () => {
     const r = resolver("POSTED", [paso({ estadoCalculado: "atencion", detalle: "Revisar un aviso" })]);
     expect(r).toMatchObject({ fase: "CONTABILIZADO", listo: true, descargable: true });
