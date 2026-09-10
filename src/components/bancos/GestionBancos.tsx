@@ -32,6 +32,8 @@ import { Card, Money, Chip } from "@/components/ui";
 import { Alert, RetryButton } from "@/components/ui/feedback";
 import { etiquetaImpuesto } from "@/lib/conciliacion-impuestos";
 import { ResolverMovimiento } from "./ResolverMovimiento";
+import { AccionesEnLote } from "./AccionesEnLote";
+import { fmtFechaCorta } from "./resolver-tipos";
 
 // ── Types (mirror /api/bancos) ────────────────────────────────────────────────
 interface BankAccount {
@@ -131,27 +133,8 @@ const TIPO_CHIPS: { f: Filter; t: string; k: keyof Counts }[] = [
   { f: "IGNORED", t: "Ignorados", k: "IGNORED" },
 ];
 
-// Familias que se registran en el LIBRO MAYOR vía aprobarSugerencia (endpoint
-// /api/bancos/sugerencias/lote). A diferencia de CATEGORIAS (que sólo ignora +
-// etiqueta), estas escriben el asiento. Los restaurantes pueden ser parcialmente
-// deducibles: NO se agrupan a ciegas — el usuario elige la familia aquí.
-const FAMILIA_LOTE: { familia: string; label: string }[] = [
-  { familia: "NON_DEDUCTIBLE",    label: "No deducible" },
-  { familia: "COMISION",          label: "Comisiones bancarias" },
-  { familia: "TAX_PAYMENT",       label: "Impuestos y derechos" },
-  { familia: "PAYROLL_NO_CFDI",   label: "Nómina sin CFDI" },
-  { familia: "RENT",              label: "Renta / arrendamiento" },
-  { familia: "FINANCIAL_INCOME",  label: "Intereses / rendimientos" },
-  { familia: "INTERNAL_TRANSFER", label: "Traspaso entre cuentas" },
-];
-
 const BANKS = ["BBVA","Banamex","Santander","Banorte","HSBC","Scotiabank","Afirme","Inbursa","BanBajío","Otro"];
 const LBL = "block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint";
-const fmtFecha = (iso: string) => {
-  const M = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
-  const d = new Date(iso);
-  return `${String(d.getUTCDate()).padStart(2, "0")} ${M[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
-};
 /** "2026-08" → "agosto 2026" (para el selector y los separadores por mes). */
 const fmtMes = (ym: string) => {
   const M = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
@@ -203,7 +186,6 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
   // Modo selección + lote
   const [selectMode, setSelectMode] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
-  const [bulkMatchOpen, setBulkMatchOpen] = useState(false);
   // Modal de cuenta: null=cerrado · {account:null}=agregar · {account:X}=editar
   const [accountModal, setAccountModal] = useState<{ account: BankAccount | null } | null>(null);
   // Resumen de la última importación cuando hubo filas descartadas o posibles
@@ -570,45 +552,9 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
   const pickedIds = [...picked];
   // Neto firmado (un reembolso resta) — coincide con el motor de conciliación.
   const pickedSum = Math.abs(txs.filter((t) => picked.has(t.id)).reduce((s, t) => s + t.monto, 0));
-
-  async function bulkCategorizar(tag: string | null, label: string) {
-    if (pickedIds.length === 0) return;
-    setActing("__bulk__");
-    try {
-      await Promise.all(pickedIds.map((id) =>
-        fetch(`/api/bancos/transactions/${id}`, {
-          method: "PATCH", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "ignore", notes: tag }),
-        })
-      ));
-      showToast(`${pickedIds.length} movimiento(s): ${label}`);
-      setPicked(new Set()); setSelectMode(false);
-      await Promise.all([loadTxs(), loadAccounts()]);
-    } finally { setActing(null); }
-  }
-
-  // Categorización en lote que SÍ registra el asiento en el libro mayor (familias
-  // de FAMILIA_LOTE), vía /api/bancos/sugerencias/lote. Distinta de bulkCategorizar
-  // (que sólo ignora + etiqueta). Se usa para "No deducible" y el selector de familia.
-  async function bulkCategorizarLote(familia: string, label: string) {
-    if (pickedIds.length === 0) return;
-    setActing("__bulk__");
-    try {
-      const res = await fetch("/api/bancos/sugerencias/lote", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ txIds: pickedIds, familia }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        const n = data?.lote?.aprobados ?? pickedIds.length;
-        showToast(`${n} movimiento(s): ${label}`);
-        setPicked(new Set()); setSelectMode(false);
-        await Promise.all([loadTxs(), loadAccounts()]);
-      } else {
-        showToast(data?.error ?? "No se pudo categorizar");
-      }
-    } finally { setActing(null); }
-  }
+  // Cuántos de los palomeados ya están cruzados: categorizarlos rompe el
+  // vínculo, y la barra lo advierte antes de hacerlo.
+  const pickedConciliados = txs.filter((t) => picked.has(t.id) && t.status !== "UNMATCHED").length;
 
 
   function statusChip(tx: BankTx) {
@@ -938,7 +884,7 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
                     )}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-3">
-                        <span className="font-mono text-[12.5px] text-cos-ink-faint">{fmtFecha(m.fecha)}</span>
+                        <span className="font-mono text-[12.5px] text-cos-ink-faint">{fmtFechaCorta(m.fecha)}</span>
                         <Money value={m.monto} sign size={17} weight={700} />
                       </div>
                       {/* Cuando el banco nos dijo QUIÉN, ése es el titular del
@@ -1202,54 +1148,22 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
             </div>
           )}
 
-          {/* bulk action bar (sticky, only in select mode) */}
-          {selectMode && picked.size > 0 && (
-            <div className="sticky bottom-5 z-[80] mt-5 flex flex-wrap items-center justify-between gap-3 rounded-card bg-cos-ink px-5 py-3.5 text-cos-canvas shadow-[0_18px_40px_-16px_oklch(0.2_0.05_258/0.6)]">
-              <span className="text-[14px] font-semibold">{picked.size} movimiento(s) · <span className="font-mono">${pickedSum.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span></span>
-              <div className="flex flex-wrap gap-2">
-                <button onClick={() => bulkCategorizar("TAX_PAYMENT", "Pago de impuestos")} disabled={acting === "__bulk__"}
-                  className="rounded-control bg-white/15 px-3.5 py-2 text-[13.5px] font-semibold hover:bg-white/25 disabled:opacity-50">Impuestos</button>
-                <button onClick={() => bulkCategorizar("INTERNAL_TRANSFER", "Transferencia")} disabled={acting === "__bulk__"}
-                  className="rounded-control bg-white/15 px-3.5 py-2 text-[13.5px] font-semibold hover:bg-white/25 disabled:opacity-50">Transferencia</button>
-                {/* No deducible + selector de familia → registran el asiento (endpoint lote). */}
-                <button onClick={() => bulkCategorizarLote("NON_DEDUCTIBLE", "No deducible")} disabled={acting === "__bulk__"}
-                  className="rounded-control bg-white/15 px-3.5 py-2 text-[13.5px] font-semibold hover:bg-white/25 disabled:opacity-50">No deducible</button>
-                <select value="" disabled={acting === "__bulk__"} aria-label="Clasificar en otra familia"
-                  onChange={(e) => { const f = FAMILIA_LOTE.find((x) => x.familia === e.target.value); if (f) bulkCategorizarLote(f.familia, f.label); e.target.value = ""; }}
-                  className="rounded-control bg-white/15 px-3 py-2 text-[13.5px] font-semibold text-white hover:bg-white/25 disabled:opacity-50 [&>option]:text-cos-ink">
-                  <option value="" disabled>Otra familia…</option>
-                  {FAMILIA_LOTE.filter((f) => f.familia !== "NON_DEDUCTIBLE").map((f) => (
-                    <option key={f.familia} value={f.familia}>{f.label}</option>
-                  ))}
-                </select>
-                <button onClick={() => bulkCategorizar(null, "Ignorar")} disabled={acting === "__bulk__"}
-                  className="rounded-control bg-white/15 px-3.5 py-2 text-[13.5px] font-semibold hover:bg-white/25 disabled:opacity-50">Ignorar</button>
-                <button onClick={() => setBulkMatchOpen(true)} disabled={acting === "__bulk__"}
-                  className="rounded-control bg-cos-brand px-3.5 py-2 text-[13.5px] font-semibold hover:bg-cos-brand-deep disabled:opacity-50">
-                  {acting === "__bulk__" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Conciliar en lote"}
-                </button>
-              </div>
-            </div>
+          {/* Acciones en lote — el MISMO componente que la mesa monta bajo
+              su lista: los tres endpoints de lote viven una sola vez. */}
+          {selectMode && activeCompany && (
+            <AccionesEnLote
+              companyId={activeCompany.id}
+              txIds={pickedIds}
+              suma={pickedSum}
+              conciliados={pickedConciliados}
+              onToast={showToast}
+              onListo={async () => {
+                setPicked(new Set()); setSelectMode(false);
+                await Promise.all([loadTxs(), loadAccounts()]);
+              }}
+            />
           )}
         </>
-      )}
-
-      {bulkMatchOpen && selectedId && activeCompany && (
-        <BulkMatchModal
-          companyId={activeCompany.id}
-          count={picked.size}
-          sum={pickedSum}
-          onClose={() => setBulkMatchOpen(false)}
-          onConfirm={async (invoiceId) => {
-            const res = await fetch("/api/bancos/batch-match", {
-              method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ txIds: pickedIds, invoiceId }),
-            });
-            setBulkMatchOpen(false);
-            if (res.ok) { showToast(`${picked.size} movimiento(s) conciliado(s)`); setPicked(new Set()); setSelectMode(false); await Promise.all([loadTxs(), loadAccounts()]); }
-            else showToast("No se pudo conciliar en lote");
-          }}
-        />
       )}
 
       {accountModal && activeCompany && (
@@ -1292,112 +1206,6 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
       {verFacturaId && (
         <RepresentacionImpresa invoiceId={verFacturaId} onClose={() => setVerFacturaId(null)} />
       )}
-    </div>
-  );
-}
-
-// ── Modal: conciliar N movimientos con una factura ──────────────────────────────
-interface FacturaSearch {
-  id: string; uuid: string | null; folio: string | null; serie: string | null;
-  fecha: string; total: number; tipo: string;
-  customer: { razonSocial: string; rfc: string } | null;
-  matchedAmount: number; fullyMatched: boolean;
-}
-function BulkMatchModal({
-  companyId, count, sum, onClose, onConfirm,
-}: {
-  companyId: string; count: number; sum: number;
-  onClose: () => void; onConfirm: (invoiceId: string) => Promise<void> | void;
-}) {
-  const [query, setQuery] = useState("");
-  const [tipo, setTipo] = useState<"EGRESO" | "INGRESO" | "NOMINA">("INGRESO");
-  const [results, setResults] = useState<FacturaSearch[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [picked, setPicked] = useState<FacturaSearch | null>(null);
-  const [confirming, setConfirming] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    const t = setTimeout(async () => {
-      setLoading(true);
-      try {
-        const params = new URLSearchParams({ companyId, tipo, take: "30", unmatchedOnly: "true" });
-        if (query.trim()) params.set("q", query.trim());
-        const res = await fetch(`/api/facturas?${params}`);
-        const data = await res.json();
-        if (!cancelled) setResults(Array.isArray(data) ? data : []);
-      } catch { if (!cancelled) setResults([]); }
-      finally { if (!cancelled) setLoading(false); }
-    }, 250);
-    return () => { cancelled = true; clearTimeout(t); };
-  }, [query, tipo, companyId]);
-
-  return (
-    <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <Card className="w-full max-w-[520px] rounded-card border-cos-line p-5 shadow-card" >
-        <div onClick={(e) => e.stopPropagation()}>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-[16px] font-semibold text-cos-ink">Conciliar {count} movimiento(s) con una factura</p>
-              <p className="mt-0.5 text-[13px] text-cos-ink-soft">Suma seleccionada: <span className="font-mono font-semibold">${sum.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span></p>
-            </div>
-            <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-control text-cos-ink-soft hover:bg-cos-paper"><X className="h-5 w-5" /></button>
-          </div>
-
-          <div className="mt-3 flex gap-1.5">
-            {(["INGRESO","EGRESO","NOMINA"] as const).map((t) => (
-              <button key={t} onClick={() => setTipo(t)}
-                className={"rounded-full px-3 py-1 text-[12.5px] font-medium " + (tipo === t ? "bg-cos-brand text-white" : "bg-cos-paper text-cos-ink-soft hover:bg-cos-line-soft")}>
-                {t === "INGRESO" ? "Ingresos" : t === "EGRESO" ? "Gastos (Egreso)" : "Nómina"}
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-3 flex items-center gap-2 rounded-control border border-cos-line px-3 py-2">
-            <Search className="h-4 w-4 text-cos-ink-faint" />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar por proveedor, RFC, UUID, folio…"
-              className="w-full bg-transparent text-[13.5px] outline-none placeholder:text-cos-ink-faint" autoFocus />
-          </div>
-
-          <div className="mt-3 max-h-[44vh] overflow-y-auto">
-            {loading ? (
-              <div className="flex items-center gap-2 py-6 text-[13px] text-cos-ink-faint"><Loader2 className="h-4 w-4 animate-spin" /> Buscando…</div>
-            ) : results.length === 0 ? (
-              <p className="py-6 text-center text-[13px] text-cos-ink-faint">Sin facturas por conciliar.</p>
-            ) : results.map((f) => (
-              <button key={f.id} onClick={() => setPicked(f)}
-                className={"flex w-full items-center justify-between gap-3 border-b border-cos-line-soft px-1 py-2.5 text-left last:border-0 " + (picked?.id === f.id ? "bg-cos-brand-tint" : "hover:bg-cos-paper")}>
-                <div className="min-w-0">
-                  <p className="truncate text-[13.5px] font-medium text-cos-ink">{f.customer?.razonSocial ?? "—"}</p>
-                  <p className="text-[12px] text-cos-ink-faint"><span className="font-mono">{f.customer?.rfc ?? "—"}</span>{f.folio ? ` · ${f.serie ?? ""}${f.folio}` : ""} · {fmtFecha(f.fecha)}</p>
-                </div>
-                <Money value={f.total} size={13} weight={600} />
-              </button>
-            ))}
-          </div>
-
-          {picked && (
-            <div className="mt-3 rounded-control bg-cos-paper px-3 py-2.5 text-[13px]">
-              <div className="flex justify-between"><span className="text-cos-ink-soft">Factura total</span><Money value={picked.total} size={13} weight={600} /></div>
-              <div className="flex justify-between"><span className="text-cos-ink-soft">Suma seleccionada</span><span className="font-mono font-semibold">${sum.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span></div>
-              <div className="flex justify-between">
-                <span className="text-cos-ink-soft">Cobertura</span>
-                <span className={"font-semibold " + (picked.total > 0 && sum / picked.total > 1.001 ? "text-cos-red-ink" : "text-cos-jade-ink")}>
-                  {picked.total > 0 ? Math.round((sum / picked.total) * 100) : 0}%{picked.total > 0 && sum / picked.total > 1.001 ? " (excede)" : ""}
-                </span>
-              </div>
-            </div>
-          )}
-
-          <div className="mt-4 flex justify-end gap-2">
-            <button onClick={onClose} className="rounded-control border border-cos-line px-4 py-2 text-[13.5px] font-semibold text-cos-ink hover:bg-cos-paper">Cancelar</button>
-            <button disabled={!picked || confirming} onClick={async () => { if (!picked) return; setConfirming(true); try { await onConfirm(picked.id); } finally { setConfirming(false); } }}
-              className="rounded-control bg-cos-brand px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
-              {confirming ? "Conciliando…" : "Conciliar"}
-            </button>
-          </div>
-        </div>
-      </Card>
     </div>
   );
 }

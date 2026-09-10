@@ -26,7 +26,6 @@ import { ConciliacionWorkbench } from "@/components/contabilidad/ConciliacionWor
 import { GestionBancos, type VistaBancos } from "@/components/bancos/GestionBancos";
 import { TopTabsBar } from "@/components/layout/TopTabsBar";
 import { MESES } from "@/components/contabilidad/PeriodProvider";
-import { cn } from "@/lib/utils";
 
 type Tab = "conciliacion" | VistaBancos;
 

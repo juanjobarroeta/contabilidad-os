@@ -19,10 +19,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Check, Landmark, Loader2, Sparkles, X } from "lucide-react";
+import { Check, CheckSquare, Landmark, Loader2, Sparkles, X } from "lucide-react";
 import { Money } from "@/components/ui/Money";
 import { StatTile, StatStrip } from "@/components/ui";
 import { Alert, RetryButton } from "@/components/ui/feedback";
+import { AccionesEnLote } from "@/components/bancos/AccionesEnLote";
 import { ResolverMovimiento } from "@/components/bancos/ResolverMovimiento";
 import { evaluarCoberturaBancaria } from "@/lib/bancos/conciliacion";
 import { cn } from "@/lib/utils";
@@ -102,6 +103,9 @@ interface ConciliacionMes {
 const fFecha = (s: string) =>
   new Date(s).toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "2-digit" });
 
+/** Renglones que se pintan de una vez; «Ver más» agrega otro tanto. */
+const PAGINA = 80;
+
 export function ConciliacionWorkbench({
   companyId,
   year,
@@ -123,6 +127,15 @@ export function ConciliacionWorkbench({
   // obligaba a cambiar de pestaña, que es de donde venía la doble mesa.
   const [filtro, setFiltro] = useState<"PENDIENTES" | "MATCHED" | "IGNORED" | "TODOS">("PENDIENTES");
   const [buscar, setBuscar] = useState("");
+  // Selección en lote — lo último que sólo existía en el tab Movimientos.
+  // Veinte comisiones se categorizan de un golpe sin salir de la mesa.
+  const [selectMode, setSelectMode] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  // Tope de RENDERIZADO, no de datos: el feed trae el mes completo (un hospital
+  // pasa de 300 movimientos) y pintarlos todos deja la lista pesada y sin fondo
+  // visible. Los filtros y la búsqueda corren sobre TODO el mes; esto sólo
+  // decide cuántos renglones se dibujan.
+  const [visibles, setVisibles] = useState(PAGINA);
 
   // Anticipos sin CFDI: obligaciones abiertas con dinero encima. Se cargan
   // aparte del mes porque no dependen del periodo — un anticipo de hace tres
@@ -168,8 +181,18 @@ export function ConciliacionWorkbench({
   useEffect(() => {
     setSelTx(null);
     setCuentaSel(null);
+    setSelectMode(false);
+    setPicked(new Set());
     cargar();
   }, [cargar]);
+
+  // Cambiar de filtro, de búsqueda o de cuenta cambia QUÉ lista se ve: arrastrar
+  // ahí una selección hecha sobre otra (o el scroll de la anterior) aplicaría el
+  // lote a movimientos que ya no están en pantalla.
+  useEffect(() => {
+    setPicked(new Set());
+    setVisibles(PAGINA);
+  }, [filtro, buscar, cuentaSel, data]);
 
   // Una vez por empresa: el detalle no depende del período.
   useEffect(() => {
@@ -210,6 +233,14 @@ export function ConciliacionWorkbench({
     for (const c of data?.cuentas ?? []) m.set(c.bankAccountId, c.etiqueta);
     return m;
   }, [data]);
+
+  function togglePick(id: string) {
+    setPicked((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  }
 
   async function autoConciliar() {
     if (!data || data.cuentas.length === 0) return;
@@ -271,7 +302,7 @@ export function ConciliacionWorkbench({
     TODOS: delMes.length,
   };
   const q = buscar.trim().toLowerCase();
-  const pendientes = delMes
+  const lista = delMes
     .filter((m) =>
       filtro === "TODOS" ? true
       : filtro === "PENDIENTES" ? !m.registrado
@@ -285,12 +316,18 @@ export function ConciliacionWorkbench({
     // Los sin conciliar (trabajo real) arriba; los «por contabilizar» al final.
     // El sort es estable: dentro de cada grupo se conserva el orden por fecha.
     .sort((a, b) => Number(a.conciliado ?? false) - Number(b.conciliado ?? false));
+  // Lo palomeado se deriva de la lista FILTRADA, no del Set suelto: así el lote
+  // nunca puede tocar un movimiento que el filtro de hoy ya no muestra.
+  const escogidos = lista.filter((m) => picked.has(m.id));
+  // Neto firmado en valor absoluto (un reembolso resta) — la cuenta del motor.
+  const escogidosSuma = Math.abs(escogidos.reduce((s, m) => s + m.monto, 0));
+  const escogidosConciliados = escogidos.filter((m) => m.conciliado).length;
   const total = deLaCuenta(data.movimientosBanco).length;
   // «Sin conciliar» = status UNMATCHED (el MISMO número que el paso 2 del
   // Inicio); los conciliados de un mes sin postear sólo esperan el posteo.
-  const sinConciliar = pendientes.filter((m) => !m.conciliado).length;
-  const esperanPosteo = pendientes.length - sinConciliar;
-  const sin = pendientes.length;
+  const sinConciliar = lista.filter((m) => !m.conciliado).length;
+  const esperanPosteo = lista.length - sinConciliar;
+  const sin = lista.length;
   const sinGlobal = data.movimientosNoRegistrados.length;
   // Σ|monto|, NO el neto firmado: +$17k de abonos y −$17k de cargos netean a
   // casi cero, y el tile diría «$92 por conciliar» con 12 movimientos por
@@ -300,10 +337,10 @@ export function ConciliacionWorkbench({
   // conciliados que esperan posteo hacía que el tile dijera «$20,207.20 por
   // conciliar» junto a «sin conciliar: 0» — dos cifras que se contradicen a la
   // vista. Lo que espera el posteo se cuenta aparte, con su nombre.
-  const porConciliar = pendientes.filter((m) => !m.conciliado);
+  const porConciliar = lista.filter((m) => !m.conciliado);
   const abonos = porConciliar.reduce((s, m) => s + (m.monto > 0 ? m.monto : 0), 0);
   const cargos = porConciliar.reduce((s, m) => s + (m.monto < 0 ? -m.monto : 0), 0);
-  const montoPorContabilizar = pendientes
+  const montoPorContabilizar = lista
     .filter((m) => m.conciliado)
     .reduce((s, m) => s + Math.abs(m.monto), 0);
   const sinActividadConfirmada =
@@ -534,27 +571,71 @@ export function ConciliacionWorkbench({
                   placeholder="Buscar concepto, contraparte, RFC o importe…"
                   className="ml-auto min-w-[180px] flex-1 rounded-control border border-cos-line bg-cos-paper px-2.5 py-1 text-[12.5px] text-cos-ink placeholder:text-cos-ink-faint focus:border-cos-brand focus:outline-none"
                 />
+                <button
+                  onClick={() => { setSelectMode((v) => !v); setPicked(new Set()); }}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold",
+                    selectMode ? "bg-cos-ink text-cos-canvas" : "text-cos-ink-soft hover:bg-cos-paper",
+                  )}
+                >
+                  <CheckSquare className="h-3.5 w-3.5" /> {selectMode ? "Salir de selección" : "Seleccionar"}
+                </button>
               </div>
+              {/* Con filtro y búsqueda encima, «los N de esta lista» es el gesto
+                  real: filtrar COMISION y palomear todo de un tirón. Marca lo
+                  FILTRADO, no lo que alcanza a estar pintado — el tope de
+                  renglones es de dibujo, no de alcance. */}
+              {selectMode && (
+                <div className="flex flex-wrap items-center gap-3 border-b border-cos-line-soft bg-cos-paper px-5 py-1.5 text-[12px] text-cos-ink-soft">
+                  <span className="tabular-nums">
+                    {picked.size} de {lista.length} {lista.length === 1 ? "seleccionado" : "seleccionados"}
+                  </span>
+                  <button
+                    onClick={() => setPicked(new Set(lista.map((m) => m.id)))}
+                    className="font-semibold text-cos-brand-ink hover:underline"
+                  >
+                    Seleccionar {lista.length === 1 ? "el de la lista" : `los ${lista.length} de la lista`}
+                  </button>
+                  {picked.size > 0 && (
+                    <button onClick={() => setPicked(new Set())} className="font-semibold text-cos-ink-soft hover:underline">
+                      Ninguno
+                    </button>
+                  )}
+                </div>
+              )}
               {/* Cada columna con su propio scroll. Antes la lista crecía sin
                   tope en escritorio para no dejar un hueco cuando la columna
                   derecha era más alta —el grid estiraba las dos—, pero con el
                   panel pegado (`self-start`) ya no se estira, y sin tope la
                   página entera hacía scroll y el panel se iba de vista. */}
               <ul className="max-h-[430px] flex-1 overflow-y-auto lg:max-h-screen lg:min-h-[430px]">
-                {pendientes.map((m) => {
+                {lista.slice(0, visibles).map((m) => {
                   const activo = selTx?.id === m.id;
+                  const palomeado = picked.has(m.id);
                   return (
                     <li key={m.id}>
                       <button
-                        onClick={() => setSelTx(activo ? null : m)}
+                        // En modo selección el renglón palomea; fuera de él,
+                        // abre el panel. Un botón dentro de otro es HTML
+                        // inválido, así que la casilla es un <span> y el
+                        // renglón entero cambia de oficio.
+                        onClick={() => (selectMode ? togglePick(m.id) : setSelTx(activo ? null : m))}
+                        aria-pressed={selectMode ? palomeado : undefined}
                         className={cn(
                           "flex w-full items-baseline justify-between gap-3 border-b border-cos-line-soft px-5 py-2.5 text-left",
-                          activo
+                          (selectMode ? palomeado : activo)
                             ? "bg-cos-brand-tint shadow-[inset_3px_0_0_var(--brand)]"
                             : "hover:bg-cos-paper"
                         )}
                       >
-                        <span className="min-w-0">
+                        {selectMode && (
+                          <span className="relative top-[3px] flex-none" aria-hidden>
+                            {palomeado
+                              ? <CheckSquare className="h-[17px] w-[17px] text-cos-brand" />
+                              : <span className="block h-[17px] w-[17px] rounded-[5px] border-[1.5px] border-cos-line" />}
+                          </span>
+                        )}
+                        <span className="min-w-0 flex-1">
                           {/* La contraparte extraída manda; la cadena cruda del
                               banco sólo cuando no hay nada mejor (misma regla,
                               con el mismo porqué, que el tab Movimientos). */}
@@ -586,6 +667,19 @@ export function ConciliacionWorkbench({
                     </li>
                   );
                 })}
+                {lista.length > visibles && (
+                  <li className="flex flex-wrap items-center justify-between gap-2 px-5 py-2.5">
+                    <button
+                      onClick={() => setVisibles((v) => v + PAGINA)}
+                      className="rounded-control border border-cos-line px-3 py-1.5 text-[12.5px] font-medium text-cos-ink hover:border-cos-brand hover:text-cos-brand-ink"
+                    >
+                      Ver {Math.min(PAGINA, lista.length - visibles)} más
+                    </button>
+                    <span className="text-[11.5px] text-cos-ink-faint tabular-nums">
+                      {visibles} de {lista.length.toLocaleString("es-MX")}
+                    </span>
+                  </li>
+                )}
               </ul>
             </section>
 
@@ -646,6 +740,27 @@ export function ConciliacionWorkbench({
             </section>
           </div>
         </div>
+
+        {/* La barra del lote — el MISMO componente que monta Movimientos. Va
+            FUERA de la tarjeta y pegada al fondo de la ventana: la lista tiene
+            su propio scroll, así que dentro de ella se perdería de vista justo
+            cuando hay algo palomeado. */}
+        {selectMode && (
+          <AccionesEnLote
+            companyId={companyId}
+            txIds={escogidos.map((m) => m.id)}
+            suma={escogidosSuma}
+            conciliados={escogidosConciliados}
+            onToast={setAviso}
+            onListo={async () => {
+              setPicked(new Set());
+              setSelectMode(false);
+              setSelTx(null);
+              await cargar();
+              onApplied?.();
+            }}
+          />
+        )}
         </>
       )}
     </div>
