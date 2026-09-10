@@ -24,7 +24,9 @@ import { Money } from "@/components/ui/Money";
 import { StatTile, StatStrip } from "@/components/ui";
 import { Alert, RetryButton } from "@/components/ui/feedback";
 import { AccionesEnLote } from "@/components/bancos/AccionesEnLote";
-import { ResolverMovimiento } from "@/components/bancos/ResolverMovimiento";
+import { AvisoRepSugerido } from "@/components/bancos/AvisoRepSugerido";
+import { ResolverMovimiento, type RepSugerido } from "@/components/bancos/ResolverMovimiento";
+import { RepresentacionImpresa } from "@/components/facturas/RepresentacionImpresa";
 import { evaluarCoberturaBancaria } from "@/lib/bancos/conciliacion";
 import { cn } from "@/lib/utils";
 
@@ -131,6 +133,13 @@ export function ConciliacionWorkbench({
   // Veinte comisiones se categorizan de un golpe sin salir de la mesa.
   const [selectMode, setSelectMode] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  // Conciliar el cobro de una PPD obliga a timbrar su complemento. El panel ya
+  // avisaba, pero la mesa no le pasaba el callback y la sugerencia se perdía:
+  // conciliar aquí —la pantalla por defecto— nunca ofrecía el REP.
+  const [repSugerido, setRepSugerido] = useState<RepSugerido | null>(null);
+  const [verFacturaId, setVerFacturaId] = useState<string | null>(null);
+  /** id del movimiento cuyo cruce se está deshaciendo. */
+  const [deshaciendo, setDeshaciendo] = useState<string | null>(null);
   // Tope de RENDERIZADO, no de datos: el feed trae el mes completo (un hospital
   // pasa de 300 movimientos) y pintarlos todos deja la lista pesada y sin fondo
   // visible. Los filtros y la búsqueda corren sobre TODO el mes; esto sólo
@@ -233,6 +242,32 @@ export function ConciliacionWorkbench({
     for (const c of data?.cuentas ?? []) m.set(c.bankAccountId, c.etiqueta);
     return m;
   }, [data]);
+
+  /** Deshace el cruce del movimiento: `unmatch` si tiene factura o declaración,
+   *  `unignore` si sólo se había categorizado. El servidor revierte de paso la
+   *  declaración pagada y borra las porciones de la conciliación múltiple. */
+  async function deshacerCruce(m: Movimiento) {
+    const ignorado = m.status === "IGNORED";
+    setDeshaciendo(m.id);
+    try {
+      const res = await fetch(`/api/bancos/transactions/${m.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: ignorado ? "unignore" : "unmatch" }),
+      });
+      if (res.ok) {
+        setAviso(ignorado ? "Movimiento reabierto" : "Movimiento desconciliado");
+        setSelTx(null);
+        await cargar();
+        onApplied?.();
+      } else {
+        const d = await res.json().catch(() => null);
+        setError(d?.error ?? (ignorado ? "No se pudo reabrir" : "No se pudo desconciliar"));
+      }
+    } finally {
+      setDeshaciendo(null);
+    }
+  }
 
   function togglePick(id: string) {
     setPicked((prev) => {
@@ -710,12 +745,27 @@ export function ConciliacionWorkbench({
                 <div className="px-5 pb-4">
                   {selTx.conciliado && (
                     <div className="mt-3 rounded-card border border-cos-jade-ink/20 bg-cos-jade-tint px-3 py-2 text-[12.5px] text-cos-jade-ink">
-                      Este movimiento ya está conciliado — no hay nada que volver a cruzar. Entra en
-                      libros al{" "}
+                      {selTx.status === "IGNORED"
+                        ? "Este movimiento se categorizó sin factura. El cierre lo asienta con su etiqueta."
+                        : "Este movimiento ya está conciliado — no hay nada que volver a cruzar."}{" "}
+                      Entra en libros al{" "}
                       <Link href="/contabilidad/cierre" className="font-medium underline">
                         contabilizar el mes
                       </Link>
                       , un solo clic para todo el período.
+                      {/* DESHACER, aquí. Desde #970 la mesa puede filtrar a
+                          Conciliados y mirar lo hecho, pero corregirse seguía
+                          exigiendo el tab Movimientos: equivocarse conciliando
+                          es normal; no poder deshacerlo donde se ve, no. */}
+                      <button
+                        onClick={() => deshacerCruce(selTx)}
+                        disabled={deshaciendo === selTx.id}
+                        className="mt-2 block text-[12.5px] font-semibold text-cos-red-ink hover:underline disabled:opacity-50"
+                      >
+                        {deshaciendo === selTx.id
+                          ? "…"
+                          : selTx.status === "IGNORED" ? "Reabrir movimiento" : "Desconciliar"}
+                      </button>
                     </div>
                   )}
                   <ResolverMovimiento
@@ -733,6 +783,8 @@ export function ConciliacionWorkbench({
                     companyId={companyId}
                     onCambio={cargar}
                     onToast={setAviso}
+                    onVerFactura={setVerFacturaId}
+                    onRepSugerido={setRepSugerido}
                     onResuelto={() => setSelTx(null)}
                   />
                 </div>
@@ -762,6 +814,18 @@ export function ConciliacionWorkbench({
           />
         )}
         </>
+      )}
+
+      {repSugerido && (
+        <AvisoRepSugerido
+          rep={repSugerido}
+          companyId={companyId}
+          onCerrar={() => setRepSugerido(null)}
+          onToast={setAviso}
+        />
+      )}
+      {verFacturaId && (
+        <RepresentacionImpresa invoiceId={verFacturaId} onClose={() => setVerFacturaId(null)} />
       )}
     </div>
   );
