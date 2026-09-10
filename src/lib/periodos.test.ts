@@ -3,9 +3,11 @@ import {
   MESES_CORTOS,
   PERIODO_TODO,
   agruparPorEjercicio,
+  ejerciciosSinConteo,
   etiquetaPeriodo,
   rangoPeriodo,
   totalComprobantes,
+  ultimosEjercicios,
 } from "./periodos";
 
 describe("rangoPeriodo", () => {
@@ -119,5 +121,26 @@ describe("MESES_CORTOS", () => {
     expect(MESES_CORTOS[0]).toBe("ene");
     expect(MESES_CORTOS[11]).toBe("dic");
     expect(MESES_CORTOS.every((m) => m.length === 3)).toBe(true);
+  });
+});
+
+describe("ejerciciosSinConteo", () => {
+  it("da los 12 meses de cada ejercicio, en cero y del más reciente al más viejo", () => {
+    const r = ejerciciosSinConteo([2024, 2026, 2025]);
+    expect(r.map((e) => e.anio)).toEqual([2026, 2025, 2024]);
+    expect(r[0].meses).toHaveLength(12);
+    expect(r[0].meses[0]).toEqual({ periodo: "2026-01", mes: 1, total: 0 });
+    expect(r[0].meses[11].periodo).toBe("2026-12");
+  });
+
+  it("no repite un ejercicio que llegue dos veces", () => {
+    expect(ejerciciosSinConteo([2026, 2026]).map((e) => e.anio)).toEqual([2026]);
+  });
+});
+
+describe("ultimosEjercicios", () => {
+  it("cuenta hacia atrás desde el año dado, incluyéndolo", () => {
+    expect(ultimosEjercicios(2026)).toEqual([2026, 2025, 2024, 2023, 2022]);
+    expect(ultimosEjercicios(2026, 2)).toEqual([2026, 2025]);
   });
 });

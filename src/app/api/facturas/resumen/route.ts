@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
-import { PERIODO_TODO, etiquetaPeriodo, rangoPeriodo } from "@/lib/facturas/periodos";
+import { PERIODO_TODO, etiquetaPeriodo, rangoPeriodo } from "@/lib/periodos";
 
 // GET /api/facturas/resumen?companyId=xxx[&periodo=YYYY-MM|YYYY|todo]
 //

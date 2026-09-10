@@ -6,10 +6,11 @@ import {
   MESES_CORTOS,
   PERIODO_TODO,
   agruparPorEjercicio,
+  ejerciciosSinConteo,
   etiquetaPeriodo,
   totalComprobantes,
   type ConteoPeriodo,
-} from "@/lib/facturas/periodos";
+} from "@/lib/periodos";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Selector de periodo de la pantalla de Facturas.
@@ -24,23 +25,53 @@ import {
 // con posiciones fijas. Los meses sin comprobantes se pintan apagados en vez de
 // esconderse — que agosto esté vacío es información, y mantener a julio siempre
 // en el mismo lugar es lo que hace la rejilla escaneable de un vistazo.
+//
+// DOS MODOS, porque no toda pantalla sabe contar. Con `conteos` es lo de
+// arriba. SIN ellos (`anios`), la rejilla ofrece esos ejercicios completos, sin
+// cifras y con los doce meses disponibles: la mesa de conciliación trabaja UN
+// mes y su feed no sabe cuántos movimientos tienen los demás — pero saltar a
+// cualquiera es justamente lo que hacía falta, y pintar todo en cero sería
+// afirmar un dato que nadie midió.
+//
+// Vive en components/ui y no en components/facturas porque la usan Facturas,
+// el archivo de Bancos y la mesa: un selector de periodo por pantalla es cómo
+// se acaba con tres gramáticas distintas para elegir un mes.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function SelectorPeriodo({
   valor,
   conteos,
+  anios,
   onChange,
+  permitirTodo = true,
+  permitirEjercicio = true,
+  sustantivo = "comprobantes",
+  className,
 }: {
   /** "todo" | "YYYY" | "YYYY-MM" */
   valor: string;
-  conteos: ConteoPeriodo[];
+  /** Conteo por mes. Omitido = la rejilla no enseña cifras y no apaga meses. */
+  conteos?: ConteoPeriodo[];
+  /** Ejercicios a ofrecer cuando no hay conteos que los revelen. */
+  anios?: number[];
   onChange: (valor: string) => void;
+  /** «Todo el historial»: el archivo lo quiere; una pantalla que trabaja un
+   *  mes (la mesa) no puede honrarlo. */
+  permitirTodo?: boolean;
+  /** «Todo 2026», por la misma razón. */
+  permitirEjercicio?: boolean;
+  /** Qué se cuenta, para que los títulos digan la verdad. */
+  sustantivo?: string;
+  className?: string;
 }) {
   const [abierto, setAbierto] = useState(false);
   const contenedor = useRef<HTMLDivElement | null>(null);
 
-  const ejercicios = agruparPorEjercicio(conteos);
-  const total = totalComprobantes(conteos);
+  const sinConteos = conteos === undefined;
+  const ejercicios = sinConteos
+    ? ejerciciosSinConteo(anios ?? [new Date().getFullYear()])
+    : agruparPorEjercicio(conteos);
+  const total = sinConteos ? 0 : totalComprobantes(conteos);
 
   // Ejercicio que se está mostrando en la rejilla. Arranca en el del periodo
   // elegido; si es "todo el historial", en el más reciente con datos.
@@ -72,15 +103,16 @@ export function SelectorPeriodo({
   }
 
   // Etiqueta del botón: el periodo elegido y cuántos comprobantes tiene.
-  const conteoDelValor =
-    valor === PERIODO_TODO
+  const conteoDelValor = sinConteos
+    ? 0
+    : valor === PERIODO_TODO
       ? total
       : /^\d{4}$/.test(valor)
       ? ejercicios.find((e) => e.anio === Number(valor))?.total ?? 0
       : ejercicios.flatMap((e) => e.meses).find((m) => m.periodo === valor)?.total ?? 0;
 
   return (
-    <div ref={contenedor} className="relative">
+    <div ref={contenedor} className={`relative${className ? ` ${className}` : ""}`}>
       <button
         type="button"
         onClick={() => setAbierto((o) => !o)}
@@ -90,7 +122,9 @@ export function SelectorPeriodo({
       >
         <CalendarRange className="h-[18px] w-[18px] shrink-0 text-cos-ink-faint" />
         <span className="font-medium">{etiquetaPeriodo(valor)}</span>
-        <span className="font-mono text-[12px] text-cos-ink-faint">{conteoDelValor.toLocaleString("es-MX")}</span>
+        {!sinConteos && (
+          <span className="font-mono text-[12px] text-cos-ink-faint">{conteoDelValor.toLocaleString("es-MX")}</span>
+        )}
         <ChevronDown className={`ml-auto h-4 w-4 shrink-0 text-cos-ink-faint transition-transform ${abierto ? "rotate-180" : ""}`} />
       </button>
 
@@ -101,6 +135,7 @@ export function SelectorPeriodo({
           className="absolute right-0 z-50 mt-1.5 w-[320px] rounded-card border border-cos-line bg-cos-card p-3 shadow-[0_20px_45px_-15px_oklch(0.2_0.05_258_/_0.45)]"
         >
           {/* Todo el historial */}
+          {permitirTodo && (
           <button
             type="button"
             onClick={() => elegir(PERIODO_TODO)}
@@ -114,15 +149,16 @@ export function SelectorPeriodo({
             </span>
             <span className="font-mono text-[12px] opacity-80">{total.toLocaleString("es-MX")}</span>
           </button>
+          )}
 
           {ejercicios.length === 0 ? (
             <p className="px-2.5 py-4 text-center text-[13px] text-cos-ink-faint">
-              Todavía no hay comprobantes.
+              Todavía no hay {sustantivo}.
             </p>
           ) : (
             <>
               {/* Ejercicios */}
-              <div className="mt-2.5 flex flex-wrap gap-1.5 border-t border-cos-line-soft pt-2.5">
+              <div className={`flex flex-wrap gap-1.5 ${permitirTodo ? "mt-2.5 border-t border-cos-line-soft pt-2.5" : ""}`}>
                 {ejercicios.map((e) => {
                   const enVista = e.anio === ejercicio?.anio;
                   return (
@@ -130,7 +166,7 @@ export function SelectorPeriodo({
                       key={e.anio}
                       type="button"
                       onClick={() => setAnioVista(e.anio)}
-                      title={`${e.total.toLocaleString("es-MX")} comprobantes en ${e.anio}`}
+                      title={sinConteos ? String(e.anio) : `${e.total.toLocaleString("es-MX")} ${sustantivo} en ${e.anio}`}
                       className={`rounded-full px-2.5 py-1 text-[12.5px] font-medium transition-colors ${
                         enVista
                           ? "bg-cos-slate-tint text-cos-ink"
@@ -146,6 +182,7 @@ export function SelectorPeriodo({
               {ejercicio && (
                 <>
                   {/* Ejercicio completo */}
+                  {permitirEjercicio && (
                   <button
                     type="button"
                     onClick={() => elegir(String(ejercicio.anio))}
@@ -163,11 +200,12 @@ export function SelectorPeriodo({
                       {ejercicio.total.toLocaleString("es-MX")}
                     </span>
                   </button>
+                  )}
 
                   {/* Rejilla de 12 meses, posiciones fijas */}
                   <div className="mt-1.5 grid grid-cols-3 gap-1.5">
                     {ejercicio.meses.map((m) => {
-                      const vacio = m.total === 0;
+                      const vacio = !sinConteos && m.total === 0;
                       const activo = valor === m.periodo;
                       return (
                         <button
@@ -176,9 +214,11 @@ export function SelectorPeriodo({
                           disabled={vacio}
                           onClick={() => elegir(m.periodo)}
                           title={
-                            vacio
-                              ? `Sin comprobantes en ${etiquetaPeriodo(m.periodo)}`
-                              : `${m.total.toLocaleString("es-MX")} comprobantes en ${etiquetaPeriodo(m.periodo)}`
+                            sinConteos
+                              ? etiquetaPeriodo(m.periodo)
+                              : vacio
+                                ? `Sin ${sustantivo} en ${etiquetaPeriodo(m.periodo)}`
+                                : `${m.total.toLocaleString("es-MX")} ${sustantivo} en ${etiquetaPeriodo(m.periodo)}`
                           }
                           className={`rounded-control border px-1 py-1.5 text-center transition-colors ${
                             activo
@@ -191,9 +231,11 @@ export function SelectorPeriodo({
                           <span className="block text-[12.5px] font-medium capitalize">
                             {MESES_CORTOS[m.mes - 1]}
                           </span>
-                          <span className="block font-mono text-[11px] opacity-75">
-                            {vacio ? "—" : m.total.toLocaleString("es-MX")}
-                          </span>
+                          {!sinConteos && (
+                            <span className="block font-mono text-[11px] opacity-75">
+                              {vacio ? "—" : m.total.toLocaleString("es-MX")}
+                            </span>
+                          )}
                         </button>
                       );
                     })}
