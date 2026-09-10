@@ -49,24 +49,39 @@ async function main() {
   for (let i = 0; i < elegibles.length; i++) {
     const c = elegibles[i];
     const t0 = Date.now();
+    let ok = false;
+    let nuevos = 0;
+    let info = "";
     try {
       const res = await importarSerieBalanzasSat(c.id, {
         anios: anios?.length ? anios : undefined,
         force,
         log: () => {},
       });
+      ok = true;
+      nuevos = res.importados;
+      info = `${res.importados} nuevos · ${res.balanzas} balanzas · ${res.periodos.length} períodos vistos`;
       resumen.ok++;
       resumen.importados += res.importados;
       console.log(`[${i + 1}/${elegibles.length}] ${c.rfc} ✅ ${res.importados} períodos nuevos (${Date.now() - t0}ms)`);
     } catch (e) {
       if (e instanceof BuzonAccesoError) {
         resumen.sinBuzon++;
+        info = `sinBuzón — ${e.message.slice(0, 130)}`;
         console.log(`[${i + 1}/${elegibles.length}] ${c.rfc} ⛔ ${e.message.slice(0, 90)}`);
       } else {
         resumen.error++;
+        info = `error — ${String(e).slice(0, 130)}`;
         console.error(`[${i + 1}/${elegibles.length}] ${c.rfc} ❌ ${String(e).slice(0, 140)}`);
       }
     }
+    // Registrar el resultado para la vista operador (best-effort).
+    await prisma.company
+      .update({
+        where: { id: c.id },
+        data: { ceSatSyncEn: new Date(), ceSatSyncOk: ok, ceSatSyncNuevos: nuevos, ceSatSyncInfo: info.slice(0, 200) },
+      })
+      .catch(() => {});
     if (i < elegibles.length - 1) await new Promise((r) => setTimeout(r, pausaMs));
   }
   console.log(`\nRESUMEN · ok=${resumen.ok} · períodos=${resumen.importados} · sinBuzón=${resumen.sinBuzon} · error=${resumen.error}`);
