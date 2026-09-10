@@ -23,7 +23,7 @@ import { Check, Landmark, Loader2, Sparkles, X } from "lucide-react";
 import { Money } from "@/components/ui/Money";
 import { StatTile, StatStrip } from "@/components/ui";
 import { Alert, RetryButton } from "@/components/ui/feedback";
-import { CATEGORIAS_MESA, type SugerenciaMovimiento } from "@/lib/bancos/inferir-movimiento";
+import { ResolverMovimiento } from "@/components/bancos/ResolverMovimiento";
 import { evaluarCoberturaBancaria } from "@/lib/bancos/conciliacion";
 import { cn } from "@/lib/utils";
 
@@ -65,6 +65,8 @@ interface Movimiento {
   contraparteNombre?: string | null;
   contraparteRfc?: string | null;
   conceptoPago?: string | null;
+  contraparteClabe?: string | null;
+  claveRastreo?: string | null;
 }
 interface Cuenta {
   bankAccountId: string;
@@ -88,34 +90,7 @@ interface ConciliacionMes {
   confirmacionSinActividad?: { confirmadaAt: string; nota: string } | null;
   sinCuentaBancos: boolean;
 }
-interface Candidato {
-  id: string;
-  uuid: string | null;
-  fecha: string;
-  folio: string | null;
-  serie: string | null;
-  metodoPago: string | null;
-  total: number;
-  cliente: string;
-  rfc: string;
-  confidence: "alta" | "media" | "baja";
-  alreadyMatched: boolean;
-  matchedAmount: number;
-  remainingBalance: number;
-}
-interface CandidatoImpuesto {
-  id: string;
-  etiqueta: string;
-  montoEsperado: number | null;
-  fechaLimitePago: string | null;
-  confidence: "alta" | "media" | "baja";
-}
 
-const CONFIANZA: Record<Candidato["confidence"], { t: string; cls: string }> = {
-  alta: { t: "alta", cls: "bg-cos-jade-tint text-cos-jade-ink" },
-  media: { t: "media", cls: "bg-cos-amber-tint text-cos-amber-ink" },
-  baja: { t: "baja", cls: "bg-cos-slate-tint text-cos-ink-soft" },
-};
 
 const fFecha = (s: string) =>
   new Date(s).toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "2-digit" });
@@ -135,24 +110,6 @@ export function ConciliacionWorkbench({
   const [data, setData] = useState<ConciliacionMes | null>(null);
   const [cargando, setCargando] = useState(true);
   const [selTx, setSelTx] = useState<Movimiento | null>(null);
-  const [cand, setCand] = useState<{
-    candidates: Candidato[];
-    impuestos: CandidatoImpuesto[];
-    /** «¿No es una factura?» — la categoría inferida (identidad/reglas/LLM). */
-    sugerencia: SugerenciaMovimiento | null;
-    /** Subconjunto de facturas de UNA contraparte que suma EXACTO el
-     *  movimiento (sugerirPagoJunto). Un clic las palomea todas. */
-    pagoJunto: {
-      rfc: string;
-      cliente: string;
-      suma: number;
-      facturas: Array<{ invoiceId: string; monto: number; folio: string }>;
-    } | null;
-  } | null>(null);
-  const [candCargando, setCandCargando] = useState(false);
-  const [seleccion, setSeleccion] = useState<string[]>([]); // ids en orden de palomeo
-  const [selImpuesto, setSelImpuesto] = useState<string | null>(null);
-  const [aplicando, setAplicando] = useState(false);
   const [autoCorriendo, setAutoCorriendo] = useState(false);
 
   // Anticipos sin CFDI: obligaciones abiertas con dinero encima. Se cargan
@@ -197,7 +154,7 @@ export function ConciliacionWorkbench({
   }, [companyId, year, month]);
 
   useEffect(() => {
-    setSelTx(null); setCand(null); setSeleccion([]); setSelImpuesto(null);
+    setSelTx(null);
     setCuentaSel(null);
     cargar();
   }, [cargar]);
@@ -234,151 +191,13 @@ export function ConciliacionWorkbench({
   // Búsqueda del humano sobre los candidatos (con debounce): cuando el
   // contador YA sabe qué factura es, tecleársela gana a cualquier score. El
   // servidor ensancha el pool (±365 días, sin tope de monto) y filtra.
-  const [busqueda, setBusqueda] = useState("");
-  const [busquedaLista, setBusquedaLista] = useState("");
-  useEffect(() => { setBusqueda(""); setBusquedaLista(""); }, [selTx?.id]);
-  useEffect(() => {
-    const t = setTimeout(() => setBusquedaLista(busqueda.trim()), 300);
-    return () => clearTimeout(t);
-  }, [busqueda]);
 
-  // Candidatos del movimiento elegido.
-  useEffect(() => {
-    if (!selTx) return;
-    let vivo = true;
-    setCandCargando(true);
-    setCand(null); setSeleccion([]); setSelImpuesto(null);
-    const qParam = busquedaLista ? `&q=${encodeURIComponent(busquedaLista)}` : "";
-    fetch(`/api/bancos/${selTx.cuentaBancariaId}/match?txId=${selTx.id}${qParam}`)
-      .then((r) => r.json())
-      .then((d) => { if (vivo && Array.isArray(d?.candidates)) setCand({ candidates: d.candidates, impuestos: d.impuestos ?? [], sugerencia: d.sugerencia ?? null, pagoJunto: d.pagoJunto ?? null }); })
-      .catch(() => {})
-      .finally(() => { if (vivo) setCandCargando(false); });
-    return () => { vivo = false; };
-  }, [selTx, busquedaLista]);
 
   const etiquetaCuenta = useMemo(() => {
     const m = new Map<string, string>();
     for (const c of data?.cuentas ?? []) m.set(c.bankAccountId, c.etiqueta);
     return m;
   }, [data]);
-
-  // Asignación en orden de palomeo: cada CFDI toma min(su saldo, lo restante).
-  const asignaciones = useMemo(() => {
-    if (!selTx || !cand) return [];
-    let restante = Math.abs(selTx.monto);
-    const out: { c: Candidato; aplicar: number }[] = [];
-    for (const id of seleccion) {
-      const c = cand.candidates.find((x) => x.id === id);
-      if (!c) continue;
-      const base = c.remainingBalance > 0 ? c.remainingBalance : c.total;
-      const aplicar = Math.min(Math.round(base * 100) / 100, Math.round(restante * 100) / 100);
-      if (aplicar <= 0) continue;
-      out.push({ c, aplicar });
-      restante = Math.round((restante - aplicar) * 100) / 100;
-    }
-    return out;
-  }, [selTx, cand, seleccion]);
-
-  const sumaAplicada = asignaciones.reduce((s, a) => s + a.aplicar, 0);
-  const diferencia = selTx ? Math.round((Math.abs(selTx.monto) - sumaAplicada) * 100) / 100 : 0;
-
-  function toggle(id: string) {
-    setSeleccion((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-    setSelImpuesto(null);
-  }
-
-  async function conciliar() {
-    if (!selTx || asignaciones.length === 0) return;
-    setAplicando(true); setError(""); setAviso("");
-    try {
-      const body =
-        asignaciones.length === 1
-          ? { action: "match", invoiceId: asignaciones[0].c.id }
-          : {
-              action: "match-multiple",
-              asignaciones: asignaciones.map((a) => ({ invoiceId: a.c.id, monto: a.aplicar })),
-            };
-      const res = await fetch(`/api/bancos/transactions/${selTx.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const d = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(d?.error ?? "No se pudo conciliar");
-      setAviso(
-        <>
-          Movimiento conciliado contra {asignaciones.length} CFDI
-          {asignaciones.length > 1 ? "s" : ""}.
-          {d?.advertencia && <> {d.advertencia.mensaje}</>}
-          {d?.repSugerido && (
-            <>
-              {" "}Este cobro PPD necesita complemento de pago —{" "}
-              <Link href="/facturas" className="font-medium underline">emitir REP</Link>.
-            </>
-          )}
-        </>
-      );
-      setSelTx(null);
-      await cargar();
-      onApplied?.();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "No se pudo conciliar");
-    } finally {
-      setAplicando(false);
-    }
-  }
-
-  async function conciliarImpuesto() {
-    if (!selTx || !selImpuesto) return;
-    setAplicando(true); setError(""); setAviso("");
-    try {
-      const res = await fetch(`/api/bancos/transactions/${selTx.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "match-impuesto", taxDeclarationId: selImpuesto }),
-      });
-      const d = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(d?.error ?? "No se pudo conciliar el impuesto");
-      setAviso("Cargo conciliado contra la declaración — quedó PAGADA.");
-      setSelTx(null);
-      await cargar();
-      onApplied?.();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "No se pudo conciliar el impuesto");
-    } finally {
-      setAplicando(false);
-    }
-  }
-
-  // Clasificar sin factura (o ignorar): el MISMO PATCH ignore+tag del tab
-  // Movimientos — el cierre (postMonth) postea cada tag con su asiento, así
-  // que aquí no se escribe ledger, sólo se etiqueta.
-  async function clasificar(tag: string | null, label: string) {
-    if (!selTx) return;
-    setAplicando(true); setError(""); setAviso("");
-    try {
-      const res = await fetch(`/api/bancos/transactions/${selTx.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "ignore", notes: tag }),
-      });
-      const d = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(d?.error ?? "No se pudo clasificar");
-      setAviso(
-        tag
-          ? `Clasificado: ${label}. El cierre del mes genera su póliza.`
-          : "Movimiento ignorado — no genera póliza."
-      );
-      setSelTx(null);
-      await cargar();
-      onApplied?.();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "No se pudo clasificar");
-    } finally {
-      setAplicando(false);
-    }
-  }
 
   async function autoConciliar() {
     if (!data || data.cuentas.length === 0) return;
@@ -712,23 +531,16 @@ export function ConciliacionWorkbench({
               </ul>
             </section>
 
-            {/* ── Derecha: CFDIs candidatos ── */}
+            {/* ── Derecha: resolver el movimiento ──
+                EL MISMO panel que la lista de Movimientos. Antes había aquí una
+                copia más pobre: repartía las porciones sola en vez de dejar
+                editarlas, y no tenía búsqueda manual de facturas, comprobante
+                CEP, pagos de impuestos ni desconciliar. Conciliar daba un
+                resultado distinto según la pestaña. */}
             <section className="min-w-0 border-t border-cos-line lg:border-t-0">
               <p className="border-b border-cos-line-soft px-5 py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-cos-ink-faint">
-                {selTx
-                  ? `CFDI candidatos · ${seleccion.length} seleccionados`
-                  : "CFDI candidatos"}
+                {selTx ? "Resolver el movimiento" : "CFDI candidatos"}
               </p>
-              {selTx && (
-                <div className="border-b border-cos-line-soft px-5 py-2">
-                  <input
-                    value={busqueda}
-                    onChange={(e) => setBusqueda(e.target.value)}
-                    placeholder="Buscar por folio, cliente, RFC o UUID…"
-                    className="w-full rounded-control border border-cos-line bg-cos-paper px-2.5 py-1.5 text-[12.5px] text-cos-ink placeholder:text-cos-ink-faint focus:border-cos-brand focus:outline-none"
-                  />
-                </div>
-              )}
               {!selTx ? (
                 <div className="flex h-full min-h-[200px] items-center justify-center px-8 py-10 text-center text-sm text-cos-ink-soft">
                   <span>
@@ -737,14 +549,10 @@ export function ConciliacionWorkbench({
                     del mismo sentido, puntuados por identidad (RFC y nombre), monto y fecha.
                   </span>
                 </div>
-              ) : candCargando ? (
-                <p className="flex items-center gap-2 px-5 py-6 text-sm text-cos-ink-soft">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Buscando candidatos…
-                </p>
               ) : (
-                <>
+                <div className="px-5 pb-4">
                   {selTx.conciliado && (
-                    <div className="mx-4 mt-3 rounded-card border border-cos-jade-ink/20 bg-cos-jade-tint px-3 py-2 text-[12.5px] text-cos-jade-ink">
+                    <div className="mt-3 rounded-card border border-cos-jade-ink/20 bg-cos-jade-tint px-3 py-2 text-[12.5px] text-cos-jade-ink">
                       Este movimiento ya está conciliado — no hay nada que volver a cruzar. Entra en
                       libros al{" "}
                       <Link href="/contabilidad/cierre" className="font-medium underline">
@@ -753,214 +561,24 @@ export function ConciliacionWorkbench({
                       , un solo clic para todo el período.
                     </div>
                   )}
-                  {!cand || (cand.candidates.length === 0 && cand.impuestos.length === 0) ? (
-                    <p className="px-5 py-6 text-sm text-cos-ink-soft">
-                      {busquedaLista
-                        ? `Nada empata con «${busquedaLista}» en ±365 días (mismo sentido, sin CFDIs ya cobrados).`
-                        : <>Sin CFDIs de este sentido que empaten por identidad, monto o fecha. Puede ser un
-                          traspaso propio, una comisión, un documento que aún no se sincroniza — o un{" "}
-                          {selTx.monto > 0 ? "ingreso" : "gasto"} que no se facturó.</>}
-                    </p>
-                  ) : (
-                    <>
-                  {cand.pagoJunto && (
-                    <div className="mx-4 mt-3 flex flex-wrap items-center justify-between gap-2 rounded-card border border-cos-brand/30 bg-cos-brand-tint px-3 py-2.5">
-                      <p className="text-[12.5px] text-cos-brand-ink">
-                        <b>Pago junto:</b> {cand.pagoJunto.facturas.length} facturas de {cand.pagoJunto.cliente} suman
-                        exacto <Money value={cand.pagoJunto.suma} size={12} /> ({cand.pagoJunto.facturas.map((f) => f.folio).join(" + ")}).
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => { setSeleccion(cand.pagoJunto!.facturas.map((f) => f.invoiceId)); setSelImpuesto(null); }}
-                        className="rounded-control bg-cos-brand px-2.5 py-1 text-[12px] font-semibold text-white hover:bg-cos-brand-deep"
-                      >
-                        Palomearlas
-                      </button>
-                    </div>
-                  )}
-                  <ul className="max-h-[330px] overflow-y-auto">
-                    {cand.candidates.map((c) => {
-                      const idx = seleccion.indexOf(c.id);
-                      const marcado = idx >= 0;
-                      const asig = asignaciones.find((a) => a.c.id === c.id);
-                      return (
-                        <li key={c.id}>
-                          <label
-                            className={cn(
-                              "flex cursor-pointer items-baseline gap-3 border-b border-cos-line-soft px-5 py-2.5",
-                              marcado ? "bg-cos-brand-tint" : "hover:bg-cos-paper"
-                            )}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={marcado}
-                              onChange={() => toggle(c.id)}
-                              className="translate-y-0.5 accent-[--brand]"
-                            />
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate text-[13px] font-medium text-cos-ink">
-                                {c.serie || c.folio ? `${c.serie ?? ""}-${c.folio ?? ""} · ` : ""}
-                                {c.cliente}
-                              </span>
-                              <span className="font-mono text-[11px] text-cos-ink-faint">
-                                {fFecha(c.fecha)}
-                                {c.metodoPago && ` · ${c.metodoPago}`}
-                                {c.alreadyMatched && c.remainingBalance > 0 && (
-                                  <> · saldo <Money value={c.remainingBalance} className="text-[11px]" muted /></>
-                                )}
-                              </span>
-                            </span>
-                            <span className="text-right">
-                              <Money value={c.total} className="block text-[13px]" />
-                              {marcado && asig && asig.aplicar < c.total && (
-                                <span className="block font-mono text-[11px] text-cos-brand-ink">
-                                  aplica <Money value={asig.aplicar} className="text-[11px] text-cos-brand-ink" />
-                                </span>
-                              )}
-                            </span>
-                            <span className="flex flex-col items-end gap-0.5">
-                              <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", CONFIANZA[c.confidence].cls)}>
-                                {CONFIANZA[c.confidence].t}
-                              </span>
-                              {/* El porqué de la confianza: el RFC que el banco
-                                  escribió en el SPEI es el del receptor de este
-                                  CFDI. Es la señal más fuerte del scoring
-                                  (PUNTOS_RFC_EXACTO) — merece verse. */}
-                              {selTx?.contraparteRfc && c.rfc === selTx.contraparteRfc && (
-                                <span className="rounded-full bg-cos-jade-tint px-2 py-0.5 text-[10px] font-semibold text-cos-jade-ink">
-                                  RFC coincide
-                                </span>
-                              )}
-                            </span>
-                          </label>
-                        </li>
-                      );
-                    })}
-                  </ul>
-
-                  {/* Impuestos: el cargo paga una declaración (SIPARE / línea de captura). */}
-                  {selTx.monto < 0 && cand.impuestos.length > 0 && (
-                    <div className="border-t border-cos-line-soft">
-                      <p className="px-5 pt-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-cos-ink-faint">
-                        ¿O paga una declaración?
-                      </p>
-                      <ul>
-                        {cand.impuestos.map((i) => (
-                          <li key={i.id}>
-                            <label className={cn("flex cursor-pointer items-baseline gap-3 px-5 py-2", selImpuesto === i.id ? "bg-cos-brand-tint" : "hover:bg-cos-paper")}>
-                              <input
-                                type="radio"
-                                name="impuesto"
-                                checked={selImpuesto === i.id}
-                                onChange={() => { setSelImpuesto(i.id); setSeleccion([]); }}
-                                className="translate-y-0.5 accent-[--brand]"
-                              />
-                              <span className="flex-1 text-[13px] text-cos-ink">{i.etiqueta}</span>
-                              {i.montoEsperado != null && <Money value={i.montoEsperado} className="text-[13px]" />}
-                              <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", CONFIANZA[i.confidence].cls)}>
-                                {CONFIANZA[i.confidence].t}
-                              </span>
-                            </label>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* ── Suma aplicada y acción ── */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-cos-line bg-cos-paper px-5 py-3">
-                    {selImpuesto ? (
-                      <>
-                        <span className="text-[13px] text-cos-ink-soft">
-                          El cargo queda MATCHED y la declaración PAGADA, en una sola transacción.
-                        </span>
-                        <button
-                          onClick={conciliarImpuesto}
-                          disabled={aplicando}
-                          className="inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-4 py-2 text-sm font-medium text-white hover:bg-cos-brand-deep disabled:opacity-50"
-                        >
-                          {aplicando && <Loader2 className="h-4 w-4 animate-spin" />}
-                          Conciliar impuesto
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <div className="text-[13px]">
-                          <span className="text-cos-ink-soft">Suma aplicada </span>
-                          <Money value={sumaAplicada} className="text-[13px]" />
-                          <span className="mx-2 text-cos-line">·</span>
-                          <span className="text-cos-ink-soft">Diferencia contra el {selTx.monto > 0 ? "depósito" : "retiro"} </span>
-                          <Money
-                            value={diferencia}
-                            className={cn("text-[13px]", diferencia === 0 ? "text-cos-jade-ink" : "text-cos-amber-ink")}
-                          />
-                          {diferencia === 0 && sumaAplicada > 0 && (
-                            <Check className="ml-1 inline h-3.5 w-3.5 text-cos-jade-ink" />
-                          )}
-                          {diferencia > 0 && sumaAplicada > 0 && (
-                            <span className="ml-2 text-[11px] text-cos-ink-faint">
-                              se permite parcial; queda advertencia
-                            </span>
-                          )}
-                        </div>
-                        <button
-                          onClick={conciliar}
-                          disabled={aplicando || asignaciones.length === 0}
-                          className="inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-4 py-2 text-sm font-medium text-white hover:bg-cos-brand-deep disabled:opacity-50"
-                        >
-                          {aplicando && <Loader2 className="h-4 w-4 animate-spin" />}
-                          Conciliar selección
-                        </button>
-                      </>
-                    )}
-                  </div>
-                  <p className="border-t border-cos-line-soft px-5 py-2 text-[11px] text-cos-ink-faint">
-                    Al conciliar queda el rastro en bitácora: quién aplicó, a qué hora y contra qué CFDI.
-                  </p>
-                    </>
-                  )}
-
-                  {/* ── ¿No es una factura? La mesa también clasifica lo demás
-                      —préstamos, aportaciones, traspasos, nómina— con el MISMO
-                      PATCH del tab Movimientos; el cierre postea cada tag con
-                      su asiento. Antes esto obligaba a cambiar de tab. */}
-                  <div className="border-t border-cos-line px-5 py-3.5">
-                    <p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-cos-ink-faint">
-                      ¿No es una factura?
-                    </p>
-                    {cand?.sugerencia && (
-                      <div className="mt-2 flex flex-wrap items-center gap-2 rounded-card bg-cos-brand-tint px-3.5 py-2.5">
-                        {/* La EVIDENCIA junto al veredicto: el usuario decide
-                            con ella, no con fe en el sistema. */}
-                        <span className="min-w-[200px] flex-1 text-[13px] text-cos-ink">
-                          Parece <b>{cand.sugerencia.etiqueta}</b> — {cand.sugerencia.porQue}.
-                        </span>
-                        <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", CONFIANZA[cand.sugerencia.confianza].cls)}>
-                          {cand.sugerencia.confianza}
-                        </span>
-                        <button
-                          onClick={() => clasificar(cand.sugerencia!.tag, cand.sugerencia!.etiqueta)}
-                          disabled={aplicando}
-                          className="rounded-control bg-cos-brand px-3 py-1.5 text-[13px] font-medium text-white hover:bg-cos-brand-deep disabled:opacity-50"
-                        >
-                          Aplicar
-                        </button>
-                      </div>
-                    )}
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {CATEGORIAS_MESA.map((c) => (
-                        <button
-                          key={c.tag ?? "__ignorar__"}
-                          onClick={() => clasificar(c.tag, c.label)}
-                          disabled={aplicando}
-                          className="rounded-full border border-cos-line bg-cos-card px-3 py-1.5 text-[12.5px] font-medium text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink disabled:opacity-50"
-                        >
-                          {c.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </>
+                  <ResolverMovimiento
+                    key={selTx.id}
+                    tx={{
+                      id: selTx.id,
+                      bankAccountId: selTx.cuentaBancariaId,
+                      fecha: selTx.fecha,
+                      descripcion: selTx.descripcion,
+                      monto: selTx.monto,
+                      contraparteNombre: selTx.contraparteNombre,
+                      contraparteClabe: selTx.contraparteClabe,
+                      claveRastreo: selTx.claveRastreo,
+                    }}
+                    companyId={companyId}
+                    onCambio={cargar}
+                    onToast={setAviso}
+                    onResuelto={() => setSelTx(null)}
+                  />
+                </div>
               )}
             </section>
           </div>
