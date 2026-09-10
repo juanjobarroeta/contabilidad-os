@@ -409,6 +409,7 @@ export function afiliacionResumen(a: {
   adquirente: string | null;
   activa: boolean;
   tasa: number | { toString(): string } | null;
+  liquidaEnBruto: boolean;
   createdAt: Date;
   _count?: { cobros?: number };
 }) {
@@ -419,6 +420,7 @@ export function afiliacionResumen(a: {
     adquirente: a.adquirente,
     activa: a.activa,
     tasa: a.tasa == null ? null : Number(a.tasa),
+    liquidaEnBruto: a.liquidaEnBruto,
     cobros: a._count?.cobros ?? null,
     createdAt: a.createdAt,
   };

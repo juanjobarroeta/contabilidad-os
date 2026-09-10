@@ -2,6 +2,10 @@
  * GET /api/hospital/liquidaciones/sugerencias?companyId=…&afiliacionId=…&neto=…[&fecha&dias]
  *   → { pendientes: [...], dias: [{ dia, cobroIds, bruto, netoEsperado, distancia }] }
  *
+ * `netoEsperado` sale de CÓMO liquida la afiliación (`liquidaEnBruto`), no de
+ * su tasa: con un adquirente que deposita en bruto el día correcto tiene
+ * distancia CERO, y descontarle una comisión que nadie descontó lo escondería.
+ *
  * Dado el depósito que llegó al banco, agrupa los cobros sin liquidar por día
  * de operación y los ordena por qué tan cerca queda su neto estimado del
  * depósito. Es lo que hoy se hace a mano en Excel.
@@ -31,7 +35,7 @@ export const GET = withHospital(async (req: Request) => {
   await requireMembership(companyId, undefined, req);
   await requireModule(companyId, "HOSPITAL", req);
 
-  const af = await prisma.hospAfiliacion.findUnique({ where: { id: afiliacionId }, select: { companyId: true, tasa: true } });
+  const af = await prisma.hospAfiliacion.findUnique({ where: { id: afiliacionId }, select: { companyId: true, tasa: true, liquidaEnBruto: true } });
   if (!af || af.companyId !== companyId) return error("Afiliación no encontrada", 404);
 
   const fechaParam = searchParams.get("fecha");
@@ -42,6 +46,6 @@ export const GET = withHospital(async (req: Request) => {
   const pendientes = await cobrosPendientes(prisma, companyId, afiliacionId, fecha, Number.isFinite(dias) ? dias : 10);
   return NextResponse.json({
     pendientes,
-    dias: sugerirDias(pendientes, neto, af.tasa == null ? null : Number(af.tasa)),
+    dias: sugerirDias(pendientes, neto, { liquidaEnBruto: af.liquidaEnBruto, tasa: af.tasa == null ? null : Number(af.tasa) }),
   });
 });

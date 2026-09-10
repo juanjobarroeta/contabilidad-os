@@ -41,6 +41,8 @@ const postSchema = z.object({
   adquirente: z.string().trim().max(60).nullable().optional(),
   /** Tasa como fracción: 1.95 % se captura 0.0195. */
   tasa: z.number().min(0).max(0.2).nullable().optional(),
+  /** true = deposita el bruto y cobra la comisión aparte (el default). */
+  liquidaEnBruto: z.boolean().optional(),
 });
 
 export const POST = withHospital(async (req: Request) => {
@@ -62,6 +64,7 @@ export const POST = withHospital(async (req: Request) => {
       descripcion: d.descripcion ?? null,
       adquirente: d.adquirente ?? null,
       tasa: d.tasa ?? null,
+      ...(d.liquidaEnBruto === undefined ? {} : { liquidaEnBruto: d.liquidaEnBruto }),
     },
     include: { _count: { select: { cobros: true } } },
   });
@@ -71,7 +74,7 @@ export const POST = withHospital(async (req: Request) => {
     accion: "hospital.afiliacion.alta",
     entidad: "HospAfiliacion",
     entidadId: afiliacion.id,
-    detalle: { numero: afiliacion.numero, adquirente: afiliacion.adquirente },
+    detalle: { numero: afiliacion.numero, adquirente: afiliacion.adquirente, liquidaEnBruto: afiliacion.liquidaEnBruto },
   });
   return NextResponse.json(afiliacionResumen(afiliacion), { status: 201 });
 });

@@ -649,6 +649,9 @@ el depósito ya hubiera llegado al banco —el adquirente lo descuenta del lote 
 RECUPERADO lo vuelve a poner. De la liquidación (`liquidaciones.ts`) el módulo asienta ÚNICAMENTE la comisión y su IVA
 (COMISION_TERMINAL y IVA_ACREDITABLE contra FONDOS_EN_TRANSITO): es el residuo exacto que queda en 107.05 después de que la
 conciliación del hub baja el NETO a BANCOS. Los contracargos del lote no se asientan ahí: cada cobro lleva su propia reversa.
+Con un adquirente que liquida EN BRUTO —el caso de Haltus— la comisión del lote es cero y no hay residuo: el depósito bancario
+limpia 107.05 completo, y la tasa de descuento entra como cualquier comisión bancaria por su propio cargo del estado de cuenta.
+El modelo es el mismo en los dos modos porque la identidad del lote no cambia; lo que cambia es `liquidaEnBruto`.
 El módulo NUNCA carga BANCOS: el dinero llega al banco días después (el adquirente liquida en lote y neto de comisión) y quien
 baja FONDOS_EN_TRANSITO a BANCOS es el movimiento bancario conciliado; si el cobro entrara directo a BANCOS, la misma cantidad
 se cargaría dos veces. Acordado con el módulo de conciliación: al conciliar ese depósito el abono se PARTE — 107.05 por lo que
