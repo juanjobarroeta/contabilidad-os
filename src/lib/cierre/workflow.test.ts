@@ -197,13 +197,13 @@ describe("decidirPasos — empresa sana", () => {
 });
 
 describe("decidirPasos — el número que importa y la propagación", () => {
-  it("banco con movimientos sin clasificar → atención con la cifra del motor", () => {
+  it("banco con movimientos sin clasificar → bloquea con la cifra del motor", () => {
     const h = hechos({
-      readiness: readiness({ sin_clasificar: "warn" }),
+      readiness: readiness({ sin_clasificar: "error" }),
       checklist: checklist({ "conciliacion-bancaria": { estado: "pendiente", detalle: "43 movimiento(s) bancario(s) del mes sin conciliar. Concílialos." } }),
     });
     const banco = estadoDe(h, "banco");
-    expect(banco.estadoCalculado).toBe("atencion");
+    expect(banco.estadoCalculado).toBe("bloquea");
     expect(banco.detalle).toBe("43 movimientos sin clasificar");
     expect(banco.cta.href).toContain("/bancos");
   });
@@ -290,7 +290,7 @@ describe("decidirPasos — el número que importa y la propagación", () => {
 describe("decidirPasos — evidencia", () => {
   it("el hash cambia cuando cambia la cifra y no cuando cambia otro paso", () => {
     const a = decidirPasos(hechos());
-    const b = decidirPasos(hechos({ readiness: readiness({ sin_clasificar: "warn" }) }));
+    const b = decidirPasos(hechos({ readiness: readiness({ sin_clasificar: "error" }) }));
     const h = (pasos: typeof a, clave: string) => pasos.find((p) => p.clave === clave)!.hashEvidencia;
     expect(h(a, "banco")).not.toBe(h(b, "banco"));
     expect(h(a, "nomina")).toBe(h(b, "nomina"));

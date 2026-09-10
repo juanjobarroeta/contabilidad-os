@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { AuthzError, requireWriter } from "@/lib/authz";
-import { postMonth, unpostMonth } from "@/lib/contabilidad/posting";
+import {
+  PeriodoNoContabilizableError,
+  postMonth,
+  unpostMonth,
+} from "@/lib/contabilidad/posting";
 import { PeriodoCerradoError } from "@/lib/contabilidad/ejercicio";
 
 const postSchema = z.object({
@@ -29,6 +33,12 @@ export async function POST(req: Request) {
   } catch (e) {
     if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
     if (e instanceof PeriodoCerradoError) return NextResponse.json({ error: e.message }, { status: e.status });
+    if (e instanceof PeriodoNoContabilizableError) {
+      return NextResponse.json(
+        { code: e.code, error: e.message, estado: e.estado },
+        { status: e.status }
+      );
+    }
     const msg = e instanceof Error ? e.message : "Error al cerrar el mes";
     return NextResponse.json({ error: msg }, { status: 500 });
   }

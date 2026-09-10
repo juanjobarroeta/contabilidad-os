@@ -1,4 +1,12 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+
+// Esta suite aísla la generación del libro contra Postgres. La compuerta
+// canónica tiene su propia suite y se sustituye aquí para llegar al motor.
+vi.mock("../cierre/compuerta-contabilizacion", () => ({
+  evaluarCompuertaContabilizacion: vi.fn(async () => ({ ok: true })),
+  invalidarCompuertaContabilizacion: vi.fn(),
+}));
+
 import { prisma } from "../prisma";
 import { postMonth } from "./posting";
 import { seedChartOfAccounts } from "./seed-catalog";

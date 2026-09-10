@@ -21,7 +21,7 @@
 
 import { prisma } from "../prisma";
 import { sinAgrupadorValido } from "./agrupador";
-import { balanza, balanzaPreview } from "./posting";
+import { balanza, balanzaPreview, IGNORED_TAGS_VALIDOS } from "./posting";
 
 // Tolerancia de cuadre (cargos vs abonos). Coincide con el balance check de
 // postMonth(): diferencias < 1 centavo se consideran cuadradas.
@@ -61,9 +61,10 @@ export type ReadinessInputs = {
   now: Date;
 
   // Banco — fuente-agnóstico: cuántas filas BankTransaction hay en el periodo
-  // y cuántas siguen sin conciliar (UNMATCHED).
+  // y cuántas no puede llevar al libro el motor todavía.
   bankTxCount: number;
-  bankUnmatchedCount: number;
+  /** UNMATCHED + IGNORED sin una categoría que el motor pueda contabilizar. */
+  bankPendingClassificationCount: number;
   // Confirmación humana del cierre para un periodo legítimamente sin banco.
   sinActividadBancariaConfirmada: boolean;
 
@@ -209,13 +210,13 @@ export function evaluarChecks(input: ReadinessInputs): ReadinessResult {
 
   // 3. Movimientos sin clasificar (sólo aplica si hay banco).
   if (input.bankTxCount > 0) {
-    if (input.bankUnmatchedCount > 0) {
+    if (input.bankPendingClassificationCount > 0) {
       checks.push({
         clave: "sin_clasificar",
-        estado: "warn",
-        titulo: `${input.bankUnmatchedCount} ${input.bankUnmatchedCount === 1 ? "movimiento sin clasificar" : "movimientos sin clasificar"}`,
+        estado: "error",
+        titulo: `${input.bankPendingClassificationCount} ${input.bankPendingClassificationCount === 1 ? "movimiento sin clasificar" : "movimientos sin clasificar"}`,
         detalle:
-          `${input.bankUnmatchedCount === 1 ? "Queda un movimiento bancario" : `Quedan ${input.bankUnmatchedCount} movimientos bancarios`} sin conciliar ni ` +
+          `${input.bankPendingClassificationCount === 1 ? "Queda un movimiento bancario" : `Quedan ${input.bankPendingClassificationCount} movimientos bancarios`} sin conciliar ni ` +
           "categorizar. Mientras no se resuelvan, no entran a la contabilidad y el mes no cierra.",
         cta: { label: "Clasificar en Bancos", href: "/bancos?tab=movimientos" },
       });
@@ -335,7 +336,7 @@ export async function evaluarReadinessCE(
   const start = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
   const end = new Date(Date.UTC(year, month, 1, 0, 0, 0, 0));
 
-  const [company, period, cfdiCount, bankTxCount, bankUnmatchedCount, cuentasActivas, cierre] = await Promise.all([
+  const [company, period, cfdiCount, bankTxCount, bankPendingClassificationCount, cuentasActivas, cierre] = await Promise.all([
     prisma.company.findUnique({
       where: { id: companyId },
       select: { regimenFiscal: true, lastAutoSyncAt: true, createdAt: true },
@@ -356,7 +357,20 @@ export async function evaluarReadinessCE(
       where: { companyId, fecha: { gte: start, lt: end } },
     }),
     prisma.bankTransaction.count({
-      where: { companyId, fecha: { gte: start, lt: end }, status: "UNMATCHED" },
+      where: {
+        companyId,
+        fecha: { gte: start, lt: end },
+        OR: [
+          { status: "UNMATCHED" },
+          {
+            status: "IGNORED",
+            OR: [
+              { notes: null },
+              { notes: { notIn: [...IGNORED_TAGS_VALIDOS] } },
+            ],
+          },
+        ],
+      },
     }),
     prisma.chartAccount.findMany({
       where: { companyId, isActive: true },
@@ -401,7 +415,7 @@ export async function evaluarReadinessCE(
     lastSyncAt: company.lastAutoSyncAt,
     now,
     bankTxCount,
-    bankUnmatchedCount,
+    bankPendingClassificationCount,
     sinActividadBancariaConfirmada: cierre?.sinActividadBancariaAt != null,
     totalCargos,
     totalAbonos,

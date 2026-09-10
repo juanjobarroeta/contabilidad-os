@@ -23,7 +23,7 @@ function base(): ReadinessInputs {
     lastSyncAt: new Date("2026-06-28T00:00:00Z"),
     now: NOW,
     bankTxCount: 30,
-    bankUnmatchedCount: 0,
+    bankPendingClassificationCount: 0,
     sinActividadBancariaConfirmada: false,
     totalCargos: 100000,
     totalAbonos: 100000,
@@ -57,14 +57,14 @@ describe("evaluarChecks — estado global", () => {
   });
 
   it("sólo warns → con_huecos", () => {
-    const r = evaluarChecks({ ...base(), bankUnmatchedCount: 3, posted: false });
+    const r = evaluarChecks({ ...base(), posted: false });
     expect(r.status).toBe("con_huecos");
     expect(r.checks.some((c) => c.estado === "error")).toBe(false);
     expect(r.checks.some((c) => c.estado === "warn")).toBe(true);
   });
 
   it("cualquier error → incompleta", () => {
-    const r = evaluarChecks({ ...base(), bankTxCount: 0, bankUnmatchedCount: 0 });
+    const r = evaluarChecks({ ...base(), bankTxCount: 0, bankPendingClassificationCount: 0 });
     expect(r.status).toBe("incompleta");
   });
 });
@@ -92,7 +92,7 @@ describe("evaluarChecks — CFDIs", () => {
 
 describe("evaluarChecks — banco (fuente-agnóstico)", () => {
   it("régimen con balance sin banco → error con CTA accionable", () => {
-    const r = evaluarChecks({ ...base(), bankTxCount: 0, bankUnmatchedCount: 0 });
+    const r = evaluarChecks({ ...base(), bankTxCount: 0, bankPendingClassificationCount: 0 });
     const banco = find(r, "banco");
     expect(banco?.estado).toBe("error");
     expect(banco?.detalle).toMatch(/balance no cierra/);
@@ -105,7 +105,7 @@ describe("evaluarChecks — banco (fuente-agnóstico)", () => {
       ...base(),
       requiereBalance: false,
       bankTxCount: 0,
-      bankUnmatchedCount: 0,
+      bankPendingClassificationCount: 0,
     });
     expect(find(r, "banco")?.estado).toBe("warn");
     expect(r.status).not.toBe("incompleta");
@@ -115,7 +115,7 @@ describe("evaluarChecks — banco (fuente-agnóstico)", () => {
     const r = evaluarChecks({
       ...base(),
       bankTxCount: 0,
-      bankUnmatchedCount: 0,
+      bankPendingClassificationCount: 0,
       sinActividadBancariaConfirmada: true,
     });
     const banco = find(r, "banco");
@@ -133,11 +133,12 @@ describe("evaluarChecks — banco (fuente-agnóstico)", () => {
 });
 
 describe("evaluarChecks — sin clasificar", () => {
-  it("movimientos sin conciliar → warn con conteo y CTA a Bancos", () => {
-    const r = evaluarChecks({ ...base(), bankUnmatchedCount: 4 });
+  it("movimientos sin conciliar o ignorados sin categoría → error con conteo y CTA a Bancos", () => {
+    const r = evaluarChecks({ ...base(), bankPendingClassificationCount: 4 });
     const c = find(r, "sin_clasificar");
-    expect(c?.estado).toBe("warn");
+    expect(c?.estado).toBe("error");
     expect(c?.titulo).toMatch(/4 movimiento/);
+    expect(r.status).toBe("incompleta");
     // El triage (conciliar/categorizar) vive en el tab Movimientos.
     expect(c?.cta?.href).toBe("/bancos?tab=movimientos");
   });

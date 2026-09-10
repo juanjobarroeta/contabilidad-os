@@ -45,6 +45,7 @@ import { tipoActivoDesdeSubtipo } from "../fiscal/depreciacion";
 import { assertPeriodoAbierto } from "./candado";
 import { PeriodoCerradoError } from "./ejercicio";
 import type { Prisma, EntryType, EntrySource, AccountingPeriod } from "@prisma/client";
+import type { EstadoCierreCanonico } from "../cierre/estado-canonico";
 
 type EntryDraft = {
   chartAccountId: string;
@@ -107,6 +108,20 @@ export type PostMonthOptions = {
   year: number;
   month: number; // 1-12
 };
+
+/** Error estable para que todas las entradas al motor devuelvan el mismo 409. */
+export class PeriodoNoContabilizableError extends Error {
+  readonly status = 409;
+  readonly code = "CIERRE_NO_CONTABILIZABLE";
+
+  constructor(
+    message: string,
+    readonly estado: EstadoCierreCanonico
+  ) {
+    super(message);
+    this.name = "PeriodoNoContabilizableError";
+  }
+}
 
 function monthRange(year: number, month: number): { start: Date; end: Date } {
   const start = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
@@ -311,6 +326,19 @@ export function reclasificacionIvaFlujo(
 export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult> {
   const { companyId, year, month } = opts;
   const { start, end } = monthRange(year, month);
+
+  // Una sola compuerta para TODAS las entradas al motor: botón manual,
+  // contabilización por lote, auto-contabilización del sync SAT y reparaciones.
+  // El import dinámico evita el ciclo estático evaluar → readiness → posting.
+  const guardasCierre = await import("../cierre/compuerta-contabilizacion");
+  const compuerta = await guardasCierre.evaluarCompuertaContabilizacion(
+    companyId,
+    year,
+    month
+  );
+  if (!compuerta.ok) {
+    throw new PeriodoNoContabilizableError(compuerta.body.error, compuerta.body.estado);
+  }
 
   const warnings: string[] = [];
   const drafts: EntryDraft[] = [];
@@ -1518,13 +1546,15 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     // cierre mensual, no un hot path: presupuesto generoso.
   }, { maxWait: 30_000, timeout: 300_000 });
 
-  return {
+  const result = {
     period: period.updated,
     entriesCreated: drafts.length,
     totalCargos: period.periodCargos,
     totalAbonos: period.periodAbonos,
     warnings,
   };
+  guardasCierre.invalidarCompuertaContabilizacion(companyId, year, month);
+  return result;
 }
 
 /**

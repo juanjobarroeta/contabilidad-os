@@ -102,7 +102,13 @@ export function resolverEstadoCierre(input: EntradaEstadoCierre): EstadoCierreCa
   // `espera` debe venir acompañado por el bloqueo de su dependencia. Si llega
   // aislado por datos persistidos incompletos, no inventamos un verde.
   if (bloqueos.length === 0) {
-    const esperaHuerfana = aplican.find((p) => p.estadoCalculado === "espera");
+    // Entregables espera de forma normal mientras Contabilidad o Declaración
+    // sigan en atención. No puede bloquear la transición que precisamente
+    // genera las pólizas que necesita. Cualquier otro `espera` sin su bloqueo
+    // de dependencia sí es evidencia incompleta y falla cerrado.
+    const esperaHuerfana = aplican.find(
+      (p) => p.clave !== "entregables" && p.estadoCalculado === "espera"
+    );
     if (esperaHuerfana) {
       bloqueos.push({
         paso: esperaHuerfana.clave,
