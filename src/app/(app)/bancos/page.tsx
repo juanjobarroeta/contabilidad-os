@@ -32,7 +32,8 @@ import { Loading } from "@/components/ui/feedback";
 import { ConciliacionWorkbench } from "@/components/contabilidad/ConciliacionWorkbench";
 import { GestionBancos, type VistaBancos } from "@/components/bancos/GestionBancos";
 import { TopTabsBar } from "@/components/layout/TopTabsBar";
-import { MESES } from "@/components/contabilidad/PeriodProvider";
+import { SelectorPeriodo } from "@/components/ui/SelectorPeriodo";
+import { ultimosEjercicios } from "@/lib/periodos";
 
 type Tab = "conciliacion" | VistaBancos;
 
@@ -86,13 +87,16 @@ export default function BancosPage() {
     const url = t === "conciliacion" ? "/bancos" : `/bancos?tab=${t}`;
     window.history.replaceState(null, "", url);
   }
-  function moverPeriodo(delta: number) {
-    const idx = year * 12 + (month - 1) + delta;
-    setYear(Math.floor(idx / 12));
-    setMonth((idx % 12) + 1);
+  function irAlPeriodo(y: number, m: number) {
+    setYear(y);
+    setMonth(m);
     // Cambiar de mes deja atrás el movimiento entregado: su `?tx=` en la barra
     // de direcciones prometería una selección que ya no existe.
     if (txInicial) { setTxInicial(null); window.history.replaceState(null, "", "/bancos"); }
+  }
+  function moverPeriodo(delta: number) {
+    const idx = year * 12 + (month - 1) + delta;
+    irAlPeriodo(Math.floor(idx / 12), (idx % 12) + 1);
   }
 
   if (!activeCompany) {
@@ -122,15 +126,29 @@ export default function BancosPage() {
         </div>
         {/* El período manda sobre la mesa; Movimientos/Histórico traen su
             propio corte por mes dentro de su barra de filtros. */}
+        {/* El MISMO selector que Facturas y el archivo: una sola gramática para
+            elegir un mes en toda la aplicación. Las flechas se quedan porque
+            el gesto de la mesa es mes±1; la rejilla es para saltar a marzo del
+            año pasado sin doce clics. Sin cifras: el feed de la mesa es de UN
+            mes y no sabe cuántos movimientos tienen los demás. */}
         {tab === "conciliacion" && (
           <div className="flex items-center gap-1">
             <button onClick={() => moverPeriodo(-1)} aria-label="Período anterior"
               className="grid h-8 w-8 place-items-center rounded-control text-cos-ink-faint hover:bg-cos-paper hover:text-cos-ink">
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <span className="min-w-[130px] text-center text-[15px] font-semibold text-cos-ink">
-              {MESES[month - 1]} {year}
-            </span>
+            <SelectorPeriodo
+              className="min-w-[190px]"
+              valor={`${year}-${String(month).padStart(2, "0")}`}
+              anios={ultimosEjercicios(Math.max(year, new Date().getFullYear()))}
+              permitirTodo={false}
+              permitirEjercicio={false}
+              sustantivo="movimientos"
+              onChange={(v) => {
+                const [y, m] = v.split("-").map(Number);
+                irAlPeriodo(y, m);
+              }}
+            />
             <button onClick={() => moverPeriodo(1)} aria-label="Período siguiente"
               className="grid h-8 w-8 place-items-center rounded-control text-cos-ink-faint hover:bg-cos-paper hover:text-cos-ink">
               <ChevronRight className="h-4 w-4" />

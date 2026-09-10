@@ -120,6 +120,31 @@ export function agruparPorEjercicio(conteos: ConteoPeriodo[]): EjercicioConteo[]
     });
 }
 
+/**
+ * Los ejercicios de una rejilla SIN conteos: la mesa de conciliación no sabe
+ * cuántos movimientos tiene cada mes (su feed es de UNO), pero sigue
+ * necesitando saltar a cualquiera. Devuelve los 12 meses de cada año en cero;
+ * el selector, sin conteos, los pinta todos disponibles.
+ */
+export function ejerciciosSinConteo(anios: number[]): EjercicioConteo[] {
+  return [...new Set(anios)]
+    .sort((a, b) => b - a)
+    .map((anio) => ({
+      anio,
+      total: 0,
+      meses: Array.from({ length: 12 }, (_, i) => ({
+        periodo: `${anio}-${String(i + 1).padStart(2, "0")}`,
+        mes: i + 1,
+        total: 0,
+      })),
+    }));
+}
+
+/** Los `n` ejercicios que terminan en `hasta` (inclusive), del más reciente. */
+export function ultimosEjercicios(hasta: number, n = 5): number[] {
+  return Array.from({ length: n }, (_, i) => hasta - i);
+}
+
 /** Total de comprobantes en todo el historial. */
 export function totalComprobantes(conteos: ConteoPeriodo[]): number {
   return conteos

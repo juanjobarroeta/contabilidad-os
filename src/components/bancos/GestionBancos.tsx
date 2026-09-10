@@ -36,6 +36,8 @@ import { Card, Money, Chip } from "@/components/ui";
 import { Alert, RetryButton } from "@/components/ui/feedback";
 import { etiquetaImpuesto } from "@/lib/conciliacion-impuestos";
 import { fmtFechaCorta } from "./resolver-tipos";
+import { SelectorPeriodo } from "@/components/ui/SelectorPeriodo";
+import { PERIODO_TODO } from "@/lib/periodos";
 
 // ── Types (mirror /api/bancos) ────────────────────────────────────────────────
 interface BankAccount {
@@ -783,15 +785,20 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
                 {t} <span className="font-mono text-[12px] opacity-80">{k === "all" ? (counts.total ?? 0) : k === "UNMATCHED" ? (counts.UNMATCHED ?? 0) : (counts.MATCHED ?? 0)}</span>
               </button>
             ))}
-            {/* División por mes: acota lista Y conteos al mes elegido. */}
+            {/* División por mes: acota lista Y conteos al mes elegido. Es el
+                MISMO selector que Facturas y la mesa — antes era un <select>
+                nativo, con una opción por mes (más de cincuenta con cuatro
+                ejercicios de historia) y un desplegable que pinta el sistema
+                operativo, así que ni siquiera respetaba el tema. */}
             {meses.length > 0 && (
-              <select value={mes} onChange={(e) => setMes(e.target.value)}
-                className={"cursor-pointer appearance-none rounded-full border px-3.5 py-2 text-[13.5px] font-medium outline-none " + (mes ? "border-cos-brand bg-cos-brand text-white" : "border-cos-line bg-cos-card text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink")}>
-                <option value="">Todos los meses</option>
-                {meses.map((m) => (
-                  <option key={m.mes} value={m.mes}>{fmtMes(m.mes)} ({m.count})</option>
-                ))}
-              </select>
+              <SelectorPeriodo
+                className="min-w-[210px]"
+                valor={mes || PERIODO_TODO}
+                conteos={meses.map((m) => ({ periodo: m.mes, total: m.count }))}
+                permitirEjercicio={false}
+                sustantivo="movimientos"
+                onChange={(v) => setMes(v === PERIODO_TODO ? "" : v)}
+              />
             )}
             {vista === "movimientos" && (
             <button onClick={() => setShowMore((v) => !v)}

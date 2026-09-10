@@ -16,8 +16,8 @@ import {
   etiquetaPeriodo,
   rangoPeriodo,
   type ConteoPeriodo,
-} from "@/lib/facturas/periodos";
-import { SelectorPeriodo } from "@/components/facturas/SelectorPeriodo";
+} from "@/lib/periodos";
+import { SelectorPeriodo } from "@/components/ui/SelectorPeriodo";
 import { ManifiestoBanner } from "@/components/facturas/ManifiestoBanner";
 import { ComplementosPendientes } from "@/components/facturas/ComplementosPendientes";
 import { repVencido } from "@/lib/facturas/rep-plazo";
