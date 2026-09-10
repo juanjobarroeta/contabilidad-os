@@ -62,7 +62,7 @@ Inicio and Cartera sort the same tasks in this order:
 5. ordinary in-progress work;
 6. informational improvements.
 
-The first prototype scenario therefore prioritizes a failed SAT refresh because it can change the August IVA and ISR result due on 17 September 2026. It does not promote the visible local calculation to an approvable result while source coverage is stale.
+The default prototype scenario has a successful SAT refresh with complete August coverage, so it prioritizes two unmatched bank payments. A selectable recovery scenario prioritizes the failed SAT refresh because it can change the August IVA and ISR result due on 17 September 2026. It does not promote the visible local calculation to an approvable result while source coverage is stale.
 
 ## Role behavior
 
@@ -82,7 +82,7 @@ The first viewport contains:
 - the shared August 2026 period;
 - adjusted urgency for the 17 September deadline;
 - one dominant next action with impact, owner, and reason;
-- the source failure that makes the state untrustworthy;
+- the source coverage and freshness that make the state trustworthy or block it;
 - counts derived from the same canonical tasks;
 - source freshness and applicability evidence.
 
@@ -124,9 +124,10 @@ These are behavior contracts, not permission to add parallel route-local compone
 - Change company while preserving the working period.
 - Change the working period with explicit deadline language.
 - Inspect owner, accountant, and read-only behavior.
+- Switch between a current SAT connection and a failed-connection recovery state without changing company or period.
 - Filter the portfolio by company, RFC, state, assignee, and source freshness.
 - Open task details from either lens.
-- Open global search with the button or `Command/Ctrl + K`.
+- Open global search from the visible `Command/Ctrl + K` control or the keyboard shortcut.
 - Open Copiloto on demand with inherited company, period, view, and role context.
 - Use the responsive sidebar and reduced desktop hierarchy.
 
@@ -137,6 +138,8 @@ These are behavior contracts, not permission to add parallel route-local compone
 - No unknown or absent value is displayed as zero or complete.
 - Local calculation, review readiness, presentation, and authority verification remain distinct.
 - Source and freshness are visible without opening a specialist module.
+- The healthy SAT scenario never invents a blocker, and the failed scenario never presents stale coverage as ready.
+- Global search is visually discoverable and operable with `Command/Ctrl + K`.
 - Read-only users do not see purchase, edit, submit, reconcile, classify, delete, or authorization actions.
 - A queue entry changes company and period atomically before entering its destination.
 - Nómina remains a first-class navigation category.
