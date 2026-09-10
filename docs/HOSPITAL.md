@@ -117,6 +117,14 @@ hecho contable, hasta que se factura.
   (días) cuando aplican y `activo` (codificable). Se cargan con
   `scripts/hospital-catalogos.ts`.
 - `HospTicket` — mantenimiento con prioridad, responsable y preventivos.
+  `recursoId` es DÓNDE está la falla (la cama, el quirófano, la sala): no son
+  coordenadas a propósito — un hospital es un edificio y el GPS no distingue
+  un quirófano del de al lado, mientras que el recurso sí es lo que el técnico
+  va a atender y lo que amarra el historial a un equipo concreto.
+- `HospTicketFoto` — las fotos del reporte (lámina 18), en la base como
+  `HospDocumento`. El satélite las encoge antes de subir (lado largo 1600,
+  JPEG); el tope duro son 2 MB por foto y 6 por reporte (`ticket-fotos.ts`).
+  El listado nunca devuelve los bytes: para eso está la ruta de la imagen.
 - `HospAfiliacion` — una afiliación de terminal, tal como la imprime el
   voucher y como la agrupa el estado de cuenta del adquirente: una fila por
   cada línea que el adquirente liquida por separado (si su corte parte crédito
@@ -622,6 +630,8 @@ POST /api/hospital/contabilidad/asentar { companyId, anio, mes } → { ok, asent
        HOSPITAL (idempotente por referencia+tipo) y marca asientoAt; 409 si la contabilidad está apagada o el ejercicio cerrado
 POST /api/hospital/episodios/[id]/depositos { fecha, monto, formaPago, referencia?, notas? } · PATCH /depositos/[id] { estado: APLICADO|DEVUELTO|CANCELADO }
 GET  /api/hospital/episodios/[id]/depositos → [...] · la cuenta muestra depósitos y saldo neto
+POST /api/hospital/mantenimiento { …, recursoId? } · GET/POST /api/hospital/mantenimiento/[id]/fotos { base64, mime, nota? } → 201
+GET  /api/hospital/mantenimiento/[id]/fotos/[fotoId] → la imagen con su content-type (Cache-Control private) · DELETE la borra
 GET  /api/hospital/afiliaciones?companyId=[&todas=1] · POST { companyId, numero, descripcion?, adquirente?, tasa? } · PATCH /afiliaciones/[id] (el `numero` no se edita)
 GET  /api/hospital/cobros?companyId=[&desde&hasta&estado&afiliacionId&episodioId] → { cobros, corte: { enCaja, enTransito, total, contracargos } }
 POST /api/hospital/cobros { companyId, fecha, monto, formaPago, episodioId?|invoiceId?|depositoId?, afiliacionId?, autorizacion?, marca?, tipoTarjeta?, ultimos4?,

@@ -417,6 +417,7 @@ model Company {
   hospCotizaciones HospCotizacion[]
   hospInsumos      HospInsumo[]
   hospTickets      HospTicket[]
+  hospTicketFotos  HospTicketFoto[]
   hospAccesos      HospAcceso[]
   hospFirmas       HospFirma[]
   hospEgresosSaeh  HospEgresoSaeh[]
@@ -6841,6 +6842,7 @@ model HospRecurso {
   episodios HospEpisodio[]
   citas     HospCita[]
   planes HospPlanTratamiento[]
+  tickets   HospTicket[]
 
   @@unique([companyId, tipo, nombre])
   @@index([companyId, area])
@@ -7765,6 +7767,33 @@ enum HospTicketEstado {
 
 /// Ticket de mantenimiento del inmueble y del equipo: desde el celular, con
 /// responsable y fecha; `preventivo` + `programadoPara` para el calendario.
+/// Una foto del reporte de mantenimiento. Vive aparte del ticket porque una
+/// falla se explica con varias («la fuga», «el charco», «la marca del techo»)
+/// y porque los bytes no tienen por qué viajar cada vez que se lista la
+/// bandeja: el listado trae el conteo, la ficha trae las fotos.
+///
+/// Se guardan en la base como `HospDocumento`, que es el patrón del módulo. El
+/// satélite las ENCOGE antes de subirlas (lado largo 1600 px, JPEG): la cámara
+/// de un teléfono entrega 4 MB y para ver una fuga sobran 300 KB. El tope duro
+/// vive en la ruta.
+model HospTicketFoto {
+  id        String   @id @default(cuid())
+  companyId String
+  ticketId  String
+  createdAt DateTime @default(now())
+
+  mime            String
+  bytes           Int
+  archivo         Bytes
+  nota            String?
+  subidoPorUserId String?
+
+  company Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  ticket  HospTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+}
+
 model HospTicket {
   id        String   @id @default(cuid())
   companyId String
@@ -7781,12 +7810,21 @@ model HospTicket {
 
   reportadoPorUserId String?
   reportadoPor       String
+  /// DÓNDE está la falla. `area` dice el piso; esto dice el cuarto: el aire
+  /// del Quirófano 2, el refrigerador de Farmacia, la cama 204. No son
+  /// coordenadas a propósito — un hospital es UN edificio y un GPS no
+  /// distingue el quirófano de la sala de al lado, mientras que el recurso sí
+  /// es lo que el técnico puede ir a atender y lo que amarra el historial de
+  /// mantenimiento a un equipo concreto.
+  recursoId          String?
   asignadoEmployeeId String?
   asignadoA          String?
   preventivo         Boolean   @default(false)
   programadoPara     DateTime?
   cerradoAt          DateTime?
   resolucion         String?   @db.Text
+  recurso            HospRecurso?     @relation(fields: [recursoId], references: [id])
+  fotos              HospTicketFoto[]
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
