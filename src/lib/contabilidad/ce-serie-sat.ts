@@ -35,7 +35,7 @@ export async function importarSerieBalanzasSat(
     ),
   );
 
-  const result: ImportarSerieResult = { periodos: [], importados: 0 };
+  const result: ImportarSerieResult = { periodos: [], importados: 0, registros: 0, balanzas: 0 };
 
   await abrirBuzonSat(
     fiel,
@@ -47,10 +47,13 @@ export async function importarSerieBalanzasSat(
           return [] as CeXml[];
         });
 
+        result.registros += xmls.length;
+        const soloBalanzas = xmls.filter((x) => x.tipo === "B");
+        result.balanzas += soloBalanzas.length;
+
         // Una fila por período; la complementaria (BC) pisa a la normal (BN).
         const porPeriodo = new Map<string, CeXml>();
-        for (const x of xmls) {
-          if (x.tipo !== "B") continue;
+        for (const x of soloBalanzas) {
           const k = `${x.anio}-${x.mes}`;
           const esComp = /BC\.xml$/i.test(x.nombre);
           if (!porPeriodo.has(k) || esComp) porPeriodo.set(k, x);
