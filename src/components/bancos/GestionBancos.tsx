@@ -31,7 +31,8 @@ import { RepresentacionImpresa } from "@/components/facturas/RepresentacionImpre
 import { Card, Money, Chip } from "@/components/ui";
 import { Alert, RetryButton } from "@/components/ui/feedback";
 import { etiquetaImpuesto } from "@/lib/conciliacion-impuestos";
-import { ResolverMovimiento } from "./ResolverMovimiento";
+import { ResolverMovimiento, type RepSugerido } from "./ResolverMovimiento";
+import { AvisoRepSugerido } from "./AvisoRepSugerido";
 import { AccionesEnLote } from "./AccionesEnLote";
 import { fmtFechaCorta } from "./resolver-tipos";
 
@@ -179,10 +180,7 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
   // Sugerencia post-conciliación: el abono que acabas de conciliar paga una
   // factura PPD → ofrecer emitir su complemento de pago (REP) de un toque con
   // el monto y la fecha del propio movimiento.
-  const [repSugerido, setRepSugerido] = useState<{
-    txId: string; invoiceId: string; cliente: string; monto: number; fecha: string;
-  } | null>(null);
-  const [repEmitiendo, setRepEmitiendo] = useState(false);
+  const [repSugerido, setRepSugerido] = useState<RepSugerido | null>(null);
   // Modo selección + lote
   const [selectMode, setSelectMode] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -465,27 +463,6 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
    *  búsqueda manual vive en `ResolverMovimiento`, que se monta al abrir. */
   function expand(tx: BankTx) {
     setExpandedId((actual) => (actual === tx.id ? null : tx.id));
-  }
-
-  async function emitirRepSugerido() {
-    if (!repSugerido || !activeCompany) return;
-    setRepEmitiendo(true);
-    try {
-      const res = await fetch("/api/facturas/complemento-pagos", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          companyId: activeCompany.id,
-          invoiceId: repSugerido.invoiceId,
-          bankTransactionId: repSugerido.txId, // monto y fecha salen del movimiento
-        }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) { showToast(data?.error ?? "No se pudo timbrar el complemento"); return; }
-      showToast(`Complemento de pago timbrado (parcialidad ${data.numParcialidad})`);
-      setRepSugerido(null);
-    } finally {
-      setRepEmitiendo(false);
-    }
   }
 
   async function desconciliar(txId: string) {
@@ -1176,31 +1153,13 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
       )}
 
       {toast && <div className="fixed bottom-6 left-1/2 z-[90] -translate-x-1/2 rounded-xl bg-cos-ink px-5 py-3 text-sm font-medium text-cos-canvas shadow-lg">{toast}</div>}
-      {repSugerido && (
-        <div className="fixed bottom-6 right-6 z-[89] w-[340px] rounded-card border border-cos-line bg-cos-card p-4 shadow-[0_18px_40px_-16px_oklch(0.2_0.05_258_/_0.5)]">
-          <p className="text-[13.5px] font-semibold text-cos-ink">Este cobro necesita complemento de pago</p>
-          <p className="mt-1 text-[12.5px] text-cos-ink-soft">
-            Conciliaste un cobro de <b>{repSugerido.cliente}</b> por{" "}
-            <b>{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(repSugerido.monto)}</b> contra
-            una factura PPD. El IVA se causa en el mes del pago y el REP vence el quinto día natural del mes siguiente.
-          </p>
-          <div className="mt-3 flex gap-2">
-            <button
-              onClick={emitirRepSugerido}
-              disabled={repEmitiendo}
-              className="flex-1 rounded-control bg-cos-brand px-3 py-2 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50"
-            >
-              {repEmitiendo ? "Timbrando…" : "Emitir REP ahora"}
-            </button>
-            <button
-              onClick={() => setRepSugerido(null)}
-              disabled={repEmitiendo}
-              className="rounded-control border border-cos-line px-3 py-2 text-[13px] text-cos-ink-soft hover:bg-cos-paper"
-            >
-              Después
-            </button>
-          </div>
-        </div>
+      {repSugerido && activeCompany && (
+        <AvisoRepSugerido
+          rep={repSugerido}
+          companyId={activeCompany.id}
+          onCerrar={() => setRepSugerido(null)}
+          onToast={showToast}
+        />
       )}
 
       {verFacturaId && (
