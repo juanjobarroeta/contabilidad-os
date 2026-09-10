@@ -62,13 +62,14 @@ export function resumenNegocio(cierre: CierreEvaluado): ResumenNegocio {
   }
 
   return {
-    // Un mes ya declarado está al corriente aunque queden observaciones
-    // contables: ante el SAT el mes está presentado.
-    alDia: declarado || acciones.length === 0,
+    // Presentar no tapa un bloqueo tardío. Sólo el estado canónico puede decir
+    // que el periodo cerró; fuera de eso, estar al día exige cero acciones y
+    // evidencia suficiente.
+    alDia: cierre.estado.cerrado || (cierre.estado.fase !== "BLOQUEADO" && acciones.length === 0),
     listos: avance.listos,
     total: avance.total,
     falta,
-    detienen: acciones.filter((a) => a.urgencia === "bloquea").length,
+    detienen: cierre.estado.bloqueos.length,
     aPagar,
     fechaLimite: declaracion?.fechaLimite ?? impuestos?.fechaLimite ?? null,
     diasRestantes: declaracion?.diasRestantes ?? impuestos?.diasRestantes ?? null,

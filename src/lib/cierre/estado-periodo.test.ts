@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { estadoDelPeriodo } from "./estado-periodo";
 import { avanceDelCierre } from "./acciones";
+import { resolverEstadoCierre, type EstadoContableCierre } from "./estado-canonico";
 import type { CierreEvaluado, PasoConDecision } from "./evaluar";
 
 function paso(over: Partial<PasoConDecision>): PasoConDecision {
@@ -25,10 +26,12 @@ function paso(over: Partial<PasoConDecision>): PasoConDecision {
   } as PasoConDecision;
 }
 
-function cierre(pasos: PasoConDecision[]): CierreEvaluado {
+function cierre(pasos: PasoConDecision[], accountingStatus: EstadoContableCierre | null = "DRAFT"): CierreEvaluado {
   return {
     companyId: "c1", year: 2021, month: 7, periodo: "2021-07",
     cierreId: null, responsableUserId: null, conversationId: null, cerradoAt: null,
+    accountingStatus,
+    estado: resolverEstadoCierre({ estadoContable: accountingStatus, pasos }),
     pasos,
     resumen: { total: pasos.length, aplican: pasos.length, listos: 0, atencion: 0, bloquean: 0, confirmados: 0, completo: false },
   };
@@ -36,7 +39,7 @@ function cierre(pasos: PasoConDecision[]): CierreEvaluado {
 
 const PRESENTADA = { clave: "fx:declaracion-periodo", estado: "ok" as const, resumen: "La declaración del periodo ya está presentada." };
 
-describe("estadoDelPeriodo — un mes ya declarado no es trabajo pendiente", () => {
+describe("estadoDelPeriodo — hecho de presentación separado del cierre", () => {
   it("lo da por declarado cuando la señal de la declaración está en ok", () => {
     const e = estadoDelPeriodo(cierre([paso({ senales: [PRESENTADA] })]));
     expect(e.declarado).toBe(true);
@@ -64,12 +67,21 @@ describe("estadoDelPeriodo — un mes ya declarado no es trabajo pendiente", () 
     expect(conPago.pagado).toBe(true);
   });
 
-  it("el avance de un mes declarado cuenta completo, sin pedir confirmar doce pasos", () => {
+  it("el avance cuenta completo cuando el estado canónico sí quedó cerrado", () => {
     const c = cierre([
       paso({ senales: [PRESENTADA] }),
       paso({ clave: "banco", orden: 4, estadoCalculado: "atencion", senales: [{ clave: "x:firmas_conciliacion", estado: "warn", resumen: "0 de 1" }] }),
-    ]);
+    ], "POSTED");
     expect(avanceDelCierre(c)).toEqual({ listos: 2, total: 2 });
+  });
+
+  it("una declaración presentada no tapa un bloqueo posterior", () => {
+    const c = cierre([
+      paso({ estadoCalculado: "listo", senales: [PRESENTADA] }),
+      paso({ clave: "banco", orden: 4, estadoCalculado: "bloquea", detalle: "Sin banco" }),
+    ], "CLOSED");
+    expect(c.estado.fase).toBe("BLOQUEADO");
+    expect(avanceDelCierre(c)).toEqual({ listos: 1, total: 2 });
   });
 
   it("sin declarar, el avance sí cuenta sólo lo listo", () => {

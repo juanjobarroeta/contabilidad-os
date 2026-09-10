@@ -22,6 +22,11 @@ import { evaluarReadinessCE, regimenRequiereBalance } from "../contabilidad/ce-r
 import { checklistDeclaracion } from "../fiscal/checklist-declaracion";
 import { estadoApertura } from "../fiscal/apertura";
 import {
+  resolverEstadoCierre,
+  type EstadoCierreCanonico,
+  type EstadoContableCierre,
+} from "./estado-canonico";
+import {
   decidirPasos,
   definicionPaso,
   periodoStr,
@@ -100,6 +105,10 @@ export interface CierreEvaluado {
   responsableUserId: string | null;
   conversationId: string | null;
   cerradoAt: string | null;
+  /** Estado persistido del ledger, separado de la fase operativa. */
+  accountingStatus: EstadoContableCierre | null;
+  /** Única precedencia para UI, API, pase diario y compuertas. */
+  estado: EstadoCierreCanonico;
   pasos: PasoConDecision[];
   resumen: {
     total: number;
@@ -310,11 +319,17 @@ export async function evaluarCierre(
   if (opts.persistir) {
     return sincronizarCierre(companyId, year, month, evaluados);
   }
-  const existente = await prisma.cierrePeriodo.findUnique({
-    where: { companyId_year_month: { companyId, year, month } },
-    include: { pasos: true },
-  });
-  return armarResultado(companyId, year, month, evaluados, existente);
+  const [existente, periodoContable] = await Promise.all([
+    prisma.cierrePeriodo.findUnique({
+      where: { companyId_year_month: { companyId, year, month } },
+      include: { pasos: true },
+    }),
+    prisma.accountingPeriod.findUnique({
+      where: { companyId_year_month: { companyId, year, month } },
+      select: { status: true },
+    }),
+  ]);
+  return armarResultado(companyId, year, month, evaluados, existente, periodoContable?.status ?? null);
 }
 
 type CierreConPasos = Prisma.CierrePeriodoGetPayload<{ include: { pasos: true } }>;
@@ -324,7 +339,8 @@ function armarResultado(
   year: number,
   month: number,
   evaluados: PasoEvaluado[],
-  cierre: CierreConPasos | null
+  cierre: CierreConPasos | null,
+  accountingStatus: EstadoContableCierre | null
 ): CierreEvaluado {
   const porClave = new Map((cierre?.pasos ?? []).map((p) => [p.clave, p]));
   const pasos: PasoConDecision[] = evaluados.map((ev) => {
@@ -345,6 +361,7 @@ function armarResultado(
   });
   const aplican = pasos.filter((p) => p.estadoCalculado !== "no_aplica");
   const requieren = aplican.filter((p) => p.requiereConfirmacion);
+  const estado = resolverEstadoCierre({ estadoContable: accountingStatus, pasos });
   return {
     companyId,
     year,
@@ -354,13 +371,15 @@ function armarResultado(
     responsableUserId: cierre?.responsableUserId ?? null,
     conversationId: cierre?.conversationId ?? null,
     cerradoAt: cierre?.cerradoAt?.toISOString() ?? null,
+    accountingStatus,
+    estado,
     pasos,
     resumen: {
       total: pasos.length,
       aplican: aplican.length,
       listos: aplican.filter((p) => p.estadoCalculado === "listo").length,
       atencion: aplican.filter((p) => p.estadoCalculado === "atencion").length,
-      bloquean: aplican.filter((p) => p.estadoCalculado === "bloquea").length,
+      bloquean: estado.bloqueos.length,
       confirmados: requieren.filter((p) => p.estado === "CONFIRMADO" || p.estado === "OMITIDO").length,
       completo: requieren.length > 0 && requieren.every((p) => p.estado === "CONFIRMADO" || p.estado === "OMITIDO"),
     },
@@ -442,10 +461,13 @@ export async function sincronizarCierre(
     });
   }
 
-  // Sin re-lectura: armarResultado sólo mira la DECISIÓN humana (estado, quién,
-  // cuándo, nota y hashConfirmado) y esta función no toca ninguno de esos
-  // campos — el paso a REVISAR lo deriva ella misma del hash.
-  return armarResultado(companyId, year, month, evaluados, cierre);
+  // La fase canónica necesita el estado físico del ledger. Las decisiones
+  // humanas no se releen: el paso a REVISAR se deriva del hash vigente.
+  const periodoContable = await prisma.accountingPeriod.findUnique({
+    where: { companyId_year_month: { companyId, year, month } },
+    select: { status: true },
+  });
+  return armarResultado(companyId, year, month, evaluados, cierre, periodoContable?.status ?? null);
 }
 
 // ── La decisión humana ───────────────────────────────────────────────────────
@@ -491,13 +513,20 @@ async function decidir(
         cierre,
       };
     }
-    if (accion === "confirmar" && (paso.estadoCalculado === "bloquea" || paso.estadoCalculado === "espera")) {
+    if (
+      accion === "confirmar" &&
+      (paso.estadoCalculado === "bloquea" ||
+        paso.estadoCalculado === "espera" ||
+        paso.estadoCalculado === "sin_datos")
+    ) {
       return {
         ok: false,
         motivo: "bloqueado",
         error:
           paso.estadoCalculado === "espera"
             ? "Un paso anterior bloquea éste; resuélvelo primero."
+            : paso.estadoCalculado === "sin_datos"
+              ? "No hay evidencia suficiente para confirmar este paso. Intenta evaluarlo de nuevo."
             : "El paso tiene un bloqueo activo; no se puede confirmar hasta resolverlo.",
         cierre,
       };
@@ -560,7 +589,10 @@ async function decidir(
     include: { pasos: true },
   });
   const evaluados: PasoEvaluado[] = cierre.pasos.map(({ estado: _e, confirmadoAt: _c, confirmadoByUserId: _u, nota: _n, ...ev }) => ev);
-  return { ok: true, cierre: armarResultado(a.companyId, a.year, a.month, evaluados, fresco) };
+  return {
+    ok: true,
+    cierre: armarResultado(a.companyId, a.year, a.month, evaluados, fresco, cierre.accountingStatus),
+  };
 }
 
 export function confirmarPaso(a: ArgsDecision): Promise<ResultadoDecision> {

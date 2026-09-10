@@ -1,16 +1,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// ¿ESTE MES YA ESTÁ HECHO?
-//
-// Un mes cuya declaración ya se presentó —y del que tenemos el acuse, casi
-// siempre bajado del SAT— no es trabajo pendiente: está cerrado, lo cerró el
-// contribuyente ante la autoridad. Pedirle a alguien que «confirme los doce
-// pasos» de julio de 2021 es inventar tarea.
+// ¿ESTE MES YA ESTÁ DECLARADO?
 //
 // Se DERIVA, no se guarda: la fuente es la misma señal del checklist que ya
-// mira si la declaración del periodo está presentada. Y no se estira más allá
-// de lo que dice: declarado significa presentado ante el SAT, no que la
-// contabilidad del mes esté impecable — si quedaron cosas sin cuadrar, se
-// siguen viendo, pero como observaciones, no como pendientes que bloquean.
+// mira si la declaración del periodo está presentada. No se estira más allá
+// de lo que dice: «declarado» es un hecho externo, no el estado del cierre.
+// `estado-canonico.ts` decide si además está posteado, cerrado o bloqueado.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { CierreEvaluado } from "./evaluar";

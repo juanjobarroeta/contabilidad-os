@@ -57,8 +57,9 @@ export function bloqueCierre(cierre: CierreEvaluado, activo: PasoConDecision | n
   partes.push(`\n\n## Cierre guiado · ${periodoLabel}`);
   partes.push(
     `El contador está cerrando el periodo ${cierre.periodo} de esta empresa en la pantalla /cierre. ` +
+      `Estado canónico: ${cierre.estado.fase}. ` +
       `Van ${cierre.resumen.confirmados} de ${cierre.resumen.aplican} pasos confirmados` +
-      (cierre.resumen.bloquean > 0 ? `; ${cierre.resumen.bloquean} bloquea(n) el cierre.` : ".")
+      (cierre.estado.bloqueos.length > 0 ? `; ${cierre.estado.bloqueos.length} bloqueo(s) duro(s).` : ".")
   );
 
   partes.push("\n### Los pasos y su estado (lo que dice el sistema HOY)");

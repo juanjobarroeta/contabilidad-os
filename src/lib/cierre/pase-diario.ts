@@ -18,7 +18,6 @@ import { fechaLocalMx, registrarYNotificar } from "../notificaciones";
 import { usuariosConAccesoACompany } from "../push";
 import { effectiveCierrePlan, planIncluyeCierreGuiado } from "../planes";
 import { diffCierre, meritaPush, rankDeltas, type Delta } from "./avance";
-import { estadoDelPeriodo } from "./estado-periodo";
 import { cargarHechosCierre, invalidarCierre, sincronizarCierre } from "./evaluar";
 import { etiquetaPeriodo, redactarAviso } from "./plantillas";
 import { decidirPasos, periodoStr, periodosEnJuego, type PasoEvaluado } from "./workflow";
@@ -131,26 +130,46 @@ export async function avanzarCierreEmpresa(
       where: { companyId_year_month: { companyId: company.id, year, month } },
       select: { id: true, snapshotAvance: true, responsableUserId: true, cerradoAt: true },
     });
-    // Un mes YA DECLARADO se marca cerrado y sale de la cola: lo cerró el
-    // contribuyente ante el SAT y tenemos el acuse. Sin esto, cada mes viejo
-    // que alguien abriera en la pantalla (que crea su fila) se quedaba en la
-    // cola del pase diario generando avisos de un cierre de hace años.
-    // No sustituye al cierre formal de la fase 3 (paquete y candado): sólo
-    // dice «aquí ya no hay trabajo».
-    if (!fila.cerradoAt && estadoDelPeriodo(cierre).declarado) {
+    // La declaración sola ya no puede esconder un bloqueo ni un ledger sin
+    // postear. El estado canónico exige presentación + posteo + cero bloqueos.
+    // Si evidencia nueva invalida una marca previa, el periodo vuelve a la
+    // cola y conserva la discrepancia visible hasta resolverla.
+    let cerradoAt = fila.cerradoAt;
+    if (cerradoAt && !cierre.estado.cerrado) {
+      await prisma.cierrePeriodo.update({
+        where: { id: fila.id },
+        data: { cerradoAt: null, cerradoByUserId: null },
+      });
+      registrarBitacora({
+        companyId: company.id,
+        accion: "cierre.mes.reabrir_evidencia",
+        entidad: "CierrePeriodo",
+        entidadId: fila.id,
+        detalle: {
+          periodo,
+          fase: cierre.estado.fase,
+          bloqueos: cierre.estado.bloqueos.map((b) => ({ paso: b.paso, tipo: b.tipo })),
+        },
+      });
+      cerradoAt = null;
+    }
+    if (!cerradoAt && cierre.estado.cerrado) {
       await prisma.cierrePeriodo.update({ where: { id: fila.id }, data: { cerradoAt: hoy } });
       registrarBitacora({
         companyId: company.id,
-        accion: "cierre.mes.declarado",
+        accion: "cierre.mes.cerrado",
         entidad: "CierrePeriodo",
         entidadId: fila.id,
-        detalle: { periodo, motivo: "la declaración del periodo está presentada" },
+        detalle: {
+          periodo,
+          motivo: "declaración presentada, contabilidad posteada y cero bloqueos duros",
+        },
       });
       out.periodos.push({ periodo, deltas: 0, avisos: 0, mejoras: 0 });
       continue;
     }
 
-    if (fila.cerradoAt) {
+    if (cerradoAt) {
       out.periodos.push({ periodo, deltas: 0, avisos: 0, mejoras: 0 });
       continue;
     }
