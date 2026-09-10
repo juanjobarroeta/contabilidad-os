@@ -9,8 +9,12 @@ import {
   ejecutarPlan,
   esPersonaFisica,
   planSalidaFarmacia,
+  asentarCobro,
+  asentarLiquidacion,
+  planesCobro,
   planesDeposito,
   planesHonorarios,
+  planesLiquidacion,
   previewMes,
   retencionesPorMedico,
   type AsientoPlan,
@@ -298,5 +302,152 @@ describe("mes: previewMes() y asentarMes()", () => {
     expect(p.asientos).toHaveLength(3);
     await expect(asentarMes(comoDb(db), "c1", 2026, 9)).rejects.toMatchObject({ status: 409 });
     expect(db.asientos).toHaveLength(0);
+  });
+});
+
+describe("cobros de caja", () => {
+  const cob = (over: Partial<Parameters<typeof planesCobro>[0]> = {}) => ({
+    id: "cb1",
+    companyId: "c1",
+    fecha: F("2026-09-05T18:30:00Z"),
+    monto: 1200,
+    formaPago: "TARJETA" as const,
+    estado: "COBRADO" as const,
+    folio: "HOSP-1",
+    ...over,
+  });
+
+  it("COBRADO: efectivo a CAJA, tarjeta a FONDOS_EN_TRANSITO, siempre contra CLIENTES", () => {
+    expect(planesCobro(cob())).toMatchObject([
+      { referenciaTipo: TIPO_ASIENTO.COBRO_RECIBIDO, cargo: "FONDOS_EN_TRANSITO", abono: "CLIENTES", monto: 1200 },
+    ]);
+    expect(planesCobro(cob({ formaPago: "EFECTIVO" }))[0].cargo).toBe("CAJA");
+    expect(planesCobro(cob({ formaPago: "TRANSFERENCIA" }))[0].cargo).toBe("FONDOS_EN_TRANSITO");
+    expect(planesCobro(cob({ formaPago: "CHEQUE" }))[0].cargo).toBe("FONDOS_EN_TRANSITO");
+  });
+
+  it("el cobro que es instrumento de un anticipo NO asienta: ya lo asentó el depósito", () => {
+    expect(planesCobro(cob({ depositoId: "d1" }))).toEqual([]);
+    expect(planesCobro(cob({ depositoId: "d1", estado: "CONTRACARGADO", contracargoAt: F("2026-09-20T12:00:00Z") }))).toEqual([]);
+  });
+
+  it("DEPOSITADO no agrega asiento: bajar el dinero a bancos es del hub", () => {
+    expect(planesCobro(cob({ estado: "DEPOSITADO" })).map((p) => p.referenciaTipo)).toEqual([
+      TIPO_ASIENTO.COBRO_RECIBIDO,
+    ]);
+  });
+
+  it("CONTRACARGADO reversa contra FONDOS_EN_TRANSITO, nunca contra BANCOS", () => {
+    const planes = planesCobro(cob({ estado: "CONTRACARGADO", contracargoAt: F("2026-09-20T12:00:00Z") }));
+    expect(planes.map((p) => [p.referenciaTipo, p.cargo, p.abono])).toEqual([
+      [TIPO_ASIENTO.COBRO_RECIBIDO, "FONDOS_EN_TRANSITO", "CLIENTES"],
+      [TIPO_ASIENTO.COBRO_CONTRACARGO, "CLIENTES", "FONDOS_EN_TRANSITO"],
+    ]);
+    expect(planes.some((p) => p.cargo === "BANCOS" || p.abono === "BANCOS")).toBe(false);
+  });
+
+  it("un contracargo de un cobro ya depositado también reversa contra 107.05", () => {
+    // El adquirente no devuelve el dinero por separado: lo descuenta del lote
+    // del día, y ese lote vuelve a pasar por FONDOS_EN_TRANSITO.
+    const planes = planesCobro(cob({ estado: "CONTRACARGADO", contracargoAt: F("2026-09-20T12:00:00Z") }));
+    expect(planes[1]).toMatchObject({ cargo: "CLIENTES", abono: "FONDOS_EN_TRANSITO" });
+  });
+
+  it("RECUPERADO: el contracargo se reversa y el cobro vuelve al libro, cada uno con su fecha", () => {
+    const planes = planesCobro(
+      cob({ estado: "RECUPERADO", contracargoAt: F("2026-09-20T12:00:00Z"), recuperadoAt: F("2026-10-15T12:00:00Z") })
+    );
+    expect(planes.map((p) => [p.referenciaTipo, p.cargo, p.abono, p.fecha.toISOString()])).toEqual([
+      [TIPO_ASIENTO.COBRO_RECIBIDO, "FONDOS_EN_TRANSITO", "CLIENTES", "2026-09-05T18:30:00.000Z"],
+      [TIPO_ASIENTO.COBRO_CONTRACARGO, "CLIENTES", "FONDOS_EN_TRANSITO", "2026-09-20T12:00:00.000Z"],
+      [TIPO_ASIENTO.COBRO_RECUPERADO, "FONDOS_EN_TRANSITO", "CLIENTES", "2026-10-15T12:00:00.000Z"],
+    ]);
+  });
+
+  it("con rango sólo las etapas del mes; CANCELADO sólo se reversa cuando se pide", () => {
+    const rango = { desde: F("2026-09-01T00:00:00Z"), hasta: F("2026-10-01T00:00:00Z") };
+    const planes = planesCobro(cob({ estado: "RECUPERADO", contracargoAt: F("2026-09-20T12:00:00Z"), recuperadoAt: F("2026-10-15T12:00:00Z") }), { rango });
+    expect(planes.map((p) => p.referenciaTipo)).toEqual([TIPO_ASIENTO.COBRO_RECIBIDO, TIPO_ASIENTO.COBRO_CONTRACARGO]);
+    expect(planesCobro(cob({ estado: "CANCELADO" }))).toEqual([]);
+    const ahora = F("2026-09-06T10:00:00Z");
+    expect(planesCobro(cob({ estado: "CANCELADO" }), { reversarCancelado: true, ahora })).toMatchObject([
+      { referenciaTipo: TIPO_ASIENTO.COBRO_CANCELADO, cargo: "CLIENTES", abono: "FONDOS_EN_TRANSITO", fecha: ahora },
+    ]);
+  });
+
+  it("asentarCobro escribe el par y marca el origen; no repite si ya está", async () => {
+    const db = conCatalogo().sembrar(["107.05"]);
+    await comoDb(db).hospCobro.create({ data: { id: "cb1", companyId: "c1", fecha: cob().fecha, monto: 1200, formaPago: "TARJETA" } });
+    const n = await asentarCobro(comoDb(db), cob());
+    expect(n).toBe(1);
+    expect(db.pares()).toMatchObject([{ referenciaTipo: TIPO_ASIENTO.COBRO_RECIBIDO, cargo: "107.05", abono: "105.01", monto: 1200 }]);
+    expect(db.cobros[0].asientoAt).toBeInstanceOf(Date);
+    expect(await asentarCobro(comoDb(db), cob())).toBe(0);
+  });
+
+  it("con la contabilidad apagada no escribe nada", async () => {
+    const db = conCatalogo(false).sembrar(["107.05"]);
+    await comoDb(db).hospCobro.create({ data: { id: "cb1", companyId: "c1", fecha: cob().fecha, monto: 1200, formaPago: "TARJETA" } });
+    expect(await asentarCobro(comoDb(db), cob())).toBe(0);
+    expect(db.asientos).toHaveLength(0);
+  });
+});
+
+describe("liquidación del adquirente", () => {
+  const liq = (over: Partial<Parameters<typeof planesLiquidacion>[0]> = {}) => ({
+    id: "lq1",
+    companyId: "c1",
+    fecha: F("2026-09-07T12:00:00Z"),
+    comision: 195,
+    ivaComision: 31.2,
+    afiliacion: "09992886",
+    ...over,
+  });
+
+  it("asienta SÓLO la comisión y su IVA: el neto lo baja a bancos el hub", () => {
+    const planes = planesLiquidacion(liq());
+    expect(planes.map((p) => [p.referenciaTipo, p.cargo, p.abono, p.monto])).toEqual([
+      [TIPO_ASIENTO.LIQUIDACION_COMISION, "COMISION_TERMINAL", "FONDOS_EN_TRANSITO", 195],
+      [TIPO_ASIENTO.LIQUIDACION_IVA_COMISION, "IVA_ACREDITABLE", "FONDOS_EN_TRANSITO", 31.2],
+    ]);
+    expect(planes.some((p) => p.cargo === "BANCOS" || p.abono === "BANCOS")).toBe(false);
+  });
+
+  it("no asienta los contracargos del lote: cada cobro lleva su propia reversa", () => {
+    // `contracargos` no es parte del plan; si lo fuera, el mismo contracargo
+    // entraría dos veces al libro.
+    expect(planesLiquidacion(liq()).map((p) => p.referenciaTipo)).toEqual([
+      TIPO_ASIENTO.LIQUIDACION_COMISION,
+      TIPO_ASIENTO.LIQUIDACION_IVA_COMISION,
+    ]);
+  });
+
+  it("un lote sin comisión no ensucia el libro con asientos de cero", () => {
+    expect(planesLiquidacion(liq({ comision: 0, ivaComision: 0 }))).toEqual([]);
+  });
+
+  it("fuera del rango del mes no se asienta", () => {
+    const rango = { desde: F("2026-10-01T00:00:00Z"), hasta: F("2026-11-01T00:00:00Z") };
+    expect(planesLiquidacion(liq(), { rango })).toEqual([]);
+  });
+
+  it("asentarLiquidacion deja 107.05 en cero junto con sus cobros", async () => {
+    const db = conCatalogo().sembrar(["107.05", "118.01", "701.10"]);
+    for (const [id, monto] of [["cb1", 4000], ["cb2", 6000]] as const) {
+      await comoDb(db).hospCobro.create({ data: { id, companyId: "c1", fecha: F("2026-09-05T18:00:00Z"), monto, formaPago: "TARJETA" } });
+    }
+    await comoDb(db).hospLiquidacion.create({
+      data: { id: "lq1", companyId: "c1", afiliacionId: "af1", fecha: F("2026-09-07T12:00:00Z"), bruto: 10000, comision: 195, ivaComision: 31.2, neto: 9773.8 },
+    });
+    // Los dos vouchers del lote: $10,000 brutos a FONDOS_EN_TRANSITO.
+    await asentarCobro(comoDb(db), { id: "cb1", companyId: "c1", fecha: F("2026-09-05T18:00:00Z"), monto: 4000, formaPago: "TARJETA", estado: "COBRADO" });
+    await asentarCobro(comoDb(db), { id: "cb2", companyId: "c1", fecha: F("2026-09-05T20:00:00Z"), monto: 6000, formaPago: "TARJETA", estado: "COBRADO" });
+    const n = await asentarLiquidacion(comoDb(db), liq());
+    expect(n).toBe(2);
+
+    const saldo107 = db.pares().reduce((s, p) => s + (p.cargo === "107.05" ? p.monto : 0) - (p.abono === "107.05" ? p.monto : 0), 0);
+    // Quedan $9,773.80 en tránsito: exactamente el neto que el banco depositará
+    // y que la conciliación del hub bajará a BANCOS contra esta misma cuenta.
+    expect(Number(saldo107.toFixed(2))).toBe(9773.8);
   });
 });

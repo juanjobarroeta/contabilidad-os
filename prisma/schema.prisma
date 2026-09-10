@@ -423,6 +423,9 @@ model Company {
   hospProtocolos   HospProtocolo[]
   hospPlanes       HospPlanTratamiento[]
   hospDepositos    HospDeposito[]
+  hospAfiliaciones HospAfiliacion[]
+  hospCobros       HospCobro[]
+  hospLiquidaciones HospLiquidacion[]
 
   // Salamería
   salConfig        SalConfig?
@@ -1049,6 +1052,7 @@ model Invoice {
   vehiculoMenciones    VehiculoCfdi[]
   refaccionMovimientos RefaccionMovimiento[]
   hospCargos            HospCargo[]
+  hospCobros            HospCobro[]
   hospLotes             HospLote[]
   hospMovimientosInsumo HospMovimientoInsumo[]
 
@@ -1495,6 +1499,7 @@ model BankTransaction {
   reembolsoPagado       ReembolsoSemanal?
   solicitudCompraPagada SolicitudCompra?
   adjudicacionPagada    SolicitudAdjudicacion? @relation("AdjudicacionPago")
+  hospLiquidacion       HospLiquidacion?
   estimacionCobrada     Estimacion?
   reservacionCobrada    Reservation?
   compraRestPagada      RestCompra?
@@ -7202,6 +7207,7 @@ model HospEpisodio {
   egresoSaeh        HospEgresoSaeh?
   plan              HospPlanTratamiento?
   depositos         HospDeposito[]
+  cobros            HospCobro[]
 
   @@unique([companyId, folio])
   @@index([companyId, estado])
@@ -8203,6 +8209,7 @@ model HospDeposito {
 
   company  Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
   episodio HospEpisodio @relation(fields: [episodioId], references: [id], onDelete: Cascade)
+  cobro    HospCobro?
 
   @@index([companyId, fecha])
   @@index([episodioId])
@@ -8212,6 +8219,176 @@ enum HospEpisodioOrigen {
   CAPTURA
   COTIZACION
   CFDI
+}
+
+// ─── Cobros de caja: la terminal, su liquidación y el contracargo ────────────
+//
+// Un COBRO es el evento de caja: el dinero que el paciente entrega y el
+// instrumento con el que lo entregó. No es un depósito (`HospDeposito` es
+// anticipo, y vive como pasivo hasta que se aplica) ni una factura: es el
+// momento en que el dinero cambia de manos.
+//
+// Existe como modelo aparte, y carga tanto dato de la terminal, por una razón
+// concreta: el adquirente NO deposita cobro por cobro. Junta el día, le resta
+// su comisión y deposita un neto dos días después, en UN solo movimiento
+// bancario. Para cuadrar ese depósito contra lo que caja cobró hace falta la
+// misma llave con la que el adquirente imprime su estado de cuenta:
+//
+//     (afiliación, fecha de operación, monto, autorización)
+//
+// La autorización SOLA no es llave: son seis dígitos que el adquirente recicla.
+// Por eso los cuatro campos van juntos y por eso `fecha` es la del voucher —la
+// fecha de OPERACIÓN—, no la de captura: caja teclea el lunes lo del sábado.
+//
+// El CONTRACARGO se modela desde el principio, no cuando aparezca. Cuando el
+// tarjetahabiente desconoce el cargo, el adquirente no devuelve el dinero por
+// separado: lo descuenta del depósito del día. Un contracargo que el sistema no
+// conoce convierte una liquidación que cuadra en una diferencia sin nombre, que
+// es exactamente el trabajo manual que este módulo viene a quitar.
+
+enum HospCobroEstado {
+  /// Cobrado en caja; el dinero todavía no llega al banco.
+  COBRADO
+  /// Incluido en una liquidación del adquirente ya identificada.
+  DEPOSITADO
+  /// El tarjetahabiente lo desconoció y el adquirente lo descontó.
+  CONTRACARGADO
+  /// Contracargo ganado: el adquirente lo devolvió.
+  RECUPERADO
+  /// Se capturó por error. No cuadra contra nada y no toca el libro.
+  CANCELADO
+}
+
+enum HospTarjetaMarca {
+  VISA
+  MASTERCARD
+  AMEX
+  CARNET
+  OTRA
+}
+
+enum HospTarjetaTipo {
+  CREDITO
+  DEBITO
+}
+
+/// Una afiliación de terminal, tal como la imprime el voucher y como la
+/// agrupa el estado de cuenta del adquirente. Se captura una por cada línea
+/// que el adquirente liquida por separado: si el estado de cuenta separa
+/// crédito de débito, son dos filas, y el `numero` se guarda como viene
+/// impreso. El modelo no interpreta el formato del adquirente.
+model HospAfiliacion {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+
+  numero      String
+  descripcion String?
+  /// Banco o adquirente que liquida (BBVA, Banorte, Amex…).
+  adquirente  String?
+  activa      Boolean @default(true)
+
+  /// Tasa de referencia para VERIFICAR la liquidación, nunca para calcularla:
+  /// manda lo que el adquirente efectivamente depositó. Sirve para levantar la
+  /// mano cuando la comisión cobrada no se parece a la pactada.
+  tasa Decimal? @db.Decimal(6, 4)
+
+  company       Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  cobros        HospCobro[]
+  liquidaciones HospLiquidacion[]
+
+  @@unique([companyId, numero])
+  @@index([companyId, activa])
+}
+
+/// El cobro de caja. Al menos uno de `episodioId` / `invoiceId` / `depositoId`
+/// debe venir: un cobro que no dice a qué entra es justamente el que caja no
+/// puede explicar en el corte.
+model HospCobro {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+
+  /// Fecha de OPERACIÓN (la del voucher), no la de captura.
+  fecha     DateTime
+  monto     Decimal         @db.Decimal(18, 2)
+  formaPago HospFormaPago
+  estado    HospCobroEstado @default(COBRADO)
+
+  episodioId String?
+  invoiceId  String?
+  /// Cuando el cobro ES el instrumento de un anticipo. El asiento lo lleva el
+  /// depósito (ver asientos.ts): aquí no se duplica.
+  depositoId String? @unique
+
+  // ── Terminal. Obligatorios cuando formaPago = TARJETA (ver cobros.ts).
+  afiliacionId String?
+  autorizacion String?
+  marca        HospTarjetaMarca?
+  tipoTarjeta  HospTarjetaTipo?
+  ultimos4     String?
+
+  /// Clave de rastreo o folio del cheque, para transferencia y cheque.
+  referencia String?
+
+  liquidacionId String?
+  depositadoAt  DateTime?
+
+  contracargoAt     DateTime?
+  contracargoMotivo String?
+  recuperadoAt      DateTime?
+
+  asientoAt        DateTime?
+  cobradoPorUserId String?
+  notas            String?
+
+  company     Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  episodio    HospEpisodio?    @relation(fields: [episodioId], references: [id], onDelete: Cascade)
+  invoice     Invoice?         @relation(fields: [invoiceId], references: [id])
+  deposito    HospDeposito?    @relation(fields: [depositoId], references: [id])
+  afiliacion  HospAfiliacion?  @relation(fields: [afiliacionId], references: [id])
+  liquidacion HospLiquidacion? @relation(fields: [liquidacionId], references: [id])
+
+  @@index([companyId, fecha])
+  @@index([companyId, estado])
+  /// La llave de conciliación contra el estado de cuenta del adquirente.
+  @@index([companyId, afiliacionId, fecha])
+  @@index([episodioId])
+  @@index([liquidacionId])
+}
+
+/// El depósito en lote del adquirente: lo que el banco sí ve. Cuadra cuando
+/// bruto − contracargos − comisión − IVA de comisión = neto, y el neto es el
+/// movimiento bancario.
+model HospLiquidacion {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+
+  afiliacionId String
+  /// Fecha en que el adquirente depositó (no la de operación de los cobros).
+  fecha        DateTime
+
+  bruto        Decimal @db.Decimal(18, 2)
+  contracargos Decimal @default(0) @db.Decimal(18, 2)
+  comision     Decimal @db.Decimal(18, 2)
+  ivaComision  Decimal @db.Decimal(18, 2)
+  neto         Decimal @db.Decimal(18, 2)
+
+  /// El movimiento bancario que la liquidó. Quien baja el dinero a BANCOS es
+  /// la conciliación del hub; este módulo sólo limpia la comisión de 107.05.
+  bankTransactionId String?   @unique
+  conciliadoAt      DateTime?
+  asientoAt         DateTime?
+  notas             String?
+
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  afiliacion      HospAfiliacion   @relation(fields: [afiliacionId], references: [id])
+  bankTransaction BankTransaction? @relation(fields: [bankTransactionId], references: [id])
+  cobros          HospCobro[]
+
+  @@index([companyId, fecha])
+  @@index([afiliacionId, fecha])
 }
 
 // ─── Module: Salamería — importadora y distribuidora de abarrote gourmet ─────

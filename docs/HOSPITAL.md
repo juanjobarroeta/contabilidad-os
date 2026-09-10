@@ -39,6 +39,7 @@ hecho contable, hasta que se factura.
 | Médicos tratantes y honorarios | **Este módulo** (`HospMedico`; el honorario es un `HospCargo` HONORARIO) | `/api/hospital/medicos` |
 | Farmacia: insumos, lotes, kardex | **Este módulo** (`HospInsumo`, `HospLote`, `HospMovimientoInsumo`) | `/api/hospital/farmacia/*` |
 | Mantenimiento | **Este módulo** (`HospTicket`) | `/api/hospital/mantenimiento` |
+| Cobros de caja, afiliaciones de terminal y liquidaciones del adquirente | **Este módulo** (`HospCobro`, `HospAfiliacion`, `HospLiquidacion`) | `/api/hospital/cobros`, `/afiliaciones`, `/liquidaciones` |
 | Clientes y proveedores (directorio fiscal) | Hub (`Customer` — el hub guarda la contraparte de TODO CFDI como Customer por RFC; `Supplier` para CLABE/datos de pago) | `/api/hospital/contactos` (derivado de CFDIs), `/api/clientes/[id]/estado-cuenta` |
 | Empleados y nómina | Hub (`Employee`, `PayrollRun`) | `/api/hospital/empleados` (roster), `/api/nomina/*` |
 | Facturas CFDI | Hub (`Invoice`) | `/api/facturas` |
@@ -116,6 +117,22 @@ hecho contable, hasta que se factura.
   (días) cuando aplican y `activo` (codificable). Se cargan con
   `scripts/hospital-catalogos.ts`.
 - `HospTicket` — mantenimiento con prioridad, responsable y preventivos.
+- `HospAfiliacion` — una afiliación de terminal, tal como la imprime el
+  voucher y como la agrupa el estado de cuenta del adquirente: una fila por
+  cada línea que el adquirente liquida por separado (si su corte parte crédito
+  de débito, son dos). `tasa` es de REFERENCIA —para levantar la mano cuando
+  la comisión cobrada no se parece a la pactada—, nunca para calcular.
+- `HospCobro` — el cobro de caja: el instrumento con el que el paciente paga.
+  Va a un episodio, a una factura o a un anticipo (al menos uno). Con tarjeta
+  NO se guarda sin afiliación, autorización, marca, crédito/débito y últimos
+  cuatro: sin ellos nadie lo casa contra el estado de cuenta. `fecha` es la de
+  OPERACIÓN (la del voucher), no la de captura. Estados: COBRADO →
+  DEPOSITADO | CONTRACARGADO | CANCELADO; CONTRACARGADO → RECUPERADO. El
+  contracargo se modela desde el principio porque el adquirente no lo devuelve
+  por separado: lo descuenta del depósito del día.
+- `HospLiquidacion` — el lote que el adquirente deposita: `bruto`,
+  `contracargos`, `comision`, `ivaComision`, `neto` y el `bankTransactionId`
+  que lo liquidó. Cierra cuando `bruto − contracargos − comisión − IVA = neto`.
 - `CompanyMember.hospitalPaginas` — rejilla de páginas visibles del satélite
   (`[]` = todas), mismo contrato que `automotrizPaginas`.
 
@@ -595,7 +612,8 @@ GET  /api/hospital/contabilidad/mapa?companyId= → { claves: [{ clave, descripc
      · claves del motor: INGRESO_HOSPITALIZACION (401.01), INGRESO_QUIROFANO (401.01), INGRESO_URGENCIAS, INGRESO_ESTUDIOS, INGRESO_FARMACIA_16, INGRESO_FARMACIA_0 (401.02),
        INGRESO_MATERIAL, INGRESO_OTROS, HONORARIOS_POR_CUENTA_DE_TERCEROS (205.06 acreedores diversos: médicos), RETENCION_ISR_HONORARIOS (216.04),
        (INGRESO_FARMACIA_0 usa 401.04 «gravados al 0 %»; 401.02 es «tasa general de contado»)
-       RETENCION_IVA_HONORARIOS (216.10), COSTO_FARMACIA (501.01), INVENTARIO_FARMACIA (115.01), ANTICIPOS_PACIENTES (206.01), CAJA (101.01), BANCOS (102.01), FONDOS_EN_TRANSITO (107.05), CLIENTES (105.01)
+       RETENCION_IVA_HONORARIOS (216.10), COSTO_FARMACIA (501.01), INVENTARIO_FARMACIA (115.01), ANTICIPOS_PACIENTES (206.01), CAJA (101.01), BANCOS (102.01), FONDOS_EN_TRANSITO (107.05), CLIENTES (105.01),
+       COMISION_TERMINAL (701.10), IVA_ACREDITABLE (118.01)
 PUT  /api/hospital/contabilidad/mapa { cuentas: { <clave>: { cuentaSAT?, subcuenta? } | null }, activa? } → guarda en HospConfig.cuentasContables (subcuenta = cuenta concreta
        del plan → también PostingCuentaOverride hospital:<clave>); `activa` enciende/apaga contabilidadActiva
 GET  /api/hospital/contabilidad/preview?companyId=&anio=&mes= → { piernasCfdi: [{ invoiceId, uuid, total, piernas: [{ clave, cuenta, monto }] }],
@@ -604,6 +622,15 @@ POST /api/hospital/contabilidad/asentar { companyId, anio, mes } → { ok, asent
        HOSPITAL (idempotente por referencia+tipo) y marca asientoAt; 409 si la contabilidad está apagada o el ejercicio cerrado
 POST /api/hospital/episodios/[id]/depositos { fecha, monto, formaPago, referencia?, notas? } · PATCH /depositos/[id] { estado: APLICADO|DEVUELTO|CANCELADO }
 GET  /api/hospital/episodios/[id]/depositos → [...] · la cuenta muestra depósitos y saldo neto
+GET  /api/hospital/afiliaciones?companyId=[&todas=1] · POST { companyId, numero, descripcion?, adquirente?, tasa? } · PATCH /afiliaciones/[id] (el `numero` no se edita)
+GET  /api/hospital/cobros?companyId=[&desde&hasta&estado&afiliacionId&episodioId] → { cobros, corte: { enCaja, enTransito, total, contracargos } }
+POST /api/hospital/cobros { companyId, fecha, monto, formaPago, episodioId?|invoiceId?|depositoId?, afiliacionId?, autorizacion?, marca?, tipoTarjeta?, ultimos4?,
+       referencia?, notas?, permitirDuplicado? } → 201 · 409 si ya hay uno con la misma (afiliación, día, monto, autorización) salvo que el cajero lo confirme
+PATCH /api/hospital/cobros/[id] { estado: CONTRACARGADO|RECUPERADO|CANCELADO, fecha?, motivo? } · DEPOSITADO no se pone aquí: se marca al armar la liquidación
+GET  /api/hospital/liquidaciones?companyId=[&desde&hasta&afiliacionId] · POST { companyId, afiliacionId, fecha, cobroIds[], bruto, contracargos, comision,
+       ivaComision, neto, bankTransactionId?, notas? } → 201; rechaza el lote que no cierra o cuyos cobros no suman el bruto, y marca sus cobros DEPOSITADOS
+GET  /api/hospital/liquidaciones/sugerencias?companyId=&afiliacionId=&neto=[&fecha&dias] → { pendientes, dias: [{ dia, cobroIds, bruto, netoEsperado, distancia }] }
+       · agrupa lo pendiente por día de operación y lo ordena por cercanía al depósito. PROPONE, no asigna: el lote lo confirma una persona
 GET  /api/hospital/contabilidad/apertura?companyId= → { apertura: { fecha, cuentas: [{ codigo, nombre, tipo, naturaleza, saldo }], total } | null, catalogo }
 POST /api/hospital/contabilidad/apertura/leer-balanza  multipart { archivo xlsx/csv } (o JSON { base64, nombre }) → { columnas, lineas: [{ fila, codigo, nombre, saldoDeudor,
        saldoAcreedor, saldo (signo natural, listo para POST apertura), agrupadora, cuentaSugerida, confianza: EXACTA|PREFIJO|NOMBRE|null }], sinMapear,
@@ -616,14 +643,21 @@ Motor: `src/lib/contabilidad/hospital.ts` (patrón taller.ts) parte el ingreso d
 alta del episodio = retenciones de ISR 10 % e IVA 2/3 de los honorarios de cada médico persona física con RFC, sólo cuando el hospital es persona moral
 (HONORARIOS_POR_CUENTA_DE_TERCEROS contra 216.04/216.10; el saldo del pasivo es lo neto a pagar); depósito RECIBIDO = CAJA (efectivo) o FONDOS_EN_TRANSITO
 (tarjeta, transferencia, cheque) contra ANTICIPOS_PACIENTES; APLICADO = ANTICIPOS_PACIENTES contra CLIENTES; DEVUELTO = al revés.
+Cobro de caja (`cobros.ts`) = CAJA o FONDOS_EN_TRANSITO contra CLIENTES; el cobro ligado a un anticipo NO asienta (ya lo asentó
+el depósito, y asentarlo otra vez metería el mismo billete dos veces). CONTRACARGADO reversa contra FONDOS_EN_TRANSITO aunque
+el depósito ya hubiera llegado al banco —el adquirente lo descuenta del lote del día, y ese lote vuelve a pasar por 107.05—;
+RECUPERADO lo vuelve a poner. De la liquidación (`liquidaciones.ts`) el módulo asienta ÚNICAMENTE la comisión y su IVA
+(COMISION_TERMINAL y IVA_ACREDITABLE contra FONDOS_EN_TRANSITO): es el residuo exacto que queda en 107.05 después de que la
+conciliación del hub baja el NETO a BANCOS. Los contracargos del lote no se asientan ahí: cada cobro lleva su propia reversa.
 El módulo NUNCA carga BANCOS: el dinero llega al banco días después (el adquirente liquida en lote y neto de comisión) y quien
 baja FONDOS_EN_TRANSITO a BANCOS es el movimiento bancario conciliado; si el cobro entrara directo a BANCOS, la misma cantidad
 se cargaría dos veces. Acordado con el módulo de conciliación: al conciliar ese depósito el abono se PARTE — 107.05 por lo que
 alcance a cubrir de los cobros pendientes, en FIFO por fecha de cobro, y 105.01 clientes por el resto (lo cobrado antes de
 operar caja ya tenía su derecho de cobro creado por el CFDI). Nunca por regla fija: 107.05 se acredita exactamente cuando
-alguien lo cargó, y el tope del FIFO impide que la cuenta se vaya a saldo acreedor. Cuando exista el módulo de caja se expondrá
-`fondosEnTransitoPendientes(companyId, hasta)` (saldo y cobros que lo componen, por fecha) para que la conciliación no replique
-la regla de qué cuenta como pendiente. Lo que ya asentó (asientoAt) no se repite; unpostMonth del hub conserva la fuente HOSPITAL.
+alguien lo cargó, y el tope del FIFO impide que la cuenta se vaya a saldo acreedor. Ese pendiente lo da
+`fondosEnTransitoPendientes(db, companyId, hasta)` de `cobros.ts` (saldo y filas que lo componen, en FIFO por fecha), para que la
+regla de QUÉ cuenta como pendiente tenga un solo dueño y la conciliación no la replique: cobro sin liquidación —o con una cuyo
+movimiento bancario aún no llega— y depósito RECIBIDO o APLICADO; el efectivo nunca, que ése va a CAJA. Lo que ya asentó (asientoAt) no se repite; unpostMonth del hub conserva la fuente HOSPITAL.
 
 ### P4 expedientes históricos desde CFDIs y convenio 360
 
