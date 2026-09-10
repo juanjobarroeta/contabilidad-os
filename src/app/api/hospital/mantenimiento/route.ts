@@ -50,6 +50,10 @@ const createSchema = z.object({
   descripcion: z.string().max(4000).nullable().optional(),
   area: z.enum(["HOSPITALIZACION", "URGENCIAS", "RECUPERACION", "TERAPIA", "QUIROFANO", "CONSULTA_EXTERNA", "ENDOSCOPIA", "IMAGEN", "LABORATORIO", "OTRA"]).nullable().optional(),
   equipo: z.string().max(120).nullable().optional(),
+  /** Dónde está la falla: la cama, el quirófano, la sala. No son coordenadas
+   *  — un hospital es un edificio y el GPS no distingue un quirófano del de
+   *  al lado; el recurso sí es lo que el técnico va a atender. */
+  recursoId: z.string().nullable().optional(),
   prioridad: z.enum(["BAJA", "MEDIA", "ALTA", "URGENTE"]).optional(),
   preventivo: z.boolean().optional(),
   programadoPara: fechaSchema.nullable().optional(),
@@ -70,6 +74,13 @@ export const POST = withHospital(async (req: Request) => {
     const e = await prisma.employee.findUnique({ where: { id: asignadoEmployeeId }, select: { companyId: true, nombre: true, apellidoPaterno: true, apellidoMaterno: true } });
     if (!e || e.companyId !== companyId) return error("asignadoEmployeeId inválido");
     asignadoA = nombreCompleto(e);
+  }
+
+  // El recurso tiene que ser de esta empresa: si no, un id ajeno colgaría la
+  // falla del quirófano de otro hospital.
+  if (d.recursoId) {
+    const r = await prisma.hospRecurso.findUnique({ where: { id: d.recursoId }, select: { companyId: true } });
+    if (!r || r.companyId !== companyId) return error("recursoId inválido");
   }
 
   const usuario = usuarioDe(user);
