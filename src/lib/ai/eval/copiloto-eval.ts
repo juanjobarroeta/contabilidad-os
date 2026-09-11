@@ -22,6 +22,7 @@ import { tools } from "@/lib/ai/tools";
 import { executeToolCall } from "@/lib/ai/tool-executor";
 import { fuentesDesdeToolResult, verificarRespuesta, type FuenteVerificacion } from "@/lib/ai/verificacion";
 import { searchFiscalKnowledge } from "@/lib/fiscal-kb/search";
+import { MATERIAS_CONTADOR } from "@/lib/fiscal-kb/materias";
 import type { PreguntaEval } from "./preguntas";
 
 type VerificacionEval = NonNullable<ResultadoPregunta["respuesta"]>["verificacion"];
@@ -44,7 +45,14 @@ const EMPRESA_EVAL: Record<NonNullable<PreguntaEval["regimen"]>, Parameters<type
 // ── 1. Recuperación ───────────────────────────────────────────────────────────
 
 export async function medirRecuperacion(p: PreguntaEval, busqueda: OpcionesBusquedaEval = {}): Promise<ResultadoPregunta["recuperacion"]> {
-  const r = await searchFiscalKnowledge(p.pregunta, { modo: busqueda.modo, rerank: busqueda.rerank, candidatosRerank: busqueda.candidatos });
+  // Como en el executor del hub: normativa (sin tesis) y materias del contador.
+  const r = await searchFiscalKnowledge(p.pregunta, {
+    modo: busqueda.modo,
+    rerank: busqueda.rerank,
+    candidatosRerank: busqueda.candidatos,
+    fuentes: ["LEY", "REGLAMENTO", "RMF", "CRITERIO", "DOF", "GUIA"],
+    materias: MATERIAS_CONTADOR,
+  });
   const citas = r.resultados.map((h) => h.cita);
   return { hit: algunaCoincide(p.fundamentos, citas), citas, busqueda: r.busqueda };
 }
