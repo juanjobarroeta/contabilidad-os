@@ -31,6 +31,13 @@ export interface CandidatoFactura {
   confidence: "alta" | "media" | "baja";
   folio?: string;
   serie?: string;
+  /** Lo ya cobrado/pagado contra esta factura (1:1 + porciones). El servidor
+   *  lo manda desde siempre; la charola lo necesita para no proponer el total
+   *  de una factura que ya recibió un abono. */
+  matchedAmount?: number;
+  /** total − matchedAmount: lo que de verdad queda por asignar. */
+  remainingBalance?: number;
+  alreadyMatched?: boolean;
   /** PPD cobra en parcialidades: el candidato lo dice para que no sorprenda. */
   metodoPago?: string;
 }
@@ -79,6 +86,10 @@ export interface SeleccionFactura {
   label: string;
   total: number;
   monto: string;
+  /** Saldo abierto de la factura al agregarla (total − ya asignado). Null si
+   *  no se conoce; cuando es menor que `total` la charola lo enseña, para que
+   *  el segundo abono se explique solo. */
+  saldo?: number | null;
 }
 
 /** El CFDI con el que un movimiento YA quedó cruzado, con su porción. */

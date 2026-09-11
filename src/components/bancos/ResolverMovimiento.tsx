@@ -279,12 +279,31 @@ export function ResolverMovimiento({
     } finally { setMultiOcupado(false); }
   }
 
-  function alternar(f: { id: string; label: string; total: number }) {
-    setSeleccion((prev) =>
-      prev.some((s) => s.id === f.id)
-        ? prev.filter((s) => s.id !== f.id)
-        : [...prev, { id: f.id, label: f.label, total: f.total, monto: f.total.toFixed(2) }],
-    );
+  /** Serie+folio primero, nombre después: una factura sin cliente salía como
+   *  «Factura» a secas en la charola y no había forma de saber cuál era. */
+  function etiquetaFactura(serie: string | null | undefined, folio: string | null | undefined, nombre: string | null | undefined): string {
+    const ref = `${serie ?? ""}${folio ?? ""}`.trim();
+    const nom = (nombre ?? "").trim();
+    if (ref && nom && nom !== "—") return `${ref} · ${nom}`;
+    return ref || nom || "Factura";
+  }
+
+  function alternar(f: { id: string; label: string; total: number; saldo?: number | null }) {
+    setSeleccion((prev) => {
+      if (prev.some((s) => s.id === f.id)) return prev.filter((s) => s.id !== f.id);
+      // El monto propuesto es lo que CABE, no el total de la factura: el menor
+      // entre lo que a la factura le falta y lo que al movimiento le queda.
+      // Con el total como default, un abono parcial arrancaba en rojo («la
+      // suma excede el movimiento») con el botón apagado, y el segundo abono
+      // a la misma factura proponía otra vez el total y el guard lo rechazaba.
+      // Si al movimiento ya no le queda nada, se propone el saldo y el aviso
+      // de exceso hace su trabajo — mejor que un 0.00 que tampoco pasa.
+      const yaAsignado = prev.reduce((s, x) => s + (Number(x.monto) || 0), 0);
+      const restanteMov = Math.abs(tx.monto) - yaAsignado;
+      const saldoFactura = f.saldo != null && f.saldo > 0 ? f.saldo : f.total;
+      const propuesto = restanteMov > 0.005 ? Math.min(saldoFactura, restanteMov) : saldoFactura;
+      return [...prev, { id: f.id, label: f.label, total: f.total, saldo: f.saldo ?? null, monto: propuesto.toFixed(2) }];
+    });
   }
 
   async function conciliarMultiple() {
@@ -564,7 +583,7 @@ export function ResolverMovimiento({
                       Ver
                     </button>
                   )}
-                  <button onClick={() => alternar({ id: c.id, label: c.cliente, total: c.total })}
+                  <button onClick={() => alternar({ id: c.id, label: etiquetaFactura(c.serie, c.folio, c.cliente), total: c.total, saldo: c.remainingBalance })}
                     className={"rounded-control border px-3 py-1.5 text-[13px] font-semibold " + (seleccion.some((s) => s.id === c.id) ? "border-cos-brand bg-cos-brand-tint text-cos-brand-ink" : "border-cos-line bg-cos-card text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink")}>
                     {seleccion.some((s) => s.id === c.id) ? "Quitar" : "Agregar"}
                   </button>
@@ -622,7 +641,16 @@ export function ResolverMovimiento({
           <div className="mt-2 flex flex-col gap-1.5">
             {seleccion.map((s) => (
               <div key={s.id} className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate text-[13px] text-cos-ink">{s.label}</span>
+                <span className="min-w-0 flex-1 truncate text-[13px] text-cos-ink">
+                  {s.label}
+                  {/* Factura que ya recibió abonos: se dice cuánto le falta, para
+                      que el segundo pago no parezca el primero. */}
+                  {s.saldo != null && s.saldo < s.total - 0.005 && (
+                    <span className="ml-1.5 text-[12px] text-cos-amber-ink">
+                      saldo {fmt(s.saldo)} de {fmt(s.total)}
+                    </span>
+                  )}
+                </span>
                 <input type="number" step="0.01" min="0" value={s.monto}
                   onChange={(e) => setSeleccion((prev) => prev.map((x) => (x.id === s.id ? { ...x, monto: e.target.value } : x)))}
                   aria-label={`Monto asignado a ${s.label}`}
@@ -729,7 +757,7 @@ export function ResolverMovimiento({
                     </p>
                   </div>
                   <div className="flex flex-none items-center gap-1.5">
-                    <button onClick={() => alternar({ id: f.id, label: f.customer?.razonSocial ?? "Factura", total: f.total })}
+                    <button onClick={() => alternar({ id: f.id, label: etiquetaFactura(f.serie, f.folio, f.customer?.razonSocial), total: f.total, saldo: Math.max(0, f.total - f.matchedAmount) })}
                       className={"rounded-control border px-3 py-1.5 text-[12.5px] font-semibold " + (seleccion.some((s) => s.id === f.id) ? "border-cos-brand bg-cos-brand-tint text-cos-brand-ink" : "border-cos-line bg-cos-card text-cos-ink-soft hover:border-cos-brand hover:text-cos-brand-ink")}>
                       {seleccion.some((s) => s.id === f.id) ? "Quitar" : "Agregar"}
                     </button>
