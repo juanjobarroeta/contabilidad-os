@@ -3,6 +3,7 @@ import {
   conciliarBancos,
   evaluarCoberturaBancaria,
   resumenConciliacion,
+  resumenDelMes,
   type AsientoBancosParaConciliar,
   type ConciliarArgs,
   type MovimientoParaConciliar,
@@ -338,5 +339,50 @@ describe("contraparte extraída", () => {
       asientos: [], saldoInicialLibros: 0,
     });
     expect(r.movimientosNoRegistrados[0].contraparteNombre).toBeUndefined();
+  });
+});
+
+describe("resumenDelMes — los números que la mesa, el Inicio y el cierre deben decir igual", () => {
+  const mes = [
+    { monto: 1000, conciliado: false, registrado: false },   // sin conciliar (abono)
+    { monto: -400, conciliado: false, registrado: false },   // sin conciliar (cargo)
+    { monto: 2500, conciliado: true, registrado: false },    // conciliado, espera posteo
+    { monto: -700, conciliado: true, registrado: true },     // ya en libros
+  ];
+
+  it("separa «nadie decidió» de «decidido, falta el asiento»", () => {
+    const r = resumenDelMes(mes);
+    expect(r.total).toBe(4);
+    expect(r.sinConciliar).toBe(2);
+    expect(r.esperanPosteo).toBe(1);
+    expect(r.pendientes).toBe(3);
+  });
+
+  it("los montos van por SENTIDO y sólo de lo que falta conciliar", () => {
+    const r = resumenDelMes(mes);
+    // Con el neto firmado esto sería $600 y diría «$600 por conciliar» con dos
+    // movimientos por casar por $1,400.
+    expect(r.abonos).toBe(1000);
+    expect(r.cargos).toBe(400);
+    // Lo ya conciliado que espera asiento se cuenta aparte, no aquí.
+    expect(r.montoPorContabilizar).toBe(2500);
+  });
+
+  it("un filtro NO puede cambiar la cobertura: es del periodo", () => {
+    // Es exactamente el bug que tuvo la mesa: alimentarla con la lista filtrada
+    // a «Conciliados» dejaba sinConciliar en 0 y anunciaba la compuerta
+    // abierta. El resumen del mes completo tiene que decir otra cosa.
+    const soloConciliados = mes.filter((m) => m.conciliado);
+    expect(resumenDelMes(soloConciliados).sinConciliar).toBe(0);
+    expect(resumenDelMes(mes).sinConciliar).toBe(2);
+    expect(evaluarCoberturaBancaria(mes.length, resumenDelMes(mes).sinConciliar).compuertaAbierta).toBe(false);
+    // …y con el mes entero conciliado, sí abre.
+    const todoConciliado = mes.map((m) => ({ ...m, conciliado: true }));
+    const r = resumenDelMes(todoConciliado);
+    expect(evaluarCoberturaBancaria(todoConciliado.length, r.sinConciliar).compuertaAbierta).toBe(true);
+  });
+
+  it("sin movimientos, todo en cero", () => {
+    expect(resumenDelMes([])).toMatchObject({ total: 0, sinConciliar: 0, esperanPosteo: 0, pendientes: 0 });
   });
 });
