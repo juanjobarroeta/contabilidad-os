@@ -75,4 +75,33 @@ describe("coberturaPlanPropio()", () => {
       "102.01:unica", "115.04:ambigua", "601.48:override", "999.99:sin_candidata",
     ]);
   });
+
+  it("varias candidatas bajo un código POR CONTRAPARTE no son una ambigüedad", async () => {
+    // El caso de BAOBAB: 31 auxiliares de proveedor. Pedir que se elija uno
+    // manda el saldo de los 31 a la elegida — no es una decisión, es la forma
+    // normal del catálogo.
+    state.cuentas = [cta("01", "201.01"), cta("02", "201.01"), cta("03", "201.01")];
+    state.overrides = [];
+    const [prov] = await coberturaPlanPropio("c1", ["201.01"]);
+    expect(prov.estado).toBe("por_dimension");
+    expect(prov.dimension).toBe("CONTRAPARTE");
+    expect(prov.padron).toBe("PROVEEDOR");
+    expect(prov.candidatas).toBe(3);
+  });
+
+  it("una sola candidata resuelve, sea dimensional o no", async () => {
+    state.cuentas = [cta("01", "201.01")];
+    state.overrides = [];
+    const [prov] = await coberturaPlanPropio("c1", ["201.01"]);
+    expect(prov.estado).toBe("unica");
+  });
+
+  it("un código FIJO con varias candidatas sigue siendo decisión de una persona", async () => {
+    // 401.01 en BAOBAB: ¿ventas al 16% o ingresos por arrendamiento? Ésa sí.
+    state.cuentas = [cta("01", "401.01"), cta("02", "401.01")];
+    state.overrides = [];
+    const [ventas] = await coberturaPlanPropio("c1", ["401.01"]);
+    expect(ventas.estado).toBe("ambigua");
+    expect(ventas.dimension).toBe("FIJA");
+  });
 });

@@ -26,10 +26,13 @@ interface CuentaPropia {
 }
 interface Cobertura {
   codigoMotor: string;
-  estado: "unica" | "override" | "ambigua" | "sin_candidata";
+  estado: "unica" | "override" | "ambigua" | "sin_candidata" | "por_dimension";
   candidatas: number;
   cuenta?: { cuentaSAT: string; nombre: string };
   nombreAgrupador: string | null;
+  dimension: "FIJA" | "CONTRAPARTE" | "EJERCICIO";
+  padron?: "BANCO" | "CLIENTE" | "PROVEEDOR" | "RELACIONADA";
+  porque: string;
 }
 
 const CHIP_ESTADO: Record<Cobertura["estado"], { t: string; cls: string }> = {
@@ -37,6 +40,9 @@ const CHIP_ESTADO: Record<Cobertura["estado"], { t: string; cls: string }> = {
   override: { t: "Decidida", cls: "bg-cos-brand-tint text-cos-brand-ink" },
   ambigua: { t: "Ambigua", cls: "bg-cos-amber-tint text-cos-amber-ink" },
   sin_candidata: { t: "Sin candidata", cls: "bg-cos-red-tint text-cos-red-ink" },
+  // No es un pendiente: es el catálogo bien armado, con un auxiliar por
+  // contraparte. Se enseña aparte y sin pedir nada.
+  por_dimension: { t: "Por contraparte", cls: "bg-cos-brand-tint text-cos-brand-ink" },
 };
 
 export default function CatalogoPage() {
@@ -73,10 +79,14 @@ export default function CatalogoPage() {
 
   useEffect(() => { cargar(); }, [cargar]);
 
+  // Pendientes = lo que una persona SÍ puede contestar. Un código que se
+  // resuelve por contraparte no entra: pedir que se elija uno de 31 auxiliares
+  // de proveedor manda el saldo de los 31 a la que se haya clicado.
   const pendientes = useMemo(
     () => (cobertura ?? []).filter((c) => c.estado === "ambigua" || c.estado === "sin_candidata"),
     [cobertura]
   );
+  const porDimension = useMemo(() => (cobertura ?? []).filter((c) => c.estado === "por_dimension"), [cobertura]);
   const overrides = useMemo(() => (cobertura ?? []).filter((c) => c.estado === "override"), [cobertura]);
   const unicas = useMemo(() => (cobertura ?? []).filter((c) => c.estado === "unica"), [cobertura]);
   // ¿La empresa declara agrupadores en cuentas propias? Sin ninguno, el motor
@@ -236,8 +246,37 @@ export default function CatalogoPage() {
               value={pendientes.filter((p) => p.estado === "sin_candidata").length}
               sub="ninguna cuenta con ese agrupador"
             />
+            <StatTile
+              label="Por contraparte"
+              tone="brand"
+              value={porDimension.length}
+              sub="se resuelven solos — no se eligen"
+            />
             <StatTile label="Decisiones tomadas" tone="brand" value={overrides.length} sub="overrides del contador" />
           </StatStrip>
+
+          {porDimension.length > 0 && (
+            <section className="rounded-cos border border-cos-line bg-cos-panel p-4">
+              <h2 className="text-sm font-semibold text-cos-ink">Se resuelven por contraparte, no aquí</h2>
+              <p className="mt-1 text-xs text-cos-ink-soft">
+                Estos códigos tienen varias cuentas porque su catálogo lleva un auxiliar por contraparte —un
+                proveedor, un cliente, un banco por cuenta—. Eso no es una ambigüedad que resolver: elegir una
+                mandaría el saldo de todas a la que se elija. La cuenta la decide el RFC de cada comprobante.
+              </p>
+              <ul className="mt-3 space-y-2">
+                {porDimension.map((c) => (
+                  <li key={c.codigoMotor} className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs">
+                    <span className="font-mono font-medium text-cos-ink">{c.codigoMotor}</span>
+                    <span className="text-cos-ink">{c.nombreAgrupador ?? ""}</span>
+                    <span className="rounded-cos-chip bg-cos-brand-tint px-1.5 py-0.5 text-cos-brand-ink">
+                      {c.candidatas} auxiliares
+                    </span>
+                    <span className="text-cos-ink-soft">{c.porque}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           {/* ── La cola de ambigüedades ── */}
           <section className="mb-5 rounded-card border border-cos-line bg-cos-card">

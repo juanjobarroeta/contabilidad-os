@@ -20,6 +20,7 @@
 
 import { prisma } from "../prisma";
 import type { ChartAccount } from "@prisma/client";
+import { dimensionDe, type Dimension, type Padron } from "./dimension-codigo";
 
 /**
  * La cuenta PROPIA para un código del motor, o null si no hay resolución
@@ -44,9 +45,21 @@ export async function resolverCuentaPropia(
 
 export interface CoberturaCodigo {
   codigoMotor: string;
-  estado: "unica" | "override" | "ambigua" | "sin_candidata";
+  /**
+   * `ambigua` quedó reservada para lo que SÍ es una decisión de persona: varias
+   * candidatas bajo un código FIJO. Cuando el código se resuelve por
+   * contraparte o por ejercicio, varias candidatas son la forma normal del
+   * catálogo —un auxiliar por proveedor— y pedir que se elija una manda el
+   * saldo de todos a la elegida. Ésas salen como `por_dimension`.
+   */
+  estado: "unica" | "override" | "ambigua" | "sin_candidata" | "por_dimension";
   candidatas: number;
   cuenta?: { cuentaSAT: string; nombre: string };
+  /** Qué elige la cuenta: nada (FIJA), la contraparte, o el ejercicio. */
+  dimension: Dimension;
+  padron?: Padron;
+  /** La explicación que se le enseña a quien cierra, en una línea. */
+  porque: string;
 }
 
 /**
@@ -65,11 +78,15 @@ export async function coberturaPlanPropio(
       include: { cuenta: true },
     });
     if (override) {
+      const dim = dimensionDe(codigoMotor);
       out.push({
         codigoMotor,
         estado: "override",
         candidatas: 1,
         cuenta: { cuentaSAT: override.cuenta.subcuenta ?? override.cuenta.cuentaSAT, nombre: override.cuenta.nombre },
+        dimension: dim.dimension,
+        padron: dim.padron,
+        porque: dim.porque,
       });
       continue;
     }
@@ -77,14 +94,29 @@ export async function coberturaPlanPropio(
       where: { companyId, isActive: true, codAgrup: codigoMotor },
       select: { cuentaSAT: true, subcuenta: true, nombre: true },
     });
+    const dim = dimensionDe(codigoMotor);
+    // Varias candidatas bajo un código dimensional NO es una ambigüedad que
+    // alguien deba resolver: es el catálogo bien armado. Una sola candidata sí
+    // resuelve, venga de donde venga.
+    const estado =
+      candidatas.length === 1
+        ? "unica"
+        : candidatas.length === 0
+          ? "sin_candidata"
+          : dim.dimension === "FIJA"
+            ? "ambigua"
+            : "por_dimension";
     out.push({
       codigoMotor,
-      estado: candidatas.length === 1 ? "unica" : candidatas.length === 0 ? "sin_candidata" : "ambigua",
+      estado,
       candidatas: candidatas.length,
       cuenta:
         candidatas.length === 1
           ? { cuentaSAT: candidatas[0].subcuenta ?? candidatas[0].cuentaSAT, nombre: candidatas[0].nombre }
           : undefined,
+      dimension: dim.dimension,
+      padron: dim.padron,
+      porque: dim.porque,
     });
   }
   return out;
