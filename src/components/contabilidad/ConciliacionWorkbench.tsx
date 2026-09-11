@@ -705,7 +705,7 @@ export function ConciliacionWorkbench({
                     ) : (
                       <>
                         Ningún movimiento del mes está en{" "}
-                        <b>{filtro === "PENDIENTES" ? "pendientes" : filtro === "MATCHED" ? "conciliados" : "categorizados"}</b>.
+                        <b>{filtro === "SIN_CONCILIAR" ? "sin conciliar" : filtro === "MATCHED" ? "conciliados" : "categorizados"}</b>.
                         <button onClick={() => setFiltro("TODOS")} className="ml-1.5 font-semibold text-cos-brand-ink hover:underline">
                           Ver todos
                         </button>
