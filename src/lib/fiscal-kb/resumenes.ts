@@ -42,6 +42,8 @@ export interface UnidadSinResumen {
   contexto: string | null;
   vigenciaDesde: Date;
   texto: string;
+  /** Materias del ordenamiento (FiscalDocument.materias): deciden la voz del resumen. */
+  materias: string[];
 }
 
 export interface ResumenGenerado {
@@ -50,11 +52,33 @@ export interface ResumenGenerado {
   regimenes: string[];
 }
 
-const SYSTEM = `Eres un fiscalista mexicano que explica la ley a dueños de negocio. Recibes un artículo de ley/reglamento o una regla de la RMF. Devuelve ÚNICAMENTE JSON con:
+const SYSTEM_FISCAL = `Eres un fiscalista mexicano que explica la ley a dueños de negocio. Recibes un artículo de ley/reglamento o una regla de la RMF. Devuelve ÚNICAMENTE JSON con:
 - "resumen": 2–3 líneas, en español llano, de QUÉ trata y qué obliga/permite (sin repetir el número del artículo).
 - "preguntas": 3 a 5 preguntas cotidianas, tal como las haría un cliente o su contador, que este texto responde («¿qué datos debe llevar mi factura?», «¿puedo deducir la gasolina si pagué en efectivo?»).
 - "regimenes": claves SAT de los regímenes a los que aplica de forma específica (601 general PM, 626 RESICO, 612 PF actividad empresarial, 605 sueldos, 621 incorporación, 616 sin obligaciones…); lista vacía si aplica a todos.
 Sin explicaciones fuera del JSON.`;
+
+/**
+ * Para el resto del orden jurídico (civil, penal, administrativo…) la voz es
+ * la de un jurista, no la de un fiscalista, y las preguntas son las de quien
+ * vive el problema o del abogado que lo atiende. Sin regímenes del SAT.
+ */
+const SYSTEM_GENERAL = `Eres un jurista mexicano que explica la ley a personas sin formación jurídica y a abogados que buscan rápido. Recibes un artículo de una ley o código mexicano. Devuelve ÚNICAMENTE JSON con:
+- "resumen": 2–3 líneas, en español llano, de QUÉ trata y qué obliga, permite o prohíbe (sin repetir el número del artículo).
+- "preguntas": 3 a 5 preguntas cotidianas, tal como las haría quien vive el problema o el abogado que lo atiende, que este texto responde («¿puedo rescindir el contrato si no me pagan?», «¿qué plazo tengo para contestar la demanda?», «¿procede el amparo contra este acto?»).
+- "regimenes": siempre una lista vacía [].
+Sin explicaciones fuera del JSON.`;
+
+/** Materias en las que el resumen se pide con voz de fiscalista y etiqueta regímenes del SAT. */
+const MATERIAS_FISCALISTA: ReadonlySet<string> = new Set(["fiscal", "aduanero", "comercio_exterior", "hacienda_publica", "laboral", "seguridad_social", "pld"]);
+
+/** Voz del resumen según las materias del ordenamiento (ver materias.ts). Puro. */
+export function esVozFiscalista(materias: readonly string[]): boolean {
+  return materias.some((m) => MATERIAS_FISCALISTA.has(m));
+}
+export function systemPara(materias: readonly string[]): string {
+  return esVozFiscalista(materias) ? SYSTEM_FISCAL : SYSTEM_GENERAL;
+}
 
 /** Parsea la respuesta del modelo; null si no es usable. Puro y testeable. */
 export function parsearResumen(texto: string): ResumenGenerado | null {
@@ -85,7 +109,7 @@ export function textoResumen(cita: string, contexto: string | null, r: ResumenGe
 /** Unidades vigentes (artículo/regla) sin chunk-resumen, con su texto concatenado. */
 export async function unidadesSinResumen(limit: number): Promise<UnidadSinResumen[]> {
   return prisma.$queryRaw<UnidadSinResumen[]>`
-    SELECT u."documentId", u."articulo", d."source"::text AS "source", d."clave", d."titulo",
+    SELECT u."documentId", u."articulo", d."source"::text AS "source", d."clave", d."titulo", d."materias",
       u."contexto", u."vigenciaDesde", u."texto"
     FROM (
       SELECT c."documentId", c."articulo", MIN(c."contexto") AS "contexto", MIN(c."vigenciaDesde") AS "vigenciaDesde",
@@ -135,7 +159,7 @@ async function resumirUnidad(client: Anthropic, u: UnidadSinResumen): Promise<Re
     {
       model: RESUMEN_MODEL,
       max_tokens: 500,
-      system: SYSTEM,
+      system: systemPara(u.materias ?? []),
       messages: [{ role: "user", content: `${cita} (${u.titulo})\n\n${cuerpo}` }],
     }
   );
@@ -143,7 +167,9 @@ async function resumirUnidad(client: Anthropic, u: UnidadSinResumen): Promise<Re
     .filter((b): b is Anthropic.TextBlock => b.type === "text")
     .map((b) => b.text)
     .join("");
-  return parsearResumen(texto);
+  const r = parsearResumen(texto);
+  // Los regímenes del SAT sólo tienen sentido en lo fiscal; en un código civil el modelo no debe inventarlos.
+  return r && !esVozFiscalista(u.materias ?? []) ? { ...r, regimenes: [] } : r;
 }
 
 async function conConcurrencia<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): Promise<R[]> {

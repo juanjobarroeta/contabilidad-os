@@ -1,7 +1,7 @@
 name: Fiscal KB resúmenes (por unidad legal)
 
 # Genera los chunks-resumen de los artículos/reglas vigentes que aún no lo
-# tienen (fiscal-kb/resumenes.ts). Incremental: cada request procesa ~100
+# tienen (fiscal-kb/resumenes.ts). Incremental: cada request procesa ~200
 # unidades y devuelve `restantes`; el job repite hasta cero. Correr después de
 # un «Fiscal KB refresh» con force (que borra los chunks) o de ingerir una
 # fuente nueva. Costo: ~$0.001 por unidad con Haiku, una vez.
@@ -12,7 +12,12 @@ on:
       limit:
         description: "Unidades por request (≤ 200)"
         required: false
-        default: "100"
+        default: "200"
+        type: string
+      concurrencia:
+        description: "Llamadas a Haiku en paralelo por request (≤ 16)"
+        required: false
+        default: "12"
         type: string
       baseUrl:
         description: "URL del despliegue"
@@ -23,13 +28,14 @@ on:
 jobs:
   resumenes:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 355
     steps:
       - name: Generar hasta que no queden
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           BASE_URL: ${{ inputs.baseUrl }}
           LIMIT: ${{ inputs.limit }}
+          CONCURRENCIA: ${{ inputs.concurrencia }}
         run: |
           set -euo pipefail
           URL="$(printf '%s' "${BASE_URL}" | tr -d '[:space:]')"
@@ -40,7 +46,7 @@ jobs:
             RESP=""; for intento in 1 2 3; do
               if RESP="$(curl -fsS --max-time 330 -X POST "${URL}/api/admin/fiscal-resumenes" \
                 -H "Content-Type: application/json" -H "x-cron-secret: ${CRON_SECRET}" \
-                -d "{\"limit\":${LIMIT:-100}}")"; then break; fi
+                -d "{\"limit\":${LIMIT:-200},\"concurrencia\":${CONCURRENCIA:-12}}")"; then break; fi
               echo "::warning::vuelta $VUELTA falló (intento $intento); reintento en 30 s"; RESP=""; sleep 30
             done
             if [ -z "$RESP" ]; then echo "::error::vuelta $VUELTA falló 3 veces"; exit 1; fi
@@ -48,6 +54,6 @@ jobs:
             INS="$(echo "$RESP" | jq -r '.insertadas')"; REST="$(echo "$RESP" | jq -r '.restantes')"; PROC="$(echo "$RESP" | jq -r '.procesadas')"
             TOTAL=$((TOTAL+INS))
             if [ "$REST" = "0" ] || [ "$PROC" = "0" ]; then break; fi
-            if [ "$VUELTA" -ge 80 ]; then echo "::error::80 vueltas y siguen quedando $REST"; exit 1; fi
+            if [ "$VUELTA" -ge 400 ]; then echo "::error::400 vueltas y siguen quedando $REST"; exit 1; fi
           done
           echo "Resúmenes insertados en esta corrida: $TOTAL"
