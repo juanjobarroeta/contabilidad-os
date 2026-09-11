@@ -68,7 +68,10 @@ const NATURALEZA_META: Record<string, { label: string; hint: string }> = {
 interface Resumen {
   timbradas: number;
   totalFacturado: number;
+  /** Sólo la parte POSITIVA de totalImpuestos (trasladado). */
   ivaCobrado: number;
+  /** Lo retenido, en positivo (ISR/IVA; en nómina ISR e IMSS). */
+  retenido?: number;
   periodos?: ConteoPeriodo[];
   /** Conteos exactos del periodo (servidor), no de las filas cargadas. */
   conteos?: Record<FilterKey, number>;
@@ -642,10 +645,17 @@ export default function FacturasPage() {
           </span>
         </Card>
         <Card className="rounded-card border-cos-line p-5 shadow-card">
-          <span className={LBL}>IVA trasladado</span>
-          <div className="my-1"><Money value={resumen?.ivaCobrado ?? NaN} size={24} /></div>
+          {/* Un recibo de nómina no lleva IVA: su `totalImpuestos` es lo
+              RETENIDO (ISR, IMSS) en negativo. Bajo el filtro Nómina la
+              tarjeta enseña eso, con su nombre — no un «IVA» en rojo. */}
+          <span className={LBL}>{filter === "nomina" ? "Retenciones (ISR / IMSS)" : "IVA trasladado"}</span>
+          <div className="my-1">
+            <Money value={filter === "nomina" ? resumen?.retenido ?? NaN : resumen?.ivaCobrado ?? NaN} size={24} />
+          </div>
           <span className="text-[12.5px] text-cos-ink-faint">
-            {filter !== "todas" || qBuscado ? `según el filtro, ${subPeriodo}` : `a clientes, ${subPeriodo}`}
+            {filter === "nomina"
+              ? `descontadas a empleados, ${subPeriodo}`
+              : filter !== "todas" || qBuscado ? `según el filtro, ${subPeriodo}` : `a clientes, ${subPeriodo}`}
           </span>
         </Card>
       </div>
