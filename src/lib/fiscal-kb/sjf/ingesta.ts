@@ -5,11 +5,14 @@
 // baja el detalle de las tesis que no conoce, filtra por Época, normaliza,
 // embebe por lotes y las guarda como FiscalDocument (source TESIS) + chunks.
 //
-// Dos modos:
-//   - "nuevas"   → semanal: se detiene en la primera página sin ids que no
-//                  haya visto (todo lo de abajo ya está).
-//   - "completo" → carga inicial o pase mensual de correcciones: recorre todo
-//                  y sólo re-embebe lo que cambió de huella.
+// Tres modos:
+//   - "nuevas"    → semanal: se detiene en la primera página sin ids que no
+//                   haya visto (todo lo de abajo ya está).
+//   - "faltantes" → carga inicial REANUDABLE: recorre todas las páginas pero
+//                   sólo baja los ids que no ha visto (un redeploy a media
+//                   carga no repite nada).
+//   - "completo"  → pase de correcciones: baja todo y sólo re-embebe lo que
+//                   cambió de huella.
 // SjfTesisVista recuerda CADA tesis vista (también las de Épocas que no se
 // ingieren) con su huella, para no volver a bajar lo que ya se decidió.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -24,7 +27,7 @@ export interface OpcionesSync {
   cliente: ClienteSjf;
   /** Épocas cortas a ingerir («9a.», «10a.», «11a.», «12a.»). Vacío = todas. */
   epocas?: ReadonlySet<string>;
-  modo?: "nuevas" | "completo";
+  modo?: "nuevas" | "faltantes" | "completo";
   paginaInicio?: number;
   maxPaginas?: number;
   sizePagina?: number;
