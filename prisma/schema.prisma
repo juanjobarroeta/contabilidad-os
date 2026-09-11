@@ -53,6 +53,7 @@ model User {
   // number from WhatsApp to bind their number — no phone known at creation time.
   whatsappLinkCodes   WhatsappLinkCode[]
   chatConversations   ChatConversation[]
+  juridicoConversaciones JuridicoConversacion[]
   // Refresh tokens de la API de satélites (flujo access corto + refresh rotatorio).
   apiRefreshTokens    ApiRefreshToken[]
   passwordResetTokens PasswordResetToken[]
@@ -4128,6 +4129,41 @@ model FiscalDocument {
 // Cada tesis que el worker del SJF ya vio, con su huella SHA-256 — también las
 // de Épocas que no se ingieren — para no volver a bajar lo ya decidido y para
 // detectar correcciones (huella distinta → se reemplaza).
+// Conversaciones del copiloto JURÍDICO (docs/MOTOR-JURIDICO.md §6): hoy la
+// superficie de prueba del operador (/operador/juridico), mañana el chat del
+// producto legal. Sin empresa: la ley es común; el gasto se registra al usuario.
+model JuridicoConversacion {
+  id         String    @id @default(cuid())
+  userId     String
+  titulo     String    @default("Nueva conversación")
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  archivedAt DateTime?
+
+  user     User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mensajes JuridicoMensaje[]
+
+  @@index([userId, updatedAt])
+}
+
+model JuridicoMensaje {
+  id             String   @id @default(cuid())
+  conversacionId String
+  rol            String // "user" | "assistant"
+  contenido      String   @db.Text
+  // Traza del turno (sólo assistant): { modelo, rondas, tools: [{name, ms}],
+  // fundamentos: [{cita, similitud, fuente}], verificacion }. Es lo que se
+  // revisa para saber si el agente ENCONTRÓ la norma o la IGNORÓ.
+  meta           Json?
+  feedback       String?
+  correccion     String?  @db.Text
+  createdAt      DateTime @default(now())
+
+  conversacion JuridicoConversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+
+  @@index([conversacionId, createdAt])
+}
+
 model SjfTesisVista {
   registro String   @id
   epoca    String?

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Card } from "@/components/ui";
 import { PlanesPanel } from "@/components/operador/PlanesPanel";
 import { CeSatPanel } from "@/components/operador/CeSatPanel";
@@ -213,6 +214,11 @@ export default function OperadorPage() {
       </div>
       <p className="mt-1.5 text-[14px] text-cos-ink-soft">
         Reconcilia contra el SAT e ingresa declaraciones previas para llenar la cadena de arrastre.
+      </p>
+      <p className="mt-2 text-[13.5px]">
+        <Link href="/operador/juridico" className="font-medium text-cos-brand-ink underline underline-offset-2 hover:opacity-80">
+          Probar el copiloto jurídico (perfil abogado, conversaciones guardadas) →
+        </Link>
       </p>
 
       <Card className="mt-5 rounded-card border-cos-line p-5 shadow-card">
