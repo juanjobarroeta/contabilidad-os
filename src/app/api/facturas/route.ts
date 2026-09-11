@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { whereBusquedaFacturas } from "@/lib/facturas/busqueda";
+import { filtrosListaFacturas } from "@/lib/facturas/filtros-lista";
 import { recordTimbrado } from "@/lib/costos/record";
 import { ensureFacturapiCustomer, getFacturapiClient } from "@/lib/facturapi";
 import { parseFacturapiError } from "@/lib/facturapi-errors";
@@ -90,43 +90,16 @@ export async function GET(req: Request) {
   const membership = await getEffectiveCompanyMembership(user.id, companyId);
   if (!membership) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
-  const q = searchParams.get("q")?.trim();
-  const tipo = searchParams.get("tipo");
   const take = Math.min(parseInt(searchParams.get("take") ?? "50"), 200);
   // Offset pagination for API consumers that walk the full list (e.g.
   // FlotaGob's invoice sync). Backward compatible: defaults to 0.
   const skip = Math.max(0, parseInt(searchParams.get("skip") ?? "0") || 0);
-  const customerId = searchParams.get("customerId")?.trim() || null;
-  const fromParam = searchParams.get("from");
-  const toParam = searchParams.get("to");
   const unmatchedOnly = searchParams.get("unmatchedOnly") === "true";
 
-  const where: import("@prisma/client").Prisma.InvoiceWhereInput = { companyId };
-  // Mismo contrato que /export: "CANCELLED" es un valor especial que trae SÓLO
-  // las canceladas; cualquier otro tipo las EXCLUYE. Una cancelada no es "te
-  // pagaron" ni candidata de conciliación (bancos usa este endpoint), y el
-  // chip de la pantalla de Facturas ya la trata como categoría propia.
-  if (tipo === "CANCELLED") {
-    where.status = "CANCELLED";
-  } else if (tipo && ["INGRESO", "EGRESO", "TRASLADO", "NOMINA", "PAGO"].includes(tipo)) {
-    where.tipo = tipo as "INGRESO" | "EGRESO" | "TRASLADO" | "NOMINA" | "PAGO";
-    where.status = { not: "CANCELLED" };
-  }
-  if (customerId) where.customerId = customerId;
-  // Optional fecha window (ISO dates); invalid values are ignored.
-  const fromDate = fromParam ? new Date(fromParam) : null;
-  const toDate = toParam ? new Date(toParam) : null;
-  const validFrom = fromDate && !isNaN(fromDate.getTime()) ? fromDate : null;
-  const validTo = toDate && !isNaN(toDate.getTime()) ? toDate : null;
-  if (validFrom || validTo) {
-    where.fecha = {
-      ...(validFrom ? { gte: validFrom } : {}),
-      ...(validTo ? { lte: validTo } : {}),
-    };
-  }
-  // Por palabras, no por frase: «victor bilbao» encuentra a VICTOR JOSE BILBAO.
-  const busqueda = whereBusquedaFacturas(q);
-  if (busqueda) where.AND = busqueda.AND;
+  // El MISMO `where` que el resumen (tarjetas) y el export: tipo —con el
+  // contrato de "CANCELLED"—, q, customerId y from/to. Vive en
+  // lib/facturas/filtros-lista para que las tres pantallas no diverjan.
+  const { where } = filtrosListaFacturas(searchParams, companyId);
 
   // When unmatchedOnly, pull extra rows and filter in code since aggregating
   // against bankTransactions requires either raw SQL or a two-step query.

@@ -334,7 +334,14 @@ export default function FacturasPage() {
     try {
       const [list, res, prefs] = await Promise.all([
         fetch(listaUrl(0)).then((r) => r.json()),
-        fetch(`/api/facturas/resumen?companyId=${activeCompany.id}&periodo=${encodeURIComponent(periodo)}`).then((r) => r.json()),
+        // Las tarjetas se llevan el MISMO tipo y la MISMA búsqueda que la lista:
+        // lo que se filtra es lo que suman. Antes sólo sabían del periodo.
+        fetch((() => {
+          const p = new URLSearchParams({ companyId: activeCompany.id, periodo });
+          if (qBuscado) p.set("q", qBuscado);
+          if (filter !== "todas") p.set("tipo", filter === "cancelada" ? "CANCELLED" : filter.toUpperCase());
+          return `/api/facturas/resumen?${p.toString()}`;
+        })()).then((r) => r.json()),
         fetch(`/api/facturas/borradores?companyId=${activeCompany.id}`).then((r) => r.json()).catch(() => []),
       ]);
       // Una respuesta de error ({ error: … }) no es una lista vacía: sin array
@@ -625,16 +632,21 @@ export default function FacturasPage() {
           <span className="text-[12.5px] text-cos-ink-faint">{subPeriodo}</span>
         </Card>
         <Card className="rounded-card border-cos-line p-5 shadow-card">
-          <span className={LBL}>Total facturado</span>
+          <span className={LBL}>{filter === "cancelada" ? "Total cancelado" : "Total facturado"}</span>
           {/* Sin resumen (aún cargando o fetch caído) va NaN → Money pinta "—".
               Un `?? 0` aquí presentaba $0.00 como cifra real. */}
           <div className="my-1"><Money value={resumen?.totalFacturado ?? NaN} size={24} /></div>
-          <span className="text-[12.5px] text-cos-ink-faint">emitido {subPeriodo}</span>
+          {/* Con filtro o búsqueda, las cifras son de lo filtrado — y se dice. */}
+          <span className="text-[12.5px] text-cos-ink-faint">
+            {filter !== "todas" || qBuscado ? `según el filtro, ${subPeriodo}` : `emitido ${subPeriodo}`}
+          </span>
         </Card>
         <Card className="rounded-card border-cos-line p-5 shadow-card">
           <span className={LBL}>IVA trasladado</span>
           <div className="my-1"><Money value={resumen?.ivaCobrado ?? NaN} size={24} /></div>
-          <span className="text-[12.5px] text-cos-ink-faint">a clientes, {subPeriodo}</span>
+          <span className="text-[12.5px] text-cos-ink-faint">
+            {filter !== "todas" || qBuscado ? `según el filtro, ${subPeriodo}` : `a clientes, ${subPeriodo}`}
+          </span>
         </Card>
       </div>
 
