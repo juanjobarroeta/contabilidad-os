@@ -66,11 +66,24 @@ export async function GET(req: Request) {
   const whereTimbradas =
     filtros.tipo === "CANCELLED" ? whereFiltrado : { ...whereFiltrado, status: "STAMPED" as const };
 
-  const [timbradas, facturado, porMes, porTipo, canceladas] = await Promise.all([
+  const [timbradas, facturado, ivaPositivo, retenidoNeg, porMes, porTipo, canceladas] = await Promise.all([
     // Comprobantes timbrados en la ventana, acotados al filtro.
     prisma.invoice.count({ where: whereTimbradas }),
-    // Total + IVA trasladado del conjunto filtrado.
-    prisma.invoice.aggregate({ where: whereTarjetas, _sum: { total: true, totalImpuestos: true } }),
+    // Total del conjunto filtrado.
+    prisma.invoice.aggregate({ where: whereTarjetas, _sum: { total: true } }),
+    // `totalImpuestos` es un NETO: positivo = trasladado (IVA), negativo =
+    // retenido (ISR/IVA retenidos; en NÓMINA, ISR e IMSS del recibo). Sumarlo
+    // entero como «IVA» daba −$101,164 al filtrar Nómina: el IMSS de 156
+    // recibos presentado como IVA negativo. El IVA es sólo la parte positiva;
+    // lo retenido va aparte, con su nombre.
+    prisma.invoice.aggregate({
+      where: { ...whereTarjetas, totalImpuestos: { gt: 0 } },
+      _sum: { totalImpuestos: true },
+    }),
+    prisma.invoice.aggregate({
+      where: { ...whereTarjetas, totalImpuestos: { lt: 0 } },
+      _sum: { totalImpuestos: true },
+    }),
     // Meses con comprobantes (TODO el historial — el selector no se acota a sí
     // mismo). `fecha` es timestamp sin zona: to_char da el mes en UTC, el mismo
     // que usan rangoPeriodo y postMonth.
@@ -100,7 +113,11 @@ export async function GET(req: Request) {
   return NextResponse.json({
     timbradas,
     totalFacturado: facturado._sum.total ?? 0,
-    ivaCobrado: facturado._sum.totalImpuestos ?? 0,
+    ivaCobrado: ivaPositivo._sum.totalImpuestos ?? 0,
+    // Retenciones del conjunto filtrado, en positivo (ISR/IVA retenidos; en
+    // nómina, ISR e IMSS). La pantalla lo enseña en lugar del IVA cuando el
+    // filtro es Nómina, donde IVA no existe.
+    retenido: Math.abs(Number(retenidoNeg._sum.totalImpuestos ?? 0)),
     // Para que la pantalla diga de qué son las cifras.
     filtrado: filtros.filtrado,
     periodo,
