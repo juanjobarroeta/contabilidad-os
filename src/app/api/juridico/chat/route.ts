@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { isOperador } from "@/lib/authz";
+import { AuthzError, isOperador, requireUser } from "@/lib/authz";
 import { toolsAbogado } from "@/lib/ai/tools-abogado";
 import { ejecutarHerramientaAbogado } from "@/lib/ai/executor-abogado";
 import { buildSystemPromptAbogado } from "@/lib/ai/system-prompt-abogado";
@@ -57,9 +56,13 @@ function resumenDeResultado(nombre: string, out: string): string | undefined {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const userId = session.user.id;
+  let usuario: { id: string };
+  try {
+    usuario = await requireUser(req);
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof AuthzError ? e.message : "Unauthorized" }, { status: e instanceof AuthzError ? e.status : 401 });
+  }
+  const userId = usuario.id;
   if (!(await isOperador(userId))) return NextResponse.json({ error: "Sólo el operador puede usar el copiloto jurídico por ahora" }, { status: 403 });
 
   const rawBody = await req.text();

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { isOperador } from "@/lib/authz";
+import { AuthzError, isOperador, requireUser } from "@/lib/authz";
 
 async function cargar(id: string, userId: string) {
   const conv = await prisma.juridicoConversacion.findUnique({ where: { id }, select: { id: true, userId: true, titulo: true, archivedAt: true } });
@@ -10,12 +9,16 @@ async function cargar(id: string, userId: string) {
 }
 
 // GET /api/juridico/conversaciones/[id] — el hilo completo con la traza de cada respuesta.
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await isOperador(session.user.id))) return NextResponse.json({ error: "Sólo el operador" }, { status: 403 });
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  let usuario: { id: string };
+  try {
+    usuario = await requireUser(req);
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof AuthzError ? e.message : "Unauthorized" }, { status: e instanceof AuthzError ? e.status : 401 });
+  }
+  if (!(await isOperador(usuario.id))) return NextResponse.json({ error: "Sólo el operador" }, { status: 403 });
   const { id } = await params;
-  const conv = await cargar(id, session.user.id);
+  const conv = await cargar(id, usuario.id);
   if (!conv) return NextResponse.json({ error: "Conversación no encontrada" }, { status: 404 });
   const mensajes = await prisma.juridicoMensaje.findMany({
     where: { conversacionId: id },
@@ -28,11 +31,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 // PATCH /api/juridico/conversaciones/[id] — feedback sobre una respuesta
 // ({ mensajeId, feedback: "up"|"down"|null, correccion? }) o renombrar ({ titulo }).
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await isOperador(session.user.id))) return NextResponse.json({ error: "Sólo el operador" }, { status: 403 });
+  let usuario: { id: string };
+  try {
+    usuario = await requireUser(req);
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof AuthzError ? e.message : "Unauthorized" }, { status: e instanceof AuthzError ? e.status : 401 });
+  }
+  if (!(await isOperador(usuario.id))) return NextResponse.json({ error: "Sólo el operador" }, { status: 403 });
   const { id } = await params;
-  const conv = await cargar(id, session.user.id);
+  const conv = await cargar(id, usuario.id);
   if (!conv) return NextResponse.json({ error: "Conversación no encontrada" }, { status: 404 });
   const body = (await req.json().catch(() => ({}))) as { titulo?: unknown; mensajeId?: unknown; feedback?: unknown; correccion?: unknown };
 
@@ -54,12 +61,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 }
 
 // DELETE /api/juridico/conversaciones/[id] — archiva (no borra: cada corrección es una fila del eval).
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await isOperador(session.user.id))) return NextResponse.json({ error: "Sólo el operador" }, { status: 403 });
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  let usuario: { id: string };
+  try {
+    usuario = await requireUser(req);
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof AuthzError ? e.message : "Unauthorized" }, { status: e instanceof AuthzError ? e.status : 401 });
+  }
+  if (!(await isOperador(usuario.id))) return NextResponse.json({ error: "Sólo el operador" }, { status: 403 });
   const { id } = await params;
-  const conv = await cargar(id, session.user.id);
+  const conv = await cargar(id, usuario.id);
   if (!conv) return NextResponse.json({ error: "Conversación no encontrada" }, { status: 404 });
   await prisma.juridicoConversacion.update({ where: { id }, data: { archivedAt: new Date() } });
   return NextResponse.json({ ok: true });
