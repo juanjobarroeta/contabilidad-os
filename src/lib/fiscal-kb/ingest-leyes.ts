@@ -1,11 +1,23 @@
-// Fetch + parse leyes vigentes from the Cámara de Diputados (official texto
-// vigente PDFs, public domain). Extracts the "Última reforma publicada DOF"
-// date as the version's vigencia/publication marker.
+// Fetch + parse leyes vigentes (texto vigente en PDF, dominio público):
+// federales desde la Cámara de Diputados, estatales desde cada congreso.
+// Extrae la fecha de «Última reforma publicada DOF» como vigencia/publicación
+// de la versión.
 //
 // Phase-0 caveat (documented in docs/FISCAL-KNOWLEDGE-BASE.md §4): we use the
 // DOF publication date of the latest reform as `vigenciaDesde`. Strictly,
 // entry into force is governed by each decreto's transitorios — good enough
 // to version texts; refine in Phase 2.
+//
+// El catálogo (docs/MOTOR-JURIDICO.md §5.2) ya no es una lista a mano: los
+// 317 ordenamientos federales vienen de catalogo/federal.json, generado desde
+// el índice de Diputados por `npm run fiscal:catalogo` y revisado por PR;
+// encima van las entradas manuales (reglamentos, estatales, correcciones) de
+// catalogo/manuales.ts. Cada entrada trae `materias` y `ambito`: con eso el
+// hub busca sólo lo que un contador cita y el producto legal busca todo.
+
+import federal from "./catalogo/federal.json";
+import { LEYES_MANUALES } from "./catalogo/manuales";
+import type { Ambito, Materia } from "./materias";
 
 export interface LeyDescriptor {
   clave: string;
@@ -20,149 +32,73 @@ export interface LeyDescriptor {
    * encabezado no da fecha; si algún día lo reforman, la del encabezado gana.
    */
   vigenciaFallback?: string;
+  /** Materias del ordenamiento (ver materias.ts). Nunca vacío. */
+  materias: Materia[];
+  ambito: Ambito;
+  /** Entidad federativa (clave SAT de 3 letras: PUE, CMX) cuando ambito = ESTATAL. */
+  entidad?: string;
+  /** Página de reformas en Diputados (historia de decretos). */
+  urlRef?: string | null;
 }
 
+interface EntradaFederal {
+  clave: string;
+  titulo: string;
+  url: string;
+  urlRef: string | null;
+  vigenciaFallback: string | null;
+  materias: string[];
+  excluida: string | null;
+}
+
+const ENTRADAS = (federal as { entradas: EntradaFederal[] }).entradas;
+
+function construirCatalogo(): Record<string, LeyDescriptor> {
+  const out: Record<string, LeyDescriptor> = {};
+  for (const e of ENTRADAS) {
+    if (e.excluida) continue;
+    out[e.clave] = {
+      clave: e.clave,
+      titulo: e.titulo,
+      url: e.url,
+      urlRef: e.urlRef,
+      vigenciaFallback: e.vigenciaFallback ?? undefined,
+      materias: e.materias as Materia[],
+      ambito: "FEDERAL",
+    };
+  }
+  for (const [clave, d] of Object.entries(LEYES_MANUALES)) out[clave] = { ...out[clave], ...d };
+  return out;
+}
+
+/** Catálogo completo: federal generado + manuales encima. */
+export const LEYES: Record<string, LeyDescriptor> = construirCatalogo();
+
+/** Ordenamientos del índice federal que no se ingieren, con el motivo. */
+export const LEYES_EXCLUIDAS: { clave: string; titulo: string; motivo: string }[] = ENTRADAS.filter((e) => e.excluida).map((e) => ({
+  clave: e.clave,
+  titulo: e.titulo,
+  motivo: e.excluida as string,
+}));
+
 /**
- * Catálogo de leyes y reglamentos — texto vigente, Cámara de Diputados.
- *
- * Fase 1 del plan del copiloto («alimentar con lo que se usa a diario»): los
- * reglamentos son donde viven las respuestas que un contador da a diario y
- * que la ley sola no contesta — RLIVA 3 (retención de 2/3 del IVA), RLISR 3-A
- * (la pickup no es «automóvil»), RCFF (avisos, plazos). Y las leyes de nómina
- * (LSS, LINFONAVIT, LFT) para todo lo que el patrón pregunta.
- *
- * Todas se refrescan solas (workflow fiscal-kb-refresh, ingesta idempotente
- * por hash). Los nombres de archivo de los reglamentos llevan fecha
- * (Reg_LISR_060516) — si Diputados los renombra, el refresco falla en voz
- * alta y se corrige aquí.
+ * Claves conocidas, de la más larga a la más corta: así una alternancia de
+ * regex prueba «RLISR» antes que «LISR» y «LFPIORPI» antes que «LFPC».
  */
-export const LEYES: Record<string, LeyDescriptor> = {
-  LISR: {
-    clave: "LISR",
-    titulo: "Ley del Impuesto sobre la Renta",
-    url: "https://www.diputados.gob.mx/LeyesBiblio/pdf/LISR.pdf",
-  },
-  LIVA: {
-    clave: "LIVA",
-    titulo: "Ley del Impuesto al Valor Agregado",
-    url: "https://www.diputados.gob.mx/LeyesBiblio/pdf/LIVA.pdf",
-  },
-  CFF: {
-    clave: "CFF",
-    titulo: "Código Fiscal de la Federación",
-    url: "https://www.diputados.gob.mx/LeyesBiblio/pdf/CFF.pdf",
-  },
-  LIEPS: {
-    clave: "LIEPS",
-    titulo: "Ley del Impuesto Especial sobre Producción y Servicios",
-    url: "https://www.diputados.gob.mx/LeyesBiblio/pdf/LIEPS.pdf",
-  },
-  // ── Reglamentos ──────────────────────────────────────────────────────────────
-  RLISR: {
-    clave: "RLISR",
-    titulo: "Reglamento de la Ley del Impuesto sobre la Renta",
-    url: "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LISR_060516.pdf",
-    source: "REGLAMENTO",
-  },
-  RLIVA: {
-    clave: "RLIVA",
-    titulo: "Reglamento de la Ley del Impuesto al Valor Agregado",
-    url: "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LIVA_250914.pdf",
-    source: "REGLAMENTO",
-  },
-  RCFF: {
-    clave: "RCFF",
-    titulo: "Reglamento del Código Fiscal de la Federación",
-    url: "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_CFF.pdf",
-    source: "REGLAMENTO",
-    // Nuevo Reglamento publicado en el DOF el 2 de abril de 2014; sin reformas
-    // desde entonces, así que el encabezado no trae «Última reforma DOF».
-    vigenciaFallback: "2014-04-02",
-  },
-  // ── Nómina ───────────────────────────────────────────────────────────────────
-  LSS: {
-    clave: "LSS",
-    titulo: "Ley del Seguro Social",
-    url: "https://www.diputados.gob.mx/LeyesBiblio/pdf/LSS.pdf",
-  },
-  LINFONAVIT: {
-    clave: "LINFONAVIT",
-    titulo: "Ley del Instituto del Fondo Nacional de la Vivienda para los Trabajadores",
-    url: "https://www.diputados.gob.mx/LeyesBiblio/pdf_mov/Ley_del_Instituto_del_Fondo_Nacional_de_la_Vivienda.pdf",
-  },
-  LFT: {
-    clave: "LFT",
-    titulo: "Ley Federal del Trabajo",
-    url: "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFT.pdf",
-  },
-  // ── Periferia de nómina (reglamentos IMSS / INFONAVIT) ──────────────────────
-  RACERF: {
-    clave: "RACERF",
-    titulo: "Reglamento de la Ley del Seguro Social en Materia de Afiliación, Clasificación de Empresas, Recaudación y Fiscalización",
-    url: "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LSS_MACERF.pdf",
-    source: "REGLAMENTO",
-  },
-  RIPAEDI: {
-    clave: "RIPAEDI",
-    titulo: "Reglamento de Inscripción, Pago de Aportaciones y Entero de Descuentos al INFONAVIT",
-    // Diputados sirve el facsímil del DOF (encabezados «ARTÍCULO 1.» en mayúsculas).
-    url: "https://www.diputados.gob.mx/LeyesBiblio/regla/n327.pdf",
-    source: "REGLAMENTO",
-    vigenciaFallback: "2012-02-10",
-  },
-  // ── Lo que un contador cita fuera de lo fiscal ───────────────────────────────
-  CCOM: {
-    clave: "CCOM",
-    titulo: "Código de Comercio",
-    url: "https://www.diputados.gob.mx/LeyesBiblio/pdf/CCom.pdf",
-  },
-  LGSM: {
-    clave: "LGSM",
-    titulo: "Ley General de Sociedades Mercantiles",
-    url: "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGSM.pdf",
-  },
-  LFPIORPI: {
-    clave: "LFPIORPI",
-    titulo: "Ley Federal para la Prevención e Identificación de Operaciones con Recursos de Procedencia Ilícita",
-    url: "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFPIORPI.pdf",
-  },
-  RLFPIORPI: {
-    clave: "RLFPIORPI",
-    titulo: "Reglamento de la Ley Federal para la Prevención e Identificación de Operaciones con Recursos de Procedencia Ilícita",
-    url: "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFPIORPI.pdf",
-    source: "REGLAMENTO",
-    vigenciaFallback: "2013-08-16",
-  },
-  LFDC: {
-    clave: "LFDC",
-    titulo: "Ley Federal de los Derechos del Contribuyente",
-    url: "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFDC.pdf",
-    vigenciaFallback: "2005-06-23",
-  },
-  // ── Estatal (impuesto sobre nómina y demás contribuciones locales) ───────────
-  // Puebla: Orden Jurídico Poblano (texto vigente con tabla de reformas).
-  LHPUE: {
-    clave: "LHPUE",
-    titulo: "Ley de Hacienda para el Estado Libre y Soberano de Puebla",
-    url: "https://ojp.puebla.gob.mx/legislacion-del-estado/item/download/7789_d874b176dd9ccf4b0a3233bb2f183cd4",
-    vigenciaFallback: "2024-08-05",
-  },
-  CFPUE: {
-    clave: "CFPUE",
-    titulo: "Código Fiscal del Estado de Puebla",
-    url: "https://ojp.puebla.gob.mx/media/k2/attachments/Codigo_Fiscal_del_Estado_de_Puebla_T6_31072025.pdf",
-    vigenciaFallback: "2025-07-31",
-  },
-  // CDMX: la Consejería Jurídica publica el texto vigente (reformado cada
-  // diciembre; el ISN subió a 4 % — el PDF del Congreso es de 2021 y dice 3 %,
-  // por eso NO se usa). El sitio de la Consejería a veces no responde; la
-  // ingesta falla en voz alta y el refresco semanal reintenta.
-  CFCDMX: {
-    clave: "CFCDMX",
-    titulo: "Código Fiscal de la Ciudad de México",
-    url: "https://data.consejeria.cdmx.gob.mx/images/leyes/codigos/CODIGO_FISCAL_DE_LA_CDMX_6.2.pdf",
-  },
-};
+export const CLAVES_LEYES: readonly string[] = Object.keys(LEYES).sort((a, b) => b.length - a.length || a.localeCompare(b));
+
+/** Alternancia lista para una regex: claves del catálogo + RMF, escapadas. */
+export function alternanciaClaves(): string {
+  return [...CLAVES_LEYES, "RMF"].map((c) => c.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")).join("|");
+}
+
+/** Claves cuyo ordenamiento toca alguna de las materias dadas. */
+export function clavesPorMateria(materias: readonly string[]): string[] {
+  return Object.values(LEYES)
+    .filter((d) => d.materias.some((m) => materias.includes(m)))
+    .map((d) => d.clave)
+    .sort();
+}
 
 export interface FetchedLey {
   descriptor: LeyDescriptor;
@@ -204,15 +140,19 @@ export function parseFechaVigencia(text: string): Date | null {
   return null;
 }
 
-/** @deprecated usa parseFechaVigencia (mismo comportamiento para Diputados). */
-function parseDofDate(text: string): Date | null {
-  return parseFechaVigencia(text);
-}
+/**
+ * Texto mínimo para dar por buena una descarga. Las leyes de una página
+ * existen (Ley de Amnistía de 1994, leyes reglamentarias de una fracción):
+ * el umbral sólo detecta un PDF vacío o una página de error servida como PDF.
+ */
+const TEXTO_MINIMO = 1_500;
 
 export async function fetchLey(clave: string): Promise<FetchedLey> {
   const descriptor = LEYES[clave];
   if (!descriptor) {
-    throw new Error(`Ley desconocida: ${clave}. Disponibles: ${Object.keys(LEYES).join(", ")}`);
+    const excluida = LEYES_EXCLUIDAS.find((e) => e.clave === clave);
+    if (excluida) throw new Error(`Ley ${clave} excluida del catálogo: ${excluida.motivo}`);
+    throw new Error(`Ley desconocida: ${clave}. El catálogo tiene ${CLAVES_LEYES.length} claves (ver catalogo/federal.json y catalogo/manuales.ts).`);
   }
   const res = await fetch(descriptor.url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; contabilidad-os/fiscal-kb)", Accept: "application/pdf,*/*" } });
   if (!res.ok) throw new Error(`Descarga falló (${res.status}) — ${descriptor.url}`);
@@ -228,8 +168,8 @@ export async function fetchLey(clave: string): Promise<FetchedLey> {
   };
   const parser = new PDFParse({ data: buffer });
   const { text } = await parser.getText();
-  if (!text || text.length < 10_000) {
+  if (!text || text.length < TEXTO_MINIMO) {
     throw new Error(`PDF de ${clave} produjo texto sospechosamente corto (${text?.length ?? 0} chars)`);
   }
-  return { descriptor, rawText: text, ultimaReformaDof: parseDofDate(text) };
+  return { descriptor, rawText: text, ultimaReformaDof: parseFechaVigencia(text) };
 }

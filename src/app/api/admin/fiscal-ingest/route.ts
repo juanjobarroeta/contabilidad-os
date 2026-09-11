@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ingestLey, ingestDoc, IngestResult } from "@/lib/fiscal-kb/orchestrate";
+import { ingestLey, ingestDoc, ingestCatalogoLote, IngestResult } from "@/lib/fiscal-kb/orchestrate";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/admin/fiscal-ingest
@@ -12,16 +12,21 @@ import { ingestLey, ingestDoc, IngestResult } from "@/lib/fiscal-kb/orchestrate"
 // Auth: shared secret in CRON_SECRET (same as the SAT cron):
 //   Authorization: Bearer <secret>   or   x-cron-secret: <secret>
 //
-// Body (JSON), one or many jobs:
+// Body (JSON), one of:
 //   { "type": "ley", "clave": "LISR" }
 //   { "jobs": [ {"type":"ley","clave":"LIVA"}, {"type":"doc","clave":"GUIA-PAGOS"} ] }
+//   { "catalogo": { "offset"?: 0, "presupuestoSegundos"?: 200, "soloFaltantes"?: false, "force"?: false } }
 //
-//   type "ley" → Cámara de Diputados: leyes (LISR | LIVA | CFF | LIEPS | LSS |
-//                LINFONAVIT | LFT) y reglamentos (RLISR | RLIVA | RCFF). Ver
-//                LEYES en fiscal-kb/ingest-leyes.ts. `vigencia` opcional: la
-//                usa una fuente sin «Última reforma DOF» en su encabezado.
+//   type "ley" → cualquier clave del catálogo (catalogo/federal.json +
+//                catalogo/manuales.ts: 320+ ordenamientos federales, reglamentos
+//                y leyes estatales). `vigencia` opcional: la usa una fuente sin
+//                «Última reforma DOF» en su encabezado.
 //   type "doc" → SAT guías by URL (GUIA-PAGOS | GUIA-CFDI-GLOBAL); RMF needs a
 //                local file and therefore the CLI, not this route.
+//   catalogo   → recorre TODO el catálogo por lotes con presupuesto de tiempo
+//                (la request muere a los 300 s): devuelve `siguiente` para que
+//                el workflow repita hasta null. `soloFaltantes` = carga inicial
+//                (sólo claves sin ninguna versión, sin descargar lo ya cargado).
 //
 // Prereqs: pgvector enabled + schema pushed (FiscalDocument/FiscalChunk, incl.
 // the GUIA enum for guías). Embeddings need OPENAI_API_KEY in the environment.
@@ -35,6 +40,13 @@ interface Job {
   clave: string;
   vigencia?: string;
   force?: boolean; // replace existing version even if hash unchanged (re-chunk)
+}
+
+interface CatalogoBody {
+  offset?: number;
+  presupuestoSegundos?: number;
+  soloFaltantes?: boolean;
+  force?: boolean;
 }
 
 function isAuthorized(req: Request): boolean {
@@ -56,8 +68,28 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "Body JSON inválido" }, { status: 400 });
   }
+  if (!process.env.OPENAI_API_KEY) {
+    return NextResponse.json({ error: "OPENAI_API_KEY no configurada en este entorno — requerida para embeddings." }, { status: 500 });
+  }
 
-  const b = body as { jobs?: Job[]; type?: string; clave?: string; vigencia?: string };
+  const b = body as { jobs?: Job[]; type?: string; clave?: string; vigencia?: string; catalogo?: CatalogoBody | boolean };
+
+  if (b.catalogo) {
+    const c: CatalogoBody = typeof b.catalogo === "object" ? b.catalogo : {};
+    try {
+      const r = await ingestCatalogoLote({
+        offset: typeof c.offset === "number" ? c.offset : undefined,
+        presupuestoSegundos: typeof c.presupuestoSegundos === "number" ? c.presupuestoSegundos : undefined,
+        soloFaltantes: c.soloFaltantes === true,
+        force: c.force === true,
+      });
+      return NextResponse.json({ ok: r.fallidas === 0, ...r }, { status: r.fallidas === 0 ? 200 : 207 });
+    } catch (err) {
+      console.error("[fiscal-ingest catalogo]", err);
+      return NextResponse.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    }
+  }
+
   const jobs: Job[] = Array.isArray(b.jobs)
     ? b.jobs
     : b.type && b.clave
@@ -65,10 +97,7 @@ export async function POST(req: Request) {
       : [];
 
   if (jobs.length === 0) {
-    return NextResponse.json({ error: "Especifica { type, clave } o { jobs: [...] }" }, { status: 400 });
-  }
-  if (!process.env.OPENAI_API_KEY) {
-    return NextResponse.json({ error: "OPENAI_API_KEY no configurada en este entorno — requerida para embeddings." }, { status: 500 });
+    return NextResponse.json({ error: "Especifica { type, clave }, { jobs: [...] } o { catalogo: {...} }" }, { status: 400 });
   }
 
   // Sequential — embeddings are rate-limited and upserts are transactional.

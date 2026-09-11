@@ -1,3 +1,9 @@
+import { clavesPorMateria } from "@/lib/fiscal-kb/ingest-leyes";
+import { MATERIAS_CONTADOR } from "@/lib/fiscal-kb/materias";
+
+/** Ordenamientos que el copiloto contable puede pedir completos: los de sus materias, más la RMF. */
+const CLAVES_GET_ARTICULO = [...clavesPorMateria(MATERIAS_CONTADOR), "RMF"];
+
 import type Anthropic from "@anthropic-ai/sdk";
 
 export const tools: Anthropic.Tool[] = [
@@ -350,7 +356,7 @@ export const tools: Anthropic.Tool[] = [
   {
     name: "search_fiscal_knowledge",
     description:
-      "Busca en la legislación y normatividad fiscal mexicana vigente (leyes: LISR/LIVA/CFF/LIEPS y sus reglamentos RLISR/RLIVA/RCFF; nómina: LSS/LINFONAVIT/LFT y los reglamentos RACERF (IMSS: afiliación, SBC, prima de riesgo) y RIPAEDI (INFONAVIT: aportaciones y descuentos); mercantil y cumplimiento: Código de Comercio (CCOM), LGSM, LFPIORPI y su reglamento (actividades vulnerables), LFDC (derechos del contribuyente); estatal: Ley de Hacienda (LHPUE) y Código Fiscal (CFPUE) de Puebla, Código Fiscal de la CDMX (CFCDMX) para impuesto sobre nómina y contribuciones locales; RMF y sus reglas; guías de llenado del CFDI / Anexo 20, incluyendo complemento de pago, PUE/PPD, método de pago) y devuelve fragmentos con su cita (artículo/regla/guía, fuente, fecha de vigencia). Úsala SIEMPRE antes de afirmar una regla, tasa, plazo, requisito o fundamento fiscal — no respondas de memoria. Si no devuelve resultados, dilo explícitamente y NO inventes un fundamento legal. Para preguntas sobre periodos pasados pasa fecha_vigencia del periodo, no la de hoy.",
+      "Busca en la legislación mexicana vigente que un contador cita — fiscal (LISR, LIVA, LIEPS, CFF, LFD, LIF, LCF, LFDC, LFPCA y sus reglamentos RLISR/RLIVA/RCFF), aduanera y de comercio exterior (LADUA, LCE), nómina y seguridad social (LFT, LSS, LINFONAVIT, LSAR y los reglamentos RACERF e RIPAEDI), mercantil (CCOM, LGSM, LGTOC, LCM), antilavado (LFPIORPI y su reglamento), estatal (LHPUE/CFPUE de Puebla, CFCDMX de la CDMX), la RMF y sus reglas y las guías de llenado del CFDI / Anexo 20 — y devuelve fragmentos con su cita (artículo/regla/guía, fuente, fecha de vigencia). Úsala SIEMPRE antes de afirmar una regla, tasa, plazo, requisito o fundamento — no respondas de memoria. Si no devuelve resultados, dilo explícitamente y NO inventes un fundamento legal. Para preguntas sobre periodos pasados pasa fecha_vigencia del periodo, no la de hoy.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -378,8 +384,8 @@ export const tools: Anthropic.Tool[] = [
       properties: {
         ley: {
           type: "string",
-          enum: ["LISR", "LIVA", "CFF", "LIEPS", "RLISR", "RLIVA", "RCFF", "LSS", "LINFONAVIT", "LFT", "RACERF", "RIPAEDI", "CCOM", "LGSM", "LFPIORPI", "RLFPIORPI", "LFDC", "LHPUE", "CFPUE", "CFCDMX", "RMF"],
-          description: "Clave del ordenamiento. RMF = Resolución Miscelánea Fiscal vigente.",
+          enum: CLAVES_GET_ARTICULO,
+          description: "Clave del ordenamiento tal como la devuelve search_fiscal_knowledge en `ley`. RMF = Resolución Miscelánea Fiscal vigente.",
         },
         articulo: { type: "string", description: "Número tal como se cita: '27', '29-A', '113-E', '17-H Bis', '30 Bis', o la regla '2.7.1.32'." },
         fecha_vigencia: { type: "string", description: "Fecha ISO (YYYY-MM-DD) del periodo relevante. Default: hoy." },

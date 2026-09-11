@@ -4051,6 +4051,15 @@ enum FiscalSource {
   GUIA // guías de llenado / Anexo 20 (SAT)
 }
 
+// Ámbito del ordenamiento (docs/MOTOR-JURIDICO.md §3.1): federal, estatal
+// (con `entidad`), municipal o internacional (tratados).
+enum AmbitoJuridico {
+  FEDERAL
+  ESTATAL
+  MUNICIPAL
+  INTERNACIONAL
+}
+
 model FiscalDocument {
   id            String        @id @default(cuid())
   source        FiscalSource
@@ -4061,11 +4070,18 @@ model FiscalDocument {
   vigenciaDesde DateTime
   vigenciaHasta DateTime? // null = texto vigente
   hash          String // sha256 of normalized text — skips unchanged re-ingest
+  // Un solo corpus, dos alcances: el hub busca con las materias del contador
+  // fijas en el servidor; el producto legal busca sin filtro. Son propiedad
+  // del ORDENAMIENTO (misma en todas sus versiones), ver fiscal-kb/materias.ts.
+  materias      String[]       @default([])
+  ambito        AmbitoJuridico @default(FEDERAL)
+  entidad       String? // clave SAT de 3 letras (PUE, CMX) cuando ambito = ESTATAL
   chunks        FiscalChunk[]
-  createdAt     DateTime      @default(now())
+  createdAt     DateTime       @default(now())
 
   @@unique([clave, vigenciaDesde])
   @@index([source, clave])
+  @@index([materias], type: Gin)
 }
 
 model FiscalChunk {

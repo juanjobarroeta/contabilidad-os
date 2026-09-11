@@ -12,6 +12,8 @@
 // brazo; k = 60 es el valor clásico y no hay nada que afinar a ojo.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { alternanciaClaves } from "./ingest-leyes";
+
 export const RRF_K = 60;
 
 /**
@@ -46,7 +48,8 @@ export interface ReferenciaExacta {
   clave: string | null;
 }
 
-const CLAVES = "RLISR|RLIVA|RCFF|CCOM|LGSM|RLFPIORPI|LFPIORPI|LFDC|RACERF|RIPAEDI|LHPUE|CFPUE|CFCDMX|LISR|LIVA|CFF|LIEPS|LSS|LINFONAVIT|LFT|RMF";
+// Las claves salen del catálogo (más larga primero: «RLISR» antes que «LISR»).
+const CLAVES = alternanciaClaves();
 // «artículo 27», «art. 29-A del CFF», «artículo 113-E de la LISR», «Art 17-H Bis»
 const RE_ART_PREGUNTA = new RegExp(
   `\\bart(?:[íi]culo|\\.)?\\s*(\\d+(?:-[A-Za-z]+)?(?:\\s+bis)?)(?:\\s*,?\\s*fracci[óo]n\\s+[IVXL]+)?(?:\\s*(?:de\\s+la\\s+|del\\s+)?(?:ley\\s+del\\s+)?(${CLAVES}))?\\b`,

@@ -11,6 +11,7 @@
 import { readFile } from "fs/promises";
 import { FiscalSource } from "@prisma/client";
 import { DocKind } from "./chunk";
+import type { Materia } from "./materias";
 import { parsePdfBuffer } from "./pdf";
 
 export interface DocSpec {
@@ -22,6 +23,8 @@ export interface DocSpec {
   /** Publication / effective date. Guías rarely carry a parseable one, so the
    *  catalog pins a known date; override per-run with --vigencia. */
   vigenciaDesde: string; // ISO YYYY-MM-DD
+  /** Materias (ver materias.ts). Default: ["fiscal"] — todos los docs del SAT lo son. */
+  materias?: Materia[];
 }
 
 /**

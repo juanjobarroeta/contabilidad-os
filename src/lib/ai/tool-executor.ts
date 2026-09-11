@@ -15,6 +15,7 @@ import { previewComplemento } from "@/lib/complementos-preview";
 import { listUnmatched, scoreCandidates } from "@/lib/conciliacion";
 import { stagePendingConciliar } from "@/lib/whatsapp/pending-action";
 import { searchFiscalKnowledge, getArticulo } from "@/lib/fiscal-kb/search";
+import { MATERIAS_CONTADOR } from "@/lib/fiscal-kb/materias";
 import { consultarValorFiscal, type ConsultaValorFiscal } from "@/lib/fiscal/valores";
 import { stageChatPendingAction } from "@/lib/ai/pending-action";
 import { contarSimilaresSinConciliar } from "@/lib/bancos/reglas-categorizacion";
@@ -245,6 +246,9 @@ export async function executeToolCall(
           await searchFiscalKnowledge(String(input.query ?? ""), {
             fechaVigencia: typeof input.fecha_vigencia === "string" ? new Date(input.fecha_vigencia) : undefined,
             fuentes: Array.isArray(input.fuentes) ? input.fuentes.map(String) : undefined,
+            // El corpus es todo el derecho mexicano; el copiloto contable sólo
+            // ve lo que un contador cita. Lo fija el servidor, no el modelo.
+            materias: MATERIAS_CONTADOR,
             limit: typeof input.limit === "number" ? input.limit : undefined,
             // El embedding de la consulta se cobra a la empresa/usuario que
             // preguntó (la ley es común, el gasto no).

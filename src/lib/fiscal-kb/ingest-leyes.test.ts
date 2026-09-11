@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LEYES, parseFechaVigencia } from "./ingest-leyes";
+import { CLAVES_LEYES, LEYES, LEYES_EXCLUIDAS, alternanciaClaves, clavesPorMateria, parseFechaVigencia } from "./ingest-leyes";
 
 describe("parseFechaVigencia", () => {
   it("Diputados: «Última reforma publicada DOF dd-mm-aaaa»", () => {
@@ -21,9 +21,42 @@ describe("parseFechaVigencia", () => {
 });
 
 describe("catálogo de leyes", () => {
-  it("las fuentes nuevas están y las estatales/facsímiles traen vigencia de respaldo cuando el texto no la declara", () => {
+  it("es el índice federal completo más las manuales: 300+ claves, todas con materias y ámbito", () => {
+    expect(Object.keys(LEYES).length).toBeGreaterThan(300);
+    for (const d of Object.values(LEYES)) {
+      expect(d.materias.length, d.clave).toBeGreaterThan(0);
+      expect(["FEDERAL", "ESTATAL", "MUNICIPAL", "INTERNACIONAL"]).toContain(d.ambito);
+      expect(d.url).toMatch(/^https:\/\//);
+    }
+    expect(LEYES_EXCLUIDAS.map((e) => e.clave)).toContain("PEF");
+    expect(LEYES.PEF).toBeUndefined();
+  });
+  it("las fuentes de la Fase 1 siguen ahí, con su URL y su vigencia de respaldo", () => {
     for (const c of ["RACERF", "RIPAEDI", "CCOM", "LGSM", "LFPIORPI", "RLFPIORPI", "LFDC", "LHPUE", "CFPUE", "CFCDMX"]) expect(LEYES[c]?.clave).toBe(c);
     expect(LEYES.RIPAEDI.vigenciaFallback).toBe("2012-02-10");
     expect(LEYES.CFPUE.url).toMatch(/^https:\/\/ojp\.puebla\.gob\.mx\//);
+    expect(LEYES.CFPUE.ambito).toBe("ESTATAL");
+    expect(LEYES.CFPUE.entidad).toBe("PUE");
+    // La LINFONAVIT conserva el PDF móvil (cambiar de PDF abriría una versión espuria por hash).
+    expect(LEYES.LINFONAVIT.url).toMatch(/pdf_mov\//);
+    expect(LEYES.LISR.url).toBe("https://www.diputados.gob.mx/LeyesBiblio/pdf/LISR.pdf");
+    expect(LEYES.LISR.materias).toEqual(["fiscal"]);
+  });
+  it("la manual gana a la generada con la misma clave, pero hereda lo que no redefine", () => {
+    expect(LEYES.LINFONAVIT.urlRef).toMatch(/ref\/lifnvt\.htm$/);
+    expect(LEYES.LINFONAVIT.vigenciaFallback).toBe("2025-02-21");
+  });
+  it("claves de más larga a más corta y alternancia escapada", () => {
+    for (let i = 1; i < CLAVES_LEYES.length; i++) expect(CLAVES_LEYES[i - 1].length).toBeGreaterThanOrEqual(CLAVES_LEYES[i].length);
+    const alt = alternanciaClaves();
+    expect(alt.indexOf("RLISR")).toBeLessThan(alt.indexOf("|LISR|"));
+    expect(alt).toContain("LRART76\\-VI");
+    expect(alt.split("|").at(-1)).toBe("RMF");
+  });
+  it("clavesPorMateria: lo que el contador puede pedir completo", () => {
+    const pld = clavesPorMateria(["pld"]);
+    expect(pld).toEqual(expect.arrayContaining(["LFPIORPI", "RLFPIORPI"]));
+    expect(clavesPorMateria(["fiscal"])).toEqual(expect.arrayContaining(["LISR", "LIVA", "CFF", "RLISR", "LHPUE", "CFCDMX"]));
+    expect(clavesPorMateria(["fiscal"])).not.toContain("CPEUM");
   });
 });
