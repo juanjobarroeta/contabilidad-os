@@ -186,6 +186,12 @@ export const IGNORED_TAGS_VALIDOS = new Set([
   "PAYROLL_DISPERSED",
   "ANTICIPO_CLIENTE",
   "ANTICIPO_PROVEEDOR",
+  // La misma historia, una vez más: clasificarCargoBancario etiqueta al
+  // IMPORTAR los renglones de centavos del banco («COMPENSACION POR RETRASO»,
+  // los de $0.00) y este set no la conocía. Un hospital con cuatro de ésos
+  // —$0.50 en total— no podía contabilizar agosto: «4 ignorados sin
+  // categoría». Lo que el importador etiqueta, el cierre lo tiene que aceptar.
+  "BANK_NOISE",
 ]);
 
 /** Spec (pura) de la subcuenta contable de una cuenta bancaria. */
@@ -1367,6 +1373,23 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       if (tag === "FINANCIAL_INCOME") {
         // Intereses/rendimientos ganados:
         //   inflow → DR Bancos / CR Otros ingresos; outflow (ajuste) invertido.
+        if (isCredit) {
+          drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,      monto: absAmount, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: accOtrosIngresos.id, monto: absAmount, tipo: "ABONO" });
+        } else {
+          drafts.push({ ...base, chartAccountId: accOtrosIngresos.id, monto: absAmount, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,      monto: absAmount, tipo: "ABONO" });
+        }
+        continue;
+      }
+
+      if (tag === "BANK_NOISE") {
+        // Ruido bancario: la compensación de centavos que el banco abona por
+        // un retraso suyo, o un renglón en $0.00. El de cero no es un asiento
+        // —una póliza de $0 sólo estorba en el auxiliar—; el de centavos es
+        // un ingreso financiero, del tamaño que sea, y se contabiliza como
+        // tal para que Bancos siga atando con el estado de cuenta.
+        if (absAmount <= 0.005) continue;
         if (isCredit) {
           drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,      monto: absAmount, tipo: "CARGO" });
           drafts.push({ ...base, chartAccountId: accOtrosIngresos.id, monto: absAmount, tipo: "ABONO" });
