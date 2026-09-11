@@ -785,7 +785,19 @@ model Customer {
   // Facturapi customer ID
   facturapiId String?
 
+  /// El auxiliar del catálogo PROPIO que le toca a esta contraparte
+  /// (`2110-002-000 TELEFONOS DE MEXICO`), cuando la empresa lleva un auxiliar
+  /// por contraparte — que es como está armado casi cualquier plan de PyME.
+  ///
+  /// Es el mismo patrón que `BankAccount.chartAccountId` y existe por la misma
+  /// razón: hay códigos del motor cuya cuenta NO se decide una vez, la elige
+  /// la contraparte de cada comprobante (docs/PLAN-motor-plan-propio.md → 2i).
+  /// Sin enlace, el motor sigue cayendo a la cuenta base: null es «todavía no
+  /// se sabe», nunca «da igual».
+  chartAccountId String?
+
   company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  chartAccount        ChartAccount?        @relation(fields: [chartAccountId], references: [id])
   invoices            Invoice[]
   borradores          FacturaBorrador[]
   recurrentes         FacturaRecurrente[]
@@ -2421,6 +2433,7 @@ model ChartAccount {
   entries          AccountingEntry[]
   postingOverrides PostingCuentaOverride[]
   bankAccounts BankAccount[]
+  contrapartes Customer[]
 
   @@unique([companyId, cuentaSAT, subcuenta])
   @@index([companyId, codAgrup])
