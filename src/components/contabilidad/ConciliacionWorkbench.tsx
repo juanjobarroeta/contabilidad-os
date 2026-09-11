@@ -102,13 +102,17 @@ interface ConciliacionMes {
 }
 
 
+/** La fecha del movimiento viaja como "YYYY-MM-DD" (un instante UTC) y el mes
+ *  se corta con Date.UTC. Sin fijar la zona, el navegador la pinta en hora de
+ *  México y el primero de mes aparece como el 31 del mes anterior — visto en
+ *  pantalla: «31/07/26» dentro del corte de agosto. */
 const fFecha = (s: string) =>
-  new Date(s).toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "2-digit" });
+  new Date(s).toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "2-digit", timeZone: "UTC" });
 
 /** Renglones que se pintan de una vez; «Ver más» agrega otro tanto. */
 const PAGINA = 80;
 
-type Filtro = "PENDIENTES" | "MATCHED" | "IGNORED" | "TODOS";
+type Filtro = "SIN_CONCILIAR" | "MATCHED" | "IGNORED" | "TODOS";
 
 /** La lista tal como se pinta: filtrada, buscada y con los pendientes arriba.
  *  Pura y a nivel de módulo — no toca el closure, y el orden de la izquierda
@@ -118,7 +122,7 @@ function armarLista(movs: Movimiento[], filtro: Filtro, buscar: string): Movimie
   return movs
     .filter((m) =>
       filtro === "TODOS" ? true
-      : filtro === "PENDIENTES" ? !m.registrado
+      : filtro === "SIN_CONCILIAR" ? !m.conciliado
       : m.status === filtro,
     )
     .filter((m) =>
@@ -154,7 +158,7 @@ export function ConciliacionWorkbench({
   // Filtro y búsqueda de la LISTA — lo que sólo tenía el tab Movimientos. La
   // mesa mostraba nada más los pendientes, así que revisar algo ya conciliado
   // obligaba a cambiar de pestaña, que es de donde venía la doble mesa.
-  const [filtro, setFiltro] = useState<Filtro>("PENDIENTES");
+  const [filtro, setFiltro] = useState<Filtro>("SIN_CONCILIAR");
   const [buscar, setBuscar] = useState("");
   // Selección en lote — lo último que sólo existía en el tab Movimientos.
   // Veinte comisiones se categorizan de un golpe sin salir de la mesa.
@@ -255,12 +259,12 @@ export function ConciliacionWorkbench({
     // ENTREGA DESDE EL ARCHIVO (`?tx=`). Manda sobre el auto-seleccionado, y
     // una sola vez por id: después el usuario navega sin que el enlace lo
     // devuelva al mismo renglón. El filtro se acomoda al movimiento — llegar
-    // con «Pendientes» a uno ya conciliado lo dejaría fuera de la lista. De
+    // con «Sin conciliar» a uno ya conciliado lo dejaría fuera de la lista. De
     // que se vea aunque caiga en el renglón 300 se encarga el render (`hasta`).
     if (txInicial && entregado.current !== txInicial) {
       const m = data.movimientosBanco.find((x) => x.id === txInicial);
       if (m) {
-        const f: Filtro = !m.registrado ? "PENDIENTES" : m.status === "MATCHED" ? "MATCHED" : "IGNORED";
+        const f: Filtro = !m.conciliado ? "SIN_CONCILIAR" : m.status === "MATCHED" ? "MATCHED" : "IGNORED";
         entregado.current = txInicial;
         setFiltro(f);
         setBuscar("");
@@ -375,12 +379,18 @@ export function ConciliacionWorkbench({
   // Los sin conciliar (trabajo real) arriba; los «por contabilizar» al final. El
   // sort es estable, así que dentro de cada grupo se conserva el orden por
   // fecha con el que llegan del API.
-  // La lista sale de TODOS los movimientos del mes, no sólo de los pendientes:
-  // con el filtro se elige qué mirar. «Pendientes» sigue siendo lo primero que
-  // se ve, porque es el trabajo real.
+  // La lista sale de TODOS los movimientos del mes, no sólo de los que faltan:
+  // con el filtro se elige qué mirar. «Sin conciliar» sigue siendo lo primero
+  // que se ve, porque es el trabajo real.
   const delMes = deLaCuenta(data.movimientosBanco);
+  // UN CHIP CUENTA LO QUE SU NOMBRE DICE. «Pendientes» contaba lo no
+  // registrado —sin conciliar MÁS lo conciliado que espera el asiento— y
+  // enseñaba 248 encima de un encabezado que decía «119 sin conciliar»: quien
+  // lo lee entiende que le faltan 248 por conciliar cuando le faltan 119. Los
+  // conciliados que esperan posteo ya se dicen en su tile y en el encabezado,
+  // y salen del mes entero con un clic en el cierre.
   const cuenta = {
-    PENDIENTES: delMes.filter((m) => !m.registrado).length,
+    SIN_CONCILIAR: delMes.filter((m) => !m.conciliado).length,
     MATCHED: delMes.filter((m) => m.status === "MATCHED").length,
     IGNORED: delMes.filter((m) => m.status === "IGNORED").length,
     TODOS: delMes.length,
@@ -617,7 +627,7 @@ export function ConciliacionWorkbench({
               </p>
               <div className="flex flex-wrap items-center gap-1.5 border-b border-cos-line-soft px-5 py-2">
                 {([
-                  ["PENDIENTES", "Pendientes"],
+                  ["SIN_CONCILIAR", "Sin conciliar"],
                   ["MATCHED", "Conciliados"],
                   ["IGNORED", "Categorizados"],
                   ["TODOS", "Todos"],
