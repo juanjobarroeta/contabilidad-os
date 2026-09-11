@@ -23,14 +23,18 @@ describe("checkInvoiceMatchGuard — PUE", () => {
     expect(checkInvoiceMatchGuard(pue, [], { id: "tx_1", monto: 1000 })).toEqual({ ok: true });
   });
 
-  it("RECHAZA un segundo movimiento sobre una factura ya conciliada", () => {
+  it("RECHAZA un segundo movimiento sobre una factura YA CUBIERTA", () => {
+    // El primero ya cubría el total: el segundo lo duplicaría. Desde que PUE
+    // admite varias deslizadas de un mismo cobro, lo que rechaza no es «ser el
+    // segundo» sino PASARSE del total — que es la protección que importa.
     const r = checkInvoiceMatchGuard(pue, [matched("tx_1", 1000)], { id: "tx_2", monto: 1000 });
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      // Mensaje formal con fecha y monto del match existente.
-      expect(r.error).toContain("ya está conciliada con otro movimiento");
-      expect(r.error).toContain("2026-06-10");
+      expect(r.error).toMatch(/excedería el total/i);
+      expect(r.error).toContain("$2,000.00");
       expect(r.error).toContain("$1,000.00");
+      // Y dice qué hacer con una PUE, que no es lo mismo que con una PPD.
+      expect(r.error).toMatch(/debió emitirse como PPD/i);
     }
   });
 
@@ -126,19 +130,36 @@ describe("checkInvoiceMatchGuard — porciones asignadas (conciliación múltipl
     expect(r).toEqual({ ok: true });
   });
 
-  it("PUE RECHAZA una porción que no cubre el total (más allá del 1%)", () => {
+  it("PUE ACEPTA una porción parcial: una exhibición puede ir en varias deslizadas", () => {
+    // Medido en Haltus: la factura 1434 de $151,499.08 se cobró con CUATRO
+    // deslizadas en tres afiliaciones —el paciente partió el pago entre dos
+    // tarjetas y entre crédito y débito—. Exigir que cada voucher igualara el
+    // total rechazaba los cuatro, y con ellos 32 depósitos del mes.
     const r = checkInvoiceMatchGuard(pue, [], { id: "tx_1", monto: 56254, montoAsignado: 5000 });
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toContain("una sola exhibición");
+    expect(r.ok).toBe(true);
   });
 
-  it("PUE RECHAZA un segundo pago encima de una porción ya asignada", () => {
+  it("PUE: las deslizadas se acumulan hasta cubrir el total", () => {
+    const primera = asignado("tx_1", 5000, 5000);
+    const r = checkInvoiceMatchGuard(pue, [primera], { id: "tx_2", monto: 4628, montoAsignado: 4628 });
+    expect(r.ok).toBe(true);
+  });
+
+  it("PUE RECHAZA la deslizada que se pasaría del total", () => {
+    const primera = asignado("tx_1", 5000, 5000);
+    const r = checkInvoiceMatchGuard(pue, [primera], { id: "tx_2", monto: 9000, montoAsignado: 9000 });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/excedería el total/i);
+  });
+
+  it("PUE RECHAZA un segundo pago encima de una factura YA CUBIERTA", () => {
+    // La porción previa ya cubría el total: el segundo pago lo duplicaría.
     const r = checkInvoiceMatchGuard(pue, [asignado("tx_1", 56254, 9628)], {
       id: "tx_2",
       monto: 9628,
     });
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toContain("ya está conciliada con otro movimiento");
+    if (!r.ok) expect(r.error).toMatch(/excedería el total/i);
   });
 
   it("PUE: el mensaje del segundo pago reporta la PORCIÓN previa, no el movimiento completo", () => {
@@ -147,7 +168,9 @@ describe("checkInvoiceMatchGuard — porciones asignadas (conciliación múltipl
       monto: 9628,
     });
     if (!r.ok) {
-      expect(r.error).toContain("$9,628.00");
+      // El acumulado son las dos porciones (9,628 + 9,628), no los $56,254
+      // del movimiento completo.
+      expect(r.error).toContain("$19,256.00");
       expect(r.error).not.toContain("$56,254.00");
     }
   });
@@ -263,7 +286,7 @@ describe("el match 1:1 también valida el importe", () => {
     // El asiento abonaba los $250,000 completos a Clientes.
     const r = checkInvoiceMatchGuard(pue, [], { id: "tx", monto: 250000 });
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toMatch(/una sola exhibición/i);
+    if (!r.ok) expect(r.error).toMatch(/excede el total/i);
   });
 
   it("PUE: el pago que SÍ es el total pasa", () => {

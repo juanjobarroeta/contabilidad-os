@@ -232,57 +232,30 @@ export function checkInvoiceMatchGuard(
   const previos = matchedTxs.filter((t) => t.id !== newTx.id);
   const total = Math.abs(invoice.total);
 
-  if (invoice.metodoPago !== "PPD") {
-    if (previos.length > 0) {
-      // PUE: ya existe un pago aplicado → rechazar el segundo.
-      const prev = previos[0];
-      return {
-        ok: false,
-        error:
-          `La factura ya está conciliada con otro movimiento bancario ` +
-          `(${prev.fecha.toISOString().slice(0, 10)}, ${fmtMonto(montoEfectivo(prev))}). ` +
-          `Una factura PUE sólo puede conciliarse con un movimiento; ` +
-          `desvincule el movimiento anterior si desea corregir la conciliación.`,
-      };
-    }
-    // Porción asignada (conciliación múltiple): PUE es «una sola exhibición»,
-    // así que la porción debe cubrir el total de la factura (±1%). Pagarla
-    // junto con otras facturas en una misma transferencia es válido; lo que
-    // sigue prohibido es un segundo pago encima (caso anterior).
-    if (newTx.montoAsignado !== undefined) {
-      const asignado = Math.abs(newTx.montoAsignado);
-      if (Math.abs(asignado - total) > total * PPD_ACUMULADO_TOLERANCIA) {
-        return {
-          ok: false,
-          error:
-            `El monto asignado (${fmtMonto(asignado)}) no coincide con el total de la ` +
-            `factura PUE (${fmtMonto(total)}). Una factura PUE se paga en una sola ` +
-            `exhibición: la porción asignada debe cubrir el total (tolerancia 1%).`,
-        };
-      }
-      return { ok: true };
-    }
-    // MATCH 1:1 SOBRE PUE. Aquí no había validación de importe, y por ahí se
-    // coló en producción un depósito en efectivo de $250,000 conciliado con una
-    // factura de $10,556 —23 veces más grande—: el asiento abonaba los $250,000
-    // completos a Clientes contra una factura que no los explicaba.
-    //
-    // «Una sola exhibición» significa que el pago ES el total. Si el movimiento
-    // cubre esa factura Y otra cosa, eso es conciliación múltiple, no 1:1.
-    const pago = montoEfectivo(newTx);
-    if (Math.abs(pago - total) > total * PPD_ACUMULADO_TOLERANCIA) {
-      return {
-        ok: false,
-        error:
-          `El movimiento (${fmtMonto(pago)}) no coincide con el total de la factura ` +
-          `PUE (${fmtMonto(total)}). Una factura PUE se paga en una sola exhibición. ` +
-          `Si el movimiento cubre esta factura y algo más, use la conciliación múltiple.`,
-      };
-    }
-    return { ok: true };
-  }
+  // ── PUE: UNA EXHIBICIÓN NO ES UN SOLO VOUCHER ──────────────────────────
+  //
+  // La regla era «la porción debe cubrir el total»: un movimiento, completo, o
+  // nada. Eso no describe cómo se cobra en un hospital. Medido en Haltus,
+  // agosto 2026: la factura 1434 de $151,499.08 se pagó con CUATRO deslizadas
+  // repartidas en tres afiliaciones, porque el paciente partió el pago entre
+  // dos tarjetas y entre crédito y débito. Ninguna de las cuatro igualaba el
+  // total, así que la regla rechazaba las cuatro — y con ella 32 de los 77
+  // depósitos de terminal del mes, $1.07M que nadie podía conciliar.
+  //
+  // Partir el cobro en varias deslizadas NO lo vuelve pago en parcialidades:
+  // sigue siendo una sola exhibición, un solo acto de pago. Lo que distingue a
+  // PUE de PPD es lo que declara el CFDI y si necesita complemento, no cuántas
+  // veces pasó la terminal. Esa distinción vive en el REP, no aquí.
+  //
+  // Lo que sí protege —y se conserva— es el techo: el acumulado nunca puede
+  // pasar del total. Un segundo pago sobre una factura ya cubierta lo sigue
+  // rechazando, porque el acumulado la excedería.
+  //
+  // Así que PUE y PPD comparten el mismo techo. Lo único que cambia es cómo se
+  // explica el rechazo, porque el siguiente paso no es el mismo: en una PPD se
+  // revisan las parcialidades ya aplicadas; en una PUE, si de verdad se está
+  // cobrando en abonos, la factura debió emitirse como PPD.
 
-  // PPD: permitir parcialidades mientras el acumulado no exceda el total.
   // Sin porción asignada y sin pagos previos se conserva el comportamiento
   // legado (el primer match 1:1 no valida monto contra total).
   // PPD, primer pago 1:1: no se valida el monto EXACTO —una parcialidad es
@@ -305,12 +278,17 @@ export function checkInvoiceMatchGuard(
   const acumulado = previos.reduce((s, t) => s + montoEfectivo(t), 0) + montoEfectivo(newTx);
   const limite = total * (1 + PPD_ACUMULADO_TOLERANCIA);
   if (acumulado > limite) {
+    const esPpd = invoice.metodoPago === "PPD";
     return {
       ok: false,
       error:
-        `El monto acumulado de los movimientos conciliados con esta factura PPD ` +
+        `El monto acumulado de los movimientos conciliados con esta factura ${esPpd ? "PPD" : "PUE"} ` +
         `(${fmtMonto(acumulado)}, incluyendo este movimiento) excedería el total ` +
-        `de la factura (${fmtMonto(invoice.total)}). Revise las parcialidades ya conciliadas.`,
+        `de la factura (${fmtMonto(invoice.total)}). ` +
+        (esPpd
+          ? `Revise las parcialidades ya conciliadas.`
+          : `Una PUE admite varias deslizadas de un mismo cobro, pero no más de su total: ` +
+            `revise si sobra una o si la factura debió emitirse como PPD.`),
     };
   }
   return { ok: true };
