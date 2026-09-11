@@ -55,6 +55,20 @@ const CATEGORIAS: { tag: string | null; label: string; icon: typeof Banknote }[]
   { tag: null,                   label: "Ignorar",                  icon: X },
 ];
 
+/** Un cargo cuyo concepto dice nómina abre la búsqueda EN nómina: los recibos
+ *  timbrados son el comprobante de esa dispersión, no una factura de gasto. */
+function tipoInicialBusqueda(tx: MovimientoResoluble): "INGRESO" | "EGRESO" | "NOMINA" {
+  if (tx.monto >= 0) return "INGRESO";
+  return /n[oó]mina|dispersi[oó]n|sueldo|raya/i.test(tx.descripcion ?? "") ? "NOMINA" : "EGRESO";
+}
+
+/** `fecha` ± `dias`, en YYYY-MM-DD (lo que /api/facturas espera en from/to). */
+function diaISO(fecha: string, dias: number): string {
+  const d = new Date(fecha);
+  d.setDate(d.getDate() + dias);
+  return d.toISOString().slice(0, 10);
+}
+
 /** Lo que el servidor devuelve al conciliar el cobro de una PPD: hay que
  *  timbrar el complemento de pago. */
 export interface RepSugerido {
@@ -97,9 +111,12 @@ export function ResolverMovimiento({
 
   // Búsqueda manual de facturas: SIN ventana de fechas, que es lo que la hace
   // el último recurso cuando el score no encontró nada.
-  const [manualAbierta, setManualAbierta] = useState(false);
+  // Abierta de entrada en un cargo de nómina: el scoring por importe no va a
+  // explicar una dispersión que paga a ocho personas, así que la lista de
+  // recibos pendientes ES el camino, no el último recurso.
+  const [manualAbierta, setManualAbierta] = useState(tipoInicialBusqueda(tx) === "NOMINA");
   const [manualTipo, setManualTipo] = useState<"INGRESO" | "EGRESO" | "NOMINA">(
-    tx.monto < 0 ? "EGRESO" : "INGRESO",
+    tipoInicialBusqueda(tx),
   );
   const [manualQuery, setManualQuery] = useState("");
   const [manualCargando, setManualCargando] = useState(false);
@@ -120,8 +137,8 @@ export function ResolverMovimiento({
     setCandidatos([]); setImpuestos([]); setPagoJunto(null); setCep(null); setSeleccion([]);
     setCruce(null); setCepAbierto(false);
     setSugerencia(null);
-    setManualAbierta(false); setManualQuery(""); setManualResultados([]);
-    setManualTipo(tx.monto < 0 ? "EGRESO" : "INGRESO");
+    setManualAbierta(tipoInicialBusqueda(tx) === "NOMINA"); setManualQuery(""); setManualResultados([]);
+    setManualTipo(tipoInicialBusqueda(tx));
     setSimilaresAbierto(false); setSimilarToken(""); setSimilarCount(null);
 
     fetch(`/api/bancos/transactions/${tx.id}/cep`)
@@ -152,7 +169,24 @@ export function ResolverMovimiento({
     const t = setTimeout(async () => {
       setManualCargando(true);
       try {
-        const params = new URLSearchParams({ companyId, tipo: manualTipo, take: "20", unmatchedOnly: "true" });
+        // NÓMINA ES OTRO PROBLEMA DE ESCALA. Una empresa con 150 empleados
+        // acumula miles de recibos sin cruzar (visto: 2,337 en un año), así que
+        // veinte resultados sin ventana de fechas son ruido. Una dispersión se
+        // paga a días de su corrida, de modo que la ventana ES la pista: ±25
+        // días alrededor del cargo, con tope alto para que quepa la corrida
+        // completa. Sin búsqueda escrita, la ventana sola ya deja la lista
+        // utilizable; al teclear, se respeta lo que el humano busca.
+        const esNomina = manualTipo === "NOMINA";
+        const params = new URLSearchParams({
+          companyId,
+          tipo: manualTipo,
+          take: esNomina ? "120" : "20",
+          unmatchedOnly: "true",
+        });
+        if (esNomina && !manualQuery.trim()) {
+          params.set("from", diaISO(tx.fecha, -25));
+          params.set("to", diaISO(tx.fecha, 25));
+        }
         if (manualQuery.trim()) params.set("q", manualQuery.trim());
         const res = await fetch(`/api/facturas?${params}`);
         const data = await res.json();
@@ -164,7 +198,7 @@ export function ResolverMovimiento({
       }
     }, 250);
     return () => { cancelado = true; clearTimeout(t); };
-  }, [manualAbierta, manualTipo, manualQuery, companyId]);
+  }, [manualAbierta, manualTipo, manualQuery, companyId, tx.fecha]);
 
   // Cuenta los similares sin conciliar cada vez que cambia el patrón.
   useEffect(() => {
@@ -621,7 +655,10 @@ export function ResolverMovimiento({
       <div className="rounded-control border border-cos-line">
         <button onClick={() => setManualAbierta((o) => !o)}
           className="flex w-full items-center gap-2 px-3 py-2.5 text-[13px] text-cos-ink-faint hover:text-cos-brand-ink">
-          <Search className="h-[15px] w-[15px]" /> Buscar otra factura por cliente, folio o monto…
+          <Search className="h-[15px] w-[15px]" />
+          {manualTipo === "NOMINA"
+            ? "Recibos de nómina pendientes de este cargo…"
+            : "Buscar otra factura por cliente, folio o monto…"}
           <ChevronDown className={"ml-auto h-3.5 w-3.5 transition-transform " + (manualAbierta ? "rotate-180" : "")} />
         </button>
         {manualAbierta && (
@@ -636,17 +673,38 @@ export function ResolverMovimiento({
             </div>
             <div className="flex items-center gap-2 rounded-control border border-cos-line px-2.5 py-1.5">
               <Search className="h-4 w-4 text-cos-ink-faint" />
-              <input value={manualQuery} onChange={(e) => setManualQuery(e.target.value)} autoFocus
-                placeholder="Cliente, RFC, UUID, folio, importe…"
+              <input value={manualQuery} onChange={(e) => setManualQuery(e.target.value)}
+                placeholder={manualTipo === "NOMINA" ? "Empleado, folio, importe…" : "Cliente, RFC, UUID, folio, importe…"}
                 className="w-full bg-transparent text-[13px] outline-none placeholder:text-cos-ink-faint" />
             </div>
+            {/* HECHOS DE LA LISTA, no un contador de resultados: cuántos
+                comprobantes pendientes hay a la vista y cuánto suman contra lo
+                que este movimiento todavía no tiene asignado. Es el número que
+                dice si la selección ya cuadra o si falta seguir. */}
+            {!manualCargando && manualResultados.length > 0 && (
+              <p className="mt-1.5 text-[11.5px] text-cos-ink-faint">
+                {manualResultados.length}{" "}
+                {manualTipo === "NOMINA"
+                  ? manualResultados.length === 1 ? "recibo pendiente" : "recibos pendientes"
+                  : manualResultados.length === 1 ? "factura pendiente" : "facturas pendientes"}
+                {manualTipo === "NOMINA" && !manualQuery.trim() && " a ±25 días del cargo"}
+                {" · suman "}
+                <Money value={manualResultados.reduce((acc, f) => acc + (f.total - f.matchedAmount), 0)} size={11.5} muted />
+                {" · falta asignar "}
+                <Money value={Math.max(0, restante)} size={11.5} muted />
+              </p>
+            )}
             <div className="mt-2 max-h-[40vh] overflow-y-auto">
               {manualCargando ? (
                 <div className="flex items-center gap-2 py-3 text-[12.5px] text-cos-ink-faint">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" /> Buscando…
                 </div>
               ) : manualResultados.length === 0 ? (
-                <p className="py-3 text-center text-[12.5px] text-cos-ink-faint">Sin facturas por conciliar con ese criterio.</p>
+                <p className="py-3 text-center text-[12.5px] text-cos-ink-faint">
+                  {manualTipo === "NOMINA"
+                    ? "No hay recibos de nómina sin conciliar con ese criterio."
+                    : "Sin facturas por conciliar con ese criterio."}
+                </p>
               ) : manualResultados.map((f) => (
                 <div key={f.id} className="flex items-center justify-between gap-3 border-b border-cos-line-soft py-2 last:border-0">
                   <div className="min-w-0">
