@@ -18,21 +18,40 @@
 > para las leyes nuevas (workflow «Fiscal KB resúmenes», ~60–100 USD una vez)
 > no se han corrido: decisión del owner.
 >
-> **F1 — en curso (2026-09-11).** Código: `src/lib/fiscal-kb/sjf/` (normalizador
-> puro y probado, cliente Playwright al API de datos abiertos, ingesta por lotes
-> con `SjfTesisVista` como memoria de lo visto) + `scripts/sjf-worker.ts` (misma
-> imagen que el worker de CE; start command `npm run sjf:worker`). Esquema:
-> `FiscalDocument` gana registro, numeroTesis, epoca, instancia, organo,
-> tipoCriterio, estadoCriterio y fechaPublicacion; `vigenciaDesde` de una tesis
-> es la fecha desde la que obliga (nota de publicación). Herramientas
-> `search_jurisprudencia` y `get_tesis` (el hub las ve con materias del contador
-> + administrativa, porque en el SJF lo fiscal vive en «Administrativa»).
-> Incapsula: el headless clásico recibe 403 siempre; el headless nuevo
-> (`channel: "chromium"`) con la automatización oculta pasa el reto en la
-> primera carga — medido localmente, 60 tesis/s desde el contexto de la página.
-> Pendiente: servicio `sjf-worker` en Railway, carga inicial 9a.–12a. Época
-> (se mide el tamaño ahí), preguntas doradas revisadas por el abogado y la
-> métrica «tesis pertinente» en el eval.
+> **F1 — corpus cargado (2026-09-11, PRs #1002, #1005, #1014).** Código en
+> `src/lib/fiscal-kb/sjf/` (normalizador puro y probado, cliente Playwright al
+> API de datos abiertos, ingesta por lotes con `SjfTesisVista` como memoria) y
+> `scripts/sjf-worker.ts`; servicio Railway `sjf-worker` (misma imagen que el
+> worker de CE; cron semanal sábados 06:30 CT en modo «nuevas»; se redespliega
+> sólo si cambian sus propios archivos). Esquema: `FiscalDocument` gana
+> registro, numeroTesis, epoca, instancia, organo, tipoCriterio,
+> estadoCriterio y fechaPublicacion; `vigenciaDesde` de una tesis es la fecha
+> desde la que obliga. Herramientas `search_jurisprudencia` y `get_tesis`; el
+> hub las ve con materias del contador + administrativa (en el SJF lo fiscal
+> vive en «Administrativa»); `search_fiscal_knowledge` es normativa (sin
+> tesis) salvo que el modelo pida TESIS. Incapsula: el headless clásico
+> recibe 403 siempre; el headless nuevo (`channel: "chromium"`) con la
+> automatización oculta pasa el reto en la primera carga, también desde
+> Railway.
+>
+> **Carga inicial (9a.–12a. Época):** los 311 965 ids del API recorridos en
+> tres corridas (dos redeploys a media carga; el modo «faltantes» reanudó sin
+> repetir), 0 fallidas, ~50 s por página de 1 000 cuando hay que embeber y
+> ~30 s cuando sólo se registra. Resultado: **≈ 92 500 tesis embebidas** (10a.–
+> 12a. ≈ 37 000; 9a. 55 470) y 219 395 tesis de la 3a. a la 8a. registradas en
+> `SjfTesisVista` sin embeber (5a. 121 787, 8a. 36 743, 7a. 32 414, 6a. 27 432,
+> 3a. 893, 4a. 126). Tamaño: ≈ 0.6 GB de vectores + índice — **se queda en la
+> misma Postgres**, sin `halfvec` (decisión §3.2 tomada).
+>
+> **Eval del contador tras F1** (sólo-KB, 96 preguntas, medido como busca el
+> hub: normativa + materias del contador): **66/96 (68.8 %)**, contra 65/96
+> (67.7 %) antes de F0. Las mediciones de la tarde (69/96) eran sin filtro de
+> materias, así que no comparan. Sin regresión.
+>
+> **Pendiente de F1:** preguntas doradas de jurisprudencia con `tesisEsperadas`
+> revisadas por el abogado y la métrica «tesis pertinente» en el eval; prueba
+> funcional de `search_jurisprudencia` desde el chat; los resúmenes por unidad
+> no aplican a tesis (el rubro ya lo es).
 >
 > Antecedente: `docs/FISCAL-KNOWLEDGE-BASE.md` (diseño original de la KB) y la
 > serie de commits «Copiloto · Fase 1–3» / «KB: …» del 3–4 de septiembre de 2026.
