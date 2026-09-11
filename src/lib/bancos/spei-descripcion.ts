@@ -551,6 +551,31 @@ export interface CamposContraparte {
 }
 
 /**
+ * Fusiona el resultado de un backfill con datos estructurados ya guardados.
+ *
+ * El barrido normal sólo llena huecos: una CLABE que llegó en su columna del
+ * CSV es más fuerte que lo que se pueda volver a inferir de `descripcion`, y
+ * no debe borrarse si el texto no la repite. `reemplazar=true` queda reservado
+ * para el `reparse=1` explícito, que sí reconstruye todos los campos.
+ */
+export function fusionarCamposContraparte(
+  existentes: CamposContraparte,
+  extraidos: CamposContraparte,
+  reemplazar = false,
+): CamposContraparte {
+  if (reemplazar) return { ...extraidos };
+  return {
+    claveRastreo: existentes.claveRastreo ?? extraidos.claveRastreo,
+    contraparteNombre: existentes.contraparteNombre ?? extraidos.contraparteNombre,
+    contraparteRfc: existentes.contraparteRfc ?? extraidos.contraparteRfc,
+    contraparteClabe: existentes.contraparteClabe ?? extraidos.contraparteClabe,
+    contraparteBanco: existentes.contraparteBanco ?? extraidos.contraparteBanco,
+    conceptoPago: existentes.conceptoPago ?? extraidos.conceptoPago,
+    lineaCaptura: existentes.lineaCaptura ?? extraidos.lineaCaptura,
+  };
+}
+
+/**
  * Traduce lo extraído a las columnas de BankTransaction.
  *
  * Vive aquí, no en el import, porque lo usan DOS caminos que tienen que
@@ -558,8 +583,9 @@ export interface CamposContraparte {
  * de lo ya guardado. Si divergen, un movimiento importado hoy y el mismo
  * movimiento reprocesado mañana quedarían distintos.
  *
- * `undefined` se vuelve `null`: en Prisma, `undefined` significa "no toques
- * esta columna" y el backfill necesita poder BORRAR un valor que ya no aplica.
+ * `undefined` se vuelve `null`: la importación persiste la forma completa y el
+ * `reparse=1` explícito puede BORRAR un valor que ya no aplica. El backfill
+ * normal fusiona con lo existente mediante `fusionarCamposContraparte`.
  */
 export function camposContraparte(d: DatosSpei): CamposContraparte {
   // El banco va como "014 SANTANDER" cuando se tienen ambos; si sólo hay uno,

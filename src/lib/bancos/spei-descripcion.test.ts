@@ -4,9 +4,41 @@ import {
   clabeValida,
   esComisionDeTransferencia,
   esSpeiInterbancario,
+  fusionarCamposContraparte,
   pareceClaveRastreo,
   parseSpei,
 } from "./spei-descripcion";
+
+describe("fusionarCamposContraparte", () => {
+  const vacios = {
+    claveRastreo: null,
+    contraparteNombre: null,
+    contraparteRfc: null,
+    contraparteClabe: null,
+    contraparteBanco: null,
+    conceptoPago: null,
+    lineaCaptura: null,
+  };
+
+  it("conserva datos estructurados aunque la descripción no los repita", () => {
+    const existentes = {
+      ...vacios,
+      contraparteNombre: "CUENTA PROPIA",
+      contraparteClabe: "014180009988776655",
+    };
+    const extraidos = { ...vacios, conceptoPago: "TRASPASO NOMINA" };
+
+    expect(fusionarCamposContraparte(existentes, extraidos)).toEqual({
+      ...existentes,
+      conceptoPago: "TRASPASO NOMINA",
+    });
+  });
+
+  it("sólo borra datos previos cuando el reparse es explícito", () => {
+    const existentes = { ...vacios, contraparteClabe: "014180009988776655" };
+    expect(fusionarCamposContraparte(existentes, vacios, true)).toEqual(vacios);
+  });
+});
 
 // ── Renglones REALES de estado de cuenta ─────────────────────────────────────
 // Banorte: separa con COMAS, y la clave de rastreo va en una columna aparte

@@ -312,6 +312,7 @@ async function main() {
             tipo: "CREDITO", monto: total, status: "MATCHED", invoiceId: inv.id,
             contraparteNombre: cliente.razonSocial, contraparteRfc: cliente.rfc,
             contraparteClabe: `0721800${String(10000000000 + Math.floor(rnd() * 8_999_999_999))}`,
+            contraparteAt: new Date(),
           },
         });
       }
@@ -375,6 +376,7 @@ async function main() {
             tipo: "DEBITO", monto: -total, status: "MATCHED", invoiceId: inv.id,
             contraparteNombre: provRazon, contraparteRfc: provRfc,
             contraparteClabe: `0141800${String(10000000000 + Math.floor(rnd() * 8_999_999_999))}`,
+            contraparteAt: new Date(),
           },
         });
       }
@@ -387,11 +389,13 @@ async function main() {
           companyId: cid, bankAccountId: bancoX.id, fecha: fecha(per.y, per.m, 14),
           descripcion: "TRASPASO A CTA NOMINA", tipo: "DEBITO", monto: -traspaso,
           status: "IGNORED", notes: "INTERNAL_TRANSFER", contraparteClabe: CLABE_Y,
+          contraparteAt: new Date(),
         },
         {
           companyId: cid, bankAccountId: bancoY.id, fecha: fecha(per.y, per.m, 14),
           descripcion: "DEPOSITO DESDE OPERATIVA", tipo: "CREDITO", monto: traspaso,
           status: "IGNORED", notes: "INTERNAL_TRANSFER", contraparteClabe: CLABE_X,
+          contraparteAt: new Date(),
         },
       ],
     });

@@ -11,7 +11,7 @@ import { descargarUrl } from "@/lib/descargar";
 // impuestos/diot, ce-serie (¿hay balanza presentada?). Todo APIs existentes.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Check, Lock, AlertCircle, ArrowRight, Loader2, RefreshCw, X,
@@ -161,9 +161,14 @@ export default function CierrePage() {
   const [invValor, setInvValor] = useState("");
   const [invGuardando, setInvGuardando] = useState(false);
   const [invMsg, setInvMsg] = useState("");
+  // El PeriodProvider hidrata desde localStorage después del primer render. Si
+  // la respuesta del período por defecto llega al final, no debe sobrescribir
+  // los datos del período ya seleccionado (p. ej. Agosto sobre Junio).
+  const cargaActual = useRef(0);
 
   const cargar = useCallback(async () => {
     if (!activeCompany) return;
+    const numeroCarga = ++cargaActual.current;
     const id = activeCompany.id;
     const q = `companyId=${id}&year=${year}&month=${month}`;
     const [rPeriods, rReady, rConcil, rRep, rDiot, rCe, rInv] = await Promise.allSettled([
@@ -175,6 +180,7 @@ export default function CierrePage() {
       fetch(`/api/contabilidad/ce-serie?companyId=${id}&anio=${year}&mes=${month}`),
       fetch(`/api/contabilidad/inventario-conteo?${q}`).then((r) => r.json()),
     ]);
+    if (numeroCarga !== cargaActual.current) return;
     if (rPeriods.status === "fulfilled" && Array.isArray(rPeriods.value)) setPeriods(rPeriods.value);
     if (rReady.status === "fulfilled" && rReady.value?.checks) setReadiness(rReady.value);
     if (rConcil.status === "fulfilled" && rConcil.value?.movimientosNoRegistrados) setConcil(rConcil.value);
@@ -189,8 +195,14 @@ export default function CierrePage() {
   }, [activeCompany, year, month]);
 
   useEffect(() => {
-    setPeriods(null); setReadiness(null); setConcil(null); setPresentada(null);
-    cargar();
+    setPeriods(null); setReadiness(null); setConcil(null); setRep(null); setDiot(null); setPresentada(null);
+    setInvAplica(false); setInvConteo(null); setInvValor(""); setInvMsg("");
+    setAviso(""); setError("");
+    void cargar();
+    return () => {
+      // Invalida también una carga que siga viva cuando cambia empresa/período.
+      cargaActual.current += 1;
+    };
   }, [cargar]);
 
   if (!activeCompany) return null;

@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
-import { camposContraparte, parseSpei, tieneContraparte } from "@/lib/bancos/spei-descripcion";
+import {
+  camposContraparte,
+  fusionarCamposContraparte,
+  parseSpei,
+  tieneContraparte,
+} from "@/lib/bancos/spei-descripcion";
 import { nombresPorRfc } from "@/lib/bancos/contraparte-nombre";
 import { vincularComisionesDeCuenta } from "@/lib/bancos/comisiones-repo";
 import { repararMojibake, tieneMojibake } from "@/lib/bancos/decodificar";
@@ -29,6 +34,8 @@ import { repararMojibake, tieneMojibake } from "@/lib/bancos/decodificar";
 // contraparte) reentrarían en cada corrida y el barrido giraría sobre las
 // mismas filas para siempre. Es el mismo bucle que costó 243 re-parseos de
 // acuses anuales, y aquí sería gratis pero igual de inútil.
+// El barrido normal sólo llena huecos y conserva datos que llegaron en columnas
+// estructuradas; únicamente `reparse=1` reemplaza o borra campos existentes.
 //
 // Auth: CRON_SECRET (Bearer o x-cron-secret), igual que los otros crons.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -96,7 +103,18 @@ async function handle(req: Request) {
     };
     const lote = await prisma.bankTransaction.findMany({
       where,
-      select: { id: true, companyId: true, descripcion: true },
+      select: {
+        id: true,
+        companyId: true,
+        descripcion: true,
+        claveRastreo: true,
+        contraparteNombre: true,
+        contraparteRfc: true,
+        contraparteClabe: true,
+        contraparteBanco: true,
+        conceptoPago: true,
+        lineaCaptura: true,
+      },
       orderBy: { id: "asc" },
       take: Math.min(PAGE, limit - procesadas),
     });
@@ -147,12 +165,25 @@ async function handle(req: Request) {
         }
       }
       const sello = new Date();
+      const camposPersistidos = fusionarCamposContraparte(
+        {
+          claveRastreo: tx.claveRastreo,
+          contraparteNombre: tx.contraparteNombre,
+          contraparteRfc: tx.contraparteRfc,
+          contraparteClabe: tx.contraparteClabe,
+          contraparteBanco: tx.contraparteBanco,
+          conceptoPago: tx.conceptoPago,
+          lineaCaptura: tx.lineaCaptura,
+        },
+        campos,
+        reparse,
+      );
 
       await prisma.bankTransaction
         .update({
           where: { id: tx.id },
           data: {
-            ...campos,
+            ...camposPersistidos,
             ...(reparada !== tx.descripcion ? { descripcion: reparada } : {}),
             contraparteAt: sello,
           },
