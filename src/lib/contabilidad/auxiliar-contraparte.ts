@@ -212,3 +212,56 @@ export async function cuentaDeContraparte(
   });
   return cta?.id ?? null;
 }
+
+// ─── Resolución en el posteo ─────────────────────────────────────────────────
+
+/** `${codAgrup}|${customerId}` → id de la cuenta auxiliar. */
+export type IndiceAuxiliares = ReadonlyMap<string, string>;
+
+const llave = (codigoMotor: string, customerId: string) => `${codigoMotor}|${customerId}`;
+
+/**
+ * Todos los auxiliares ligados de la empresa, en UNA consulta.
+ *
+ * El posteo resuelve una vez por código al arrancar el mes; la contraparte
+ * cambia en cada comprobante. Preguntar por comprobante sería una consulta por
+ * renglón dentro del bucle del mes — así que se carga el índice completo antes
+ * de entrar. Una empresa con 400 auxiliares son 400 filas de tres columnas.
+ */
+export async function cargarAuxiliaresPorContraparte(db: Db, companyId: string): Promise<IndiceAuxiliares> {
+  const filas = await db.chartAccount.findMany({
+    where: { companyId, isActive: true, customerId: { not: null } },
+    select: { id: true, codAgrup: true, customerId: true },
+  });
+  const idx = new Map<string, string>();
+  for (const f of filas) {
+    if (f.codAgrup && f.customerId) idx.set(llave(f.codAgrup, f.customerId), f.id);
+  }
+  return idx;
+}
+
+/** El auxiliar de esta contraparte para este código, o null si no hay. PURA. */
+export function cuentaAuxiliar(idx: IndiceAuxiliares, codigoMotor: string, customerId: string | null | undefined): string | null {
+  if (!customerId) return null;
+  return idx.get(llave(codigoMotor, customerId)) ?? null;
+}
+
+/**
+ * La contraparte que comparten las facturas de un pago, o null si no hay una
+ * sola.
+ *
+ * Un movimiento bancario puede liquidar varias facturas, y el motor las abona
+ * en UN renglón. Si esas facturas son de contrapartes distintas, no existe un
+ * auxiliar que sea el correcto: se cae a la cuenta base, que es lo que se hace
+ * hoy. Mismo criterio que `kindComun` — de hecho es la misma forma: o todos
+ * coinciden, o no se decide.
+ */
+export function contraparteComun(
+  customerPorInvoice: ReadonlyMap<string, string | null>,
+  invoiceIds: string[],
+): string | null {
+  if (invoiceIds.length === 0) return null;
+  const primero = customerPorInvoice.get(invoiceIds[0]) ?? null;
+  if (primero == null) return null;
+  return invoiceIds.every((id) => customerPorInvoice.get(id) === primero) ? primero : null;
+}
