@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { CODIGO_AGRUPADOR_OFICIAL } from "./codigo-agrupador";
+import { CODIGOS_AGRUPADOR_SAT } from "./codigo-agrupador-sat";
+import { esAgrupadorOficial } from "./agrupador";
 import { COE_CODES, SAT_STARTER_CATALOG } from "./catalog";
 import { EXTRA_ACCOUNTS_FOR_CLASSIFICATION } from "./classify-egreso";
 
@@ -78,5 +80,50 @@ describe("EXTRA_ACCOUNTS_FOR_CLASSIFICATION", () => {
       expect(CODIGO_AGRUPADOR_OFICIAL[cuenta], `classify(${clave}) → ${cuenta} no es código oficial`).toBeDefined();
       expect(seeded.has(cuenta), `classify(${clave}) → ${cuenta} no está sembrada`).toBe(true);
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// La otra dirección, que es la que faltaba y costó siete cierres.
+//
+// La prueba de arriba comprueba que no INVENTAMOS códigos. Nadie comprobaba
+// que no nos FALTARAN: al mapa de nombres le faltaban 171.03, 613.03, 703.04 y
+// 704.04 —equipo de transporte, en el XSD del SAT desde siempre— y como la
+// validez del cierre se leía de ese mapa, siete empresas no podían cerrar el
+// mes. El mensaje decía «cuenta sin código agrupador» sobre cuentas que lo
+// tenían, y bien puesto.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("CODIGOS_AGRUPADOR_SAT (generado del XSD)", () => {
+  const delXsd = () => {
+    const lineas = readFileSync(join(__dirname, "xsd", "CatalogosParaEsqContE.xsd"), "utf8").split("\n");
+    // Sólo c_CodAgrup: el XSD trae además c_Moneda, c_Banco y c_MetPagos, y
+    // los códigos de banco (002 Banamex, 012 BBVA, 014 Santander…) se parecen
+    // lo bastante a un agrupador como para colarse en un regex ingenuo.
+    const inicio = lineas.findIndex((l) => l.includes('simpleType name="c_CodAgrup"'));
+    const fin = lineas.findIndex((l, i) => i > inicio && l.includes("</xs:simpleType>"));
+    const bloque = lineas.slice(inicio, fin).join("\n");
+    return new Set([...bloque.matchAll(/value="([^"]+)"/g)].map((m) => m[1]));
+  };
+
+  it("es EXACTAMENTE la enumeración del XSD", () => {
+    expect([...CODIGOS_AGRUPADOR_SAT].sort()).toEqual([...delXsd()].sort());
+  });
+
+  it("acepta los códigos de equipo de transporte que bloqueaban el cierre", () => {
+    for (const c of ["171.03", "613.03", "703.04", "704.04"]) {
+      expect(esAgrupadorOficial(c)).toBe(true);
+    }
+  });
+
+  it("todo código del XSD es válido, tenga nombre o no", () => {
+    // Es el punto: que falte un NOMBRE no puede impedir cerrar un mes.
+    const sinNombre = [...delXsd()].filter((c) => !(c in CODIGO_AGRUPADOR_OFICIAL));
+    for (const c of sinNombre) expect(esAgrupadorOficial(c)).toBe(true);
+  });
+
+  it("el mapa de nombres nunca tiene códigos que el SAT no acepte", () => {
+    const inventados = Object.keys(CODIGO_AGRUPADOR_OFICIAL).filter((c) => !CODIGOS_AGRUPADOR_SAT.has(c));
+    expect(inventados).toEqual([]);
   });
 });
