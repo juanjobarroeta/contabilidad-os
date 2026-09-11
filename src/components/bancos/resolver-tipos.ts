@@ -30,6 +30,9 @@ export interface CandidatoFactura {
   score: number;
   confidence: "alta" | "media" | "baja";
   folio?: string;
+  serie?: string;
+  /** PPD cobra en parcialidades: el candidato lo dice para que no sorprenda. */
+  metodoPago?: string;
 }
 
 /** Comprobante Electrónico de Pago de Banxico: la prueba de que el dinero

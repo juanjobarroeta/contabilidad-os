@@ -485,9 +485,24 @@ export function ResolverMovimiento({
             {candidatos.map((c) => (
               <div key={c.id} className="flex items-center justify-between gap-3 rounded-control bg-cos-paper px-3 py-2.5">
                 <div className="min-w-0">
-                  <p className="truncate text-[13.5px] font-medium text-cos-ink">{c.cliente}</p>
+                  <p className="truncate text-[13.5px] font-medium text-cos-ink">
+                    {/* EL FOLIO, primero. El servidor ya lo mandaba y la fila
+                        no lo pintaba: cuando el banco no dice quién pagó —un
+                        depósito del hospital que remite por paciente— el folio
+                        es LO ÚNICO con lo que se puede cotejar contra el
+                        reporte de quien depositó. Y con varias facturas del
+                        mismo importe (un procedimiento de precio fijo), es lo
+                        único que distingue una de otra. */}
+                    {(c.serie || c.folio) && (
+                      <span className="mr-1.5 rounded bg-cos-paper px-1.5 py-px font-mono text-[11.5px] font-semibold text-cos-ink-soft">
+                        {c.serie ?? ""}{c.folio ?? ""}
+                      </span>
+                    )}
+                    {c.cliente}
+                  </p>
                   <p className="text-[12px] text-cos-ink-faint">
                     <span className="font-mono">{c.rfc}</span> · {fmtFechaCorta(c.fecha)} · <Money value={c.total} size={12} muted />
+                    {c.metodoPago === "PPD" && <span className="ml-1.5 text-cos-amber-ink">PPD</span>}
                   </p>
                 </div>
                 <div className="flex flex-none items-center gap-2">
