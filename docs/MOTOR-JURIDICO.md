@@ -1,0 +1,308 @@
+# Motor jurídico — de la KB fiscal a todo el derecho mexicano (leyes + jurisprudencia), con dos productos encima
+
+> Status: **propuesta, 2026-09-11.** Nada de lo descrito aquí está construido; todo
+> lo que se cita como existente está en `origin/main` a esa fecha.
+>
+> Antecedente: `docs/FISCAL-KNOWLEDGE-BASE.md` (diseño original de la KB) y la
+> serie de commits «Copiloto · Fase 1–3» / «KB: …» del 3–4 de septiembre de 2026.
+
+---
+
+## 1. Qué se decide con este documento
+
+Hoy el copiloto de Contabilidad OS responde derecho **fiscal y su periferia** con
+fundamento recuperado de una base de conocimiento propia. La idea es llevar el
+mismo motor a **todo el orden jurídico mexicano** (federal y estatal) **más la
+jurisprudencia**, y montarle dos productos:
+
+1. **Contabilidad OS** (el de hoy): sigue contestando sólo lo que un contador
+   necesita. Gana cobertura (leyes que hoy no están) pero **no** cambia de alcance.
+2. **Un producto legal aparte** (frontend nuevo): contesta cualquier materia, lee
+   contratos y demandas, ayuda a redactar contratos y escritos. Necesita leyes y
+   jurisprudencia; el fiscal es un subconjunto.
+
+Las cinco decisiones de diseño están en §3. El resto es inventario (§2),
+fuentes verificadas (§4), cambios concretos por archivo (§5), el producto legal
+(§6), fases con criterio de salida (§7) y lo que sólo Juan puede decidir (§8).
+
+---
+
+## 2. Punto de partida: lo que ya existe y cuánto rinde
+
+Todo vive en `src/lib/fiscal-kb/` y `src/lib/ai/`. No es un prototipo: está en
+producción, medido y con refresco automático.
+
+| Pieza | Dónde | Estado |
+|---|---|---|
+| Ingesta de leyes desde PDF oficial (Diputados, OJP Puebla, Consejería CDMX) | `ingest-leyes.ts`, `pdf.ts` | 20 fuentes en catálogo (4 leyes fiscales, 3 reglamentos, 3 de nómina + 2 reglamentos IMSS/INFONAVIT, CCom, LGSM, LFPIORPI + reglamento, LFDC, 2 de Puebla, 1 de CDMX) |
+| Chunker por unidad legal (artículo / regla / guía) con breadcrumbs, índice fuera, notas al pie corregidas | `chunk.ts` | Probado contra ocho editores distintos de PDF |
+| Versionado por vigencia (una versión nueva CIERRA la anterior; búsqueda filtrada por fecha) | `upsert.ts`, `search.ts` | Vivo; la historia empieza en la primera ingesta |
+| Embeddings | `embed.ts` | OpenAI `text-embedding-3-small`, 1536 dims, pgvector |
+| Búsqueda: vector + rerank con Haiku (default); híbrido léxico existe pero medido peor y apagado; brazo exacto por número de artículo | `search.ts`, `fusion.ts`, `rerank.ts`, `diversificar.ts` | Recuperación top-6: 48 % sólo vector → **65 % con rerank** (eval sólo-KB, 80 preguntas) |
+| Resúmenes por unidad («qué preguntas cotidianas responde este artículo») embebidos como chunk auxiliar | `resumenes.ts` + workflow | Cierra el hueco «el 29-A CFF no se parece a "¿qué datos lleva mi factura?"» |
+| Herramientas del agente | `tools.ts` | `search_fiscal_knowledge`, `get_articulo` (unidad completa), `get_valor_fiscal` (multas, tarifas, UMA, recargos, ISN por entidad) |
+| Valores fiscales tipados desde la fuente oficial, por PR | `src/lib/fiscal/fuentes/*` | Anexo 5 y 8 RMF, LIF, INEGI; workflow abre PR con el diff |
+| Pase de verificación de citas (post-respuesta, con la unidad completa; sólo contradicciones) | `verificacion.ts` | Construido; **opt-in** (`AI_VERIFICACION=1`) porque la primera medición empeoró el número |
+| Eval con tres capas (recuperación sin LLM, agente real, juez Opus) | `src/lib/ai/eval/` | 96 preguntas doradas; fundamento correcto 97–98 %, «no inventa» 88–91 % |
+| Refresco semanal idempotente por hash + cierre de versión | `.github/workflows/fiscal-kb-refresh.yml` | Lunes 00:00 CT |
+| Medición de costo por llamada y guardia de uso de IA por empresa/usuario | `src/lib/costos/*`, `guardia.ts` | Cada embedding, rerank, resumen y verificación deja `CostEvent` |
+
+Lo que importa de esta lista: **el motor es genérico en un 80 %**. Lo fiscal está
+en el catálogo de fuentes, en la regex de claves, en el prompt y en las
+preguntas del eval. No está en el esquema ni en la búsqueda.
+
+---
+
+## 3. Las cinco decisiones
+
+### 3.1 Un solo corpus, dos alcances
+
+No hay «KB fiscal» y «KB legal»: hay **un corpus etiquetado por materia y
+ámbito**. Cada documento lleva `materias` (fiscal, contable, laboral,
+seguridad_social, mercantil, civil, familiar, penal, administrativo,
+constitucional, amparo, pld, ambiental, …) y `ambito` (federal / estatal +
+entidad / internacional).
+
+- El copiloto de Contabilidad OS busca **con filtro**: el conjunto que un
+  contador cita (fiscal, contable, laboral, seguridad social, mercantil, pld,
+  estatal-fiscal). El filtro lo fija el servidor, no el modelo. El «Alcance» del
+  prompt sigue declinando lo que no es contable, y así el copiloto no se vuelve
+  un abogado gratuito aunque el corpus lo permita.
+- El producto legal busca **sin filtro** (o con el filtro que el abogado elija:
+  «sólo civil», «sólo Jalisco»).
+
+Ventaja: una sola ingesta, un solo refresco, un solo eval de recuperación. La
+misma tesis de la 2a. Sala sobre deducciones la ve el contador y el abogado.
+
+### 3.2 Dónde vive: la misma Postgres, el mismo esquema (hasta que la jurisprudencia diga otra cosa)
+
+Doctrina del repo (`docs/INTEGRATION-GUIDE-SATELLITE-APPS.md`): **una base, un
+auth**. Las leyes completas (317 ordenamientos federales, ver §4) son pequeñas:
+LISR son 313 páginas → 327 chunks; el catálogo entero cabe en decenas de miles
+de chunks, menos de 5 USD de embeddings, minutos de ingesta. Entra en la Postgres
+del hub sin discusión.
+
+La **jurisprudencia es otra escala** (cientos de miles de tesis desde 1917;
+la 9a. a 12a. Época concentran lo que se cita hoy). A 1536 dims × 4 bytes, cada
+tesis son ~6 KB de vector más el índice HNSW: 300 k tesis ≈ 1.8 GB + índice.
+Es soportable, pero se **mide en la Fase 1 antes de decidir** entre (a) misma
+base con `halfvec` (mitad de tamaño) y sólo 9a.–12a. Época, o (b) base propia
+para el corpus, con el hub llamándola por HTTP. Este documento asume (a) y deja
+(b) como salida explícita si el número lo pide.
+
+Las tablas siguen llamándose `FiscalDocument` / `FiscalChunk`: renombrar no
+compra nada y toca cada consulta cruda. Se **agregan columnas**, no tablas.
+
+### 3.3 El frontend legal es un satélite
+
+Igual que bartiz o credipro: React SPA sin base de datos ni auth propia,
+bearer JWT del hub, CORS allowlisted, gateado por `CompanyModule = JURIDICO`.
+El hub expone `/api/juridico/*` (chat, expedientes, documentos, redacción). Se
+reutilizan tal cual: auth, membresías, guardia de IA y `CostEvent`, historial
+de chat, acciones pendientes, verificación, eval.
+
+El tenant del producto legal es una `Company` (el despacho jurídico tiene RFC;
+también sirve para el despacho contable que ya es cliente y quiere el módulo).
+
+### 3.4 La jurisprudencia se versiona con el mismo mecanismo que las reformas
+
+Una tesis no «se reforma», pero **cambia de estatus**: jurisprudencia vs.
+aislada; obligatoria a partir de la fecha de publicación en el SJF (la «nota de
+publicación» lo dice: «se considera de aplicación obligatoria a partir del lunes
+25 de agosto de 2025»); puede ser interrumpida, sustituida o superada por
+contradicción de criterios. Eso es exactamente `vigenciaDesde` /
+`vigenciaHasta` más un `estadoCriterio`. La búsqueda por fecha ya existe: una
+pregunta sobre un juicio de 2022 recupera la jurisprudencia obligatoria
+entonces.
+
+El agente debe **saber distinguir** (prompt + cita): «Jurisprudencia 2a./J.
+10/2024 (11a.)» obliga a los tribunales; una tesis aislada orienta. Esa
+distinción es el equivalente jurídico de «la ley va antes que el reglamento» que
+ya aprendió el rerank.
+
+### 3.5 Nada entra sin eval
+
+Regla vigente del copiloto: «lo que no mueve el número, no se queda». Se
+extiende: **cada materia nueva llega con 20–40 preguntas doradas revisadas por
+un abogado** (fundamento esperado en ley y, donde aplique, la tesis esperada).
+Las métricas existentes se reusan sin cambio: recuperación top-6, cita presente,
+citas fuera de la KB, juez. Se agrega una: **tesis pertinente** (¿la tesis
+esperada está en el top-6 de `search_jurisprudencia`?).
+
+El eval fiscal actual es la **prueba de no regresión**: agregar 300 leyes al
+corpus no puede bajar el 65 % de recuperación del contador. Si baja (ruido de
+vecinos de otras materias), el filtro de materias del hub es el primer sospechoso
+y el rerank el segundo.
+
+---
+
+## 4. Fuentes verificadas (11-sep-2026)
+
+| Fuente | Qué | Acceso comprobado | Uso |
+|---|---|---|---|
+| **Cámara de Diputados — LeyesBiblio** | **317 ordenamientos vigentes** en el índice (CPEUM, códigos federales y nacionales, leyes federales y generales, LIF/PEF 2026) + reglamentos en `/regley`. Cada ley tiene `ref/<clave>.htm` con **todos los decretos de reforma** (fecha DOF, PDF y Word) y el texto original. | El pipeline actual ya ingiere 15 de ellas; mismo formato de PDF. Página `ref` legible sin JS. | Fase 0. Catálogo generado desde el índice, no a mano. |
+| **Orden Jurídico Nacional (SEGOB)** | Legislación de las 32 entidades, `estatal.php?edo=1..32`; cobertura desigual (`liberado=si/no`). | Página servida sin bloqueo. Cada congreso estatal publica distinto (Puebla OJP y CDMX Consejería ya resueltos en el chunker). | Fase 3, por entidad y por demanda de clientes. |
+| **SCJN — Semanario Judicial de la Federación** (`sjf2.scjn.gob.mx`) | Tesis desde 1917 (5a.–12a. Época), precedentes, votos, acuerdos. Microservicio público `…/services/sjftesismicroservice/api/public/tesis`. | **Detrás de Incapsula**: `curl` recibe 403; un navegador pasa (Firecrawl devolvió la tesis 2031002 completa con todos sus campos). | Fase 1, vía el worker Playwright que ya existe para el SAT, si la API abierta no basta. |
+| **SCJN — Datos abiertos (Repositorio del Bicentenario)** `bicentenario.scjn.gob.mx/repositorio-scjn/sjf` | Descarga oficial en **CSV por lotes de 100** (con acuse y SHA-256 por documento) y **API JSON** con conteo total, lista de ids y tesis por id. Campos: registro digital, época, instancia, órgano, materia(s), tipo (jurisprudencia/aislada), número de identificación, rubro, texto, precedentes, localización, **nota de publicación** (fecha de obligatoriedad). | Manual público leído. La URL base de la API se muestra en la pestaña «API» del sitio, cargada por JS: **leerla desde un navegador** (pendiente, primer paso de la Fase 1). | Fase 1, fuente preferida (es la oficial y trae hash). |
+| **TFJA — Sistema de Consulta de Tesis y Jurisprudencias** | Tesis y jurisprudencia administrativa/fiscal (la que más cita un fiscalista en litigio). | Formulario, exige elegir Época, sin API ni exportación documentada. | Fase 3, Playwright. |
+| **DOF** | Reformas diarias; es la fuente primaria de las versiones. | Bloquea bots y el certificado falla desde el contenedor (medido en la capa de valores). | Fase 3, Playwright; hoy la reforma llega vía Diputados en días. |
+| **Tratados (SRE, cja.sre.gob.mx)** | Tratados internacionales vigentes (convenios para evitar doble tributación, T-MEC). | No verificado. | Opcional. |
+
+Lo que NO se puede: reconstruir automáticamente el texto vigente de una ley en
+una fecha anterior a su primera ingesta. Diputados publica los decretos de
+reforma, no consolidados históricos; reconstruirlos es trabajo manual por ley y
+sólo se hace si un cliente lo necesita (litigio sobre ejercicios viejos).
+
+---
+
+## 5. Cambios concretos por archivo
+
+### 5.1 Esquema (`prisma/schema.prisma`)
+
+```prisma
+enum FiscalSource { LEY RMF CRITERIO DOF REGLAMENTO TESIS GUIA SENTENCIA TRATADO }
+enum AmbitoJuridico { FEDERAL ESTATAL MUNICIPAL INTERNACIONAL }
+enum TipoCriterio { JURISPRUDENCIA AISLADA }
+enum EstadoCriterio { VIGENTE INTERRUMPIDA SUSTITUIDA SUPERADA }
+
+model FiscalDocument {
+  // … lo de hoy …
+  materias       String[]        @default([])   // "fiscal", "laboral", "civil", …
+  ambito         AmbitoJuridico  @default(FEDERAL)
+  entidad        String?                        // "PUE", "CMX" (clave INEGI de 3 letras)
+  // Sólo TESIS / SENTENCIA:
+  registro       String?         @unique        // registro digital SJF
+  epoca          String?                        // "11a."
+  instancia      String?                        // "Primera Sala", "TCC"
+  organo         String?
+  tipoCriterio   TipoCriterio?
+  estadoCriterio EstadoCriterio?
+  fechaPublicacion DateTime?                    // viernes de publicación en el SJF
+}
+```
+
+`FiscalChunk` no cambia. El filtro por materias va en el `JOIN` que la búsqueda
+ya hace con `FiscalDocument` (`d."materias" && $1::text[]`), sin denormalizar
+hasta que el plan de la consulta lo pida. `embedding` se mantiene en 1536; el
+cambio a `halfvec` es una migración aparte si la Fase 1 lo justifica (§3.2).
+
+### 5.2 Catálogo generado (`src/lib/fiscal-kb/catalogo/`)
+
+- `scripts/fiscal-catalogo-diputados.ts`: lee el índice de LeyesBiblio, emite
+  `catalogo/federal.json` con `{ clave, titulo, urlPdf, urlRef, materias }`.
+  Las materias se asignan por regla (nombre de la ley → materia) y se revisan a
+  mano una vez; el JSON entra por PR como hoy entran los valores fiscales.
+- `ingest-leyes.ts`: `LEYES` se convierte en `catalogo/federal.json` +
+  `catalogo/overrides.ts` (lo que hoy es manual: `vigenciaFallback`, fuentes
+  estatales con URL propia, reglamentos con nombre de archivo fechado).
+- `fusion.ts`: `CLAVES` se deriva del catálogo (hoy es un string literal de 21
+  claves). Nuevas referencias exactas: «tesis 1a./J. 215/2025», «registro
+  2031002», «jurisprudencia 2a./J. 10/2024».
+- `fiscal-kb-refresh.yml`: un job por fuente ya no escala a 317; el endpoint
+  `POST /api/admin/fiscal-ingest` acepta `{ "jobs": "catalogo" }` y procesa por
+  lotes con el hash (sólo re-embebe lo reformado; una semana normal son 0–3
+  leyes).
+
+### 5.3 Chunker (`chunk.ts`)
+
+- `DocKind` gana `"tesis"` (unidad = la tesis completa: rubro + texto +
+  precedentes; el rubro va en `contexto`, el registro en `articulo`) y
+  `"sentencia"` (unidad = considerando; rara vez se cita, Fase 3).
+- La CPEUM y los códigos usan `chunkLaw` tal cual (el chunker ya acepta
+  «Artículo 1o.», «ARTÍCULO 158.-», «30 Bis», transitorios).
+
+### 5.4 Búsqueda y herramientas (`search.ts`, `tools.ts`, `tool-executor.ts`)
+
+- `searchFiscalKnowledge` gana `materias?: string[]` y `ambito?/entidad?`.
+- `buildCita` para TESIS: «Jurisprudencia 1a./J. 215/2025 (11a.), reg. 2031002»
+  / «Tesis aislada I.4o.A.12 A (11a.), reg. 2031551». La regex de
+  `extraerCitas` (eval y verificación) aprende ese formato.
+- Nuevas: `search_jurisprudencia(query, materia?, epoca?, tipo?, fecha?)` y
+  `get_tesis(registro)` (equivalente de `get_articulo`).
+- En el hub, `search_fiscal_knowledge` fija `materias` al conjunto contable
+  **en el executor**, no en el prompt. `search_jurisprudencia` en el hub queda
+  limitada a materia administrativa/fiscal/laboral (un contador sí cita la
+  jurisprudencia de la 2a. Sala sobre deducciones; no la civil).
+- El pase de verificación coteja citas de tesis con `get_tesis` igual que hace
+  con `get_articulo`.
+
+### 5.5 Resúmenes y rerank
+
+- Resúmenes por unidad: se corren para las leyes nuevas (mismo workflow). Las
+  tesis **no** los necesitan: el rubro ya es el resumen y la tesis entera es una
+  unidad.
+- El prompt del rerank gana el criterio «jurisprudencia antes que tesis aislada;
+  la Época más reciente antes que una superada» y deja de presentarse como
+  «fiscalista» cuando la consulta viene del producto legal (parámetro `perfil`).
+
+### 5.6 Prompt y eval
+
+- `system-prompt.ts` se divide: un núcleo común (fecha, reglas de fundamento,
+  verificación, estilo) y dos perfiles: `contador` (el de hoy, sin cambios de
+  comportamiento) y `abogado` (rol, alcance, jurisprudencia obligatoria vs.
+  aislada, vigencia y Época, confidencialidad, «no sustituye al abogado»,
+  prohibido presentar nada ante autoridad).
+- `src/lib/ai/eval/preguntas-juridico.ts`: preguntas por materia con
+  `fundamentos` y `tesisEsperadas`; el runner existente las corre con el perfil
+  `abogado`.
+
+---
+
+## 6. El producto legal (segundo frontend)
+
+Todo lo de abajo se construye **sobre las mismas herramientas** del §5; lo nuevo
+es el expediente y la redacción.
+
+| Capacidad | Cómo se construye | Qué protege |
+|---|---|---|
+| **Consulta** («¿procede el amparo contra…?», «¿qué plazo tengo para contestar la demanda?») | Chat con `search_fiscal_knowledge` sin filtro + `search_jurisprudencia` + `get_articulo` / `get_tesis`. Verificación de citas **siempre encendida** (aquí el costo lo paga el precio del módulo). | Citas con vigencia y Época; «sin fundamento» explícito. |
+| **Leer un contrato o una demanda** | Subir PDF/DOCX (pdf-parse ya está; DOCX con `mammoth`) → texto → `Expediente` + `DocumentoJuridico` por Company. Análisis: partes, objeto, obligaciones, plazos, penas, cláusulas atípicas o nulas; en demandas: vía, prestaciones, hechos, pruebas, plazos procesales. **Las citas que el documento hace se cotejan contra la KB** con el mismo pase de verificación (aplicado al documento del cliente, no a la respuesta del modelo). | Nunca se resume sin decir qué no se pudo verificar. |
+| **Redactar un contrato** | Biblioteca de plantillas y cláusulas versionadas por materia y entidad (entra por PR, como los valores fiscales). El modelo arma con los datos del expediente y con fundamentos recuperados; cada cláusula con fundamento sale marcada «verificado» / «no verificado». Export DOCX. | El abogado revisa; el producto no firma ni envía. |
+| **Redactar una demanda o escrito** | Estructura por vía, con el **checklist de requisitos tomado de la ley por `get_articulo`** (amparo indirecto: Ley de Amparo; contencioso administrativo: LFPCA; mercantil: CCom; civil/familiar: CNPCF; laboral: LFT). Hechos del expediente, conceptos de violación / agravios con jurisprudencia recuperada. | Igual: marcas de verificación por párrafo; nada se presenta. |
+| **Expediente** | Tabla nueva `Expediente` (Company, asunto, vía, partes, plazos) con `DocumentoJuridico[]` y el hilo de chat asociado (el `ChatMessage` ya tiene conversación por empresa). | Aislamiento por tenant; retención configurable; los documentos no salen del tenant ni entran a entrenamiento. |
+
+Guardrails no negociables: «no sustituye asesoría profesional» (ya en el
+prompt), nada irreversible (no presenta, no notifica, no firma), topes de IA por
+tier (`guardia.ts`) con un tier `JURIDICO` propio, y los términos de uso con
+revisión de abogado (`docs/LEGAL-ACEPTACIONES.md` ya tiene el borrador y la nota
+de que un abogado debe revisarlos).
+
+Distribución: repositorio propio del satélite (como Automotriz / Hospital),
+módulo `JURIDICO` en el hub, orígenes en `API_ALLOWED_ORIGINS`. Cliente
+objetivo: despachos jurídicos y venta cruzada a los despachos contables que ya
+son clientes (un despacho contable litiga ante el TFJA y contesta requerimientos:
+ahí el módulo legal y el contable se tocan).
+
+---
+
+## 7. Fases y criterio de salida
+
+| Fase | Alcance | Duración | Sale cuando |
+|---|---|---|---|
+| **F0 — Corpus federal completo** | Catálogo generado desde Diputados (317 ordenamientos + reglamentos), etiquetas de materia/ámbito, filtro de materias fijo en el hub, `CLAVES` derivadas, refresco por lotes, resúmenes para lo nuevo. | 1 semana | Todo ingerido y refrescándose solo; **el eval fiscal no baja** (recuperación ≥ 65 %, fundamento correcto ≥ 97 %). |
+| **F1 — Jurisprudencia SCJN** | URL base de la API de datos abiertos leída desde navegador; ingesta 9a.–12a. Época (Playwright si la API no alcanza); esquema §5.1; `search_jurisprudencia` + `get_tesis`; cita y verificación; medición de tamaño (§3.2); 40 preguntas doradas legales revisadas por un abogado. | 2 semanas | «Tesis pertinente» ≥ 70 % en top-6; decisión tomada sobre dónde vive el corpus. |
+| **F2 — Producto legal MVP** | Satélite: chat con perfil `abogado`, expediente, leer documento con verificación, 3 plantillas de contrato, 1 vía de escrito (amparo indirecto o contencioso administrativo, que además sirve al despacho contable). Módulo `JURIDICO`, tier de IA, términos. | 3–4 semanas | 5 despachos piloto usándolo; costo de IA por despacho medido en `CostEvent`. |
+| **F3 — Cobertura** | TFJA (Playwright), estatales por demanda (Orden Jurídico Nacional + congresos), DOF diario, sentencias completas (SIJ), tratados. | Continuo, por demanda | Cada fuente con su eval. |
+
+Costos de construcción del corpus, orden de magnitud: embeddings de las 317
+leyes < 5 USD; resúmenes con Haiku ≈ 0.001 USD por artículo (decenas de miles
+de artículos → 60–100 USD, una vez); tesis 9a.–12a. Época: unos cuantos USD de
+embeddings, el costo real es almacenamiento (§3.2). Consulta: igual que hoy (un
+embedding + un rerank por búsqueda, medidos).
+
+---
+
+## 8. Lo que sólo Juan decide
+
+1. **Nombre, precio y tier de IA** del producto legal (¿módulo del hub o marca
+   propia con su dominio?).
+2. **El abogado revisor**: preguntas doradas por materia, plantillas de contrato
+   y términos de uso. El GTM ya contempla «una hora de abogado»; esto son más.
+3. **Dónde vive la jurisprudencia** si la medición de F1 pasa de ~2 GB: misma
+   Postgres con `halfvec` o base propia.
+4. **Responsabilidad profesional**: seguro E&O y qué dice el producto de sí
+   mismo (herramienta del abogado, no abogado).
+5. **Prioridad de entidades federativas** para la Fase 3 (hoy: Puebla y CDMX).
+6. **Orden F1 ↔ F2**: la jurisprudencia primero hace mejor el producto; el
+   frontend primero valida demanda antes. La recomendación es F0 → F1 → F2
+   porque un producto legal sin jurisprudencia no es creíble para un litigante.
