@@ -140,5 +140,8 @@ export const config = {
     // de Impuestos — sin esto la pantalla sólo puede enseñar totales, y un
     // total sin los comprobantes que lo forman no se defiende ante nadie.
     "/api/papeles/:path*",
+    // Copiloto jurídico (satélite, docs/MOTOR-JURIDICO.md §6): chat en
+    // streaming y conversaciones, con bearer del hub.
+    "/api/juridico/:path*",
   ],
 };
