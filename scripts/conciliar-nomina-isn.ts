@@ -68,6 +68,13 @@ const H = filasIsn[0].map((h) => norm(h));
 const col = (label: string) => H.findIndex((h) => h === norm(label));
 const cNombre = col("Razon receptor"), cFechaPago = col("Fecha pago"), cIni = col("Fecha inicial pago"), cFin = col("Fecha final pago");
 const cSueldo = col("Sueldo");
+// El CFDI timbra las vacaciones pagadas dentro de la clave 001 (ver
+// DesgloseNomina: «001 Sueldos (incluye vacaciones pagadas como 001)»); la
+// hoja del contador las separa en sus propias columnas. Comparar «Sueldo» de
+// la hoja contra 001 marcaba como DIFIERE cada finiquito por exactamente sus
+// vacaciones (agosto 2026: 4 casos, $7,748.68) sin que nada estuviera mal.
+// Se compara sueldo + vacaciones contra 001.
+const colsSueldo001 = ["Sueldo", "Vacaciones a tiempo", "Vacaciones reportadas"].map(col).filter((i) => i >= 0);
 const colsBase = [
   "Vacaciones a tiempo", "Vacaciones reportadas", "Prima de vacaciones reportada", "Aguinaldo", "Sueldo",
   "Prima de vacaciones a tiempo", "Gratificación Anual (Aguinaldo)", "Prima vacacional", "Otros ingresos por salarios",
@@ -85,7 +92,7 @@ filasIsn.slice(1).forEach((r, i) => {
   isn.push({
     nombre, clave: norm(nombre),
     fechaPago: fecha(r[cFechaPago]), periodoIni: fecha(r[cIni]), periodoFin: fin,
-    sueldo: r2(num(r[cSueldo])),
+    sueldo: r2(colsSueldo001.reduce((s, c) => s + num(r[c]), 0)),
     baseIsn: r2(colsBase.reduce((s, c) => s + num(r[c]), 0)),
     fila: i + 2,
   });
