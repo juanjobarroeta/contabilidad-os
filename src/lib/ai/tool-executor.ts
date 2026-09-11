@@ -16,6 +16,9 @@ import { listUnmatched, scoreCandidates } from "@/lib/conciliacion";
 import { stagePendingConciliar } from "@/lib/whatsapp/pending-action";
 import { searchFiscalKnowledge, getArticulo, searchJurisprudencia, getTesis } from "@/lib/fiscal-kb/search";
 import { MATERIAS_CONTADOR, MATERIAS_CONTADOR_JURISPRUDENCIA } from "@/lib/fiscal-kb/materias";
+
+/** Fuentes de search_fiscal_knowledge cuando el modelo no pide unas: todo menos las tesis. */
+const FUENTES_NORMATIVA = ["LEY", "REGLAMENTO", "RMF", "CRITERIO", "DOF", "GUIA"];
 import { consultarValorFiscal, type ConsultaValorFiscal } from "@/lib/fiscal/valores";
 import { stageChatPendingAction } from "@/lib/ai/pending-action";
 import { contarSimilaresSinConciliar } from "@/lib/bancos/reglas-categorizacion";
@@ -245,7 +248,10 @@ export async function executeToolCall(
         return JSON.stringify(
           await searchFiscalKnowledge(String(input.query ?? ""), {
             fechaVigencia: typeof input.fecha_vigencia === "string" ? new Date(input.fecha_vigencia) : undefined,
-            fuentes: Array.isArray(input.fuentes) ? input.fuentes.map(String) : undefined,
+            // Sin `fuentes` explícitas, esta herramienta es NORMATIVA (ley,
+            // reglamento, RMF, guías, criterios): la jurisprudencia tiene la
+            // suya (search_jurisprudencia) y no compite aquí por el top-6.
+            fuentes: Array.isArray(input.fuentes) && input.fuentes.length > 0 ? input.fuentes.map(String) : FUENTES_NORMATIVA,
             // El corpus es todo el derecho mexicano; el copiloto contable sólo
             // ve lo que un contador cita. Lo fija el servidor, no el modelo.
             materias: MATERIAS_CONTADOR,
