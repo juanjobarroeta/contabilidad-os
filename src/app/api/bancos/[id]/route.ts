@@ -188,12 +188,24 @@ export async function GET(req: Request, { params }: Params) {
     // Meses con movimientos (SIN el filtro de mes — alimenta el selector).
     // fecha se guarda como instante UTC en columna timestamp, así que to_char
     // directo coincide con el corte Date.UTC del filtro `mes` de arriba.
-    prisma.$queryRaw<{ mes: string; n: bigint }[]>`
-      SELECT to_char(fecha, 'YYYY-MM') AS mes, COUNT(*) AS n
-      FROM "BankTransaction"
-      WHERE "bankAccountId" = ${bankAccountId}
-      GROUP BY 1
-      ORDER BY 1 DESC`,
+    //
+    // Respeta el alcance: en la vista «todas» el id NO es un id, es la palabra
+    // "todas". Comparándolo contra bankAccountId no casaba con ninguna fila y
+    // el selector de meses salía vacío justo en la vista donde más falta hace.
+    companyIdScope
+      ? prisma.$queryRaw<{ mes: string; n: bigint }[]>`
+          SELECT to_char(t.fecha, 'YYYY-MM') AS mes, COUNT(*) AS n
+          FROM "BankTransaction" t
+          JOIN "BankAccount" a ON a.id = t."bankAccountId"
+          WHERE a."companyId" = ${companyIdScope}
+          GROUP BY 1
+          ORDER BY 1 DESC`
+      : prisma.$queryRaw<{ mes: string; n: bigint }[]>`
+          SELECT to_char(fecha, 'YYYY-MM') AS mes, COUNT(*) AS n
+          FROM "BankTransaction"
+          WHERE "bankAccountId" = ${bankAccountId}
+          GROUP BY 1
+          ORDER BY 1 DESC`,
   ]);
   const statusCounts = Object.fromEntries(counts.map(c => [c.status, c._count]));
   const tagCountMap = Object.fromEntries(
