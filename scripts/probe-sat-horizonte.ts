@@ -226,6 +226,152 @@ async function fase0Procedencia(companyId: string): Promise<{
   };
 }
 
+// ── Censo de la cartera (BD, gratis) ─────────────────────────────────────────
+//
+// «¿Qué se pierde al cancelar Syntage?» es una pregunta POR EMPRESA y la
+// respuesta cambia de una a otra (BAOBAB: nada, todo entró por descarga masiva
+// propia; MARGOM: 2017-2021 entró por fuera). Recorrer la cartera entera son
+// cuatro consultas agrupadas —no N por empresa—, así que va siempre, antes de
+// la empresa del RFC, y se persiste como fila propia en AuditLog.
+interface CensoEmpresa {
+  rfc: string;
+  razonSocial: string;
+  facturas: number;
+  sinXml: number;
+  primerAnio: number | null;
+  /** Años con facturas y SIN solicitud propia terminada: ese tramo entró por fuera. */
+  aniosSinSolicitudPropia: number[];
+  extraccionesSyntage: number;
+}
+
+async function censoCartera(): Promise<CensoEmpresa[]> {
+  const [empresas, facturas, propias, syntage] = await Promise.all([
+    prisma.company.findMany({
+      where: { fielCer: { not: null } },
+      select: { id: true, rfc: true, razonSocial: true },
+      orderBy: { rfc: "asc" },
+    }),
+    prisma.$queryRaw<Array<{ companyId: string; anio: number; n: bigint; sin_xml: bigint }>>`
+      SELECT i."companyId", EXTRACT(YEAR FROM i."fecha")::int AS anio,
+             COUNT(*) AS n, COUNT(*) FILTER (WHERE i."rawXml" IS NULL) AS sin_xml
+      FROM "Invoice" i
+      JOIN "Company" c ON c.id = i."companyId" AND c."fielCer" IS NOT NULL
+      GROUP BY 1, 2`,
+    prisma.$queryRaw<Array<{ companyId: string; anio: number }>>`
+      SELECT DISTINCT "companyId", "year" AS anio
+      FROM "SatSyncRequest" WHERE "status" = 'FINISHED'`,
+    prisma.$queryRaw<Array<{ companyId: string; n: bigint }>>`
+      SELECT "companyId", COUNT(*) AS n FROM "CostEvent"
+      WHERE "categoria" = 'SYNTAGE' GROUP BY 1`,
+  ]);
+
+  const porEmpresa = new Map<string, { anios: Map<number, { n: number; sinXml: number }> }>();
+  for (const f of facturas) {
+    const e = porEmpresa.get(f.companyId) ?? { anios: new Map() };
+    e.anios.set(f.anio, { n: Number(f.n), sinXml: Number(f.sin_xml) });
+    porEmpresa.set(f.companyId, e);
+  }
+  const propiasPor = new Map<string, Set<number>>();
+  for (const p of propias) {
+    if (!propiasPor.has(p.companyId)) propiasPor.set(p.companyId, new Set());
+    propiasPor.get(p.companyId)!.add(p.anio);
+  }
+  const syntagePor = new Map(syntage.map((s) => [s.companyId, Number(s.n)]));
+
+  return empresas.map((c) => {
+    const anios = porEmpresa.get(c.id)?.anios ?? new Map<number, { n: number; sinXml: number }>();
+    const conFacturas = [...anios.keys()].sort();
+    const conSolicitud = propiasPor.get(c.id) ?? new Set<number>();
+    return {
+      rfc: c.rfc,
+      razonSocial: c.razonSocial,
+      facturas: [...anios.values()].reduce((s, a) => s + a.n, 0),
+      sinXml: [...anios.values()].reduce((s, a) => s + a.sinXml, 0),
+      primerAnio: conFacturas[0] ?? null,
+      aniosSinSolicitudPropia: conFacturas.filter((a) => !conSolicitud.has(a)),
+      extraccionesSyntage: syntagePor.get(c.id) ?? 0,
+    };
+  });
+}
+
+// ── IMSS vía SatGo (sin cuota del SAT, sin e.firma) ──────────────────────────
+//
+// `ComplianceProvider.fetchImssOpinion` existe y la implementación de Syntage
+// LANZA: «Syntage no provee la opinión de cumplimiento IMSS». SatGo sí la da,
+// con sólo el RFC: `GET /api/v2/consultar/imssoc`. El primer intento (10-sep)
+// llegó al IMSS y el IMSS contestó «servicio no disponible, reintente» —
+// transitorio de ellos, no del código. Aquí se reintenta.
+//
+// Sólo corre con SATGO_API_KEY presente. No toca al SAT ni gasta cuota.
+const SATGO_BASE = process.env.SATGO_BASE ?? "https://api.sat-go.com";
+const SATGO_API_KEY = process.env.SATGO_API_KEY ?? "";
+
+interface ResultadoImss {
+  status: number;
+  ok: boolean;
+  contentType: string;
+  bytes: number;
+  ms: number;
+  /** Primeros caracteres cuando la respuesta es texto/JSON (el mensaje del IMSS). */
+  muestra: string;
+  archivo: string | null;
+  error?: string;
+}
+
+/** Canjea la API Key durable por el JWT (POST /api/Auth/token-json). Igual que el piloto. */
+async function jwtSatGo(key: string): Promise<string> {
+  const res = await fetch(`${SATGO_BASE}/api/Auth/token-json?api-version=1.0`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key }),
+  });
+  const txt = (await res.text()).trim();
+  if (!res.ok) throw new Error(`Auth/token-json ${res.status}: ${txt.slice(0, 160)}`);
+  try {
+    const j = JSON.parse(txt);
+    return j.tokens?.access?.value ?? j.token ?? j.jwt ?? j.access_token ?? txt.replace(/^"|"$/g, "");
+  } catch {
+    return txt.replace(/^"|"$/g, "");
+  }
+}
+
+async function faseImss(rfc: string, salida: string): Promise<ResultadoImss> {
+  const vacio: ResultadoImss = { status: 0, ok: false, contentType: "", bytes: 0, ms: 0, muestra: "", archivo: null };
+  let token: string;
+  try {
+    token = await jwtSatGo(SATGO_API_KEY);
+  } catch (e) {
+    return { ...vacio, error: `auth: ${e instanceof Error ? e.message : String(e)}` };
+  }
+  const t0 = Date.now();
+  try {
+    const res = await fetch(`${SATGO_BASE}/api/v2/consultar/imssoc?api-version=2.0`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}`, Rfc: rfc },
+    });
+    const ms = Date.now() - t0;
+    const contentType = res.headers.get("content-type") ?? "";
+    const buf = Buffer.from(await res.arrayBuffer());
+    const esTexto = /json|text/.test(contentType);
+    let archivo: string | null = null;
+    if (res.ok && !esTexto) {
+      archivo = path.join(salida, `imss-${rfc}.${/pdf/.test(contentType) ? "pdf" : "bin"}`);
+      writeFileSync(archivo, buf);
+    }
+    return {
+      status: res.status,
+      ok: res.ok,
+      contentType: contentType.split(";")[0],
+      bytes: buf.length,
+      ms,
+      muestra: esTexto ? buf.toString("utf8").slice(0, 300) : "",
+      archivo,
+    };
+  } catch (e) {
+    return { ...vacio, ms: Date.now() - t0, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 async function fase0Inventario(companyId: string): Promise<InventarioAnio[]> {
   const filas = await prisma.$queryRaw<
     Array<{ anio: number; total: bigint; con_xml: bigint; cancelados: bigint }>
@@ -481,8 +627,36 @@ async function main(): Promise<void> {
   console.log(`   bitácora: ${rutaBitacora}\n`);
   anotar({ evento: "inicio", rfc: company.rfc, companyId: company.id, aplicar: APLICAR, anios: ANIOS });
 
+  // ── Censo de la cartera ───────────────────────────────────────────────────
+  console.log("── Censo de la cartera — procedencia por empresa (BD, gratis)");
+  const censo = await censoCartera();
+  console.log("   rfc            facturas  sinXml  desde  syntage  años sin solicitud propia");
+  for (const e of censo) {
+    console.log(
+      `   ${e.rfc.padEnd(14)} ${String(e.facturas).padStart(8)}  ${String(e.sinXml).padStart(6)}` +
+        `  ${e.primerAnio ?? "—"}   ${String(e.extraccionesSyntage).padStart(6)}  ` +
+        (e.aniosSinSolicitudPropia.length > 0 ? `⚠ ${e.aniosSinSolicitudPropia.join(",")}` : "—"),
+    );
+  }
+  const enRiesgo = censo.filter((e) => e.aniosSinSolicitudPropia.length > 0);
+  console.log(
+    `\n   ${enRiesgo.length} de ${censo.length} empresas tienen años que entraron por fuera ` +
+      `(se pierden al cancelar Syntage si el SAT ya no los sirve).`,
+  );
+  try {
+    await prisma.auditLog.create({
+      data: {
+        accion: "sat.probe-censo",
+        entidad: "Company",
+        detalle: JSON.parse(JSON.stringify({ empresas: censo, enRiesgo: enRiesgo.map((e) => e.rfc) })),
+      },
+    });
+  } catch (e) {
+    console.error("   ⚠ no se pudo persistir el censo:", e instanceof Error ? e.message : e);
+  }
+
   // ── Fase 0 ────────────────────────────────────────────────────────────────
-  console.log("── Fase 0 — lo que ya tenemos (BD, gratis)");
+  console.log(`\n── Fase 0 — lo que ya tenemos de ${company.rfc} (BD, gratis)`);
   const inventario = await fase0Inventario(company.id);
   if (inventario.length === 0) {
     console.log("   (sin facturas)");
@@ -605,6 +779,19 @@ async function main(): Promise<void> {
     }
   }
 
+  // ── IMSS vía SatGo ────────────────────────────────────────────────────────
+  let imss: ResultadoImss | null = null;
+  if (SATGO_API_KEY) {
+    console.log("\n── IMSS — opinión de cumplimiento vía SatGo (sólo RFC, sin cuota SAT)");
+    imss = await faseImss(company.rfc, SALIDA);
+    if (imss.error) console.log(`   ✗ ${imss.error}`);
+    else if (imss.ok) console.log(`   ✓ ${imss.status} ${imss.contentType} ${imss.bytes}b en ${imss.ms}ms${imss.archivo ? ` → ${path.basename(imss.archivo)}` : ""}`);
+    else console.log(`   ✗ ${imss.status} ${imss.contentType} en ${imss.ms}ms`);
+    if (imss.muestra) console.log(`   respuesta: ${imss.muestra}`);
+  } else {
+    console.log("\n── IMSS — omitido (sin SATGO_API_KEY)");
+  }
+
   // ── Reporte ───────────────────────────────────────────────────────────────
   const reporte = {
     rfc: company.rfc,
@@ -669,6 +856,7 @@ async function main(): Promise<void> {
             columnasObservadas: reporte.manifiesto.columnasObservadas,
             faltantesTotal: faltantes.length,
             faltantesPorPeriodo,
+            imss,
           }),
         ),
       },
