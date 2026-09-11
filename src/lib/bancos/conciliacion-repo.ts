@@ -12,6 +12,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { resolverSaldos, type SaldoConFuente } from "./saldos";
+import { claveMes, mesDeLote } from "./periodo-lote";
 import { COE_CODES } from "@/lib/contabilidad/catalog";
 import { clavePoliza, numerarPolizas } from "@/lib/contabilidad/coe-polizas";
 import {
@@ -274,18 +275,17 @@ export async function conciliacionDelMes(
     saldoInicialEstado: c.saldoInicialEstado === null ? null : Number(c.saldoInicialEstado),
     saldoFinalEstado: c.saldoFinalEstado === null ? null : Number(c.saldoFinalEstado),
   }]));
-  const periodo = `${year}-${String(month).padStart(2, "0")}`;
-  const lotes = (await prisma.importBatch.findMany({
-    where: { companyId, periodo, undoneAt: null, saldoFinal: { not: null } },
-    select: { bankAccountId: true, saldoInicial: true, saldoFinal: true },
-    orderBy: { createdAt: "desc" },
-  })).map((l) => ({
-    ...l,
-    saldoInicial: l.saldoInicial === null ? null : Number(l.saldoInicial),
-    saldoFinal: l.saldoFinal === null ? null : Number(l.saldoFinal),
-  }));
+  // El mes de cada lote sale de las FECHAS de sus movimientos (ver
+  // periodo-lote.ts): comparar `periodo` contra "2026-08" nunca coincidía con
+  // un PDF, cuyo periodo es el texto literal del banco, y el saldo final que
+  // el estado sí traía no se proponía nunca.
+  const periodo = claveMes(year, month);
+  const lotesConMes = await lotesConSaldoYMes(companyId, cuentasBancarias.map((c) => c.id));
   const propuestos = new Map<string, { saldoInicial: number | null; saldoFinal: number | null }>();
-  for (const l of lotes) if (!propuestos.has(l.bankAccountId)) propuestos.set(l.bankAccountId, l);
+  for (const l of lotesConMes) {
+    if (l.mes !== periodo || propuestos.has(l.bankAccountId)) continue;
+    propuestos.set(l.bankAccountId, { saldoInicial: l.saldoInicial, saldoFinal: l.saldoFinal });
+  }
 
   // El ancla de cada cuenta: el último saldo CONOCIDO en o antes de este mes
   // (capturado o del estado importado). Con él ya no hay que teclear el saldo
@@ -506,6 +506,50 @@ const MESES_ES = [
  * siguientes se encadenan. No hay recursión — el neto sale de UNA agregación
  * por rango de fechas, así que da igual si el ancla es de hace tres años.
  */
+/**
+ * Los lotes con algún saldo de estas cuentas, cada uno con SU MES ("YYYY-MM")
+ * derivado de las fechas de sus movimientos (y del texto del periodo como
+ * respaldo). Más recientes primero. Lo comparten la propuesta del mes y el
+ * ancla del encadenado: los dos leían `periodo` como si fuera "YYYY-MM" y
+ * ninguno funcionaba con un estado de cuenta en PDF.
+ */
+async function lotesConSaldoYMes(
+  companyId: string,
+  bankAccountIds: string[],
+): Promise<Array<{ id: string; bankAccountId: string; mes: string | null; saldoInicial: number | null; saldoFinal: number | null }>> {
+  if (bankAccountIds.length === 0) return [];
+  // Con CUALQUIERA de los dos saldos: un PDF al que el parser no le sacó el
+  // final (visto en un BBVA de cheques, importado con cuadre forzado) sí trae
+  // el inicial, y con el inicial `resolverSaldos` calcula el final con el neto
+  // del mes. Exigir el final tiraba también el inicial que sí estaba.
+  const lotes = await prisma.importBatch.findMany({
+    where: {
+      companyId, bankAccountId: { in: bankAccountIds }, undoneAt: null,
+      OR: [{ saldoFinal: { not: null } }, { saldoInicial: { not: null } }],
+    },
+    select: { id: true, bankAccountId: true, periodo: true, saldoInicial: true, saldoFinal: true },
+    orderBy: { createdAt: "desc" },
+  });
+  if (lotes.length === 0) return [];
+  const rangos = await prisma.bankTransaction.groupBy({
+    by: ["importBatchId"],
+    where: { companyId, importBatchId: { in: lotes.map((l) => l.id) } },
+    _min: { fecha: true },
+    _max: { fecha: true },
+  });
+  const rango = new Map(rangos.map((r) => [r.importBatchId, { min: r._min.fecha, max: r._max.fecha }]));
+  return lotes.map((l) => {
+    const r = rango.get(l.id);
+    return {
+      id: l.id,
+      bankAccountId: l.bankAccountId,
+      mes: mesDeLote({ periodo: l.periodo, minFecha: r?.min ?? null, maxFecha: r?.max ?? null }),
+      saldoInicial: l.saldoInicial === null ? null : Number(l.saldoInicial),
+      saldoFinal: l.saldoFinal === null ? null : Number(l.saldoFinal),
+    };
+  });
+}
+
 async function anclasDeSaldo(
   companyId: string,
   bankAccountIds: string[],
@@ -523,11 +567,7 @@ async function anclasDeSaldo(
       select: { bankAccountId: true, year: true, month: true, saldoFinalEstado: true },
       orderBy: [{ year: "desc" }, { month: "desc" }],
     }),
-    prisma.importBatch.findMany({
-      where: { companyId, bankAccountId: { in: bankAccountIds }, undoneAt: null, saldoFinal: { not: null }, periodo: { not: null } },
-      select: { bankAccountId: true, periodo: true, saldoFinal: true },
-      orderBy: { createdAt: "desc" },
-    }),
+    lotesConSaldoYMes(companyId, bankAccountIds),
   ]);
 
   // Candidato por cuenta: el más reciente que NO sea posterior al mes pedido.
@@ -551,11 +591,11 @@ async function anclasDeSaldo(
     });
   }
   for (const l of lotes) {
-    const [y, m] = (l.periodo ?? "").split("-").map(Number);
-    if (!y || !m || m < 1 || m > 12) continue;
+    if (!l.mes || l.saldoFinal == null) continue;
+    const [y, m] = l.mes.split("-").map(Number);
     proponer(l.bankAccountId, {
       periodo: y * 100 + m,
-      saldo: Number(l.saldoFinal),
+      saldo: l.saldoFinal,
       etiqueta: `el estado de cuenta de ${MESES_ES[m - 1]} ${y}`,
       duro: false,
     });
