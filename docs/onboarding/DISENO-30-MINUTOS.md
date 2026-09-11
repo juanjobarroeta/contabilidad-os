@@ -88,7 +88,36 @@ El orquestador arranca en el minuto 20 de un presupuesto de 30 — y por §1.1
 arranca para no hacer nada. La dependencia que esos retrasos expresan es real;
 expresarla con el reloj, no.
 
-### 1.4 Syntage es asíncrono por construcción
+### 1.4 La fuga de cuota 5002: reintentos sin backoff ni reaper
+
+`submitSatSync` reutiliza una solicitud existente sólo si está en
+`REUSABLE_STATUSES` y tiene menos de 24 h. Una solicitud `FAILED` no es
+reutilizable, así que **un periodo que falla crea una solicitud NUEVA en cada
+corrida** — y cada solicitud aceptada gasta cuota 5002 de por vida sobre ese
+(RFC + rango + tipo). No hay backoff. Tampoco hay reaper: una `IN_PROGRESS`
+que el SAT ya expiró se queda `IN_PROGRESS` para siempre.
+
+Medido en BAOBAB (BJQ190709T52, 684 CFDIs en total) el 11-sep-2026:
+
+| año | solicitudes | FINISHED | ACCEPTED sin verificar | IN_PROGRESS | FAILED |
+|---|---:|---:|---:|---:|---:|
+| 2022 | 105 | 24 | 2 | **76** | 3 |
+| 2023 | 74 | 46 | — | 28 | — |
+| 2025 | 88 | 48 | — | 27 | 13 |
+| 2026 | **611** | 269 | 52 | **142** | **148** |
+
+934 solicitudes para 684 facturas. 273 `IN_PROGRESS` zombis (76 de 2022, que el
+SAT expiró hace años), 164 `FAILED` que engendraron una solicitud nueva cada
+una, 54 `ACCEPTED` que nadie verificó. Y **de un día para otro 2026 pasó de 607
+a 611**: la fuga está viva, ~4 solicitudes diarias para una empresa con 17
+facturas en el año.
+
+Es exactamente lo que `DISENO-orquestador.md` pidió como «autocuración del sync
+SAT» y nunca se construyó: reaper de colgados, reintento con tramos al fallar,
+y detector de huecos. Con granularidad anual (§2) la superficie de la fuga cae
+12×, pero la fuga en sí se cierra con esas tres guardas — van en la Ola 0.
+
+### 1.5 Syntage es asíncrono por construcción
 
 `provisionCompany` dispara extracciones y `seguirExtracciones` sondea cada 15 s
 hasta 3 h. Opinión y CSF terminan en segundos; las mensuales de 5 ejercicios,
@@ -249,16 +278,25 @@ la tabla auditada y pasa a ser el censo del SAT.
 propio (BD, gratis) → manifiesto (metadata por año) → diff → un año de XML
 cronometrado. Corre en seco por defecto.
 
-### 3bis.2 El horizonte es de ~5 años, y eso ya está medido
+### 3bis.2 El horizonte de «5 años» NUNCA se midió — corrección
 
-La descarga masiva sólo sirve una ventana de ~5 años. No es teoría: está en
-`HANDOFF-inventario-cfdis.md`, en la tabla de lo irrecuperable — «Emitidas
-2018-06, 2018-10, 2020-06 · fuera de la ventana de 5 años», «Recibidas vigentes
-pre-2021-08 · igual».
+La primera versión de esta sección decía que la ventana de ~5 años «ya está
+medida» porque `HANDOFF-inventario-cfdis.md` la cita («Emitidas 2018-06,
+2018-10, 2020-06 · fuera de la ventana de 5 años»). **El censo del 11-sep lo
+desmiente:** para MARGOM, los años 2017-2020 aparecen como `NUNCA_PEDIDO` — no
+hay una sola fila de `SatSyncRequest` para ellos. El handoff *infirió* la
+ventana de tres meses que faltaban; nuestro sistema jamás le preguntó al SAT.
 
-El probe lo vuelve a medir por empresa igual, y barato: los años fuera de
-ventana contestan **5004 (vacío)** en segundos. Barrer del año más viejo al más
-nuevo fija el horizonte real antes de gastar cuota en los años que sí importan.
+Eso reabre la pregunta de fondo (§3bis.3): si no hay ventana medida, que
+Syntage haya sacado XML real de 2017-2020 con una FIEL de 2026 deja de ser un
+misterio y pasa a ser la hipótesis más simple — **el SAT sí los sirve, y
+nosotros nunca los pedimos**.
+
+El probe lo mide de verdad, y barato: se barre del año más viejo al más nuevo
+y los que de verdad estén fuera de ventana contestan **5004 (vacío)** en
+segundos. **MARGOM es el candidato ideal para esta medición:** sus 2017-2020 ya
+están completos en BD (203,617 CFDIs, todos con `rawXml`), así que la cuota que
+gaste la prueba no compra nada que haga falta — sólo la respuesta.
 
 ### 3bis.3 Lo que Syntage tiene de antes de 2021 es un ARCHIVO, no una técnica
 
@@ -284,9 +322,21 @@ Tres consecuencias, y la tercera es la que manda:
    es para los clientes **ya cargados**: lo que Syntage guarde fuera de nuestra
    ventana se pierde para siempre el día que se cancele el contrato.
 
-**Regla de cutover:** antes de apagar Syntage, correr el probe por cada empresa
-de la cartera y extraer de Syntage todo lo que caiga fuera de la ventana del
-SAT. Es una tarea que sólo se puede hacer una vez, y sólo antes.
+**Lo que el censo demostró (11-sep-2026, 18 empresas con e.firma):** sólo
+**MARGOM** tiene años que entraron por fuera (2017-2020), y **los 203,617 CFDIs
+de MARGOM traen `rawXml`** — el archivo de Syntage ya está íntegro en nuestra
+base. Las otras 17 nunca recibieron un CFDI de Syntage (sólo opinión, CSF,
+declaraciones y CE). **No hay nada que extraer antes de cancelar.**
+
+La regla de cutover se reduce a: correr el censo una vez más el día del corte
+(`scripts/probe-sat-horizonte.ts`, dry run, gratis) y confirmar que sigue
+saliendo `1 de 18` con `sinXml = 0`.
+
+Ojo con la lectura de `rawXml`: **no dice de dónde vino.** La descarga masiva y
+el cron `syntage-cfdis` importan por la misma `importarCfdiXml`. La procedencia
+se infiere de los rastros —`SatSyncRequest` (pedimos nosotros) contra
+`CostEvent categoria=SYNTAGE` (pagamos a un tercero)— y eso es lo que el censo
+cruza.
 
 ---
 
@@ -352,21 +402,28 @@ posponga.
    la empresa en `empresasCargando` aunque su único pendiente sea el backfill.
 5. `companies/route.ts`: quitar los retrasos de 10/15/20 min; encadenar por
    evento (`encadena`) en vez de por reloj.
+6. **Cerrar la fuga de cuota** (§1.4): (a) reaper — una `IN_PROGRESS` con más
+   de 72 h pasa a `EXPIRED` y deja de contar como «en vuelo»; (b) una `FAILED`
+   NO engendra una solicitud idéntica: el siguiente intento va con el rango
+   partido (`partirMes`, que ya existe) o espera un piso de días; (c) una
+   `ACCEPTED` sin verificar en 24 h se verifica antes de pedir nada nuevo.
 
 **Ola 0.5 — MEDIR antes de diseñar más (una tarde).** `scripts/probe-sat-horizonte.ts`,
-ya escrito. De aquí salen los cuatro números que deciden todo lo demás:
+ya escrito y desplegado como worker `sat-probe` en Railway. De aquí salen los
+cuatro números que deciden todo lo demás:
 
-6. Correr en **seco** primero (imprime qué pediría, no toca al SAT). Revisar la
+7. Correr en **seco** primero (imprime qué pediría, no toca al SAT). Revisar la
    Fase 0: cuántas filas `sinXml` tiene la empresa — ése es el archivo heredado.
-7. Correr con `PROBE_APLICAR=1` contra **una** empresa con e.firma. Salen:
+8. Correr con `PROBE_APLICAR=1` contra **una** empresa con e.firma — **MARGOM**,
+   por §3bis.2. Salen:
    · **horizonte** — el año más viejo con datos, y cuáles contestan 5004;
    · **¿cabe el año?** — si algún lado devuelve **5003**, el año no cabe en una
      solicitud y hay que partirlo; si ninguno, la granularidad anual es válida;
    · **tiempo de preparación del SAT** por solicitud anual, metadata vs XML —
      el número que decide si 30 min es alcanzable;
    · **el diff** — la lista exacta de UUIDs cuyo XML falta.
-8. Con `PROBE_XML_ANIO=<año>` agrega el año de XML cronometrado (Fase 3).
-9. Con esos números: ¿30 min es alcanzable con granularidad anual? Si sí, el
+9. Con `PROBE_XML_ANIO=<año>` agrega el año de XML cronometrado (Fase 3).
+10. Con esos números: ¿30 min es alcanzable con granularidad anual? Si sí, el
    alcance del dueño se cumple tal cual. Si no, la metadata (§3.1) sostiene la
    apertura mientras el XML converge, y la promesa al cliente se redacta sobre eso.
 
@@ -404,10 +461,11 @@ Correr en seco primero, y elegir a conciencia la empresa del ensayo.
 **Ola 4 — CE en el alta.** Repuntar `ce-worker` a `main`; invocación por empresa
 desde el alta; borrar `feat/ce-descarga-sat`.
 
-**Ola 5 — apagar Syntage.** Sólo cuando 15-17 corran en sombra sin divergencia
-**y** se haya extraído, empresa por empresa, lo que Syntage guarde fuera de la
-ventana del SAT (§3bis.3). Ese archivo no se puede reconstruir después.
-Syntage es la red, no el objetivo.
+**Ola 5 — apagar Syntage.** Sólo cuando 15-17 corran en sombra sin divergencia.
+La precondición de archivo (§3bis.3) **ya está cumplida**: el censo demostró
+que lo único que Syntage trajo de fuera —MARGOM 2017-2020— ya está íntegro en
+BD. Re-correr el censo el día del corte y listo. Syntage es la red, no el
+objetivo.
 
 ---
 
