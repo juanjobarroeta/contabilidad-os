@@ -48,6 +48,18 @@
 > (67.7 %) antes de F0. Las mediciones de la tarde (69/96) eran sin filtro de
 > materias, así que no comparan. Sin regresión.
 >
+> **Satélite con URL propia (2026-09-11):** repo privado
+> `juanjobarroeta/copiloto-juridico` (Next 15; sin base ni auth: bearer del
+> hub vía `POST /api/auth/token` + refresh, chat SSE contra
+> `/api/juridico/chat`, conversaciones contra `/api/juridico/conversaciones`),
+> proyecto Railway `copiloto-juridico`, URL
+> https://copiloto-juridico-production.up.railway.app, variable
+> `NEXT_PUBLIC_HUB_URL`. En el hub: `/api/juridico/*` resuelve sesión o
+> bearer (`requireUser`), el middleware de CORS lo cubre y
+> `API_ALLOWED_ORIGINS` incluye el origen del satélite. Nombre y marca
+> pendientes (renombrable). Sigue siendo sólo operador hasta que exista el
+> módulo `JURIDICO` y su plan.
+>
 > **Superficie de prueba (2026-09-11):** `/operador/juridico` — el perfil
 > abogado (`src/lib/ai/system-prompt-abogado.ts`, `tools-abogado.ts`,
 > `executor-abogado.ts`) sobre todo el corpus + jurisprudencia, sin empresa,
