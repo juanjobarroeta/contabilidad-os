@@ -222,7 +222,15 @@ describe("check de códigos agrupadores (planes propios sin mapear)", () => {
 
   it("singular sin «(s)»", () => {
     const c = find(evaluarChecks({ ...base(), cuentasSinAgrupador: 1 }), "agrupadores");
-    expect(c?.titulo).toBe("1 cuenta sin código agrupador del SAT");
+    expect(c?.titulo).toBe("1 cuenta sin un código agrupador válido");
+  });
+
+  it("el detalle cubre los DOS casos, no sólo el del código ausente", () => {
+    // Decir «sin código agrupador» cuando la cuenta lo tiene mal escrito manda
+    // a poner un código que ya está puesto.
+    const c = find(evaluarChecks({ ...base(), cuentasSinAgrupador: 4 }), "agrupadores");
+    expect(c?.detalle).toMatch(/no lo tienen/i);
+    expect(c?.detalle).toMatch(/no es uno de los del Anexo 24/i);
   });
 
   it("catálogo completo: el check ni aparece (en semilla sería ruido)", () => {

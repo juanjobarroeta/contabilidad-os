@@ -15,7 +15,7 @@
 //     emite el XML cuando no hay subcuenta.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { CODIGO_AGRUPADOR_OFICIAL } from "./codigo-agrupador";
+import { CODIGOS_AGRUPADOR_SAT } from "./codigo-agrupador-sat";
 
 export interface CuentaConAgrupador {
   cuentaSAT: string;
@@ -35,10 +35,20 @@ export function agrupadorEmitido(c: CuentaConAgrupador): string {
   return declarado !== "" ? declarado : codigoDeCuenta(c);
 }
 
-/** ¿Ese código existe de verdad en el Anexo 24? */
+/**
+ * ¿Ese código existe de verdad en el Anexo 24?
+ *
+ * Se pregunta al XSD del SAT y NO al mapa de nombres. Son dos cosas distintas
+ * que se habían vuelto una: el XSD dice qué acepta el SAT, el mapa dice cómo
+ * se llama cada cuenta en pantalla. Mientras la validez dependió del mapa, un
+ * nombre que faltaba bloqueaba un cierre — y faltaban cuatro códigos de equipo
+ * de transporte que el SAT trae desde siempre, con siete empresas trabadas
+ * detrás y un mensaje que decía «cuenta sin código agrupador» sobre cuentas
+ * que lo tenían bien puesto.
+ */
 export function esAgrupadorOficial(codigo: string | null | undefined): boolean {
   const cod = (codigo ?? "").trim();
-  return cod !== "" && cod in CODIGO_AGRUPADOR_OFICIAL;
+  return cod !== "" && CODIGOS_AGRUPADOR_SAT.has(cod);
 }
 
 /**

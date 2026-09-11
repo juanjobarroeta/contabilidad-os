@@ -262,11 +262,17 @@ export function evaluarChecks(input: ReadinessInputs): ReadinessResult {
       estado: "error",
       titulo:
         input.cuentasSinAgrupador === 1
-          ? "1 cuenta sin código agrupador del SAT"
-          : `${input.cuentasSinAgrupador} cuentas sin código agrupador del SAT`,
+          ? "1 cuenta sin un código agrupador válido"
+          : `${input.cuentasSinAgrupador} cuentas sin un código agrupador válido`,
       detalle:
-        "Su CodAgrup saldría con el código interno de la cuenta y el SAT rechazaría el XML del " +
-        "catálogo. Asigna el código agrupador real de cada una.",
+        // Decía «sin código agrupador», y eso sólo describe la mitad de los
+        // casos: la otra es una cuenta que SÍ lo tiene, mal escrito. Mandar a
+        // alguien a poner un código que ya está puesto es cómo se pierde una
+        // tarde — y peor si el código estaba bien y el que fallaba era el
+        // nuestro, que es lo que pasó con los cuatro de equipo de transporte.
+        "O no lo tienen, y entonces su CodAgrup saldría con el número interno de la cuenta; o lo " +
+        "tienen pero no es uno de los del Anexo 24. En los dos casos el SAT rechaza el XML del " +
+        "catálogo. Revisa el código de cada una contra el catálogo oficial.",
       cta: { label: "Mapear cuentas", href: "/contabilidad/catalogo" },
     });
   }
