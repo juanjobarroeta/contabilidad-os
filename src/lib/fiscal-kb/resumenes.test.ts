@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parsearResumen, textoResumen } from "./resumenes";
+import { esVozFiscalista, parsearResumen, systemPara, textoResumen } from "./resumenes";
 
 describe("parsearResumen", () => {
   it("acepta JSON con o sin texto alrededor y filtra regímenes inválidos", () => {
@@ -22,5 +22,20 @@ describe("textoResumen", () => {
   });
   it("sin contexto ni preguntas", () => {
     expect(textoResumen("Regla 2.7.1.32 RMF-2026", null, { resumen: "X.", preguntas: [], regimenes: [] })).toBe("[Resumen · Regla 2.7.1.32 RMF-2026]\nX.");
+  });
+});
+
+describe("voz del resumen por materia", () => {
+  it("fiscal, laboral, aduanero… hablan como fiscalista y etiquetan regímenes", () => {
+    expect(esVozFiscalista(["fiscal"])).toBe(true);
+    expect(esVozFiscalista(["laboral", "servidores_publicos"])).toBe(true);
+    expect(systemPara(["seguridad_social"])).toMatch(/fiscalista/);
+    expect(systemPara(["fiscal"])).toMatch(/regimenes.*claves SAT/);
+  });
+  it("civil, penal, administrativo… hablan como jurista y sin regímenes", () => {
+    expect(esVozFiscalista(["civil", "familiar"])).toBe(false);
+    expect(esVozFiscalista([])).toBe(false);
+    expect(systemPara(["penal", "procesal"])).toMatch(/jurista/);
+    expect(systemPara(["civil"])).toMatch(/"regimenes": siempre una lista vacía/);
   });
 });
