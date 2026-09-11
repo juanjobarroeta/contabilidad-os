@@ -1,0 +1,147 @@
+import { describe, it, expect, beforeEach } from "vitest";
+import { aplicarParejas, emparejarAuxiliares, esNombreDeRelleno } from "./auxiliar-contraparte";
+import { COE_CODES } from "./catalog";
+
+// Base mínima en memoria: sólo lo que toca este módulo.
+type Cta = { id: string; companyId: string; cuentaSAT: string; subcuenta: string | null; nombre: string; isActive: boolean; codAgrup: string | null };
+type Cli = { id: string; companyId: string; razonSocial: string; rfc: string; chartAccountId: string | null };
+
+let cuentas: Cta[] = [];
+let clientes: Cli[] = [];
+
+const cta = (id: string, nombre: string, codAgrup: string = COE_CODES.PROVEEDORES): Cta => ({
+  id, companyId: "c1", cuentaSAT: "2110", subcuenta: `2110-${id}-000`, nombre, isActive: true, codAgrup,
+});
+const cli = (id: string, razonSocial: string, chartAccountId: string | null = null): Cli => ({
+  id, companyId: "c1", razonSocial, rfc: `RFC${id}`, chartAccountId,
+});
+
+const coincide = (f: Record<string, unknown>, w: Record<string, unknown>): boolean =>
+  Object.entries(w).every(([k, v]) => (v === null ? f[k] == null : f[k] === v));
+
+const db = {
+  chartAccount: { findMany: async ({ where }: never) => cuentas.filter((c) => coincide(c as never, where)) },
+  customer: {
+    findMany: async ({ where }: never) => clientes.filter((c) => coincide(c as never, where)),
+    findFirst: async ({ where }: never) => clientes.find((c) => coincide(c as never, where)) ?? null,
+    updateMany: async ({ where, data }: never) => {
+      let count = 0;
+      for (const c of clientes) {
+        if (coincide(c as never, where)) { Object.assign(c, data); count++; }
+      }
+      return { count };
+    },
+  },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+} as any;
+
+beforeEach(() => { cuentas = []; clientes = []; });
+
+describe("esNombreDeRelleno()", () => {
+  it("reconoce lo que un catálogo pone de relleno", () => {
+    // Vistos en producción, en REYES HUERTA y BARTIZ.
+    for (const n of ["SALDO INICIAL", "PROVEEDOR #", "Clientes", "VARIOS", "Por identificar"]) {
+      expect(esNombreDeRelleno(n), n).toBe(true);
+    }
+  });
+
+  it("no confunde una contraparte con relleno", () => {
+    for (const n of ["TELEFONOS DE MEXICO", "CFE SUMINISTRADOR DE SERVICIOS BASICOS"]) {
+      expect(esNombreDeRelleno(n), n).toBe(false);
+    }
+  });
+});
+
+describe("emparejarAuxiliares()", () => {
+  it("empareja por nombre idéntico y lo marca EXACTA", async () => {
+    cuentas = [cta("002", "TELEFONOS DE MEXICO")];
+    clientes = [cli("t", "Teléfonos de México, S.A. de C.V.")];
+    const r = await emparejarAuxiliares(db, "c1", COE_CODES.PROVEEDORES);
+    expect(r.pares).toHaveLength(1);
+    expect(r.pares[0].confianza).toBe("EXACTA");
+    expect(r.pares[0].customerId).toBe("t");
+    expect(r.pares[0].codigo).toBe("2110-002-000");
+  });
+
+  it("el catálogo trunca, y eso es PARECIDA — no exacta", async () => {
+    // Visto en TMA: «GRUPO LA ESPERANZA DE SAN RAFAEL DE ARRI».
+    cuentas = [cta("006", "GRUPO LA ESPERANZA DE SAN RAFAEL DE ARRI")];
+    clientes = [cli("g", "GRUPO LA ESPERANZA DE SAN RAFAEL DE ARRIBA SA DE CV")];
+    const r = await emparejarAuxiliares(db, "c1", COE_CODES.PROVEEDORES);
+    expect(r.pares[0]?.confianza).toBe("PARECIDA");
+  });
+
+  it("si el nombre empata con DOS contrapartes no propone ninguna", async () => {
+    cuentas = [cta("010", "CONSTRUCTORA BARTIZ")];
+    clientes = [cli("a", "CONSTRUCTORA BARTIZ VERT SA DE CV"), cli("b", "CONSTRUCTORA BARTIZ NORTE SA DE CV")];
+    const r = await emparejarAuxiliares(db, "c1", COE_CODES.PROVEEDORES);
+    expect(r.pares).toHaveLength(0);
+    expect(r.sinPareja[0].motivo).toBe("varias_candidatas");
+  });
+
+  it("si DOS auxiliares apuntan a la misma contraparte, ninguno se sostiene", async () => {
+    cuentas = [cta("011", "SUPERAVIT COMERCIALIZADORA"), cta("012", "SUPERAVIT COMERCIALIZADORA")];
+    clientes = [cli("s", "SUPERAVIT COMERCIALIZADORA INDUSTRIAL")];
+    const r = await emparejarAuxiliares(db, "c1", COE_CODES.PROVEEDORES);
+    expect(r.pares).toHaveLength(0);
+    expect(r.sinPareja).toHaveLength(2);
+  });
+
+  it("el relleno no empareja aunque se parezca a algo", async () => {
+    cuentas = [cta("001", "SALDO INICIAL")];
+    clientes = [cli("x", "SALDO INICIAL SA DE CV")];
+    const r = await emparejarAuxiliares(db, "c1", COE_CODES.PROVEEDORES);
+    expect(r.pares).toHaveLength(0);
+  });
+
+  it("no vuelve a proponer lo ya ligado", async () => {
+    cuentas = [cta("002", "TELEFONOS DE MEXICO")];
+    clientes = [cli("t", "TELEFONOS DE MEXICO", "2110-002-000")];
+    const r = await emparejarAuxiliares(db, "c1", COE_CODES.PROVEEDORES);
+    expect(r.yaLigados).toBe(1);
+    expect(r.pares).toHaveLength(0);
+  });
+
+  it("un código FIJO no se empareja por contraparte", async () => {
+    // 401.01 es una decisión de persona, no un padrón.
+    cuentas = [cta("x", "VENTAS AL 16%", COE_CODES.VENTAS_GENERAL)];
+    clientes = [cli("v", "VENTAS AL 16%")];
+    const r = await emparejarAuxiliares(db, "c1", COE_CODES.VENTAS_GENERAL);
+    expect(r.pares).toHaveLength(0);
+  });
+
+  it("un catálogo FUNCIONAL no empareja nada, y eso es correcto", async () => {
+    // MARGOM: «CXP PLANTA VEHICULOS» no es una contraparte del padrón.
+    cuentas = [cta("a", "CXP PLANTA VEHICULOS"), cta("b", "CXP FINANCIERA VEHICULOS")];
+    clientes = [cli("p", "NISSAN MEXICANA SA DE CV"), cli("q", "NR FINANCE MEXICO SA DE CV")];
+    const r = await emparejarAuxiliares(db, "c1", COE_CODES.PROVEEDORES);
+    expect(r.pares).toHaveLength(0);
+    expect(r.sinPareja).toHaveLength(2);
+  });
+});
+
+describe("aplicarParejas()", () => {
+  it("por default escribe SÓLO las exactas", async () => {
+    cuentas = [cta("002", "TELEFONOS DE MEXICO"), cta("006", "GRUPO LA ESPERANZA DE SAN RAFAEL DE ARRI")];
+    clientes = [cli("t", "TELEFONOS DE MEXICO"), cli("g", "GRUPO LA ESPERANZA DE SAN RAFAEL DE ARRIBA SA DE CV")];
+    const r = await emparejarAuxiliares(db, "c1", COE_CODES.PROVEEDORES);
+    expect(await aplicarParejas(db, "c1", r.pares)).toBe(1);
+    expect(clientes.find((c) => c.id === "t")!.chartAccountId).toBe("002");
+    expect(clientes.find((c) => c.id === "g")!.chartAccountId).toBeNull();
+  });
+
+  it("con soloExactas:false escribe lo confirmado por una persona", async () => {
+    cuentas = [cta("006", "GRUPO LA ESPERANZA DE SAN RAFAEL DE ARRI")];
+    clientes = [cli("g", "GRUPO LA ESPERANZA DE SAN RAFAEL DE ARRIBA SA DE CV")];
+    const r = await emparejarAuxiliares(db, "c1", COE_CODES.PROVEEDORES);
+    expect(await aplicarParejas(db, "c1", r.pares, { soloExactas: false })).toBe(1);
+  });
+
+  it("nunca pisa un enlace que ya existe", async () => {
+    cuentas = [cta("002", "TELEFONOS DE MEXICO")];
+    clientes = [cli("t", "TELEFONOS DE MEXICO", "otra-cuenta")];
+    const r = { pares: [{ chartAccountId: "002", codigo: "2110-002-000", nombreCuenta: "TELEFONOS DE MEXICO", customerId: "t", customerNombre: "TELEFONOS DE MEXICO", customerRfc: "RFCt", confianza: "EXACTA" as const }] };
+    expect(await aplicarParejas(db, "c1", r.pares)).toBe(0);
+    expect(clientes[0].chartAccountId).toBe("otra-cuenta");
+  });
+});
