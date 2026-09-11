@@ -4060,6 +4060,21 @@ enum AmbitoJuridico {
   INTERNACIONAL
 }
 
+// Jurisprudencia (docs/MOTOR-JURIDICO.md §3.4): una tesis es obligatoria
+// (jurisprudencia) u orientadora (aislada), y puede dejar de regir sin que
+// «se reforme»: interrumpida, sustituida o superada por contradicción.
+enum TipoCriterio {
+  JURISPRUDENCIA
+  AISLADA
+}
+
+enum EstadoCriterio {
+  VIGENTE
+  INTERRUMPIDA
+  SUSTITUIDA
+  SUPERADA
+}
+
 model FiscalDocument {
   id            String        @id @default(cuid())
   source        FiscalSource
@@ -4076,12 +4091,38 @@ model FiscalDocument {
   materias      String[]       @default([])
   ambito        AmbitoJuridico @default(FEDERAL)
   entidad       String? // clave SAT de 3 letras (PUE, CMX) cuando ambito = ESTATAL
+  // Sólo source = TESIS (jurisprudencia de la SCJN, fiscal-kb/sjf): el registro
+  // digital del Semanario, el número de identificación («1a./J. 215/2025
+  // (11a.)»), la Época corta («11a.»), instancia y órgano, y el estatus del
+  // criterio. vigenciaDesde = desde cuándo obliga (nota de publicación).
+  registro         String?         @unique
+  numeroTesis      String?
+  epoca            String?
+  instancia        String?
+  organo           String?
+  tipoCriterio     TipoCriterio?
+  estadoCriterio   EstadoCriterio?
+  fechaPublicacion DateTime?
   chunks        FiscalChunk[]
   createdAt     DateTime       @default(now())
 
   @@unique([clave, vigenciaDesde])
   @@index([source, clave])
   @@index([materias], type: Gin)
+  @@index([epoca, tipoCriterio])
+}
+
+// Cada tesis que el worker del SJF ya vio, con su huella SHA-256 — también las
+// de Épocas que no se ingieren — para no volver a bajar lo ya decidido y para
+// detectar correcciones (huella distinta → se reemplaza).
+model SjfTesisVista {
+  registro String   @id
+  epoca    String?
+  huella   String
+  ingerida Boolean  @default(false)
+  vistaAt  DateTime @default(now())
+
+  @@index([epoca, ingerida])
 }
 
 model FiscalChunk {

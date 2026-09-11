@@ -413,6 +413,34 @@ export const tools: Anthropic.Tool[] = [
       required: ["tipo"],
     },
   },
+  {
+    name: "search_jurisprudencia",
+    description:
+      "Busca en la jurisprudencia y tesis aisladas del Poder Judicial de la Federación (Semanario Judicial de la Federación: SCJN, Plenos y Tribunales Colegiados; Novena a Duodécima Época) y devuelve fragmentos con su cita («Jurisprudencia 2a./J. 10/2024 (11a.), reg. 2028xxx»), Época, instancia y desde cuándo obliga. Úsala cuando la pregunta sea CÓMO HAN RESUELTO LOS TRIBUNALES un punto (criterios sobre deducciones, devoluciones, multas, procedimientos, IMSS, laboral) o cuando la ley sola no zanja la duda. Distingue SIEMPRE «Jurisprudencia» (obligatoria para los tribunales) de «Tesis aislada» (orientadora). Si no devuelve resultados, dilo; NO inventes tesis ni registros.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "Consulta en lenguaje natural o el rubro aproximado de la tesis." },
+        tipo: { type: "string", enum: ["JURISPRUDENCIA", "AISLADA"], description: "Sólo jurisprudencia (obligatoria) o sólo tesis aisladas. Default: ambas." },
+        epocas: { type: "array", items: { type: "string" }, description: "Épocas cortas a considerar, p.ej. [\"11a.\", \"12a.\"]. Default: todas las cargadas." },
+        fecha_vigencia: { type: "string", description: "Fecha ISO del asunto: sólo tesis que ya obligaban entonces. Default: hoy." },
+        limit: { type: "number", description: "Máximo de fragmentos (default 6)" },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "get_tesis",
+    description:
+      "Trae COMPLETA una tesis del Semanario Judicial de la Federación por su registro digital (el número de 7 cifras, p.ej. 2031002): rubro, texto íntegro, precedentes, número de identificación, tipo (jurisprudencia/aislada), Época, instancia, órgano, estatus (vigente, interrumpida, sustituida, superada) y desde cuándo obliga. Úsala antes de atribuirle un criterio a una tesis que apareció en search_jurisprudencia o que el usuario nombra por registro.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        registro: { type: "string", description: "Registro digital del SJF, p.ej. '2031002'." },
+      },
+      required: ["registro"],
+    },
+  },
   // ── Herramientas de PROPUESTA (acciones reversibles) ───────────────────────
   // Estas herramientas NO ejecutan nada: STAGEAN una propuesta sobre la
   // conversación y devuelven un resumen legible + un token. El usuario debe tocar

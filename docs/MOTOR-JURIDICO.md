@@ -18,6 +18,22 @@
 > para las leyes nuevas (workflow «Fiscal KB resúmenes», ~60–100 USD una vez)
 > no se han corrido: decisión del owner.
 >
+> **F1 — en curso (2026-09-11).** Código: `src/lib/fiscal-kb/sjf/` (normalizador
+> puro y probado, cliente Playwright al API de datos abiertos, ingesta por lotes
+> con `SjfTesisVista` como memoria de lo visto) + `scripts/sjf-worker.ts` (misma
+> imagen que el worker de CE; start command `npm run sjf:worker`). Esquema:
+> `FiscalDocument` gana registro, numeroTesis, epoca, instancia, organo,
+> tipoCriterio, estadoCriterio y fechaPublicacion; `vigenciaDesde` de una tesis
+> es la fecha desde la que obliga (nota de publicación). Herramientas
+> `search_jurisprudencia` y `get_tesis` (el hub las ve con materias del contador
+> + administrativa, porque en el SJF lo fiscal vive en «Administrativa»).
+> Incapsula: el headless clásico recibe 403 siempre; el headless nuevo
+> (`channel: "chromium"`) con la automatización oculta pasa el reto en la
+> primera carga — medido localmente, 60 tesis/s desde el contexto de la página.
+> Pendiente: servicio `sjf-worker` en Railway, carga inicial 9a.–12a. Época
+> (se mide el tamaño ahí), preguntas doradas revisadas por el abogado y la
+> métrica «tesis pertinente» en el eval.
+>
 > Antecedente: `docs/FISCAL-KNOWLEDGE-BASE.md` (diseño original de la KB) y la
 > serie de commits «Copiloto · Fase 1–3» / «KB: …» del 3–4 de septiembre de 2026.
 

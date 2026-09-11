@@ -288,9 +288,10 @@ export async function verificarRespuesta(
 /** Fuentes de un turno a partir de los JSON que devolvieron las tools de la KB. */
 export function fuentesDesdeToolResult(toolName: string, out: string): FuenteVerificacion[] {
   try {
-    const parsed = JSON.parse(out) as { resultados?: { cita: string; texto: string }[]; cita?: string; partes?: { texto: string }[]; tipo?: string; error?: string };
-    if (toolName === "search_fiscal_knowledge") return (parsed.resultados ?? []).map((h) => ({ cita: h.cita, texto: h.texto }));
+    const parsed = JSON.parse(out) as { resultados?: { cita: string; texto: string }[]; cita?: string; partes?: { texto: string }[]; texto?: string; tipo?: string; error?: string };
+    if (toolName === "search_fiscal_knowledge" || toolName === "search_jurisprudencia") return (parsed.resultados ?? []).map((h) => ({ cita: h.cita, texto: h.texto }));
     if (toolName === "get_articulo" && typeof parsed.cita === "string") return [{ cita: parsed.cita, texto: (parsed.partes ?? []).map((p) => p.texto).join("\n") }];
+    if (toolName === "get_tesis" && typeof parsed.cita === "string" && typeof parsed.texto === "string") return [{ cita: parsed.cita, texto: parsed.texto }];
     if (toolName === "get_valor_fiscal" && typeof parsed.tipo === "string" && !parsed.error) {
       return [{ cita: `${PREFIJO_VALORES} · ${parsed.tipo}`, texto: JSON.stringify(parsed, null, 1) }];
     }

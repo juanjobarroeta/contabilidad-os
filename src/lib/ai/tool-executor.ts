@@ -14,8 +14,8 @@ import { previewTimbrar } from "@/lib/facturas/preview-timbrar";
 import { previewComplemento } from "@/lib/complementos-preview";
 import { listUnmatched, scoreCandidates } from "@/lib/conciliacion";
 import { stagePendingConciliar } from "@/lib/whatsapp/pending-action";
-import { searchFiscalKnowledge, getArticulo } from "@/lib/fiscal-kb/search";
-import { MATERIAS_CONTADOR } from "@/lib/fiscal-kb/materias";
+import { searchFiscalKnowledge, getArticulo, searchJurisprudencia, getTesis } from "@/lib/fiscal-kb/search";
+import { MATERIAS_CONTADOR, MATERIAS_CONTADOR_JURISPRUDENCIA } from "@/lib/fiscal-kb/materias";
 import { consultarValorFiscal, type ConsultaValorFiscal } from "@/lib/fiscal/valores";
 import { stageChatPendingAction } from "@/lib/ai/pending-action";
 import { contarSimilaresSinConciliar } from "@/lib/bancos/reglas-categorizacion";
@@ -280,6 +280,33 @@ export async function executeToolCall(
       } catch (err) {
         console.error("[get_articulo]", err);
         return JSON.stringify({ error: "Knowledge base fiscal no disponible en este momento.", instruccion: "NO inventes el texto del artículo." });
+      }
+    case "search_jurisprudencia":
+      try {
+        return JSON.stringify(
+          await searchJurisprudencia(String(input.query ?? ""), {
+            fechaVigencia: typeof input.fecha_vigencia === "string" ? new Date(input.fecha_vigencia) : undefined,
+            tipoCriterio: input.tipo === "JURISPRUDENCIA" || input.tipo === "AISLADA" ? input.tipo : undefined,
+            epocas: Array.isArray(input.epocas) ? input.epocas.map(String) : undefined,
+            limit: typeof input.limit === "number" ? input.limit : undefined,
+            // En el SJF lo fiscal vive en «Administrativa»: el contador ve administrativa + sus materias.
+            materias: MATERIAS_CONTADOR_JURISPRUDENCIA,
+            cost: { companyId, userId: context.userId ?? null },
+          })
+        );
+      } catch (err) {
+        console.error("[search_jurisprudencia]", err);
+        return JSON.stringify({ error: "Jurisprudencia no disponible en este momento.", instruccion: "Dilo al usuario; NO inventes tesis ni registros." });
+      }
+    case "get_tesis":
+      try {
+        const t = await getTesis(String(input.registro ?? ""));
+        return JSON.stringify(
+          t ?? { error: `No hay una tesis con registro ${String(input.registro)} en la base.`, instruccion: "Dilo al usuario; NO reconstruyas la tesis de memoria. Prueba search_jurisprudencia con el tema." }
+        );
+      } catch (err) {
+        console.error("[get_tesis]", err);
+        return JSON.stringify({ error: "Jurisprudencia no disponible en este momento.", instruccion: "NO inventes el texto de la tesis." });
       }
     case "get_valor_fiscal": {
       const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v)) ? Number(v) : undefined);

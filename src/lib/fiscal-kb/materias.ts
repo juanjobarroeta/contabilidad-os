@@ -81,6 +81,13 @@ export const MATERIAS_CONTADOR: readonly Materia[] = [
   "pld",
 ];
 
+/**
+ * Para la jurisprudencia el SJF no tiene materia «Fiscal»: lo tributario va en
+ * «Administrativa» (el normalizador agrega «fiscal» cuando el rubro lo delata).
+ * El contador ve, además de sus materias, toda la administrativa.
+ */
+export const MATERIAS_CONTADOR_JURISPRUDENCIA: readonly Materia[] = [...MATERIAS_CONTADOR, "administrativo"];
+
 export type Ambito = "FEDERAL" | "ESTATAL" | "MUNICIPAL" | "INTERNACIONAL";
 
 /** Reglas título → materias. Se aplican todas; una ley puede tener varias. */
