@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
-import { headersDescargaXlsx, toXlsx, type XlsxRow } from "@/lib/export/xlsx";
+import { headersDescargaXlsx, toXlsx, type HojaXlsx, type XlsxRow } from "@/lib/export/xlsx";
 import { filtrosListaFacturas } from "@/lib/facturas/filtros-lista";
+import { parseReciboNominaHistorico } from "@/lib/nomina/historia-import";
 
 // GET /api/facturas/export?companyId=xxx&tipo=&from=&to=&q=&customerId=
 //
@@ -72,6 +73,20 @@ export async function GET(req: Request) {
   const n = (v: unknown) => (v == null ? null : Number(v));
   const r2 = (v: number) => Math.round(v * 100) / 100;
 
+  // NÓMINA: lo que el contador de verdad quiere cruzar —periodo, fecha de pago,
+  // días, sueldo, IMSS, ISR, neto— vive en el complemento del XML, no en las
+  // columnas del comprobante. Sólo bajo ese filtro se trae el rawXml (pesa) y
+  // se parsea con el MISMO parser del import histórico, para que el Excel
+  // diga lo que dice el libro.
+  const xmlPorId = new Map<string, string | null>();
+  if (filtros.tipo === "NOMINA" && invoices.length > 0) {
+    const xmls = await prisma.invoice.findMany({
+      where: { id: { in: invoices.map((i) => i.id) } },
+      select: { id: true, rawXml: true },
+    });
+    for (const x of xmls) xmlPorId.set(x.id, x.rawXml);
+  }
+
   const hFacturas = [
     "Tipo",
     "Tipo SAT",
@@ -124,8 +139,46 @@ export async function GET(req: Request) {
     "Cuenta predial",
   ];
 
+  const hNomina = [
+    "UUID",
+    "Fecha CFDI",
+    "Empleado",
+    "RFC",
+    "CURP",
+    "NSS",
+    "Puesto",
+    "Departamento",
+    "Periodicidad",
+    "Tipo nómina",
+    "Periodo inicio",
+    "Periodo fin",
+    "Fecha de pago",
+    "Días pagados",
+    "SBC",
+    "SDI",
+    "Sueldo (001)",
+    "Horas extra (019)",
+    "Vales (029)",
+    "Aguinaldo (002)",
+    "Prima vacacional (021)",
+    "PTU (003)",
+    "Otras percepciones",
+    "Total percepciones",
+    "IMSS obrero",
+    "ISR retenido",
+    "Infonavit",
+    "Otras deducciones",
+    "Total deducciones",
+    "Subsidio al empleo",
+    "Otros pagos",
+    "Neto a pagar",
+    "Estado",
+  ];
+
   const filasFacturas: XlsxRow[] = [];
   const filasConceptos: XlsxRow[] = [];
+  const filasNomina: XlsxRow[] = [];
+  const d = (iso: string | null | undefined) => (iso ? new Date(iso) : null);
 
   for (const inv of invoices) {
     // Quién es el emisor: si la empresa emite (INGRESO/NOMINA/PAGO) la
@@ -205,9 +258,50 @@ export async function GET(req: Request) {
         it.cuentaPredial ?? "",
       ]);
     }
+
+    if (inv.tipo === "NOMINA" && xmlPorId.has(inv.id)) {
+      const rec = parseReciboNominaHistorico(xmlPorId.get(inv.id));
+      const c = rec?.complemento;
+      const g = rec?.desglose;
+      filasNomina.push([
+        inv.uuid ?? "",
+        inv.fecha,
+        c?.nombre ?? contraparteNombre,
+        c?.rfc ?? contraparteRfc,
+        c?.curp ?? "",
+        c?.nss ?? "",
+        c?.puesto ?? "",
+        c?.departamento ?? "",
+        c?.periodicidadPago ?? "",
+        c?.tipoNomina ?? inv.tipoNomina ?? "",
+        d(rec?.fechaInicialPago),
+        d(rec?.fechaFinalPago),
+        d(c?.fechaPago),
+        rec?.numDiasPagados ?? null,
+        c?.sbc ?? null,
+        c?.sdi ?? null,
+        g ? r2(g.sueldoBase) : null,
+        g ? r2(g.horasExtra) : null,
+        g ? r2(g.vales) : null,
+        g ? r2(g.aguinaldo) : null,
+        g ? r2(g.primaVacacional) : null,
+        g ? r2(g.ptu) : null,
+        g ? r2(g.otrasPercepciones) : null,
+        g ? r2(g.totalPercepciones) : null,
+        g ? r2(g.imssObrero) : null,
+        g ? r2(g.isrRetenido) : null,
+        g ? r2(g.infonavit) : null,
+        g ? r2(g.otrasDeducc) : null,
+        g ? r2(g.totalDeducciones) : null,
+        g ? r2(g.subsidioEmpleo) : null,
+        g ? r2(g.otrosPagos) : null,
+        g ? r2(g.netoAPagar) : r2(Number(inv.total)),
+        rec ? inv.status : "SIN XML",
+      ]);
+    }
   }
 
-  const libro = toXlsx([
+  const hojas: HojaXlsx[] = [
     {
       nombre: "Facturas",
       headers: hFacturas,
@@ -220,7 +314,16 @@ export async function GET(req: Request) {
       rows: filasConceptos,
       anchos: [38, 11, 9, 7, 9, 14, 32, 12, 60, 10, 8, 10, 13, 11, 13, 14],
     },
-  ]);
+  ];
+  if (filasNomina.length > 0) {
+    hojas.push({
+      nombre: "Nómina",
+      headers: hNomina,
+      rows: filasNomina,
+      anchos: [38, 11, 32, 14, 20, 12, 18, 16, 11, 9, 12, 12, 12, 8, 9, 9, 12, 11, 10, 11, 12, 10, 12, 13, 11, 11, 10, 12, 13, 11, 10, 12, 10],
+    });
+  }
+  const libro = toXlsx(hojas);
 
   // Nombre: empresa, filtro y fecha de descarga.
   const hoy = new Date().toISOString().slice(0, 10);
