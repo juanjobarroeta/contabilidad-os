@@ -188,6 +188,8 @@ interface ProcedenciaAnio {
   anio: number;
   solicitudesPropias: number;
   solicitudesFinished: number;
+  /** Las que NO terminaron, por status: cuántas siguen en vuelo vs. cuántas murieron. */
+  porStatus: Record<string, number>;
 }
 
 async function fase0Procedencia(companyId: string): Promise<{
@@ -195,13 +197,11 @@ async function fase0Procedencia(companyId: string): Promise<{
   syntage: Array<{ subtipo: string; n: number; primera: string | null; ultima: string | null }>;
 }> {
   const [propias, syntage] = await Promise.all([
-    prisma.$queryRaw<Array<{ anio: number; n: bigint; finished: bigint }>>`
-      SELECT "year" AS anio,
-             COUNT(*)                                    AS n,
-             COUNT(*) FILTER (WHERE "status" = 'FINISHED') AS finished
+    prisma.$queryRaw<Array<{ anio: number; status: string; n: bigint }>>`
+      SELECT "year" AS anio, "status", COUNT(*) AS n
       FROM "SatSyncRequest"
       WHERE "companyId" = ${companyId}
-      GROUP BY 1 ORDER BY 1`,
+      GROUP BY 1, 2 ORDER BY 1, 2`,
     prisma.$queryRaw<Array<{ subtipo: string; n: bigint; primera: Date | null; ultima: Date | null }>>`
       SELECT "subtipo",
              COUNT(*)            AS n,
@@ -211,12 +211,17 @@ async function fase0Procedencia(companyId: string): Promise<{
       WHERE "companyId" = ${companyId} AND "categoria" = 'SYNTAGE'
       GROUP BY 1 ORDER BY 1`,
   ]);
+  const porAnioMap = new Map<number, ProcedenciaAnio>();
+  for (const p of propias) {
+    const fila = porAnioMap.get(p.anio) ?? { anio: p.anio, solicitudesPropias: 0, solicitudesFinished: 0, porStatus: {} };
+    const n = Number(p.n);
+    fila.solicitudesPropias += n;
+    if (p.status === "FINISHED") fila.solicitudesFinished += n;
+    else fila.porStatus[p.status] = (fila.porStatus[p.status] ?? 0) + n;
+    porAnioMap.set(p.anio, fila);
+  }
   return {
-    porAnio: propias.map((p) => ({
-      anio: p.anio,
-      solicitudesPropias: Number(p.n),
-      solicitudesFinished: Number(p.finished),
-    })),
+    porAnio: [...porAnioMap.values()].sort((a, b) => a.anio - b.anio),
     syntage: syntage.map((s) => ({
       subtipo: s.subtipo,
       n: Number(s.n),
@@ -242,10 +247,17 @@ interface CensoEmpresa {
   /** Años con facturas y SIN solicitud propia terminada: ese tramo entró por fuera. */
   aniosSinSolicitudPropia: number[];
   extraccionesSyntage: number;
+  /**
+   * Para los años flagueados: qué dijo el SAT cuando SÍ los pedimos (o que
+   * nunca se pidieron). Distingue «ventana» (5004, vacío) de «cuota» (5002,
+   * agotada): si es cuota, el tramo no está fuera de ventana — alguien lo pidió
+   * antes que nosotros con la misma FIEL, y Syntage es el sospechoso obvio.
+   */
+  rastroSat: Array<{ anio: number; status: string; error: string | null; n: number }>;
 }
 
 async function censoCartera(): Promise<CensoEmpresa[]> {
-  const [empresas, facturas, propias, syntage] = await Promise.all([
+  const [empresas, facturas, propias, syntage, rastro] = await Promise.all([
     prisma.company.findMany({
       where: { fielCer: { not: null } },
       select: { id: true, rfc: true, razonSocial: true },
@@ -263,7 +275,22 @@ async function censoCartera(): Promise<CensoEmpresa[]> {
     prisma.$queryRaw<Array<{ companyId: string; n: bigint }>>`
       SELECT "companyId", COUNT(*) AS n FROM "CostEvent"
       WHERE "categoria" = 'SYNTAGE' GROUP BY 1`,
+    // Todo lo que el SAT contestó por (empresa, año, status, mensaje). El
+    // mensaje se recorta: lo que importa es el código (5002/5004) que va al
+    // principio, no el texto entero.
+    prisma.$queryRaw<Array<{ companyId: string; anio: number; status: string; error: string | null; n: bigint }>>`
+      SELECT "companyId", "year" AS anio, "status", left("errorMessage", 90) AS error, COUNT(*) AS n
+      FROM "SatSyncRequest"
+      GROUP BY 1, 2, 3, 4`,
   ]);
+
+  const rastroPor = new Map<string, Map<number, Array<{ status: string; error: string | null; n: number }>>>();
+  for (const r of rastro) {
+    if (!rastroPor.has(r.companyId)) rastroPor.set(r.companyId, new Map());
+    const porAnio = rastroPor.get(r.companyId)!;
+    if (!porAnio.has(r.anio)) porAnio.set(r.anio, []);
+    porAnio.get(r.anio)!.push({ status: r.status, error: r.error, n: Number(r.n) });
+  }
 
   const porEmpresa = new Map<string, { anios: Map<number, { n: number; sinXml: number }> }>();
   for (const f of facturas) {
@@ -282,14 +309,22 @@ async function censoCartera(): Promise<CensoEmpresa[]> {
     const anios = porEmpresa.get(c.id)?.anios ?? new Map<number, { n: number; sinXml: number }>();
     const conFacturas = [...anios.keys()].sort();
     const conSolicitud = propiasPor.get(c.id) ?? new Set<number>();
+    const flagueados = conFacturas.filter((a) => !conSolicitud.has(a));
+    const rastroSat = flagueados.flatMap((anio) => {
+      const filas = rastroPor.get(c.id)?.get(anio);
+      // Sin filas = nunca lo pedimos nosotros. Eso también es un dato.
+      if (!filas || filas.length === 0) return [{ anio, status: "NUNCA_PEDIDO", error: null, n: 0 }];
+      return filas.map((f) => ({ anio, ...f }));
+    });
     return {
       rfc: c.rfc,
       razonSocial: c.razonSocial,
       facturas: [...anios.values()].reduce((s, a) => s + a.n, 0),
       sinXml: [...anios.values()].reduce((s, a) => s + a.sinXml, 0),
       primerAnio: conFacturas[0] ?? null,
-      aniosSinSolicitudPropia: conFacturas.filter((a) => !conSolicitud.has(a)),
+      aniosSinSolicitudPropia: flagueados,
       extraccionesSyntage: syntagePor.get(c.id) ?? 0,
+      rastroSat,
     };
   });
 }
@@ -643,6 +678,13 @@ async function main(): Promise<void> {
     `\n   ${enRiesgo.length} de ${censo.length} empresas tienen años que entraron por fuera ` +
       `(se pierden al cancelar Syntage si el SAT ya no los sirve).`,
   );
+  // ¿Ventana o cuota? Lo que el SAT contestó cuando pedimos esos años.
+  for (const e of enRiesgo) {
+    console.log(`\n   ${e.rfc} — qué dijo el SAT de los años flagueados:`);
+    for (const r of e.rastroSat) {
+      console.log(`     ${r.anio}  ${r.status.padEnd(12)} ${String(r.n).padStart(4)}  ${r.error ?? ""}`);
+    }
+  }
   try {
     await prisma.auditLog.create({
       data: {
@@ -682,10 +724,11 @@ async function main(): Promise<void> {
   if (proc.porAnio.length === 0) {
     console.log("     ninguna. TODO el archivo entró por un tercero, no por descarga masiva propia.");
   } else {
-    console.log("     año   solicitudes   FINISHED");
+    console.log("     año   solicitudes   FINISHED   las demás, por status");
     for (const p of proc.porAnio) {
+      const resto = Object.entries(p.porStatus).map(([s, n]) => `${s}:${n}`).join(" ");
       console.log(
-        `     ${p.anio}  ${String(p.solicitudesPropias).padStart(11)}  ${String(p.solicitudesFinished).padStart(8)}`,
+        `     ${p.anio}  ${String(p.solicitudesPropias).padStart(11)}  ${String(p.solicitudesFinished).padStart(8)}   ${resto}`,
       );
     }
     const conFacturas = new Set(inventario.filter((i) => i.total > 0).map((i) => i.anio));
