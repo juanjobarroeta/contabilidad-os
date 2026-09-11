@@ -21,8 +21,13 @@ function baseInputs(overrides: Partial<ChecklistInputs> = {}): ChecklistInputs {
     hoy: new Date("2026-06-10T18:00:00Z"), // 10 de junio en Ciudad de México
     fechaLimite: fechaLimiteDeclaracion(2026, 5),
     aperturaConfirmada: true,
+    aperturaOrigenConocido: true,
+    aperturaOrigenes: ["saldo a favor de IVA del acuse de abril de 2026", "coeficiente de la anual 2025"],
     satEmitidosCompleto: true,
     satRecibidosCompleto: true,
+    cfdisConXml: 40,
+    cfdisSinXml: 0,
+    cfdiFaltantes: 0,
     advertenciasCadena: [],
     movimientosBancarios: 8,
     sinActividadBancariaConfirmada: false,
@@ -77,7 +82,7 @@ describe("decidirChecklist — empresa limpia", () => {
 
 describe("decidirChecklist — apertura fiscal", () => {
   it("apertura sin confirmar → atención, primero en la lista, con link a /empresa/apertura", () => {
-    const items = decidirChecklist(baseInputs({ aperturaConfirmada: false }));
+    const items = decidirChecklist(baseInputs({ aperturaConfirmada: false, aperturaOrigenConocido: false, aperturaOrigenes: [] }));
     const ap = item(items, "apertura");
     expect(items[0].clave).toBe("apertura");
     expect(ap.estado).toBe("atencion");
@@ -92,9 +97,52 @@ describe("decidirChecklist — apertura fiscal", () => {
   });
 });
 
+describe("decidirChecklist — apertura con origen conocido", () => {
+  it("sin firma pero con los tres datos de acuses propios → listo, y dice de dónde salen", () => {
+    const ap = item(decidirChecklist(baseInputs({ aperturaConfirmada: false, aperturaOrigenConocido: true })), "apertura");
+    expect(ap.estado).toBe("listo");
+    expect(ap.detalle).toContain("acuse de abril de 2026");
+    expect(ap.detalle).toContain("dejarlo firmado");
+  });
+
+  it("sin firma y sin origen → sigue en atención", () => {
+    const ap = item(decidirChecklist(baseInputs({ aperturaConfirmada: false, aperturaOrigenConocido: false, aperturaOrigenes: [] })), "apertura");
+    expect(ap.estado).toBe("atencion");
+    expect(ap.detalle).toContain("aún no está confirmado");
+  });
+});
+
 describe("decidirChecklist — sincronización SAT", () => {
+  it("la descarga por FIEL falló pero el periodo está completo → listo, y dice las dos cosas", () => {
+    const sat = item(
+      decidirChecklist(baseInputs({ satEmitidosCompleto: false, satRecibidosCompleto: false, cfdisConXml: 734, cfdisSinXml: 0, cfdiFaltantes: 0 })),
+      "sincronizacion-sat"
+    );
+    expect(sat.estado).toBe("listo");
+    expect(sat.detalle).toContain("734 CFDI");
+    expect(sat.detalle).toContain("emitidos y recibidos no terminó");
+  });
+
+  it("la descarga falló Y hay CFDI sin XML → atención, con el conteo", () => {
+    const sat = item(
+      decidirChecklist(baseInputs({ satRecibidosCompleto: false, cfdisConXml: 700, cfdisSinXml: 3, cfdiFaltantes: 0 })),
+      "sincronizacion-sat"
+    );
+    expect(sat.estado).toBe("atencion");
+    expect(sat.detalle).toContain("3 CFDI sin XML");
+  });
+
+  it("un mes sin CFDI no se da por completo sólo porque no falte nada", () => {
+    const sat = item(
+      decidirChecklist(baseInputs({ satRecibidosCompleto: false, cfdisConXml: 0, cfdisSinXml: 0, cfdiFaltantes: 0 })),
+      "sincronizacion-sat"
+    );
+    expect(sat.estado).toBe("atencion");
+  });
+
   it("periodos faltantes → atención, nombrando la dirección que falta", () => {
-    const items = decidirChecklist(baseInputs({ satRecibidosCompleto: false }));
+    // Con un faltante frente al censo la cobertura no rescata al job: sigue en atención.
+    const items = decidirChecklist(baseInputs({ satRecibidosCompleto: false, cfdiFaltantes: 1 }));
     const sat = item(items, "sincronizacion-sat");
     expect(sat.estado).toBe("atencion");
     expect(sat.detalle).toContain("recibidos");
@@ -103,7 +151,7 @@ describe("decidirChecklist — sincronización SAT", () => {
 
   it("faltan ambas direcciones → atención con ambas", () => {
     const sat = item(
-      decidirChecklist(baseInputs({ satEmitidosCompleto: false, satRecibidosCompleto: false })),
+      decidirChecklist(baseInputs({ satEmitidosCompleto: false, satRecibidosCompleto: false, cfdiFaltantes: 1 })),
       "sincronizacion-sat"
     );
     expect(sat.estado).toBe("atencion");

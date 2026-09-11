@@ -1,4 +1,5 @@
 import { prisma } from "../prisma";
+import { estadoApertura } from "./apertura";
 import { computeTaxPosition } from "../impuestos";
 import {
   detectComplementosPendientes,
@@ -97,9 +98,24 @@ export interface ChecklistInputs {
   fechaLimite: Date;
   /** Apertura fiscal (punto de partida) revisada y confirmada por el contador. */
   aperturaConfirmada: boolean;
+  /** Los tres datos del arranque (saldo a favor de IVA, coeficiente, pérdidas)
+   *  tienen ORIGEN CONOCIDO —salen de acuses y anuales propios— aunque nadie
+   *  haya pulsado «confirmar». Es la misma prueba que usa el cierre en
+   *  `x:datos_apertura`: dos señales del mismo paso no pueden decir lo
+   *  contrario sobre el mismo hecho. */
+  aperturaOrigenConocido: boolean;
+  /** De dónde sale cada dato, para decirlo ("saldo a favor de IVA del acuse de julio de 2023"). */
+  aperturaOrigenes: string[];
   /** Descarga del SAT del periodo terminada (SatSyncRequest FINISHED) por dirección. */
   satEmitidosCompleto: boolean;
   satRecibidosCompleto: boolean;
+  /** COBERTURA del periodo, que es otra pregunta que «¿terminó el job de FIEL?»:
+   *  los CFDI del mes pueden haber llegado por otro camino (Syntage) y estar
+   *  completos aunque la descarga masiva haya fallado. */
+  cfdisConXml: number;
+  cfdisSinXml: number;
+  /** Renglones del censo del SAT sin XML en el periodo (CfdiFaltante). */
+  cfdiFaltantes: number;
   /** Avisos de computeTaxPosition: meses con CFDI sin declaración guardada. */
   advertenciasCadena: string[];
   /** Todos los movimientos bancarios con fecha dentro del mes. */
@@ -179,13 +195,21 @@ export function decidirChecklist(i: ChecklistInputs): ChecklistItem[] {
   // 0. Apertura fiscal confirmada — va PRIMERO: un punto de partida erróneo
   // (saldo a favor inicial, pérdidas, coeficiente, obligaciones) se hereda a
   // TODOS los meses siguientes, así que se revisa antes que cualquier otra cosa.
+  // Tres casos, no dos. «No confirmado» sonaba a dato faltante, y en una
+  // empresa con 77 acuses cargados el punto de partida YA salía de ellos: el
+  // motor lo sabía (x:datos_apertura decía «origen conocido») y este item
+  // decía lo contrario en el mismo paso. Cuando el origen es conocido, el
+  // item está listo y la firma queda como lo que es: opcional y recomendable.
+  const aperturaListo = i.aperturaConfirmada || i.aperturaOrigenConocido;
   items.push({
     clave: "apertura",
     titulo: "Punto de partida fiscal",
-    estado: i.aperturaConfirmada ? "listo" : "atencion",
+    estado: aperturaListo ? "listo" : "atencion",
     detalle: i.aperturaConfirmada
       ? "El punto de partida fiscal (saldo a favor inicial, pérdidas por amortizar, coeficiente y obligaciones) está revisado y confirmado."
-      : "El punto de partida fiscal aún no está confirmado. Revisa el saldo a favor de IVA inicial, las pérdidas por amortizar, el coeficiente de utilidad y las obligaciones: un error en el arranque se arrastra a todos los meses.",
+      : i.aperturaOrigenConocido
+        ? `El punto de partida sale de tus propios acuses${i.aperturaOrigenes.length > 0 ? `: ${i.aperturaOrigenes.join("; ")}` : ""}. Puedes dejarlo firmado en Punto de partida fiscal.`
+        : "El punto de partida fiscal aún no está confirmado. Revisa el saldo a favor de IVA inicial, las pérdidas por amortizar, el coeficiente de utilidad y las obligaciones: un error en el arranque se arrastra a todos los meses.",
     accionUrl: "/empresa/apertura",
   });
 
@@ -195,13 +219,26 @@ export function decidirChecklist(i: ChecklistInputs): ChecklistItem[] {
     ...(!i.satEmitidosCompleto ? ["emitidos"] : []),
     ...(!i.satRecibidosCompleto ? ["recibidos"] : []),
   ].join(" y ");
+  // «¿Terminó la descarga por FIEL?» y «¿te faltan CFDI?» son dos preguntas.
+  // Este item respondía la primera como si fuera la segunda: en un hospital
+  // con 734 CFDI de agosto, todos con XML y cero faltantes frente al censo,
+  // decía «falta completar la descarga» porque el job del SAT había fallado
+  // con «Error no controlado». La cobertura manda; el job, si falló, se dice.
+  const coberturaCompleta = i.cfdisConXml > 0 && i.cfdisSinXml === 0 && i.cfdiFaltantes === 0;
+  const satListo = satCompleto || coberturaCompleta;
   items.push({
     clave: "sincronizacion-sat",
     titulo: "Sincronización con el SAT",
-    estado: satCompleto ? "listo" : "atencion",
+    estado: satListo ? "listo" : "atencion",
     detalle: satCompleto
       ? "Los CFDI emitidos y recibidos del periodo ya se descargaron del SAT."
-      : `Falta completar la descarga de CFDI ${faltanDirecciones} del periodo. Sin ella, los cálculos pueden estar incompletos.`,
+      : coberturaCompleta
+        ? `Los ${i.cfdisConXml.toLocaleString("es-MX")} CFDI del periodo están completos: todos con XML y sin faltantes frente al censo del SAT. ` +
+          `La descarga por FIEL de ${faltanDirecciones} no terminó — no falta ningún comprobante, pero conviene revisar esa descarga.`
+        : `Falta completar la descarga de CFDI ${faltanDirecciones} del periodo` +
+          (i.cfdisSinXml > 0 ? ` y hay ${i.cfdisSinXml.toLocaleString("es-MX")} CFDI sin XML` : "") +
+          (i.cfdiFaltantes > 0 ? ` y ${i.cfdiFaltantes.toLocaleString("es-MX")} del censo sin descargar` : "") +
+          ". Sin ella, los cálculos pueden estar incompletos.",
     accionUrl: linkMes,
   });
 
@@ -466,6 +503,10 @@ export async function checklistDeclaracion(
     companyRow,
     imssSumsMes,
     imssSumsBimestre,
+    cfdisConXml,
+    cfdisSinXml,
+    cfdiFaltantes,
+    apertura,
   ] = await Promise.all([
     // La MISMA llamada que alimenta la página de impuestos y el asistente —
     // incluye las advertencias de cadena de declaraciones rota.
@@ -524,7 +565,29 @@ export async function checklistDeclaracion(
           _sum: { infonavit: true },
         })
       : Promise.resolve(null),
+    // Cobertura del periodo (ver ChecklistInputs.cfdisConXml).
+    prisma.invoice.count({ where: { companyId, fecha: { gte: from, lt: to }, rawXml: { not: null } } }),
+    prisma.invoice.count({ where: { companyId, fecha: { gte: from, lt: to }, rawXml: null } }),
+    prisma.cfdiFaltante.count({ where: { companyId, fecha: { gte: from, lt: to } } }),
+    // El punto de partida con sus fuentes: si falla, se degrada a «no
+    // confirmado» en vez de tumbar el checklist entero.
+    estadoApertura(companyId, hoy).catch(() => null),
   ]);
+
+  // El MISMO criterio que senalDatosApertura (cierre/workflow.ts): origen
+  // conocido = ninguno de los tres datos viene «sin-dato».
+  const aperturaOrigenConocido =
+    apertura != null &&
+    apertura.ivaSaldoFavor.fuente.tipo !== "sin-dato" &&
+    (!apertura.coeficiente.aplica || apertura.coeficiente.fuente.tipo !== "sin-dato") &&
+    (!apertura.perdidaPendiente.aplica || apertura.perdidaPendiente.fuente.tipo !== "sin-dato");
+  const aperturaOrigenes = apertura && aperturaOrigenConocido
+    ? [
+        `saldo a favor de IVA ${apertura.ivaSaldoFavor.fuente.etiqueta}`,
+        ...(apertura.coeficiente.aplica ? [`coeficiente ${apertura.coeficiente.fuente.etiqueta}`] : []),
+        ...(apertura.perdidaPendiente.aplica ? [`pérdidas ${apertura.perdidaPendiente.fuente.etiqueta}`] : []),
+      ]
+    : [];
 
   // Cobertura del SAT para el periodo: mismas semánticas que getSatSyncStatus
   // (un periodo está completo cuando EMITIDOS y RECIBIDOS están FINISHED),
@@ -574,8 +637,13 @@ export async function checklistDeclaracion(
     hoy,
     fechaLimite,
     aperturaConfirmada: companyRow?.aperturaConfirmadaAt != null,
+    aperturaOrigenConocido,
+    aperturaOrigenes,
     satEmitidosCompleto: tiposFinished.has("EMITIDOS"),
     satRecibidosCompleto: tiposFinished.has("RECIBIDOS"),
+    cfdisConXml,
+    cfdisSinXml,
+    cfdiFaltantes,
     advertenciasCadena: pos.advertencias,
     movimientosBancarios,
     sinActividadBancariaConfirmada: cierre?.sinActividadBancariaAt != null,
