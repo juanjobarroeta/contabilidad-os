@@ -361,6 +361,20 @@ Encaje con lo que existe:
 - la e.firma ya está guardada y cifrada — es el material que piden los `*fiel`;
 - va detrás de `ComplianceProvider`, que ya anticipa proveedores intercambiables.
 
+**Lo que SatGo da y Syntage nunca dio: la opinión de cumplimiento IMSS.**
+`ComplianceProvider.fetchImssOpinion` existe desde siempre y la implementación
+de Syntage LANZA («Syntage no provee la opinión de cumplimiento IMSS»). SatGo
+la entrega con sólo el RFC —sin e.firma, sin cuota del SAT— vía
+`GET /api/v2/consultar/imssoc`. **Verificado en vivo el 11-sep-2026 (BAOBAB):
+200, PDF de 776 KB, en 86 s.** El IMSS es lento: va como trabajo de fondo
+dentro del carril A, nunca como llamada síncrona desde la interfaz.
+
+Credencial: la que funciona en producción es la **API Key durable** generada en
+la app PROD (sat-go.com → Configuración → Llaves de API), que `Auth/token-json`
+canjea por JWT. Un JWT de sesión de Clerk —y peor, de preprod— vence en días y
+`Auth/token-json` lo rechaza con «Invalid key». Vive en el servicio
+`contabilidad-os`; los workers la toman por referencia.
+
 Lo que SatGo **no** tiene: `balanza`/`catálogo`/`contabilidad`. **No ofrece CE.**
 La CE propia no es redundante con SatGo — es complementaria, y es la única pieza
 que Syntage cubría y SatGo no.
