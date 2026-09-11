@@ -1,7 +1,22 @@
 # Motor jurídico — de la KB fiscal a todo el derecho mexicano (leyes + jurisprudencia), con dos productos encima
 
-> Status: **propuesta, 2026-09-11.** Nada de lo descrito aquí está construido; todo
-> lo que se cita como existente está en `origin/main` a esa fecha.
+> Status: **F0 hecha y medida (2026-09-11, PR #994).** F1–F3 siguen siendo
+> propuesta.
+>
+> **F0 — resultado.** Catálogo federal completo generado desde Diputados
+> (`catalogo/federal.json`, 317 ordenamientos, 6 excluidos con motivo),
+> materias/ámbito/entidad en el esquema, filtro `MATERIAS_CONTADOR` fijo en el
+> executor del hub (52 leyes federales visibles al contador), ingesta por lotes
+> y refresco semanal en loop. Carga inicial en producción: 300 leyes nuevas,
+> 40 453 chunks, 23 minutos, 1 fallo (CFCDMX: su sitio no respondió; el
+> refresco semanal reintenta). Eval sólo-KB (96 preguntas, recuperación
+> top-6): **65/96 antes → 69/96 después** (67.7 % → 71.9 %), cuatro preguntas
+> ganadas (c07, j30, j33, n02) y ninguna perdida: el criterio de salida se
+> cumple. Pendientes menores: tres leyes minúsculas con artículos en ordinal
+> («ARTICULO PRIMERO.-»: LCNP, LISEDIP, LRART73-XVIII) quedaron como un solo
+> chunk porque el chunker sólo reconoce números; y los resúmenes por unidad
+> para las leyes nuevas (workflow «Fiscal KB resúmenes», ~60–100 USD una vez)
+> no se han corrido: decisión del owner.
 >
 > Antecedente: `docs/FISCAL-KNOWLEDGE-BASE.md` (diseño original de la KB) y la
 > serie de commits «Copiloto · Fase 1–3» / «KB: …» del 3–4 de septiembre de 2026.
