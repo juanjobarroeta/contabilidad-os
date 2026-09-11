@@ -370,13 +370,45 @@ async function jwtSatGo(key: string): Promise<string> {
   }
 }
 
+/**
+ * ¿Es un JWT? Tres segmentos base64url y cabecera `eyJ`. Si lo es, se leen SÓLO
+ * `iss` y `exp` del payload —no son secreto: dicen qué instancia lo emitió
+ * (prod vs preprod) y si ya venció— que es justo lo que distingue «llave mal»
+ * de «token vencido» de «token de otra instancia».
+ */
+function inspeccionarJwt(v: string): { esJwt: boolean; iss?: string; exp?: string; vencido?: boolean } {
+  const partes = v.split(".");
+  if (partes.length !== 3 || !v.startsWith("eyJ")) return { esJwt: false };
+  try {
+    const payload = JSON.parse(Buffer.from(partes[1], "base64url").toString("utf8")) as Record<string, unknown>;
+    const exp = typeof payload.exp === "number" ? payload.exp : null;
+    return {
+      esJwt: true,
+      iss: typeof payload.iss === "string" ? payload.iss : undefined,
+      exp: exp ? new Date(exp * 1000).toISOString() : undefined,
+      vencido: exp ? exp * 1000 < Date.now() : undefined,
+    };
+  } catch {
+    return { esJwt: true };
+  }
+}
+
 async function faseImss(rfc: string, salida: string): Promise<ResultadoImss> {
   const vacio: ResultadoImss = { status: 0, ok: false, contentType: "", bytes: 0, ms: 0, muestra: "", archivo: null };
   let token: string;
-  try {
-    token = await jwtSatGo(SATGO_API_KEY);
-  } catch (e) {
-    return { ...vacio, error: `auth: ${e instanceof Error ? e.message : String(e)}` };
+  const jwt = inspeccionarJwt(SATGO_API_KEY);
+  if (jwt.esJwt) {
+    // Lo que hay en la variable ya ES un token de acceso, no la llave durable.
+    // Canjearlo en Auth/token-json da «Invalid key» por definición; lo que
+    // corresponde es usarlo directo como Bearer — si no venció.
+    console.log(`   la variable es un JWT (iss=${jwt.iss ?? "?"}, exp=${jwt.exp ?? "?"}${jwt.vencido ? ", VENCIDO" : ""}) → se usa directo como Bearer`);
+    token = SATGO_API_KEY;
+  } else {
+    try {
+      token = await jwtSatGo(SATGO_API_KEY);
+    } catch (e) {
+      return { ...vacio, error: `auth: ${e instanceof Error ? e.message : String(e)}` };
+    }
   }
   const t0 = Date.now();
   try {
