@@ -316,6 +316,76 @@ apertura, UDIS y garantías extendidas; todo `SM*` en USADOS AFECTOS aunque él
 separe afectos de no afectos. El total del rubro sí cuadra, y el corte fino es
 una decisión suya —el mecanismo ya la admite.
 
+## Fase 2i — la contraparte como dimensión (propuesta, 2026-09-11)
+
+**El hueco**: una empresa SIN módulo vertical no tiene cómo resolver 201.01 ni
+105.01. La Fase 1 ofrece un override —«elige la cuenta»— y la Fase 2 resuelve
+por módulo (la familia del vehículo). Para BAOBAB, ZIONX o BARTIZ no aplica
+ninguna de las dos: su 201.01 tiene 31 candidatas porque su catálogo lleva UN
+AUXILIAR POR PROVEEDOR, que es como está armado cualquier plan de PyME
+mexicana. Preguntar «¿cuál de tus 31 proveedores es *la* cuenta de proveedores?»
+no tiene respuesta correcta, y cualquiera que se elija manda el saldo de los 31
+a la que se haya clicado. Este plan ya lo había dicho para el 105.01 de MARGOM
+—«ningún override es honesto»— pero lo resolvió con módulo, que sólo existe en
+los verticales.
+
+**Dos formas de catálogo, medidas (2026-09-11, producción):**
+
+| forma | cómo se llaman los auxiliares | quién la usa |
+|---|---|---|
+| por CONTRAPARTE | «TELEFONOS DE MEXICO», «CFE SUMINISTRADOR…» | BAOBAB, ZIONX, BARTIZ, SMP, TMA, REYES HUERTA |
+| FUNCIONAL | «CXP PLANTA VEHICULOS», «CXP FINANCIERA» | MARGOM |
+
+La funcional ya está resuelta por módulo (Fase 2) y no debe tocarse. La de
+contraparte es la que no tiene mecanismo, y es la mayoría de las empresas.
+
+**El mecanismo**, que no es nuevo: `BankAccount.chartAccountId` +
+`subcuentaBancoSpec` YA hacen exactamente esto para bancos — cada cuenta
+bancaria postea en su propia subcuenta, ligada por id, creada bajo demanda.
+Fase 5 es generalizar ese patrón a las demás contrapartes.
+
+1. **Clasificar los códigos del motor por DIMENSIÓN**, no por si son ambiguos:
+   `FIJA` (una cuenta: IVA por pagar, caja), `CONTRAPARTE` (~10 de los 42:
+   102.01, 105.01, 107.03, 107.05, 120.01, 201.01, 205.02, 205.04, 206.01),
+   `EJERCICIO` (304.01, una por año). Sólo las `FIJA` ambiguas son decisión de
+   una persona; el resto NUNCA debe aparecer en una cola de «elige una».
+
+2. **Ligar contraparte → cuenta**: `Customer.chartAccountId` (el hub guarda la
+   contraparte de TODO CFDI como Customer, en las dos direcciones; `Supplier`
+   es sólo datos de pago, así que el enlace va en Customer).
+
+3. **Sembrar el enlace desde el CT histórico, por nombre.** El auxiliar SE
+   LLAMA como la contraparte. Medido con `normalizarNombre` y empate exacto o
+   por prefijo, sin RFC y sin difuso: **384 de 792 auxiliares (48 %)**, con
+   varianza enorme — BARTIZ 84 %, REYES HUERTA 64 %, ZIONX 62 %, SMP 47 %,
+   TMA 33 %, MARGOM 0 % (es funcional, y ahí el 0 % es la respuesta correcta).
+   Con el RFC cuando el CT lo trae, y con las reglas de nombre que ya usa la
+   conciliación bancaria (`bancos/contraparte-nombre.ts`), sube.
+
+4. **Sin enlace, cae a la cuenta base y se reporta.** NO crear el auxiliar
+   solo: en una empresa que llega desde su CE, el catálogo ya lo conoce el SAT
+   y engordarlo con cuentas nuestras es justo lo que no debe pasar. Crear bajo
+   demanda es legítimo para bancos —donde el sistema es la fuente— y no para
+   un padrón que viene de afuera.
+
+5. **La cola de decisiones cambia de pregunta.** Hoy: «201.01 · 31 candidatas ·
+   elige una». Debería: «201.01 se resuelve por proveedor · 28 de 31 auxiliares
+   emparejados · 3 por revisar», con las tres a un clic. De 8 «decisiones»
+   imposibles en BAOBAB quedan 2 reales (401.01 ventas vs arrendamiento;
+   701.10 comisiones vs apertura de créditos).
+
+**Lo que NO resuelve**: los auxiliares que no son contrapartes («SALDO
+INICIAL», «PROVEEDOR #»), las partes relacionadas sin CFDI entre ellas (REYES
+HUERTA tiene un auxiliar «BAOBAB JQM» y ningún comprobante todavía), y los
+catálogos funcionales. Ésos siguen cayendo a la base, que es lo honesto.
+
+**Por qué importa para el objetivo del producto**: el onboarding se vende como
+«traemos tu CE y sigues posteando aquí». Hoy una empresa que llega con su CE
+completa llega también a una cola de 26 preguntas de las que 6 no tienen
+respuesta, y si las contesta igual, su balanza sale con el saldo de 31
+proveedores en una sola cuenta. Eso no es declarable. Fase 5 es lo que hace
+que «seguir posteando» sea cierto.
+
 ## Fase 3 — rubros exactos, cada uno con su checksum CE
 
 En orden de tractabilidad (datos completos de nuestro lado):
