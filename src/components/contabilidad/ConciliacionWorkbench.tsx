@@ -28,6 +28,7 @@ import { AvisoRepSugerido } from "@/components/bancos/AvisoRepSugerido";
 import { ResolverMovimiento, type RepSugerido } from "@/components/bancos/ResolverMovimiento";
 import { RepresentacionImpresa } from "@/components/facturas/RepresentacionImpresa";
 import { evaluarCoberturaBancaria, resumenDelMes } from "@/lib/bancos/conciliacion";
+import { etiquetaPeriodo } from "@/lib/periodos";
 import { cn } from "@/lib/utils";
 
 // ── Tipos espejo de las APIs ──────────────────────────────────────────────────
@@ -496,14 +497,19 @@ export function ConciliacionWorkbench({
 
       {/* Contexto de la cuenta elegida. El saldo es el del último renglón del
           estado de cuenta (con su fecha) — y sólo cuando el banco lo trae:
-          sin saldo no se muestra un cero que nadie midió. El conteo es
-          histórico de la cuenta, no del mes (los tiles de arriba ya son del
-          mes), por eso dice «en total». */}
+          sin saldo no se muestra un cero que nadie midió.
+
+          DOS CONTEOS, LOS DOS CON NOMBRE. Decía sólo «40 movimientos en
+          total» —el histórico de la cuenta— encima de un chip «Todos 8» que
+          es del mes, y el lector entendía que faltaban 32. Ahora dice
+          «8 en agosto 2026 · 40 en total»: los dos números atan a la vista
+          y se ve que los otros 32 viven en otros meses. */}
       {cuentaSel && detalleCuentas.has(cuentaSel) && (() => {
         const d = detalleCuentas.get(cuentaSel)!;
         return (
           <p className="-mt-2 mb-4 font-mono text-[11px] text-cos-ink-faint">
-            {d.banco} ··{d.numeroCuenta.slice(-4)} · {d.stats.total.toLocaleString("es-MX")} movimientos en total
+            {d.banco} ··{d.numeroCuenta.slice(-4)} · {delMes.length.toLocaleString("es-MX")} en{" "}
+            {etiquetaPeriodo(`${year}-${String(month).padStart(2, "0")}`)} · {d.stats.total.toLocaleString("es-MX")} en total
             {d.lastTransaction?.saldo != null && (
               <>
                 {" "}· saldo <Money value={d.lastTransaction.saldo} className="text-[11px]" muted /> al{" "}
