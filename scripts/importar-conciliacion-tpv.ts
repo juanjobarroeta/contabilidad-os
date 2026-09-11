@@ -117,6 +117,12 @@ async function main() {
     select: { id: true, fecha: true, descripcion: true, monto: true, status: true, invoiceId: true, conciliacionDetalles: { select: { id: true } } },
   });
 
+  // Un movimiento se usa UNA vez. El adquirente deposita el mismo importe dos
+  // veces el mismo día en la misma afiliación más seguido de lo que parece
+  // —visto en Haltus: 09992889C 14-ago $10,000.00 ×2— y sin consumirlos, los
+  // dos renglones del Excel eligen el mismo movimiento y el segundo choca con
+  // el único (movimiento, factura).
+  const usados = new Set<string>();
   let listos = 0, yaEstaban = 0, sinMovimiento = 0, rechazados = 0, escritos = 0;
   let montoListo = 0, montoSobrante = 0;
 
@@ -125,12 +131,16 @@ async function main() {
 
     const cand = movs.filter(
       (m) =>
+        !usados.has(m.id) &&
         Math.abs(Number(m.monto) - d.importe) < 0.01 &&
         m.descripcion.includes(d.afiliacion) &&
         Math.abs(m.fecha.getTime() - d.fecha.getTime()) <= DIAS_VENTANA * 86400000,
     );
-    if (cand.length === 0) { sinMovimiento++; console.log(`  ✗ ${etiqueta}  sin movimiento bancario que empate`); continue; }
+    if (cand.length === 0) { sinMovimiento++; console.log(`  ✗ ${etiqueta}  sin movimiento bancario disponible que empate`); continue; }
+    // Entre movimientos idénticos da igual cuál: se toma uno y se consume.
     const mov = cand[0];
+    usados.add(mov.id);
+    // Idempotente: lo ya conciliado (por este script o a mano) no se re-escribe.
     if (mov.status === "MATCHED" || mov.conciliacionDetalles.length > 0) { yaEstaban++; continue; }
 
     // Las facturas, y el guard de cada una con lo que YA tiene aplicado.
