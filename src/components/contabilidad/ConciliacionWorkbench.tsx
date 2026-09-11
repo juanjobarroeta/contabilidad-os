@@ -855,6 +855,7 @@ export function ConciliacionWorkbench({
                     onVerFactura={setVerFacturaId}
                     onRepSugerido={setRepSugerido}
                     onResuelto={() => setSelTx(null)}
+                    resuelto={!!selTx.conciliado}
                   />
                 </div>
               )}

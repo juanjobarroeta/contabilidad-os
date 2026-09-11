@@ -80,7 +80,7 @@ export interface RepSugerido {
 }
 
 export function ResolverMovimiento({
-  tx, companyId, onCambio, onToast, onVerFactura, onRepSugerido, onResuelto,
+  tx, companyId, onCambio, onToast, onVerFactura, onRepSugerido, onResuelto, resuelto = false,
 }: {
   tx: MovimientoResoluble;
   companyId: string;
@@ -92,6 +92,12 @@ export function ResolverMovimiento({
   onRepSugerido?: (r: RepSugerido) => void;
   /** El movimiento dejó de estar pendiente: cerrar el panel. */
   onResuelto: () => void;
+  /** YA está conciliado o categorizado. El panel enseña contra qué quedó y
+   *  la evidencia (CEP), pero NO ofrece candidatos ni categorías: un
+   *  «Conciliar» sobre un movimiento resuelto lo re-cruza en silencio. Visto
+   *  en pantalla: una dispersión de nómina ya etiquetada seguía ofreciendo,
+   *  como «media», una factura de farmacia por un importe parecido. */
+  resuelto?: boolean;
 }) {
   const [candidatos, setCandidatos] = useState<CandidatoFactura[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -480,6 +486,14 @@ export function ResolverMovimiento({
         <VisorCep cep={cep} txId={tx.id} montoMovimiento={tx.monto} onClose={() => setCepAbierto(false)} />
       )}
 
+      {resuelto && (
+        <p className="text-[12px] text-cos-ink-faint">
+          Para volver a cruzarlo o cambiarle la categoría, reábrelo primero.
+        </p>
+      )}
+
+      {!resuelto && (
+        <>
       {/* Pago junto: N facturas de la MISMA contraparte suman exacto el
           movimiento — la combinación es única, por eso se ofrece en un gesto. */}
       {!cargando && pagoJunto && (
@@ -811,6 +825,8 @@ export function ResolverMovimiento({
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }
