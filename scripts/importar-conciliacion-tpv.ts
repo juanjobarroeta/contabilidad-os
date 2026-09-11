@@ -20,7 +20,15 @@
 // una obligación que envejece a la vista y no un saldo diluido.
 //
 // Uso:
-//   npx tsx scripts/importar-conciliacion-tpv.ts <archivo.xlsx> [--rfc RFC] [--aplicar]
+//   npx tsx scripts/importar-conciliacion-tpv.ts <archivo.xlsx> [--rfc RFC] [--aplicar] [--corregir]
+//
+// `--corregir` DESHACE los matches 1:1 previos que contradicen el archivo. La
+// auto-conciliación empareja por MONTO Y FECHA cuando el movimiento no trae
+// contraparte —un depósito de terminal nunca la trae— y con eso un depósito de
+// $10,000 se casó con una factura de $10,000 de meses antes. Medido en Haltus:
+// SEIS de catorce 1:1 apuntaban a la factura equivocada, y como esas facturas
+// quedaban «pagadas», bloqueaban a los depósitos que sí les correspondían.
+// El Excel de caja sabe qué paciente pagó; el matcher estaba adivinando.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import * as XLSX from "xlsx";
@@ -101,6 +109,7 @@ async function main() {
   const ruta = process.argv[2];
   if (!ruta) throw new Error("uso: importar-conciliacion-tpv.ts <archivo.xlsx> [--rfc RFC] [--aplicar]");
   const aplicar = process.argv.includes("--aplicar");
+  const corregir = process.argv.includes("--corregir");
   const i = process.argv.indexOf("--rfc");
   const rfc = i > 0 ? process.argv[i + 1] : "CPM2307076Z9";
 
@@ -112,10 +121,16 @@ async function main() {
   console.log(`${deps.length} depósitos de terminal en el archivo · ${money(deps.reduce((s, d) => s + d.importe, 0))}`);
   console.log(aplicar ? "\nMODO: APLICAR\n" : "\nMODO: dry-run (no escribe nada)\n");
 
-  const movs = await prisma.bankTransaction.findMany({
+  const movsRaw = await prisma.bankTransaction.findMany({
     where: { companyId: empresa.id, monto: { gt: 0 } },
-    select: { id: true, fecha: true, descripcion: true, monto: true, status: true, invoiceId: true, conciliacionDetalles: { select: { id: true } } },
+    select: {
+      id: true, fecha: true, descripcion: true, monto: true, status: true, invoiceId: true,
+      invoice: { select: { uuid: true } },
+      conciliacionDetalles: { select: { id: true } },
+    },
   });
+  // `invoiceUuid` plano: el pase previo lo compara contra el archivo.
+  const movs = movsRaw.map((m) => ({ ...m, invoiceUuid: m.invoice?.uuid ?? null }));
 
   // Un movimiento se usa UNA vez. El adquirente deposita el mismo importe dos
   // veces el mismo día en la misma afiliación más seguido de lo que parece
@@ -125,6 +140,42 @@ async function main() {
   const usados = new Set<string>();
   let listos = 0, yaEstaban = 0, sinMovimiento = 0, rechazados = 0, escritos = 0;
   let montoListo = 0, montoSobrante = 0;
+
+  // ── Pase previo: deshacer los 1:1 que contradicen el archivo ──────────────
+  // Va ANTES de escribir nada: liberar la factura de un depósito es lo que
+  // deja pasar a OTRO depósito que también la toca. Con el orden al revés, el
+  // segundo se rechazaría por una sobre-aplicación que estaba por corregirse.
+  if (corregir) {
+    const tomados = new Set<string>();
+    let deshechos = 0;
+    for (const d of deps) {
+      const cand = movs.filter(
+        (m) =>
+          !tomados.has(m.id) &&
+          Math.abs(Number(m.monto) - d.importe) < 0.01 &&
+          m.descripcion.includes(d.afiliacion) &&
+          Math.abs(m.fecha.getTime() - d.fecha.getTime()) <= DIAS_VENTANA * 86400000,
+      );
+      if (!cand.length) continue;
+      const mov = cand[0];
+      tomados.add(mov.id);
+      if (!mov.invoiceId || mov.conciliacionDetalles.length > 0) continue;
+
+      // Coincide si el 1:1 apunta a la ÚNICA factura que el archivo nombra.
+      const unaSola = d.lineas.length === 1 && mov.invoiceUuid?.toUpperCase() === d.lineas[0].uuid;
+      if (unaSola) continue;
+
+      console.log(`  ↺ ${d.afiliacion} ${d.fecha.toISOString().slice(0, 10)} ${money(d.importe).padStart(12)}  deshago 1:1 → ${d.lineas.map((l) => l.folio).join(" + ")}`);
+      if (aplicar) {
+        await prisma.bankTransaction.update({ where: { id: mov.id }, data: { invoiceId: null, status: "UNMATCHED" } });
+        mov.invoiceId = null;
+        mov.status = "UNMATCHED";
+      }
+      deshechos++;
+    }
+    console.log(`
+  1:1 que contradicen el archivo: ${deshechos}${aplicar ? " (deshechos)" : " (dry-run)"}\n`);
+  }
 
   for (const d of deps) {
     const etiqueta = `${d.afiliacion} ${d.fecha.toISOString().slice(0, 10)} ${money(d.importe).padStart(12)}`;
