@@ -5,7 +5,8 @@
  * local para probar la descarga sin base (SJF_SOLO_DESCARGA).
  *
  * Env: DATABASE_URL, OPENAI_API_KEY (embeddings). Opcionales:
- *   SJF_MODO=nuevas|completo   (default nuevas: se detiene en la primera página sin ids nuevos)
+ *   SJF_MODO=nuevas|faltantes|completo   (default nuevas: se detiene en la primera página sin ids nuevos;
+ *            faltantes: carga inicial reanudable — todas las páginas, sólo ids no vistos; completo: baja todo, re-embebe lo cambiado)
  *   SJF_EPOCAS=9a,10a,11a,12a  (default; vacío = todas)
  *   SJF_PAGINA_INICIO=0  SJF_MAX_PAGINAS=n  SJF_SIZE_PAGINA=1000  SJF_LOTE=50  SJF_CONCURRENCIA=6
  *   SJF_SOLO_DESCARGA=/ruta/salida.ndjson  (sin DB: escribe cada tesis como JSON por línea)
@@ -22,7 +23,7 @@ function num(v: string | undefined): number | undefined {
 
 async function main() {
   const soloDescarga = process.env.SJF_SOLO_DESCARGA;
-  const modo = process.env.SJF_MODO === "completo" ? "completo" : "nuevas";
+  const modo = process.env.SJF_MODO === "completo" ? "completo" : process.env.SJF_MODO === "faltantes" ? "faltantes" : "nuevas";
   const epocasRaw = process.env.SJF_EPOCAS ?? "9a,10a,11a,12a";
   const epocas = new Set(
     epocasRaw
