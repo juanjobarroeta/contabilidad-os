@@ -8,6 +8,15 @@
 // salió de un CFDI. Emparejarlos es lo que convierte «31 candidatas, elige
 // una» —que no tiene respuesta— en «28 de 31 emparejados, revisa 3».
 //
+// DÓNDE VIVE EL ENLACE, que costó una migración corregirlo: en la CUENTA
+// (`ChartAccount.customerId`), no en la contraparte. Un auxiliar pertenece a
+// una sola contraparte, pero una contraparte tiene tantos auxiliares como
+// papeles juegue — en BAOBAB, SUPERAVIT COMERCIALIZADORA es 2110-018 como
+// proveedor, 2120-007 como acreedor y 1170-003 como deudor, las tres
+// legítimas. Con el enlace del otro lado sólo cabía uno. El `codAgrup` de la
+// cuenta ya dice para qué código sirve, así que (contraparte, código) queda
+// determinado sin tabla intermedia.
+//
 // POR QUÉ ESTO PROPONE Y NO APLICA SOLO. Un enlace malo no se nota: manda el
 // saldo de una contraparte a la cuenta de otra y la balanza sigue cuadrando,
 // porque el importe está, sólo que en el renglón equivocado. Es el error más
@@ -89,19 +98,20 @@ export async function emparejarAuxiliares(db: Db, companyId: string, codigoMotor
   const [cuentas, contrapartes] = await Promise.all([
     db.chartAccount.findMany({
       where: { companyId, isActive: true, codAgrup: codigoMotor },
-      select: { id: true, cuentaSAT: true, subcuenta: true, nombre: true },
+      select: { id: true, cuentaSAT: true, subcuenta: true, nombre: true, customerId: true },
     }),
     // El hub guarda la contraparte de TODO CFDI como Customer, en las dos
     // direcciones; `Supplier` es sólo datos de pago. El padrón es éste.
     db.customer.findMany({
       where: { companyId },
-      select: { id: true, razonSocial: true, rfc: true, chartAccountId: true },
+      select: { id: true, razonSocial: true, rfc: true },
     }),
   ]);
 
-  const yaLigados = contrapartes.filter((c) => c.chartAccountId).length;
-  const libres = contrapartes.filter((c) => !c.chartAccountId);
-  const tomadas = new Set(contrapartes.map((c) => c.chartAccountId).filter(Boolean) as string[]);
+  // Ya ligadas son las CUENTAS con contraparte; una contraparte puede estar en
+  // varias cuentas a la vez (proveedor y acreedor) y eso no la agota.
+  const yaLigados = cuentas.filter((c) => c.customerId).length;
+  const libres = contrapartes;
 
   const pares: Pareja[] = [];
   const sinPareja: SinPareja[] = [];
@@ -110,7 +120,7 @@ export async function emparejarAuxiliares(db: Db, companyId: string, codigoMotor
 
   for (const cta of cuentas) {
     const codigo = cta.subcuenta ?? cta.cuentaSAT;
-    if (tomadas.has(cta.id)) continue;
+    if (cta.customerId) continue;
     if (esNombreDeRelleno(cta.nombre)) {
       sinPareja.push({ chartAccountId: cta.id, codigo, nombreCuenta: cta.nombre, motivo: "sin_candidata" });
       continue;
@@ -143,7 +153,9 @@ export async function emparejarAuxiliares(db: Db, companyId: string, codigoMotor
     });
   }
 
-  // Dos auxiliares que apuntan a la misma contraparte: ninguno se sostiene.
+  // Dos auxiliares del MISMO código apuntando a la misma contraparte: ninguno
+  // se sostiene. Entre códigos distintos sí es legítimo —proveedor y acreedor
+  // a la vez— y por eso esto se evalúa dentro de un solo código.
   const duplicadas = new Set([...propuestas.entries()].filter(([, n]) => n > 1).map(([id]) => id));
   if (duplicadas.size === 0) return { codigoMotor, pares, sinPareja, yaLigados };
 
@@ -169,11 +181,12 @@ export async function aplicarParejas(
   const aplicar = opts.soloExactas === false ? pares : pares.filter((p) => p.confianza === "EXACTA");
   let n = 0;
   for (const p of aplicar) {
-    const { count } = await db.customer.updateMany({
-      // `companyId` en el where no es redundante: impide ligar la contraparte
-      // de otra empresa a una cuenta de ésta.
-      where: { id: p.customerId, companyId, chartAccountId: null },
-      data: { chartAccountId: p.chartAccountId },
+    const { count } = await db.chartAccount.updateMany({
+      // `companyId` en el where no es redundante: impide ligar una cuenta de
+      // otra empresa. `customerId: null` hace la escritura idempotente y no
+      // pisa un enlace que alguien ya corrigió a mano.
+      where: { id: p.chartAccountId, companyId, customerId: null },
+      data: { customerId: p.customerId },
     });
     n += count;
   }
@@ -186,11 +199,16 @@ export async function aplicarParejas(
  * Null significa «cae a la cuenta base», que es exactamente lo que el motor
  * hace hoy para estos códigos: adoptar esto no mueve nada hasta que hay enlace.
  */
-export async function cuentaDeContraparte(db: Db, companyId: string, customerId: string | null | undefined): Promise<string | null> {
+export async function cuentaDeContraparte(
+  db: Db,
+  companyId: string,
+  codigoMotor: string,
+  customerId: string | null | undefined
+): Promise<string | null> {
   if (!customerId) return null;
-  const c = await db.customer.findFirst({
-    where: { id: customerId, companyId },
-    select: { chartAccount: { select: { id: true, isActive: true } } },
+  const cta = await db.chartAccount.findFirst({
+    where: { companyId, isActive: true, codAgrup: codigoMotor, customerId },
+    select: { id: true },
   });
-  return c?.chartAccount?.isActive ? c.chartAccount.id : null;
+  return cta?.id ?? null;
 }

@@ -3,35 +3,33 @@ import { aplicarParejas, emparejarAuxiliares, esNombreDeRelleno } from "./auxili
 import { COE_CODES } from "./catalog";
 
 // Base mínima en memoria: sólo lo que toca este módulo.
-type Cta = { id: string; companyId: string; cuentaSAT: string; subcuenta: string | null; nombre: string; isActive: boolean; codAgrup: string | null };
-type Cli = { id: string; companyId: string; razonSocial: string; rfc: string; chartAccountId: string | null };
+type Cta = { id: string; companyId: string; cuentaSAT: string; subcuenta: string | null; nombre: string; isActive: boolean; codAgrup: string | null; customerId: string | null };
+type Cli = { id: string; companyId: string; razonSocial: string; rfc: string };
 
 let cuentas: Cta[] = [];
 let clientes: Cli[] = [];
 
-const cta = (id: string, nombre: string, codAgrup: string = COE_CODES.PROVEEDORES): Cta => ({
-  id, companyId: "c1", cuentaSAT: "2110", subcuenta: `2110-${id}-000`, nombre, isActive: true, codAgrup,
+const cta = (id: string, nombre: string, codAgrup: string = COE_CODES.PROVEEDORES, customerId: string | null = null): Cta => ({
+  id, companyId: "c1", cuentaSAT: "2110", subcuenta: `2110-${id}-000`, nombre, isActive: true, codAgrup, customerId,
 });
-const cli = (id: string, razonSocial: string, chartAccountId: string | null = null): Cli => ({
-  id, companyId: "c1", razonSocial, rfc: `RFC${id}`, chartAccountId,
-});
+const cli = (id: string, razonSocial: string): Cli => ({ id, companyId: "c1", razonSocial, rfc: `RFC${id}` });
 
 const coincide = (f: Record<string, unknown>, w: Record<string, unknown>): boolean =>
   Object.entries(w).every(([k, v]) => (v === null ? f[k] == null : f[k] === v));
 
 const db = {
-  chartAccount: { findMany: async ({ where }: never) => cuentas.filter((c) => coincide(c as never, where)) },
-  customer: {
-    findMany: async ({ where }: never) => clientes.filter((c) => coincide(c as never, where)),
-    findFirst: async ({ where }: never) => clientes.find((c) => coincide(c as never, where)) ?? null,
+  chartAccount: {
+    findMany: async ({ where }: never) => cuentas.filter((c) => coincide(c as never, where)),
+    findFirst: async ({ where }: never) => cuentas.find((c) => coincide(c as never, where)) ?? null,
     updateMany: async ({ where, data }: never) => {
       let count = 0;
-      for (const c of clientes) {
+      for (const c of cuentas) {
         if (coincide(c as never, where)) { Object.assign(c, data); count++; }
       }
       return { count };
     },
   },
+  customer: { findMany: async ({ where }: never) => clientes.filter((c) => coincide(c as never, where)) },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } as any;
 
@@ -95,8 +93,8 @@ describe("emparejarAuxiliares()", () => {
   });
 
   it("no vuelve a proponer lo ya ligado", async () => {
-    cuentas = [cta("002", "TELEFONOS DE MEXICO")];
-    clientes = [cli("t", "TELEFONOS DE MEXICO", "2110-002-000")];
+    cuentas = [cta("002", "TELEFONOS DE MEXICO", COE_CODES.PROVEEDORES, "t")];
+    clientes = [cli("t", "TELEFONOS DE MEXICO")];
     const r = await emparejarAuxiliares(db, "c1", COE_CODES.PROVEEDORES);
     expect(r.yaLigados).toBe(1);
     expect(r.pares).toHaveLength(0);
@@ -126,8 +124,8 @@ describe("aplicarParejas()", () => {
     clientes = [cli("t", "TELEFONOS DE MEXICO"), cli("g", "GRUPO LA ESPERANZA DE SAN RAFAEL DE ARRIBA SA DE CV")];
     const r = await emparejarAuxiliares(db, "c1", COE_CODES.PROVEEDORES);
     expect(await aplicarParejas(db, "c1", r.pares)).toBe(1);
-    expect(clientes.find((c) => c.id === "t")!.chartAccountId).toBe("002");
-    expect(clientes.find((c) => c.id === "g")!.chartAccountId).toBeNull();
+    expect(cuentas.find((c) => c.id === "002")!.customerId).toBe("t");
+    expect(cuentas.find((c) => c.id === "006")!.customerId).toBeNull();
   });
 
   it("con soloExactas:false escribe lo confirmado por una persona", async () => {
@@ -138,10 +136,29 @@ describe("aplicarParejas()", () => {
   });
 
   it("nunca pisa un enlace que ya existe", async () => {
-    cuentas = [cta("002", "TELEFONOS DE MEXICO")];
-    clientes = [cli("t", "TELEFONOS DE MEXICO", "otra-cuenta")];
+    cuentas = [cta("002", "TELEFONOS DE MEXICO", COE_CODES.PROVEEDORES, "otro-cliente")];
+    clientes = [cli("t", "TELEFONOS DE MEXICO")];
     const r = { pares: [{ chartAccountId: "002", codigo: "2110-002-000", nombreCuenta: "TELEFONOS DE MEXICO", customerId: "t", customerNombre: "TELEFONOS DE MEXICO", customerRfc: "RFCt", confianza: "EXACTA" as const }] };
     expect(await aplicarParejas(db, "c1", r.pares)).toBe(0);
-    expect(clientes[0].chartAccountId).toBe("otra-cuenta");
+    expect(cuentas[0].customerId).toBe("otro-cliente");
+  });
+
+  it("la MISMA contraparte puede quedar en varios auxiliares de códigos distintos", async () => {
+    // BAOBAB: SUPERAVIT COMERCIALIZADORA es proveedor, acreedor y deudor a la
+    // vez. Con el enlace en Customer sólo cabía uno y los otros dos se perdían
+    // en silencio — por esto la columna se movió a la cuenta.
+    cuentas = [
+      cta("018", "SUPERAVIT COMERCIALIZADORA", COE_CODES.PROVEEDORES),
+      cta("007", "SUPERAVIT COMERCIALIZADORA", COE_CODES.ACREEDORES_DIVERSOS),
+    ];
+    clientes = [cli("s", "SUPERAVIT COMERCIALIZADORA")];
+
+    const prov = await emparejarAuxiliares(db, "c1", COE_CODES.PROVEEDORES);
+    expect(await aplicarParejas(db, "c1", prov.pares)).toBe(1);
+    const acre = await emparejarAuxiliares(db, "c1", COE_CODES.ACREEDORES_DIVERSOS);
+    expect(await aplicarParejas(db, "c1", acre.pares)).toBe(1);
+
+    expect(cuentas.find((c) => c.id === "018")!.customerId).toBe("s");
+    expect(cuentas.find((c) => c.id === "007")!.customerId).toBe("s");
   });
 });

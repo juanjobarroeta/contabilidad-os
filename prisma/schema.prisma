@@ -785,24 +785,14 @@ model Customer {
   // Facturapi customer ID
   facturapiId String?
 
-  /// El auxiliar del catálogo PROPIO que le toca a esta contraparte
-  /// (`2110-002-000 TELEFONOS DE MEXICO`), cuando la empresa lleva un auxiliar
-  /// por contraparte — que es como está armado casi cualquier plan de PyME.
-  ///
-  /// Es el mismo patrón que `BankAccount.chartAccountId` y existe por la misma
-  /// razón: hay códigos del motor cuya cuenta NO se decide una vez, la elige
-  /// la contraparte de cada comprobante (docs/PLAN-motor-plan-propio.md → 2i).
-  /// Sin enlace, el motor sigue cayendo a la cuenta base: null es «todavía no
-  /// se sabe», nunca «da igual».
-  chartAccountId String?
 
   company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  chartAccount        ChartAccount?        @relation(fields: [chartAccountId], references: [id])
   invoices            Invoice[]
   borradores          FacturaBorrador[]
   recurrentes         FacturaRecurrente[]
   proyectos           Proyecto[]
   clubMembers         ClubMember[]
+  auxiliares          ChartAccount[]
   restOrdenes         RestOrden[]
   purifVentas         PurifVenta[]
   purifSucursales     PurifSucursal[]
@@ -2433,7 +2423,17 @@ model ChartAccount {
   entries          AccountingEntry[]
   postingOverrides PostingCuentaOverride[]
   bankAccounts BankAccount[]
-  contrapartes Customer[]
+
+  /// DE QUIÉN es este auxiliar. Va de este lado y no en `Customer` porque un
+  /// auxiliar pertenece a UNA contraparte, pero una contraparte tiene tantos
+  /// auxiliares como papeles juegue: visto en BAOBAB, SUPERAVIT
+  /// COMERCIALIZADORA es 2110-018 como proveedor, 2120-007 como acreedor y
+  /// 1170-003 como deudor — las tres cosas a la vez, y las tres legítimas.
+  /// Con el enlace en Customer sólo cabía una y las otras dos se perdían en
+  /// silencio. El `codAgrup` de cada cuenta ya dice para qué código sirve, así
+  /// que (contraparte, código) queda determinado sin una tabla intermedia.
+  customerId   String?
+  customer     Customer? @relation(fields: [customerId], references: [id])
 
   @@unique([companyId, cuentaSAT, subcuenta])
   @@index([companyId, codAgrup])
