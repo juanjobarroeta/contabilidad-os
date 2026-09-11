@@ -85,6 +85,63 @@ export function evaluarCoberturaBancaria(
   };
 }
 
+/**
+ * LOS NÚMEROS DEL MES, en un solo lugar.
+ *
+ * La mesa los calculaba a mano sobre la lista que estaba pintando, y desde que
+ * esa lista tiene filtro y búsqueda eso volvió un filtro en un dato falso: con
+ * el chip «Conciliados» —o con una búsqueda sin resultados— «sin conciliar»
+ * caía a 0 y la mesa anunciaba la compuerta del cierre abierta. La cobertura
+ * es del PERIODO: cambiar de vista no puede cambiarla.
+ *
+ * Las definiciones, que tienen que decir lo mismo aquí, en el Inicio y en el
+ * cierre:
+ *   · sinConciliar  — status UNMATCHED: nadie decidió qué es.
+ *   · esperanPosteo — decidido pero sin asiento: sólo espera contabilizar.
+ *   · pendientes    — lo que NO llegó al libro (la suma de los dos).
+ *
+ * Los montos son Σ|monto| POR SENTIDO y sólo de lo que falta conciliar. Dos
+ * lecciones caras: el neto firmado hacía que +$17k de abonos y −$17k de cargos
+ * se netearan a «$92 por conciliar» con 12 movimientos por casar (el neto es
+ * del motor, que necesita el signo para su ecuación); y sumar también los ya
+ * conciliados que esperan posteo hacía que el tile dijera «$20,207.20 por
+ * conciliar» junto a «sin conciliar: 0» — dos cifras que se contradicen a la
+ * vista. Lo que espera el posteo se cuenta aparte, con su nombre.
+ */
+export function resumenDelMes(
+  movimientos: Array<{ monto: number; conciliado?: boolean; registrado?: boolean }>,
+): {
+  total: number;
+  sinConciliar: number;
+  esperanPosteo: number;
+  pendientes: number;
+  /** Σ de abonos y de cargos SIN conciliar (no el neto: se netearían). */
+  abonos: number;
+  cargos: number;
+  /** Σ|monto| de lo ya decidido que espera el asiento. */
+  montoPorContabilizar: number;
+} {
+  let sinConciliar = 0, esperanPosteo = 0, abonos = 0, cargos = 0, montoPorContabilizar = 0;
+  for (const m of movimientos) {
+    if (!m.conciliado) {
+      sinConciliar++;
+      if (m.monto > 0) abonos += m.monto; else cargos += -m.monto;
+    } else if (!m.registrado) {
+      esperanPosteo++;
+      montoPorContabilizar += Math.abs(m.monto);
+    }
+  }
+  return {
+    total: movimientos.length,
+    sinConciliar,
+    esperanPosteo,
+    pendientes: sinConciliar + esperanPosteo,
+    abonos: r2(abonos),
+    cargos: r2(cargos),
+    montoPorContabilizar: r2(montoPorContabilizar),
+  };
+}
+
 /** Movimiento del estado de cuenta, con el signo del banco. */
 export interface MovimientoParaConciliar {
   id: string;

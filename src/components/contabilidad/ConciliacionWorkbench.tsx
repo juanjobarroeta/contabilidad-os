@@ -27,7 +27,7 @@ import { AccionesEnLote } from "@/components/bancos/AccionesEnLote";
 import { AvisoRepSugerido } from "@/components/bancos/AvisoRepSugerido";
 import { ResolverMovimiento, type RepSugerido } from "@/components/bancos/ResolverMovimiento";
 import { RepresentacionImpresa } from "@/components/facturas/RepresentacionImpresa";
-import { evaluarCoberturaBancaria } from "@/lib/bancos/conciliacion";
+import { evaluarCoberturaBancaria, resumenDelMes } from "@/lib/bancos/conciliacion";
 import { cn } from "@/lib/utils";
 
 // ── Tipos espejo de las APIs ──────────────────────────────────────────────────
@@ -397,27 +397,15 @@ export function ConciliacionWorkbench({
   // Neto firmado en valor absoluto (un reembolso resta) — la cuenta del motor.
   const escogidosSuma = Math.abs(escogidos.reduce((s, m) => s + m.monto, 0));
   const escogidosConciliados = escogidos.filter((m) => m.conciliado).length;
-  const total = deLaCuenta(data.movimientosBanco).length;
-  // «Sin conciliar» = status UNMATCHED (el MISMO número que el paso 2 del
-  // Inicio); los conciliados de un mes sin postear sólo esperan el posteo.
-  const sinConciliar = lista.filter((m) => !m.conciliado).length;
-  const esperanPosteo = lista.length - sinConciliar;
-  const sin = lista.length;
+  // LOS TILES Y LA COBERTURA SON DEL MES, NUNCA DE LA LISTA FILTRADA (ver
+  // resumenDelMes): salían de `lista`, y con el chip «Conciliados» —o una
+  // búsqueda sin resultados— «sin conciliar» caía a 0 y la mesa anunciaba la
+  // compuerta abierta.
+  const mes = resumenDelMes(delMes);
+  const { total, sinConciliar, esperanPosteo, abonos, cargos, montoPorContabilizar } = mes;
+  /** Trabajo real del mes en esta cuenta: lo que no ha llegado al libro. */
+  const pendientesMes = mes.pendientes;
   const sinGlobal = data.movimientosNoRegistrados.length;
-  // Σ|monto|, NO el neto firmado: +$17k de abonos y −$17k de cargos netean a
-  // casi cero, y el tile diría «$92 por conciliar» con 12 movimientos por
-  // casar. El neto es del motor (la ecuación del cuadre lo necesita firmado);
-  // este tile mide cuánto trabajo hay sobre la mesa.
-  // …y SÓLO sobre lo que de verdad falta conciliar. Sumar también los ya
-  // conciliados que esperan posteo hacía que el tile dijera «$20,207.20 por
-  // conciliar» junto a «sin conciliar: 0» — dos cifras que se contradicen a la
-  // vista. Lo que espera el posteo se cuenta aparte, con su nombre.
-  const porConciliar = lista.filter((m) => !m.conciliado);
-  const abonos = porConciliar.reduce((s, m) => s + (m.monto > 0 ? m.monto : 0), 0);
-  const cargos = porConciliar.reduce((s, m) => s + (m.monto < 0 ? -m.monto : 0), 0);
-  const montoPorContabilizar = lista
-    .filter((m) => m.conciliado)
-    .reduce((s, m) => s + Math.abs(m.monto), 0);
   const sinActividadConfirmada =
     data.movimientosBanco.length === 0 && data.confirmacionSinActividad != null;
   const cobertura = evaluarCoberturaBancaria(total, sinConciliar, sinActividadConfirmada);
@@ -516,8 +504,14 @@ export function ConciliacionWorkbench({
         );
       })()}
 
-      {sin === 0 ? (
-        <div className="rounded-card border border-cos-line bg-cos-card px-5 py-4 text-sm text-cos-ink-soft">
+      {/* AVISO DEL MES, no de la lista. Este bloque colgaba de `lista.length`,
+          así que una búsqueda sin resultados reemplazaba la mesa entera —
+          filtros y caja de búsqueda incluidos, de modo que ni se podía borrar
+          lo tecleado— y encima anunciaba que todo estaba conciliado. Ahora
+          depende de lo que el MES tiene pendiente, y la mesa se queda debajo
+          para poder seguir mirando. */}
+      {pendientesMes === 0 && (
+        <div className="mb-4 rounded-card border border-cos-line bg-cos-card px-5 py-4 text-sm text-cos-ink-soft">
           {/* «Compuerta abierta» sólo cuando el MES entero está limpio: con una
               cuenta filtrada en cero pero otras pendientes, decirlo mentiría. */}
           {coberturaGlobal.estado === "NO_ACTIVITY_CONFIRMED"
@@ -530,7 +524,8 @@ export function ConciliacionWorkbench({
                 ? "Todos los movimientos del mes están conciliados — la compuerta del cierre está abierta."
                 : `Esta cuenta está al corriente; ${sinGlobal === 1 ? "queda 1 movimiento" : `quedan ${sinGlobal} movimientos`} en otras cuentas.`}
         </div>
-      ) : (
+      )}
+      {delMes.length > 0 && (
         <>
         {/* ANTICIPOS SIN CFDI. No es un banner que se cierra: es una lista de
             obligaciones con dinero encima, ordenada por ANTIGÜEDAD, porque eso
@@ -684,6 +679,30 @@ export function ConciliacionWorkbench({
                   panel pegado (`self-start`) ya no se estira, y sin tope la
                   página entera hacía scroll y el panel se iba de vista. */}
               <ul className="max-h-[430px] flex-1 overflow-y-auto lg:max-h-screen lg:min-h-[430px]">
+                {/* VACÍO CON MOTIVO. Una lista vacía por el filtro o por la
+                    búsqueda no es «no hay movimientos»: lo dice, y ofrece
+                    deshacer lo que la dejó vacía sin tener que adivinar. */}
+                {lista.length === 0 && (
+                  <li className="px-5 py-8 text-center text-[13px] text-cos-ink-soft">
+                    {buscar.trim() ? (
+                      <>
+                        Nada coincide con <b>{buscar.trim()}</b>
+                        {filtro !== "TODOS" && " en este filtro"}.
+                        <button onClick={() => setBuscar("")} className="ml-1.5 font-semibold text-cos-brand-ink hover:underline">
+                          Limpiar la búsqueda
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        Ningún movimiento del mes está en{" "}
+                        <b>{filtro === "PENDIENTES" ? "pendientes" : filtro === "MATCHED" ? "conciliados" : "categorizados"}</b>.
+                        <button onClick={() => setFiltro("TODOS")} className="ml-1.5 font-semibold text-cos-brand-ink hover:underline">
+                          Ver todos
+                        </button>
+                      </>
+                    )}
+                  </li>
+                )}
                 {lista.slice(0, hasta).map((m) => {
                   const activo = selTx?.id === m.id;
                   const palomeado = picked.has(m.id);
