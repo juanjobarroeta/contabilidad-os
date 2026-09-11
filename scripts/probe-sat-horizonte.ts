@@ -826,6 +826,15 @@ async function main(): Promise<void> {
   let imss: ResultadoImss | null = null;
   if (SATGO_API_KEY) {
     console.log("\n── IMSS — opinión de cumplimiento vía SatGo (sólo RFC, sin cuota SAT)");
+    // Diagnóstico sin exponer el secreto: largo y forma. Un valor que empieza
+    // por `${{` es una referencia de Railway que NO se resolvió; espacios o
+    // comillas en los extremos son un paste sucio. Ambos dan «Invalid key».
+    const k = SATGO_API_KEY;
+    const forma =
+      k.startsWith("${{") ? "REFERENCIA SIN RESOLVER" :
+      k !== k.trim() ? "con espacios en los extremos" :
+      /^["']|["']$/.test(k) ? "con comillas en los extremos" : "limpia";
+    console.log(`   llave: ${k.length} chars, ${forma}, base ${SATGO_BASE}`);
     imss = await faseImss(company.rfc, SALIDA);
     if (imss.error) console.log(`   ✗ ${imss.error}`);
     else if (imss.ok) console.log(`   ✓ ${imss.status} ${imss.contentType} ${imss.bytes}b en ${imss.ms}ms${imss.archivo ? ` → ${path.basename(imss.archivo)}` : ""}`);
