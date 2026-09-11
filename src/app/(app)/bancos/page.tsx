@@ -19,7 +19,9 @@
 // EL REPARTO: la mesa DECIDE (conciliar, categorizar, en lote), el archivo
 // BUSCA Y MUESTRA. El triage estaba en los dos y por eso seguían sintiéndose
 // dos mesas; ahora el archivo entrega el movimiento con «Resolver en la mesa»
-// (?year=&month=&tx=) en vez de resolverlo por su cuenta.
+// —un callback a esta página (resolverEnLaMesa), NO un enlace: el archivo vive
+// en un tab de esta misma ruta y un <Link> a /bancos?tx= no la remonta— y la
+// URL sólo lo refleja (?year=&month=&tx=), para que el deep link siga sirviendo.
 //
 // Deep links: ?tab=movimientos|cuentas|historico (sin ?tab = la mesa);
 // ?year=&month=&tx= abre la mesa en ese mes con ese movimiento elegido.
@@ -94,6 +96,21 @@ export default function BancosPage() {
     // de direcciones prometería una selección que ya no existe.
     if (txInicial) { setTxInicial(null); window.history.replaceState(null, "", "/bancos"); }
   }
+  // ENTREGA DESDE EL ARCHIVO. El tab Movimientos vive en ESTA misma página, así
+  // que «Resolver en la mesa» no puede ser un enlace a /bancos?tx=: Next no
+  // remonta la página por navegar a la misma ruta, y tab/período/tx se leen
+  // UNA vez al montar (arriba). El enlace cambiaba la URL y nada más — visto
+  // en producción: el botón «no hacía nada». Ahora el archivo llama aquí; el
+  // estado cambia de verdad y la URL sólo lo refleja, como en irA/irAlPeriodo.
+  function resolverEnLaMesa(tx: { id: string; fecha: string }) {
+    const [y, m] = tx.fecha.slice(0, 7).split("-").map(Number);
+    if (!Number.isInteger(y) || !Number.isInteger(m)) return;
+    setYear(y);
+    setMonth(m);
+    setTxInicial(tx.id);
+    setTab("conciliacion");
+    window.history.replaceState(null, "", `/bancos?year=${y}&month=${m}&tx=${tx.id}`);
+  }
   function moverPeriodo(delta: number) {
     const idx = year * 12 + (month - 1) + delta;
     irAlPeriodo(Math.floor(idx / 12), (idx % 12) + 1);
@@ -167,7 +184,7 @@ export default function BancosPage() {
             onApplied={() => setVersion((v) => v + 1)}
           />
         ) : (
-          <GestionBancos key={`${tab}-${version}`} vista={tab} />
+          <GestionBancos key={`${tab}-${version}`} vista={tab} onResolverEnLaMesa={resolverEnLaMesa} />
         )}
       </div>
       </div>
