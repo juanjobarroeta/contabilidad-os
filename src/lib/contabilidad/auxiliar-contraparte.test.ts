@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { aplicarParejas, emparejarAuxiliares, esNombreDeRelleno } from "./auxiliar-contraparte";
+import {
+  aplicarParejas,
+  contraparteComun,
+  cuentaAuxiliar,
+  emparejarAuxiliares,
+  esNombreDeRelleno,
+} from "./auxiliar-contraparte";
 import { COE_CODES } from "./catalog";
 
 // Base mínima en memoria: sólo lo que toca este módulo.
@@ -160,5 +166,65 @@ describe("aplicarParejas()", () => {
 
     expect(cuentas.find((c) => c.id === "018")!.customerId).toBe("s");
     expect(cuentas.find((c) => c.id === "007")!.customerId).toBe("s");
+  });
+});
+
+describe("cuentaAuxiliar() — la resolución del posteo", () => {
+  const idx = new Map([
+    ["201.01|cli-telmex", "cta-2110-002"],
+    ["205.02|cli-superavit", "cta-2120-007"],
+    ["201.01|cli-superavit", "cta-2110-018"],
+  ]);
+
+  it("devuelve el auxiliar de esa contraparte para ESE código", () => {
+    expect(cuentaAuxiliar(idx, "201.01", "cli-telmex")).toBe("cta-2110-002");
+  });
+
+  it("la misma contraparte resuelve distinto según el código", () => {
+    // SUPERAVIT es proveedor Y acreedor: cada papel, su auxiliar.
+    expect(cuentaAuxiliar(idx, "201.01", "cli-superavit")).toBe("cta-2110-018");
+    expect(cuentaAuxiliar(idx, "205.02", "cli-superavit")).toBe("cta-2120-007");
+  });
+
+  it("sin enlace devuelve null, que es «cae a la cuenta base»", () => {
+    expect(cuentaAuxiliar(idx, "201.01", "cli-sin-ligar")).toBeNull();
+    expect(cuentaAuxiliar(idx, "105.01", "cli-telmex")).toBeNull();
+  });
+
+  it("sin contraparte no hay nada que resolver", () => {
+    expect(cuentaAuxiliar(idx, "201.01", null)).toBeNull();
+    expect(cuentaAuxiliar(idx, "201.01", undefined)).toBeNull();
+  });
+});
+
+describe("contraparteComun() — un pago que cubre varias facturas", () => {
+  const porInvoice = new Map<string, string | null>([
+    ["f1", "cli-a"],
+    ["f2", "cli-a"],
+    ["f3", "cli-b"],
+    ["f4", null],
+  ]);
+
+  it("varias facturas del MISMO cliente resuelven a ese cliente", () => {
+    expect(contraparteComun(porInvoice, ["f1", "f2"])).toBe("cli-a");
+  });
+
+  it("facturas de clientes DISTINTOS no resuelven: el pago va a la base", () => {
+    // El motor abona en UN renglón; no existe un auxiliar que sea el correcto
+    // para los dos. Caer a la cuenta base es lo honesto.
+    expect(contraparteComun(porInvoice, ["f1", "f3"])).toBeNull();
+  });
+
+  it("una factura sin contraparte no arrastra a las demás", () => {
+    expect(contraparteComun(porInvoice, ["f1", "f4"])).toBeNull();
+    expect(contraparteComun(porInvoice, ["f4"])).toBeNull();
+  });
+
+  it("un pago sin facturas conciliadas no resuelve", () => {
+    expect(contraparteComun(porInvoice, [])).toBeNull();
+  });
+
+  it("el match 1:1 es el caso común y resuelve", () => {
+    expect(contraparteComun(porInvoice, ["f1"])).toBe("cli-a");
   });
 });

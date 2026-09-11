@@ -14,6 +14,11 @@
 
 import { prisma } from "../prisma";
 import { resolveAccount } from "./seed-catalog";
+import {
+  cargarAuxiliaresPorContraparte,
+  contraparteComun,
+  cuentaAuxiliar,
+} from "./auxiliar-contraparte";
 import { COE_CODES } from "./catalog";
 import { naturalezaPorTipo, saldosCoe } from "./coe-saldos";
 import { costoPeriodico } from "./inventario-periodico";
@@ -441,6 +446,11 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
   // familia, sin CT o con ambigüedad → exactamente el flujo de siempre.
   // Ver docs/PLAN-motor-plan-propio.md y resolver-familia.ts.
   const idxFamilia = await cargarIndiceFamilia(companyId);
+  // FASE 2i: el auxiliar POR CONTRAPARTE. Un catálogo de PyME lleva
+  // 2110-002 TELEFONOS DE MEXICO, 2110-003 WORLDCAM… La cuenta no se decide
+  // una vez: la elige el RFC de cada comprobante. Sin enlace el índice viene
+  // vacío y todo cae a la cuenta base, que es el comportamiento de siempre.
+  const idxAux = await cargarAuxiliaresPorContraparte(prisma, companyId);
   const ventasUnidad = await unidadesAmparadas(companyId, ingresos.map((i) => i.id), "venta");
   // FASE 2b: la CxC también resuelve por módulo (unidades → 1206, refacciones
   // → 1217, servicio → 1214). Ver cxc-cxp-modulo.ts.
@@ -490,9 +500,15 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     const moduloCxc = moduloDeInvoice(inv.id, modulosIngreso);
     const ctaCxc = moduloCxc ? cuentasCxc[moduloCxc] : null;
 
+    // Precedencia: MÓDULO (la unidad sabe su CxC) → CONTRAPARTE (el auxiliar
+    // del cliente) → cuenta base. El módulo va primero por ser la regla de
+    // negocio más específica, y en la práctica no compiten: un catálogo
+    // funcional no tiene contraparte que resolver y uno por contraparte no
+    // tiene módulo.
     drafts.push({
       ...base,
-      chartAccountId: (ctaCxc ?? accClientes).id,
+      chartAccountId:
+        ctaCxc?.id ?? cuentaAuxiliar(idxAux, COE_CODES.CLIENTES_NACIONALES, inv.customerId) ?? accClientes.id,
       monto: inv.total,
       tipo: espejo("CARGO", esEgreso),
     });
@@ -826,7 +842,7 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     }
     drafts.push({
       ...base,
-      chartAccountId: accProveedores.id,
+      chartAccountId: cuentaAuxiliar(idxAux, COE_CODES.PROVEEDORES, inv.customerId) ?? accProveedores.id,
       monto: inv.total,
       tipo: espejo("ABONO", esEgreso),
     });
@@ -976,10 +992,16 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
   const invoicesConciliadas = idsConciliados.length
     ? (await prisma.invoice.findMany({
         where: { id: { in: idsConciliados } },
-        select: { id: true, uuid: true, tipo: true, total: true, subtotal: true },
+        select: { id: true, uuid: true, tipo: true, total: true, subtotal: true, customerId: true },
       })).map((i) => ({ ...i, total: Number(i.total), subtotal: Number(i.subtotal) }))
     : [];
   const invoicePorId = new Map(invoicesConciliadas.map((i) => [i.id, i]));
+  // FASE 2i: la contraparte de cada factura liquidada, para que el pago abone
+  // EL MISMO auxiliar que el CFDI cargó. Sin esto la CxC del cliente se carga
+  // en su auxiliar y se abona en la cuenta base: el saldo nunca cierra.
+  const customerPorInvoice = new Map<string, string | null>(
+    invoicesConciliadas.map((i) => [i.id, i.customerId ?? null]),
+  );
   const refsConciliadas = invoicesConciliadas.map((i) => i.uuid ?? i.id);
   const devengoNuevo = new Set(
     refsConciliadas.length
@@ -1121,20 +1143,32 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       );
 
       if (isCredit) {
-        // Cobro: abona LA MISMA CxC que el CFDI cargó (módulo o stub).
-        const ctaCobro = kind && kind !== "NOMINA" ? (cuentasCxc[kind] ?? accClientes) : accClientes;
+        // Cobro: abona LA MISMA CxC que el CFDI cargó (módulo, contraparte o
+        // stub) — con la misma precedencia del devengo, o el saldo no cierra.
+        const ctaCobroMod = kind && kind !== "NOMINA" ? (cuentasCxc[kind] ?? null) : null;
+        const ctaCobroAux = cuentaAuxiliar(
+          idxAux,
+          COE_CODES.CLIENTES_NACIONALES,
+          contraparteComun(customerPorInvoice, idsDelMatch),
+        );
+        const ctaCobroId = ctaCobroMod?.id ?? ctaCobroAux ?? accClientes.id;
         drafts.push({ ...base, chartAccountId: ctaBanco(tx).id, monto: absAmount, tipo: "CARGO" });
         if (asignado > 0.005) {
-          drafts.push({ ...base, chartAccountId: ctaCobro.id, monto: asignado, tipo: "ABONO" });
+          drafts.push({ ...base, chartAccountId: ctaCobroId, monto: asignado, tipo: "ABONO" });
         }
         if (sobrante > 0.005) {
           drafts.push({ ...base, chartAccountId: accAnticiposClientes.id, monto: sobrante, tipo: "ABONO" });
         }
       } else {
-        // Pago: nómina liquida ACREEDORES (donde provisionó); lo demás, proveedores.
-        const ctaPago = kind === "NOMINA" ? accAcreedoresDiv : accProveedores;
+        // Pago: nómina liquida ACREEDORES (donde provisionó); lo demás, el
+        // auxiliar del proveedor si lo tiene, y si no la cuenta base.
+        const ctaPagoId =
+          kind === "NOMINA"
+            ? accAcreedoresDiv.id
+            : (cuentaAuxiliar(idxAux, COE_CODES.PROVEEDORES, contraparteComun(customerPorInvoice, idsDelMatch)) ??
+              accProveedores.id);
         if (asignado > 0.005) {
-          drafts.push({ ...base, chartAccountId: ctaPago.id, monto: asignado, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: ctaPagoId, monto: asignado, tipo: "CARGO" });
         }
         if (sobrante > 0.005) {
           drafts.push({ ...base, chartAccountId: accAnticiposProveedores.id, monto: sobrante, tipo: "CARGO" });
@@ -1783,13 +1817,18 @@ export async function balanzaPreview(
   // ── INGRESO (mismas reglas que postMonth) ────────────────────────────────
   const ingresosRows = await prisma.invoice.findMany({
     where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: start, lt: end } },
-    select: { id: true, subtotal: true, total: true, tipoSat: true, serie: true },
+    select: { id: true, subtotal: true, total: true, tipoSat: true, serie: true, customerId: true },
   });
   const ingresos = ingresosRows.map((i) => ({ ...i, subtotal: Number(i.subtotal), total: Number(i.total) }));
   // FASE 2: mismas reglas de familia que postMonth (venta a 4101-00XX y costo
   // DR 5101-00XX / CR 1301-00XX), para que la balanza preliminar no difiera
   // del cierre.
   const idxFamilia = await cargarIndiceFamilia(companyId);
+  // FASE 2i: el auxiliar POR CONTRAPARTE. Un catálogo de PyME lleva
+  // 2110-002 TELEFONOS DE MEXICO, 2110-003 WORLDCAM… La cuenta no se decide
+  // una vez: la elige el RFC de cada comprobante. Sin enlace el índice viene
+  // vacío y todo cae a la cuenta base, que es el comportamiento de siempre.
+  const idxAux = await cargarAuxiliaresPorContraparte(prisma, companyId);
   const ventasUnidad = await unidadesAmparadas(companyId, ingresos.map((i) => i.id), "venta");
   const cuentasCxc = await cargarCuentasCxc(companyId);
   const modulosIngreso = await conjuntosModulo(companyId, ingresos.map((i) => i.id));
@@ -1812,7 +1851,13 @@ export async function balanzaPreview(
         cuentaDeFamilia(idxFamilia, MOTOR_VENTAS_UNIDAD, unidad.sufijo))
       : null;
     const moduloCxc = moduloDeInvoice(inv.id, modulosIngreso);
-    addMov(((moduloCxc ? cuentasCxc[moduloCxc] : null) ?? accClientes).id, espejo("CARGO", esEgreso), inv.total);
+    addMov(
+      (moduloCxc ? cuentasCxc[moduloCxc] : null)?.id ??
+        cuentaAuxiliar(idxAux, COE_CODES.CLIENTES_NACIONALES, inv.customerId) ??
+        accClientes.id,
+      espejo("CARGO", esEgreso),
+      inv.total,
+    );
     const piernasVenta = ctaVentaFam
       ? [{ id: ctaVentaFam.id, monto: inv.subtotal }]
       : ((piernasIngresoTaller(inv.id, inv.subtotal, taller) ?? piernasIngresoHospital(inv.id, inv.subtotal, hospital))?.map((p) => ({
@@ -1901,7 +1946,11 @@ export async function balanzaPreview(
     if (inv.subtotal - montoRefa > 0.005) addMov(gastoId, espejo("CARGO", esEgreso), inv.subtotal - montoRefa);
     if (delta > 0.005) addMov(accIvaAcreditable.id, espejo("CARGO", esEgreso), delta);
     else if (delta < -0.005) addMov(accIsrRetenidoHonorarios.id, espejo("ABONO", esEgreso), -delta);
-    addMov(accProveedores.id, espejo("ABONO", esEgreso), inv.total);
+    addMov(
+      cuentaAuxiliar(idxAux, COE_CODES.PROVEEDORES, inv.customerId) ?? accProveedores.id,
+      espejo("ABONO", esEgreso),
+      inv.total,
+    );
   }
 
   // Saldos iniciales del ledger real (periodos previos ya posteados).
@@ -2162,6 +2211,8 @@ export async function estadoResultadosPreview(
   // de compra aporta al COSTO de la familia (5101-00XX) — el preview refleja
   // la utilidad bruta real de unidades, no ingreso sin costo.
   const idxFamilia = await cargarIndiceFamilia(companyId);
+  // Aquí NO va el índice de auxiliares por contraparte: el estado de
+  // resultados no toca clientes ni proveedores, que son cuentas de balance.
   const ventasUnidad = await unidadesAmparadas(companyId, ingresos.map((i) => i.id), "venta");
   const taller = await cargarContextoTaller(companyId, ingresos.map((i) => i.id));
   // P3c HOSPITAL: sólo las piernas de resultados (el honorario es pasivo, no aporta).
