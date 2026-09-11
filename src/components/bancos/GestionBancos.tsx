@@ -157,7 +157,19 @@ function fileToBase64(file: File): Promise<string> {
 
 export type VistaBancos = "cuentas" | "movimientos" | "historico";
 
-export function GestionBancos({ vista }: { vista: VistaBancos }) {
+export function GestionBancos({
+  vista,
+  onResolverEnLaMesa,
+}: {
+  vista: VistaBancos;
+  /**
+   * La página /bancos monta este archivo en un tab y la mesa en otro. Entregar
+   * un movimiento a la mesa tiene que cambiar el ESTADO de esa página (tab,
+   * período, movimiento elegido): un <Link> a /bancos?tx= no remonta la página
+   * y se quedaba en nada. Si no hay callback (montaje suelto), queda el enlace.
+   */
+  onResolverEnLaMesa?: (tx: BankTx) => void;
+}) {
   const { activeCompany } = useCompany();
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -1116,12 +1128,22 @@ export function GestionBancos({ vista }: { vista: VistaBancos }) {
                           con sus candidatos ya puntuados. */}
                       {!matched && !ignored && (
                         <div className="mt-3 border-t border-dashed border-cos-line pt-3">
-                          <Link
-                            href={enlaceALaMesa(m)}
-                            className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-cos-brand-ink hover:underline"
-                          >
-                            <Search className="h-[15px] w-[15px]" /> Resolver en la mesa
-                          </Link>
+                          {onResolverEnLaMesa ? (
+                            <button
+                              type="button"
+                              onClick={() => onResolverEnLaMesa(m)}
+                              className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-cos-brand-ink hover:underline"
+                            >
+                              <Search className="h-[15px] w-[15px]" /> Resolver en la mesa
+                            </button>
+                          ) : (
+                            <Link
+                              href={enlaceALaMesa(m)}
+                              className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-cos-brand-ink hover:underline"
+                            >
+                              <Search className="h-[15px] w-[15px]" /> Resolver en la mesa
+                            </Link>
+                          )}
                         </div>
                       )}
                     </div>
