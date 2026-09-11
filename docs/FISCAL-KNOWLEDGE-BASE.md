@@ -1,6 +1,12 @@
 # Fiscal Knowledge Base (Agente fiscal) — Design Doc
 
 > Status: **Phases 0–1 live; Phase 3 (RMF + guías/Anexo 20) in progress.**
+> **2026-09-11 (F0 de docs/MOTOR-JURIDICO.md):** el catálogo de leyes ya no es
+> una lista a mano — `src/lib/fiscal-kb/catalogo/federal.json` (317
+> ordenamientos federales, generado desde el índice de Diputados con
+> `npm run fiscal:catalogo`) + `catalogo/manuales.ts`. Cada documento lleva
+> `materias`/`ambito`/`entidad`; el hub busca con `MATERIAS_CONTADOR` fijas en
+> el executor. El refresco semanal recorre todo el catálogo por lotes.
 > Live in production over LISR (schema, ingestion, chunker, embeddings,
 > `search_fiscal_knowledge` wired into the assistant — `src/lib/fiscal-kb/`).
 > Phase 3 adds a generic ingester for SAT/DOF docs: RMF reglas + guías de

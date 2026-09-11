@@ -1,0 +1,4593 @@
+{
+  "fuente": "https://www.diputados.gob.mx/LeyesBiblio/index.htm",
+  "generado": "2026-09-11",
+  "entradas": [
+    {
+      "clave": "CPEUM",
+      "titulo": "Constitución Política de los Estados Unidos Mexicanos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/CPEUM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/cpeum.htm",
+      "archivo": "CPEUM",
+      "dofOriginal": "1917-02-05",
+      "ultimaReforma": "2026-06-02",
+      "vigenciaFallback": "2026-06-02",
+      "materias": [
+        "constitucional"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CCF",
+      "titulo": "Código Civil Federal",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/CCF.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/ccf.htm",
+      "archivo": "CCF",
+      "dofOriginal": "1928-05-26",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "civil",
+        "familiar"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CCOM",
+      "titulo": "Código de Comercio",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/CCom.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/ccom.htm",
+      "archivo": "CCom",
+      "dofOriginal": "1889-10-07",
+      "ultimaReforma": "2026-02-18",
+      "vigenciaFallback": "2026-02-18",
+      "materias": [
+        "mercantil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CJM",
+      "titulo": "Código de Justicia Militar",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/CJM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/cjm.htm",
+      "archivo": "CJM",
+      "dofOriginal": "1933-08-31",
+      "ultimaReforma": "2025-07-16",
+      "vigenciaFallback": "2025-07-16",
+      "materias": [
+        "militar"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CFPC",
+      "titulo": "Código Federal de Procedimientos Civiles",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/CFPC.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/cfpc.htm",
+      "archivo": "CFPC",
+      "dofOriginal": "1943-02-24",
+      "ultimaReforma": null,
+      "vigenciaFallback": "1943-02-24",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CFF",
+      "titulo": "Código Fiscal de la Federación",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/CFF.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/cff.htm",
+      "archivo": "CFF",
+      "dofOriginal": "1981-12-31",
+      "ultimaReforma": "2026-04-09",
+      "vigenciaFallback": "2026-04-09",
+      "materias": [
+        "fiscal",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CMPP",
+      "titulo": "Código Militar de Procedimientos Penales",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/CMPP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/cmpp.htm",
+      "archivo": "CMPP",
+      "dofOriginal": "2016-05-16",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "penal",
+        "procesal",
+        "militar"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CNPCF",
+      "titulo": "Código Nacional de Procedimientos Civiles y Familiares",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/CNPCF.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/cnpcf.htm",
+      "archivo": "CNPCF",
+      "dofOriginal": "2023-06-07",
+      "ultimaReforma": "2026-01-15",
+      "vigenciaFallback": "2026-01-15",
+      "materias": [
+        "civil",
+        "familiar",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CNPP",
+      "titulo": "Código Nacional de Procedimientos Penales",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/CNPP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/cnpp.htm",
+      "archivo": "CNPP",
+      "dofOriginal": "2014-03-05",
+      "ultimaReforma": "2025-11-28",
+      "vigenciaFallback": "2025-11-28",
+      "materias": [
+        "penal",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CPF",
+      "titulo": "Código Penal Federal",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/CPF.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/cpf.htm",
+      "archivo": "CPF",
+      "dofOriginal": "1931-08-14",
+      "ultimaReforma": "2026-03-13",
+      "vigenciaFallback": "2026-03-13",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "EGDF",
+      "titulo": "Estatuto de Gobierno del Distrito Federal",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/10_270614.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/egdf.htm",
+      "archivo": "10_270614",
+      "dofOriginal": "1994-07-26",
+      "ultimaReforma": "2014-06-27",
+      "vigenciaFallback": "2014-06-27",
+      "materias": [
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LISEDIP",
+      "titulo": "Impuesto sobre Servicios Expresamente Declarados de Interés Público por Ley, en los que Intervengan Empresas Concesionarias de Bienes del Dominio Directo de la Nación (LEY que establece, reforma y adiciona las disposiciones relativas a diversos impuestos)",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/79.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lisipl.htm",
+      "archivo": "79",
+      "dofOriginal": "1968-12-31",
+      "ultimaReforma": null,
+      "vigenciaFallback": "1968-12-31",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LADUA",
+      "titulo": "Ley Aduanera",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LAdua.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/ladua.htm",
+      "archivo": "LAdua",
+      "dofOriginal": "1995-12-15",
+      "ultimaReforma": "2025-12-27",
+      "vigenciaFallback": "2025-12-27",
+      "materias": [
+        "aduanero",
+        "fiscal",
+        "comercio_exterior"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LAGRA",
+      "titulo": "Ley Agraria",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LAgra.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lagra.htm",
+      "archivo": "LAgra",
+      "dofOriginal": "1992-02-26",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "agrario",
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LAASSP",
+      "titulo": "Ley de Adquisiciones, Arrendamientos y Servicios del Sector Público",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LAASSP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/laassp.htm",
+      "archivo": "LAASSP",
+      "dofOriginal": "2025-04-16",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-04-16",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LAERO",
+      "titulo": "Ley de Aeropuertos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LAero.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/laero.htm",
+      "archivo": "LAero",
+      "dofOriginal": "1995-12-22",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "transporte"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LAN",
+      "titulo": "Ley de Aguas Nacionales",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LAN.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lan.htm",
+      "archivo": "LAN",
+      "dofOriginal": "1992-12-01",
+      "ultimaReforma": "2025-12-11",
+      "vigenciaFallback": "2025-12-11",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LACP",
+      "titulo": "Ley de Ahorro y Crédito Popular",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LACP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lacp.htm",
+      "archivo": "LACP",
+      "dofOriginal": "2001-06-04",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "financiero"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LAMN",
+      "titulo": "Ley de Amnistía",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LAmn.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lamn.htm",
+      "archivo": "LAmn",
+      "dofOriginal": "2020-04-22",
+      "ultimaReforma": "2024-06-14",
+      "vigenciaFallback": "2024-06-14",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LAMN-1994",
+      "titulo": "Ley de Amnistía",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/19.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lamni.htm",
+      "archivo": "19",
+      "dofOriginal": "1994-01-22",
+      "ultimaReforma": null,
+      "vigenciaFallback": "1994-01-22",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LAMP",
+      "titulo": "Ley de Amparo, Reglamentaria de los artículos 103 y 107 de la Constitución Política de los Estados Unidos Mexicanos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LAmp.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lamp.htm",
+      "archivo": "LAmp",
+      "dofOriginal": "2013-04-02",
+      "ultimaReforma": "2025-10-16",
+      "vigenciaFallback": "2025-10-16",
+      "materias": [
+        "amparo",
+        "constitucional",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LAAM",
+      "titulo": "Ley de Ascensos de la Armada de México",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LAAM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/laam.htm",
+      "archivo": "LAAM",
+      "dofOriginal": "2004-06-25",
+      "ultimaReforma": "2025-12-17",
+      "vigenciaFallback": "2025-12-17",
+      "materias": [
+        "militar"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LAREFAGN",
+      "titulo": "Ley de Ascensos y Recompensas del Ejército, Fuerza Aérea y Guardia Nacional",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LAREFAGN.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/larefam.htm",
+      "archivo": "LAREFAGN",
+      "dofOriginal": "2003-10-30",
+      "ultimaReforma": "2025-07-16",
+      "vigenciaFallback": "2025-07-16",
+      "materias": [
+        "militar",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LASOC",
+      "titulo": "Ley de Asistencia Social",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LASoc.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lasoc.htm",
+      "archivo": "LASoc",
+      "dofOriginal": "2004-09-02",
+      "ultimaReforma": "2024-04-01",
+      "vigenciaFallback": "2024-04-01",
+      "materias": [
+        "derechos_humanos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LAPP",
+      "titulo": "Ley de Asociaciones Público Privadas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LAPP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lapp.htm",
+      "archivo": "LAPP",
+      "dofOriginal": "2012-01-16",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LARCP",
+      "titulo": "Ley de Asociaciones Religiosas y Culto Público",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LARCP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/larcp.htm",
+      "archivo": "LARCP",
+      "dofOriginal": "1992-07-15",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "religioso"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LAC",
+      "titulo": "Ley de Aviación Civil",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LAC.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lac.htm",
+      "archivo": "LAC",
+      "dofOriginal": "1995-05-12",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "transporte"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LAAT",
+      "titulo": "Ley de Ayuda Alimentaria para los Trabajadores",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LAAT.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/laat.htm",
+      "archivo": "LAAT",
+      "dofOriginal": "2011-01-17",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2011-01-17",
+      "materias": [
+        "laboral",
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LBIO",
+      "titulo": "Ley de Biocombustibles",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LBio.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lbio.htm",
+      "archivo": "LBio",
+      "dofOriginal": "2025-03-18",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-03-18",
+      "materias": [
+        "energia"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LBOGM",
+      "titulo": "Ley de Bioseguridad de Organismos Genéticamente Modificados",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LBOGM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lbogm.htm",
+      "archivo": "LBOGM",
+      "dofOriginal": "2005-03-18",
+      "ultimaReforma": "2022-05-11",
+      "vigenciaFallback": "2022-05-11",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LCEC",
+      "titulo": "Ley de Cámaras Empresariales y sus Confederaciones",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LCEC_120419.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lcec.htm",
+      "archivo": "LCEC_120419",
+      "dofOriginal": "2005-01-20",
+      "ultimaReforma": "2019-04-12",
+      "vigenciaFallback": "2019-04-12",
+      "materias": [
+        "mercantil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LCPAF",
+      "titulo": "Ley de Caminos, Puentes y Autotransporte Federal",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LCPAF.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lcpaf.htm",
+      "archivo": "LCPAF",
+      "dofOriginal": "1993-12-22",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "transporte"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LCP",
+      "titulo": "Ley de Capitalización del Procampo",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/238.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lcpro.htm",
+      "archivo": "238",
+      "dofOriginal": "2001-12-31",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2001-12-31",
+      "materias": [
+        "agrario"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LCJPJF",
+      "titulo": "Ley de Carrera Judicial del Poder Judicial de la Federación",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LCJPJF.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lcjpjf.htm",
+      "archivo": "LCJPJF",
+      "dofOriginal": "2025-01-02",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-01-02",
+      "materias": [
+        "judicial"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LCE",
+      "titulo": "Ley de Comercio Exterior",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LCE.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lce.htm",
+      "archivo": "LCE",
+      "dofOriginal": "1993-07-27",
+      "ultimaReforma": "2026-05-01",
+      "vigenciaFallback": "2026-05-01",
+      "materias": [
+        "comercio_exterior"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LCM",
+      "titulo": "Ley de Concursos Mercantiles",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LCM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lcm.htm",
+      "archivo": "LCM",
+      "dofOriginal": "2000-05-12",
+      "ultimaReforma": "2026-01-16",
+      "vigenciaFallback": "2026-01-16",
+      "materias": [
+        "mercantil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LCMOPFIH",
+      "titulo": "Ley de Contribución de Mejoras por Obras Públicas Federales de Infraestructura Hidráulica",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/30.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lcmopfih.htm",
+      "archivo": "30",
+      "dofOriginal": "1990-12-26",
+      "ultimaReforma": null,
+      "vigenciaFallback": "1990-12-26",
+      "materias": [
+        "fiscal",
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LCID",
+      "titulo": "Ley de Cooperación Internacional para el Desarrollo",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LCID_061120.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lcid.htm",
+      "archivo": "LCID_061120",
+      "dofOriginal": "2011-04-06",
+      "ultimaReforma": "2020-11-06",
+      "vigenciaFallback": "2020-11-06",
+      "materias": [
+        "administrativo",
+        "internacional"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LCF",
+      "titulo": "Ley de Coordinación Fiscal",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LCF.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lcf.htm",
+      "archivo": "LCF",
+      "dofOriginal": "1978-12-27",
+      "ultimaReforma": "2024-01-03",
+      "vigenciaFallback": "2024-01-03",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LDRS",
+      "titulo": "Ley de Desarrollo Rural Sustentable",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LDRS.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/ldrs.htm",
+      "archivo": "LDRS",
+      "dofOriginal": "2001-12-07",
+      "ultimaReforma": "2024-06-07",
+      "vigenciaFallback": "2024-06-07",
+      "materias": [
+        "agrario"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LDSC",
+      "titulo": "Ley de Desarrollo Sustentable de la Cafeticultura",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LDSC.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/ldsc.htm",
+      "archivo": "LDSC",
+      "dofOriginal": "2025-12-19",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-12-19",
+      "materias": [
+        "agrario",
+        "cultura"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LDSCA",
+      "titulo": "Ley de Desarrollo Sustentable de la Caña de Azúcar",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LDSCA.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/ldsca.htm",
+      "archivo": "LDSCA",
+      "dofOriginal": "2005-08-22",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "agrario"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LDEFAGN",
+      "titulo": "Ley de Disciplina del Ejército, Fuerza Aérea y Guardia Nacional",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LDEFAGN.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/ldefam.htm",
+      "archivo": "LDEFAGN",
+      "dofOriginal": "1926-03-15",
+      "ultimaReforma": "2025-07-16",
+      "vigenciaFallback": "2025-07-16",
+      "materias": [
+        "militar",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LDFEFM",
+      "titulo": "Ley de Disciplina Financiera de las Entidades Federativas y los Municipios",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LDFEFM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/ldfefm.htm",
+      "archivo": "LDFEFM",
+      "dofOriginal": "2016-04-27",
+      "ultimaReforma": "2022-05-10",
+      "vigenciaFallback": "2022-05-10",
+      "materias": [
+        "hacienda_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LDISPAM",
+      "titulo": "Ley de Disciplina para el Personal de la Armada de México",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/252.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/ldparm.htm",
+      "archivo": "252",
+      "dofOriginal": "2002-12-13",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2002-12-13",
+      "materias": [
+        "militar"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LEMEFAGN",
+      "titulo": "Ley de Educación Militar del Ejército, Fuerza Aérea y Guardia Nacional",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LEMEFAGN.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lemefam.htm",
+      "archivo": "LEMEFAGN",
+      "dofOriginal": "2005-12-23",
+      "ultimaReforma": "2025-07-16",
+      "vigenciaFallback": "2025-07-16",
+      "materias": [
+        "educacion",
+        "militar",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LEN",
+      "titulo": "Ley de Educación Naval",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LEN.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/len.htm",
+      "archivo": "LEN",
+      "dofOriginal": "2019-03-12",
+      "ultimaReforma": "2023-03-24",
+      "vigenciaFallback": "2023-03-24",
+      "materias": [
+        "educacion",
+        "militar"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LEC",
+      "titulo": "Ley de Energía para el Campo",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/246.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lec.htm",
+      "archivo": "246",
+      "dofOriginal": "2002-12-30",
+      "ultimaReforma": "2012-12-28",
+      "vigenciaFallback": "2012-12-28",
+      "materias": [
+        "energia",
+        "agrario"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LEXP",
+      "titulo": "Ley de Expropiación",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/35.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lexp.htm",
+      "archivo": "35",
+      "dofOriginal": "1936-11-25",
+      "ultimaReforma": "2012-01-27",
+      "vigenciaFallback": "2012-01-27",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LEI",
+      "titulo": "Ley de Extradición Internacional",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/36_200521.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lei.htm",
+      "archivo": "36_200521",
+      "dofOriginal": "1975-12-29",
+      "ultimaReforma": "2021-05-20",
+      "vigenciaFallback": "2021-05-20",
+      "materias": [
+        "penal",
+        "internacional"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFEA",
+      "titulo": "Ley de Firma Electrónica Avanzada",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFEA.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfea.htm",
+      "archivo": "LFEA",
+      "dofOriginal": "2012-01-11",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "administrativo",
+        "mercantil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFRCF",
+      "titulo": "Ley de Fiscalización y Rendición de Cuentas de la Federación",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFRCF.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfrcf.htm",
+      "archivo": "LFRCF",
+      "dofOriginal": "2016-07-18",
+      "ultimaReforma": "2026-05-15",
+      "vigenciaFallback": "2026-05-15",
+      "materias": [
+        "hacienda_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFCC",
+      "titulo": "Ley de Fomento a la Confianza Ciudadana",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFCC_200120.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfcc.htm",
+      "archivo": "LFCC_200120",
+      "dofOriginal": "2020-01-20",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2020-01-20",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFIV",
+      "titulo": "Ley de Fomento a la Industria Vitivinícola",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFIV_230518.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfiv.htm",
+      "archivo": "LFIV_230518",
+      "dofOriginal": "2018-05-23",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2018-05-23",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFLL",
+      "titulo": "Ley de Fomento para la Lectura y el Libro",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFLL.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfll.htm",
+      "archivo": "LFLL",
+      "dofOriginal": "2008-07-24",
+      "ultimaReforma": "2023-11-29",
+      "vigenciaFallback": "2023-11-29",
+      "materias": [
+        "educacion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFAAR",
+      "titulo": "Ley de Fondos de Aseguramiento Agropecuario y Rural",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFAAR.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfaar.htm",
+      "archivo": "LFAAR",
+      "dofOriginal": "2005-05-13",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "financiero",
+        "seguros",
+        "agrario"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFI",
+      "titulo": "Ley de Fondos de Inversión",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFI.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfi.htm",
+      "archivo": "LFI",
+      "dofOriginal": "2001-06-04",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "financiero"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGEO",
+      "titulo": "Ley de Geotermia",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGeo.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgeo.htm",
+      "archivo": "LGeo",
+      "dofOriginal": "2025-03-18",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-03-18",
+      "materias": [
+        "energia"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LICAL",
+      "titulo": "Ley de Infraestructura de la Calidad",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LICal_010720.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lical.htm",
+      "archivo": "LICal_010720",
+      "dofOriginal": "2020-07-01",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2020-07-01",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LIF",
+      "titulo": "Ley de Ingresos de la Federación para el Ejercicio Fiscal de 2026",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LIF_2026.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lif_2026.htm",
+      "archivo": "LIF_2026",
+      "dofOriginal": "2025-11-07",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-11-07",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LIH",
+      "titulo": "Ley de Ingresos sobre Hidrocarburos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LIH.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lih.htm",
+      "archivo": "LIH",
+      "dofOriginal": "2014-08-11",
+      "ultimaReforma": "2025-12-28",
+      "vigenciaFallback": "2025-12-28",
+      "materias": [
+        "fiscal",
+        "energia"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LIC",
+      "titulo": "Ley de Instituciones de Crédito",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LIC.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lic.htm",
+      "archivo": "LIC",
+      "dofOriginal": "1990-07-18",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "financiero"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LISF",
+      "titulo": "Ley de Instituciones de Seguros y de Fianzas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LISF.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lisf.htm",
+      "archivo": "LISF",
+      "dofOriginal": "2013-04-04",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "seguros",
+        "financiero"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LIE",
+      "titulo": "Ley de Inversión Extranjera",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LIE.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lie.htm",
+      "archivo": "LIE",
+      "dofOriginal": "1993-12-27",
+      "ultimaReforma": "2024-05-27",
+      "vigenciaFallback": "2024-05-27",
+      "materias": [
+        "comercio_exterior",
+        "mercantil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LANSI",
+      "titulo": "Ley de la Agencia Nacional de Seguridad Industrial y de Protección al Medio Ambiente del Sector Hidrocarburos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LANSI.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lansi.htm",
+      "archivo": "LANSI",
+      "dofOriginal": "2014-08-11",
+      "ultimaReforma": "2022-05-11",
+      "vigenciaFallback": "2022-05-11",
+      "materias": [
+        "ambiental",
+        "energia",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LCMM",
+      "titulo": "Ley de la Casa de Moneda de México",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LCMM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lcmm.htm",
+      "archivo": "LCMM",
+      "dofOriginal": "1986-01-20",
+      "ultimaReforma": "2022-05-11",
+      "vigenciaFallback": "2022-05-11",
+      "materias": [
+        "financiero"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LCNBV",
+      "titulo": "Ley de la Comisión Nacional Bancaria y de Valores",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LCNBV.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lcnbv.htm",
+      "archivo": "LCNBV",
+      "dofOriginal": "1995-04-28",
+      "ultimaReforma": "2022-05-11",
+      "vigenciaFallback": "2022-05-11",
+      "materias": [
+        "financiero",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LCNE",
+      "titulo": "Ley de la Comisión Nacional de Energía",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LCNE.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lcne.htm",
+      "archivo": "LCNE",
+      "dofOriginal": "2025-03-18",
+      "ultimaReforma": "2025-12-26",
+      "vigenciaFallback": "2025-12-26",
+      "materias": [
+        "energia",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LCNDH",
+      "titulo": "Ley de la Comisión Nacional de los Derechos Humanos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LCNDH.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lcndh.htm",
+      "archivo": "LCNDH",
+      "dofOriginal": "1992-06-29",
+      "ultimaReforma": "2024-04-01",
+      "vigenciaFallback": "2024-04-01",
+      "materias": [
+        "derechos_humanos",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LESS",
+      "titulo": "Ley de la Economía Social y Solidaria",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LESS.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/less.htm",
+      "archivo": "LESS",
+      "dofOriginal": "2012-05-23",
+      "ultimaReforma": "2025-04-16",
+      "vigenciaFallback": "2025-04-16",
+      "materias": [
+        "mercantil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LEPECFE",
+      "titulo": "Ley de la Empresa Pública del Estado, Comisión Federal de Electricidad",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LEPECFE.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lepecfe.htm",
+      "archivo": "LEPECFE",
+      "dofOriginal": "2025-03-18",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-03-18",
+      "materias": [
+        "energia",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LEPEPM",
+      "titulo": "Ley de la Empresa Pública del Estado, Petróleos Mexicanos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LEPEPM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lepepm.htm",
+      "archivo": "LEPEPM",
+      "dofOriginal": "2025-03-18",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-03-18",
+      "materias": [
+        "energia",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFGR",
+      "titulo": "Ley de la Fiscalía General de la República",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFGR.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfgr.htm",
+      "archivo": "LFGR",
+      "dofOriginal": "2021-05-20",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "penal",
+        "judicial",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGN",
+      "titulo": "Ley de la Guardia Nacional",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGN.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgn.htm",
+      "archivo": "LGN",
+      "dofOriginal": "2025-07-16",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-07-16",
+      "materias": [
+        "militar",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LPF",
+      "titulo": "Ley de la Policía Federal",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LPF.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lpf.htm",
+      "archivo": "LPF",
+      "dofOriginal": "2009-06-01",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LDPAM",
+      "titulo": "Ley de los Derechos de las Personas Adultas Mayores",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LDPAM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/ldpam.htm",
+      "archivo": "LDPAM",
+      "dofOriginal": "2002-06-25",
+      "ultimaReforma": "2024-06-14",
+      "vigenciaFallback": "2024-06-14",
+      "materias": [
+        "derechos_humanos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LHHEUM",
+      "titulo": "Ley de los Husos Horarios en los Estados Unidos Mexicanos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LHHEUM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lhheum.htm",
+      "archivo": "LHHEUM",
+      "dofOriginal": "2022-10-28",
+      "ultimaReforma": "2022-11-29",
+      "vigenciaFallback": "2022-11-29",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LIGIE",
+      "titulo": "Ley de los Impuestos Generales de Importación y de Exportación",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LIGIE_2022.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/ligie_2022.htm",
+      "archivo": "LIGIE_2022",
+      "dofOriginal": "2022-06-07",
+      "ultimaReforma": "2026-04-23",
+      "vigenciaFallback": "2026-04-23",
+      "materias": [
+        "fiscal",
+        "comercio_exterior"
+      ],
+      "excluida": "Tarifa arancelaria: miles de páginas de fracciones en tabla; el chunker por artículo no aplica."
+    },
+    {
+      "clave": "LINS",
+      "titulo": "Ley de los Institutos Nacionales de Salud",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LINS.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lins.htm",
+      "archivo": "LINS",
+      "dofOriginal": "2000-05-26",
+      "ultimaReforma": "2022-05-11",
+      "vigenciaFallback": "2022-05-11",
+      "materias": [
+        "salud"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LSAR",
+      "titulo": "Ley de los Sistemas de Ahorro para el Retiro",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LSAR.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lsar.htm",
+      "archivo": "LSAR",
+      "dofOriginal": "1996-05-23",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "seguridad_social",
+        "financiero"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LMIGRA",
+      "titulo": "Ley de Migración",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LMigra.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lmigra.htm",
+      "archivo": "LMigra",
+      "dofOriginal": "2011-05-25",
+      "ultimaReforma": "2026-01-15",
+      "vigenciaFallback": "2026-01-15",
+      "materias": [
+        "migracion",
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LMIN",
+      "titulo": "Ley de Minería",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LMin.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lmin.htm",
+      "archivo": "LMin",
+      "dofOriginal": "1992-06-26",
+      "ultimaReforma": "2023-05-08",
+      "vigenciaFallback": "2023-05-08",
+      "materias": [
+        "energia"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LNAC",
+      "titulo": "Ley de Nacionalidad",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/53.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lnac.htm",
+      "archivo": "53",
+      "dofOriginal": "1998-01-23",
+      "ultimaReforma": "2012-04-23",
+      "vigenciaFallback": "2012-04-23",
+      "materias": [
+        "migracion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LNCM",
+      "titulo": "Ley de Navegación y Comercio Marítimos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LNCM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lncm.htm",
+      "archivo": "LNCM",
+      "dofOriginal": "2006-06-01",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "mercantil",
+        "transporte"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LOPSRM",
+      "titulo": "Ley de Obras Públicas y Servicios Relacionados con las Mismas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LOPSRM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lopsrm.htm",
+      "archivo": "LOPSRM",
+      "dofOriginal": "2000-01-04",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LOG",
+      "titulo": "Ley de Organizaciones Ganaderas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/57.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/log.htm",
+      "archivo": "57",
+      "dofOriginal": "1999-01-06",
+      "ultimaReforma": "2012-04-09",
+      "vigenciaFallback": "2012-04-09",
+      "materias": [
+        "agrario"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LPLAN",
+      "titulo": "Ley de Planeación",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LPlan.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lplan.htm",
+      "archivo": "LPlan",
+      "dofOriginal": "1983-01-05",
+      "ultimaReforma": "2026-01-15",
+      "vigenciaFallback": "2026-01-15",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LPTE",
+      "titulo": "Ley de Planeación y Transición Energética",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LPTE.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lpte.htm",
+      "archivo": "LPTE",
+      "dofOriginal": "2025-03-18",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-03-18",
+      "materias": [
+        "administrativo",
+        "energia"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LPERC",
+      "titulo": "Ley de Premios, Estímulos y Recompensas Civiles",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LPERC.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lperc.htm",
+      "archivo": "LPERC",
+      "dofOriginal": "1975-12-31",
+      "ultimaReforma": "2024-04-01",
+      "vigenciaFallback": "2024-04-01",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LPO",
+      "titulo": "Ley de Productos Orgánicos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LPO.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lpo.htm",
+      "archivo": "LPO",
+      "dofOriginal": "2006-02-07",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2006-02-07",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LPAB",
+      "titulo": "Ley de Protección al Ahorro Bancario",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LPAB.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lpab.htm",
+      "archivo": "LPAB",
+      "dofOriginal": "1999-01-19",
+      "ultimaReforma": "2022-05-11",
+      "vigenciaFallback": "2022-05-11",
+      "materias": [
+        "financiero"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LPCINE",
+      "titulo": "Ley de Protección al Comercio y la Inversión de Normas Extranjeras que Contravengan el Derecho Internacional",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/63.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lpcinecdi.htm",
+      "archivo": "63",
+      "dofOriginal": "1996-10-23",
+      "ultimaReforma": "2012-04-09",
+      "vigenciaFallback": "2012-04-09",
+      "materias": [
+        "comercio_exterior",
+        "internacional"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LPEAM",
+      "titulo": "Ley de Protección del Espacio Aéreo Mexicano",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LPEAM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lpeam.htm",
+      "archivo": "LPEAM",
+      "dofOriginal": "2023-03-01",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2023-03-01",
+      "materias": [
+        "transporte"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LPDUSF",
+      "titulo": "Ley de Protección y Defensa al Usuario de Servicios Financieros",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LPDUSF.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lpdusf.htm",
+      "archivo": "LPDUSF",
+      "dofOriginal": "1999-01-18",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "financiero",
+        "consumidor"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LPUERTOS",
+      "titulo": "Ley de Puertos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/65_071220.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lpue.htm",
+      "archivo": "65_071220",
+      "dofOriginal": "1993-07-19",
+      "ultimaReforma": "2020-12-07",
+      "vigenciaFallback": "2020-12-07",
+      "materias": [
+        "transporte"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LRAM",
+      "titulo": "Ley de Recompensas de la Armada de México",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LRAM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lram.htm",
+      "archivo": "LRAM",
+      "dofOriginal": "1985-01-14",
+      "ultimaReforma": "2021-11-22",
+      "vigenciaFallback": "2021-11-22",
+      "materias": [
+        "militar"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LRCDN",
+      "titulo": "Ley de Responsabilidad Civil por Daños Nucleares",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LRCDN.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lrcdn.htm",
+      "archivo": "LRCDN",
+      "dofOriginal": "1974-12-31",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "civil",
+        "ambiental",
+        "energia"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LSINT",
+      "titulo": "Ley de Seguridad Interior",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LSInt_300519.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lsint.htm",
+      "archivo": "LSInt_300519",
+      "dofOriginal": "2017-12-21",
+      "ultimaReforma": "2019-05-30",
+      "vigenciaFallback": "2019-05-30",
+      "materias": [
+        "seguridad_publica"
+      ],
+      "excluida": "Declaratoria de invalidez de la ley (DOF 30/05/2019)."
+    },
+    {
+      "clave": "LSN",
+      "titulo": "Ley de Seguridad Nacional",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LSN.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lsn.htm",
+      "archivo": "LSN",
+      "dofOriginal": "2005-01-31",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LSP",
+      "titulo": "Ley de Sistemas de Pagos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LSP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lsp.htm",
+      "archivo": "LSP",
+      "dofOriginal": "2002-12-12",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "financiero"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LSRLIP",
+      "titulo": "Ley de Sociedades de Responsabilidad Limitada de Interés Público",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/70.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lsrlip.htm",
+      "archivo": "70",
+      "dofOriginal": "1934-08-31",
+      "ultimaReforma": "2012-04-09",
+      "vigenciaFallback": "2012-04-09",
+      "materias": [
+        "mercantil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LSSS",
+      "titulo": "Ley de Sociedades de Solidaridad Social",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/71_240418.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lsss.htm",
+      "archivo": "71_240418",
+      "dofOriginal": "1976-05-27",
+      "ultimaReforma": "2018-04-24",
+      "vigenciaFallback": "2018-04-24",
+      "materias": [
+        "mercantil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LTF",
+      "titulo": "Ley de Tesorería de la Federación",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LTF.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/ltf.htm",
+      "archivo": "LTF",
+      "dofOriginal": "2015-12-30",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2015-12-30",
+      "materias": [
+        "hacienda_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LTFCCG",
+      "titulo": "Ley de Transparencia y de Fomento a la Competencia en el Crédito Garantizado",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/256.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/ltfccg.htm",
+      "archivo": "256",
+      "dofOriginal": "2002-12-30",
+      "ultimaReforma": "2014-01-10",
+      "vigenciaFallback": "2014-01-10",
+      "materias": [
+        "financiero"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LUC",
+      "titulo": "Ley de Uniones de Crédito",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LUC.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/luc.htm",
+      "archivo": "LUC",
+      "dofOriginal": "2008-08-20",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "financiero"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LVZMM",
+      "titulo": "Ley de Vertimientos en las Zonas Marinas Mexicanas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LVZMM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lvzmm.htm",
+      "archivo": "LVZMM",
+      "dofOriginal": "2014-01-17",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LVGC",
+      "titulo": "Ley de Vías Generales de Comunicación",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LVGC.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lvgc.htm",
+      "archivo": "LVGC",
+      "dofOriginal": "1940-02-19",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "transporte"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LVIV",
+      "titulo": "Ley de Vivienda",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LViv.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lviv.htm",
+      "archivo": "LViv",
+      "dofOriginal": "2006-06-27",
+      "ultimaReforma": "2026-04-29",
+      "vigenciaFallback": "2026-04-29",
+      "materias": [
+        "vivienda",
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LBM",
+      "titulo": "Ley del Banco de México",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/74.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lbm.htm",
+      "archivo": "74",
+      "dofOriginal": "1993-12-23",
+      "ultimaReforma": "2014-01-10",
+      "vigenciaFallback": "2014-01-10",
+      "materias": [
+        "financiero"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LDOF",
+      "titulo": "Ley del Diario Oficial de la Federación y Gacetas Gubernamentales",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/75_100619.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/ldofgg.htm",
+      "archivo": "75_100619",
+      "dofOriginal": "1986-12-24",
+      "ultimaReforma": "2019-06-10",
+      "vigenciaFallback": "2019-06-10",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFMPED",
+      "titulo": "Ley del Fondo Mexicano del Petróleo para la Estabilización y el Desarrollo",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFMPED.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfmped.htm",
+      "archivo": "LFMPED",
+      "dofOriginal": "2014-08-11",
+      "ultimaReforma": "2025-03-18",
+      "vigenciaFallback": "2025-03-18",
+      "materias": [
+        "hacienda_publica",
+        "energia"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LIVA",
+      "titulo": "Ley del Impuesto al Valor Agregado",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LIVA.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/liva.htm",
+      "archivo": "LIVA",
+      "dofOriginal": "1978-12-29",
+      "ultimaReforma": "2021-11-12",
+      "vigenciaFallback": "2021-11-12",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LIEPS",
+      "titulo": "Ley del Impuesto Especial sobre Producción y Servicios",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LIEPS.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lieps.htm",
+      "archivo": "LIEPS",
+      "dofOriginal": "1980-12-30",
+      "ultimaReforma": "2025-12-22",
+      "vigenciaFallback": "2025-12-22",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LISR",
+      "titulo": "Ley del Impuesto sobre la Renta",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LISR.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lisr.htm",
+      "archivo": "LISR",
+      "dofOriginal": "2013-12-11",
+      "ultimaReforma": "2024-04-01",
+      "vigenciaFallback": "2024-04-01",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LISSFAM",
+      "titulo": "Ley del Instituto de Seguridad Social para las Fuerzas Armadas Mexicanas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LISSFAM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lissfam.htm",
+      "archivo": "LISSFAM",
+      "dofOriginal": "2003-07-09",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2003-07-09",
+      "materias": [
+        "militar"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LISSSTE",
+      "titulo": "Ley del Instituto de Seguridad y Servicios Sociales de los Trabajadores del Estado",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LISSSTE.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lissste.htm",
+      "archivo": "LISSSTE",
+      "dofOriginal": "2007-03-31",
+      "ultimaReforma": "2026-01-15",
+      "vigenciaFallback": "2026-01-15",
+      "materias": [
+        "seguridad_social",
+        "servidores_publicos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LINFONAVIT",
+      "titulo": "Ley del Instituto del Fondo Nacional de la Vivienda para los Trabajadores",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LIFNVT.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lifnvt.htm",
+      "archivo": "LIFNVT",
+      "dofOriginal": "1972-04-24",
+      "ultimaReforma": "2025-02-21",
+      "vigenciaFallback": "2025-02-21",
+      "materias": [
+        "seguridad_social",
+        "laboral",
+        "vivienda"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LIFNCT",
+      "titulo": "Ley del Instituto del Fondo Nacional para el Consumo de los Trabajadores",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LIFNCT.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lifnct.htm",
+      "archivo": "LIFNCT",
+      "dofOriginal": "2006-04-24",
+      "ultimaReforma": "2024-01-03",
+      "vigenciaFallback": "2024-01-03",
+      "materias": [
+        "laboral",
+        "financiero"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LIMJ",
+      "titulo": "Ley del Instituto Mexicano de la Juventud",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LIMJ.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/limj.htm",
+      "archivo": "LIMJ",
+      "dofOriginal": "1999-01-06",
+      "ultimaReforma": "2024-04-01",
+      "vigenciaFallback": "2024-04-01",
+      "materias": [
+        "derechos_humanos",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LINPI",
+      "titulo": "Ley del Instituto Nacional de los Pueblos Indígenas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LINPI.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/linpi.htm",
+      "archivo": "LINPI",
+      "dofOriginal": "2018-12-04",
+      "ultimaReforma": "2023-12-29",
+      "vigenciaFallback": "2023-12-29",
+      "materias": [
+        "derechos_humanos",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LMV",
+      "titulo": "Ley del Mercado de Valores",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LMV.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lmv.htm",
+      "archivo": "LMV",
+      "dofOriginal": "2005-12-30",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "financiero"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LRPV",
+      "titulo": "Ley del Registro Público Vehicular",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/269_200521.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lrpv.htm",
+      "archivo": "269_200521",
+      "dofOriginal": "2004-09-01",
+      "ultimaReforma": "2021-05-20",
+      "vigenciaFallback": "2021-05-20",
+      "materias": [
+        "administrativo",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LSE",
+      "titulo": "Ley del Sector Eléctrico",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LSE.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lse.htm",
+      "archivo": "LSE",
+      "dofOriginal": "2025-03-18",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-03-18",
+      "materias": [
+        "energia"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LSH",
+      "titulo": "Ley del Sector Hidrocarburos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LSH.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lsh.htm",
+      "archivo": "LSH",
+      "dofOriginal": "2025-03-18",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-03-18",
+      "materias": [
+        "energia"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LSS",
+      "titulo": "Ley del Seguro Social",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LSS.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lss.htm",
+      "archivo": "LSS",
+      "dofOriginal": "1995-12-21",
+      "ultimaReforma": "2026-01-15",
+      "vigenciaFallback": "2026-01-15",
+      "materias": [
+        "seguridad_social",
+        "laboral"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LSAT",
+      "titulo": "Ley del Servicio de Administración Tributaria",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/93_041218.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lsat.htm",
+      "archivo": "93_041218",
+      "dofOriginal": "1995-12-15",
+      "ultimaReforma": "2018-12-04",
+      "vigenciaFallback": "2018-12-04",
+      "materias": [
+        "fiscal",
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LSEM",
+      "titulo": "Ley del Servicio Exterior Mexicano",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/96_190418.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lsem.htm",
+      "archivo": "96_190418",
+      "dofOriginal": "1994-01-04",
+      "ultimaReforma": "2018-04-19",
+      "vigenciaFallback": "2018-04-19",
+      "materias": [
+        "internacional"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LSM",
+      "titulo": "Ley del Servicio Militar",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LSM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lsm.htm",
+      "archivo": "LSM",
+      "dofOriginal": "1940-09-11",
+      "ultimaReforma": "2022-05-18",
+      "vigenciaFallback": "2022-05-18",
+      "materias": [
+        "militar"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LSPM",
+      "titulo": "Ley del Servicio Postal Mexicano",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LSPM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lspm.htm",
+      "archivo": "LSPM",
+      "dofOriginal": "1986-12-24",
+      "ultimaReforma": "2023-01-19",
+      "vigenciaFallback": "2023-01-19",
+      "materias": [
+        "telecomunicaciones"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LSPCAPF",
+      "titulo": "Ley del Servicio Profesional de Carrera en la Administración Pública Federal",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/260.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lspcapf.htm",
+      "archivo": "260",
+      "dofOriginal": "2003-04-10",
+      "ultimaReforma": "2006-01-09",
+      "vigenciaFallback": "2006-01-09",
+      "materias": [
+        "servidores_publicos",
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LSNIEG",
+      "titulo": "Ley del Sistema Nacional de Información Estadística y Geográfica",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LSNIEG.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lsnieg.htm",
+      "archivo": "LSNIEG",
+      "dofOriginal": "2008-04-16",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "estadistica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LSNIIMSP",
+      "titulo": "Ley del Sistema Nacional de Investigación e Inteligencia en Materia de Seguridad Pública",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LSNIIMSP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lsniimsp.htm",
+      "archivo": "LSNIIMSP",
+      "dofOriginal": "2025-07-16",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-07-16",
+      "materias": [
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LSPREM",
+      "titulo": "Ley del Sistema Público de Radiodifusión del Estado Mexicano",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LSPREM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lsprem.htm",
+      "archivo": "LSPREM",
+      "dofOriginal": "2014-07-14",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "telecomunicaciones"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LMTR",
+      "titulo": "Ley en Materia de Telecomunicaciones y Radiodifusión",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LMTR.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lmtr.htm",
+      "archivo": "LMTR",
+      "dofOriginal": "2025-07-16",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-07-16",
+      "materias": [
+        "telecomunicaciones",
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFCDO",
+      "titulo": "Ley Federal contra la Delincuencia Organizada",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFCDO.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfcdo.htm",
+      "archivo": "LFCDO",
+      "dofOriginal": "1996-11-07",
+      "ultimaReforma": "2025-11-28",
+      "vigenciaFallback": "2025-11-28",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFAFE",
+      "titulo": "Ley Federal de Armas de Fuego y Explosivos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFAFE.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfafe.htm",
+      "archivo": "LFAFE",
+      "dofOriginal": "1972-01-11",
+      "ultimaReforma": "2025-05-29",
+      "vigenciaFallback": "2025-05-29",
+      "materias": [
+        "penal",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFAR",
+      "titulo": "Ley Federal de Austeridad Republicana",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFAR.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfar.htm",
+      "archivo": "LFAR",
+      "dofOriginal": "2019-11-19",
+      "ultimaReforma": "2025-04-16",
+      "vigenciaFallback": "2025-04-16",
+      "materias": [
+        "hacienda_publica",
+        "servidores_publicos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFCA",
+      "titulo": "Ley Federal de Cine y el Audiovisual",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFCA.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfca.htm",
+      "archivo": "LFCA",
+      "dofOriginal": "2026-05-22",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-05-22",
+      "materias": [
+        "cultura",
+        "telecomunicaciones"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFCE",
+      "titulo": "Ley Federal de Competencia Económica",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFCE.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfce.htm",
+      "archivo": "LFCE",
+      "dofOriginal": "2014-05-23",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "competencia"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFCPO",
+      "titulo": "Ley Federal de Consulta Popular",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFCPo_190521.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfcpo.htm",
+      "archivo": "LFCPo_190521",
+      "dofOriginal": "2014-03-14",
+      "ultimaReforma": "2021-05-19",
+      "vigenciaFallback": "2021-05-19",
+      "materias": [
+        "electoral"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFCP",
+      "titulo": "Ley Federal de Correduría Pública",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/105.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfcp.htm",
+      "archivo": "105",
+      "dofOriginal": "1992-12-29",
+      "ultimaReforma": "2012-04-09",
+      "vigenciaFallback": "2012-04-09",
+      "materias": [
+        "mercantil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFDEAPD",
+      "titulo": "Ley Federal de Declaración Especial de Ausencia para Personas Desaparecidas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFDEAPD.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfdeapd.htm",
+      "archivo": "LFDEAPD",
+      "dofOriginal": "2018-06-22",
+      "ultimaReforma": "2024-04-01",
+      "vigenciaFallback": "2024-04-01",
+      "materias": [
+        "derechos_humanos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFDEFP",
+      "titulo": "Ley Federal de Defensoría Pública",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFDefP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfdefp.htm",
+      "archivo": "LFDefP",
+      "dofOriginal": "1998-05-28",
+      "ultimaReforma": "2024-04-01",
+      "vigenciaFallback": "2024-04-01",
+      "materias": [
+        "judicial"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFD",
+      "titulo": "Ley Federal de Derechos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFD.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfd.htm",
+      "archivo": "LFD",
+      "dofOriginal": "1981-12-31",
+      "ultimaReforma": "2025-12-28",
+      "vigenciaFallback": "2025-12-28",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFDP",
+      "titulo": "Ley Federal de Deuda Pública",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/136_300118.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgdp.htm",
+      "archivo": "136_300118",
+      "dofOriginal": "1976-12-31",
+      "ultimaReforma": "2018-01-30",
+      "vigenciaFallback": "2018-01-30",
+      "materias": [
+        "hacienda_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFFAOSC",
+      "titulo": "Ley Federal de Fomento a las Actividades Realizadas por Organizaciones de la Sociedad Civil",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFFAOSC.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lffaosc.htm",
+      "archivo": "LFFAOSC",
+      "dofOriginal": "2004-02-09",
+      "ultimaReforma": "2024-04-01",
+      "vigenciaFallback": "2024-04-01",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFJS",
+      "titulo": "Ley Federal de Juegos y Sorteos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/109.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfjs.htm",
+      "archivo": "109",
+      "dofOriginal": "1947-12-31",
+      "ultimaReforma": null,
+      "vigenciaFallback": "1947-12-31",
+      "materias": [
+        "juegos_sorteos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFEP",
+      "titulo": "Ley Federal de las Entidades Paraestatales",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFEP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfep.htm",
+      "archivo": "LFEP",
+      "dofOriginal": "1986-05-14",
+      "ultimaReforma": "2025-07-16",
+      "vigenciaFallback": "2025-07-16",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFDC",
+      "titulo": "Ley Federal de los Derechos del Contribuyente",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFDC.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfdc.htm",
+      "archivo": "LFDC",
+      "dofOriginal": "2005-06-23",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2005-06-23",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFTSE",
+      "titulo": "Ley Federal de los Trabajadores al Servicio del Estado, Reglamentaria del Apartado B) del Artículo 123 Constitucional",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFTSE.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lftse.htm",
+      "archivo": "LFTSE",
+      "dofOriginal": "1963-12-28",
+      "ultimaReforma": "2026-01-15",
+      "vigenciaFallback": "2026-01-15",
+      "materias": [
+        "laboral",
+        "servidores_publicos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFPRH",
+      "titulo": "Ley Federal de Presupuesto y Responsabilidad Hacendaria",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFPRH.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfprh.htm",
+      "archivo": "LFPRH",
+      "dofOriginal": "2006-03-30",
+      "ultimaReforma": "2026-04-09",
+      "vigenciaFallback": "2026-04-09",
+      "materias": [
+        "hacienda_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFPA",
+      "titulo": "Ley Federal de Procedimiento Administrativo",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFPA.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfpa.htm",
+      "archivo": "LFPA",
+      "dofOriginal": "1994-08-04",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "administrativo",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFPCA",
+      "titulo": "Ley Federal de Procedimiento Contencioso Administrativo",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFPCA.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfpca.htm",
+      "archivo": "LFPCA",
+      "dofOriginal": "2005-12-01",
+      "ultimaReforma": "2026-06-09",
+      "vigenciaFallback": "2026-06-09",
+      "materias": [
+        "fiscal",
+        "administrativo",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFPCCS",
+      "titulo": "Ley Federal de Producción, Certificación y Comercio de Semillas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFPCCS_110518.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfpccs.htm",
+      "archivo": "LFPCCS_110518",
+      "dofOriginal": "2007-06-15",
+      "ultimaReforma": "2018-05-11",
+      "vigenciaFallback": "2018-05-11",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFPPI",
+      "titulo": "Ley Federal de Protección a la Propiedad Industrial",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFPPI.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfppi.htm",
+      "archivo": "LFPPI",
+      "dofOriginal": "2020-07-01",
+      "ultimaReforma": "2026-04-03",
+      "vigenciaFallback": "2026-04-03",
+      "materias": [
+        "propiedad_intelectual"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFPC",
+      "titulo": "Ley Federal de Protección al Consumidor",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFPC.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfpc.htm",
+      "archivo": "LFPC",
+      "dofOriginal": "1992-12-24",
+      "ultimaReforma": "2025-12-23",
+      "vigenciaFallback": "2025-12-23",
+      "materias": [
+        "consumidor",
+        "mercantil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFPDPPP",
+      "titulo": "Ley Federal de Protección de Datos Personales en Posesión de los Particulares",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFPDPPP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfpdppp.htm",
+      "archivo": "LFPDPPP",
+      "dofOriginal": "2025-03-20",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "datos_personales",
+        "mercantil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFPPCPCIA",
+      "titulo": "Ley Federal de Protección del Patrimonio Cultural de los Pueblos y Comunidades Indígenas y Afromexicanas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFPPCPCIA.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfppcpcia.htm",
+      "archivo": "LFPPCPCIA",
+      "dofOriginal": "2022-01-17",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "propiedad_intelectual"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFREMSP",
+      "titulo": "Ley Federal de Remuneraciones de los Servidores Públicos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFRemSP_190521.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfremsp.htm",
+      "archivo": "LFRemSP_190521",
+      "dofOriginal": "2021-05-19",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2021-05-19",
+      "materias": [
+        "servidores_publicos",
+        "hacienda_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFRA",
+      "titulo": "Ley Federal de Responsabilidad Ambiental",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFRA.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfra.htm",
+      "archivo": "LFRA",
+      "dofOriginal": "2013-06-07",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFRPE",
+      "titulo": "Ley Federal de Responsabilidad Patrimonial del Estado",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFRPE.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfrpe.htm",
+      "archivo": "LFRPE",
+      "dofOriginal": "2004-12-31",
+      "ultimaReforma": "2023-12-29",
+      "vigenciaFallback": "2023-12-29",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFRSP",
+      "titulo": "Ley Federal de Responsabilidades de los Servidores Públicos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFRSP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfrsp.htm",
+      "archivo": "LFRSP",
+      "dofOriginal": "1982-12-31",
+      "ultimaReforma": "2024-04-01",
+      "vigenciaFallback": "2024-04-01",
+      "materias": [
+        "administrativo",
+        "servidores_publicos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFRM",
+      "titulo": "Ley Federal de Revocación de Mandato",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFRM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfrm.htm",
+      "archivo": "LFRM",
+      "dofOriginal": "2021-09-14",
+      "ultimaReforma": "2022-09-26",
+      "vigenciaFallback": "2022-09-26",
+      "materias": [
+        "electoral"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFSA",
+      "titulo": "Ley Federal de Sanidad Animal",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFSA.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfsa.htm",
+      "archivo": "LFSA",
+      "dofOriginal": "2007-07-25",
+      "ultimaReforma": "2024-05-21",
+      "vigenciaFallback": "2024-05-21",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFSV",
+      "titulo": "Ley Federal de Sanidad Vegetal",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFSV.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfsv.htm",
+      "archivo": "LFSV",
+      "dofOriginal": "1994-01-05",
+      "ultimaReforma": "2022-05-11",
+      "vigenciaFallback": "2022-05-11",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFSP",
+      "titulo": "Ley Federal de Seguridad Privada",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFSP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfsp.htm",
+      "archivo": "LFSP",
+      "dofOriginal": "2006-07-06",
+      "ultimaReforma": "2011-10-17",
+      "vigenciaFallback": "2011-10-17",
+      "materias": [
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFVV",
+      "titulo": "Ley Federal de Variedades Vegetales",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFVV.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfvv.htm",
+      "archivo": "LFVV",
+      "dofOriginal": "1996-10-25",
+      "ultimaReforma": "2022-05-11",
+      "vigenciaFallback": "2022-05-11",
+      "materias": [
+        "propiedad_intelectual"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFZEE",
+      "titulo": "Ley Federal de Zonas Económicas Especiales",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFZEE.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfzee.htm",
+      "archivo": "LFZEE",
+      "dofOriginal": "2016-06-01",
+      "ultimaReforma": "2024-04-01",
+      "vigenciaFallback": "2024-04-01",
+      "materias": [
+        "comercio_exterior"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFDA",
+      "titulo": "Ley Federal del Derecho de Autor",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFDA.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfda.htm",
+      "archivo": "LFDA",
+      "dofOriginal": "1996-12-24",
+      "ultimaReforma": "2026-05-14",
+      "vigenciaFallback": "2026-05-14",
+      "materias": [
+        "propiedad_intelectual"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFISAN",
+      "titulo": "Ley Federal del Impuesto sobre Automóviles Nuevos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFISAN.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfisan.htm",
+      "archivo": "LFISAN",
+      "dofOriginal": "1996-12-30",
+      "ultimaReforma": "2025-12-28",
+      "vigenciaFallback": "2025-12-28",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFM",
+      "titulo": "Ley Federal del Mar",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/124.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfm.htm",
+      "archivo": "124",
+      "dofOriginal": "1986-01-08",
+      "ultimaReforma": null,
+      "vigenciaFallback": "1986-01-08",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFT",
+      "titulo": "Ley Federal del Trabajo",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFT.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lft.htm",
+      "archivo": "LFT",
+      "dofOriginal": "1970-04-01",
+      "ultimaReforma": "2026-05-14",
+      "vigenciaFallback": "2026-05-14",
+      "materias": [
+        "laboral"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFCPQ",
+      "titulo": "Ley Federal para el Control de Precursores Químicos, Productos Químicos Esenciales y Máquinas para Elaborar Cápsulas, Tabletas y/o Comprimidos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFCPQ.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfcpq.htm",
+      "archivo": "LFCPQ",
+      "dofOriginal": "1997-12-26",
+      "ultimaReforma": "2023-05-03",
+      "vigenciaFallback": "2023-05-03",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFCSQ",
+      "titulo": "Ley Federal para el Control de Sustancias Químicas Susceptibles de Desvío para la Fabricación de Armas Químicas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFCSQ.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfcsq.htm",
+      "archivo": "LFCSQ",
+      "dofOriginal": "2009-06-09",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFFMAA",
+      "titulo": "Ley Federal para el Fomento de la Microindustria y la Actividad Artesanal",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFFMAA.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lffmaa.htm",
+      "archivo": "LFFMAA",
+      "dofOriginal": "1988-01-26",
+      "ultimaReforma": "2023-03-27",
+      "vigenciaFallback": "2023-03-27",
+      "materias": [
+        "mercantil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFFPMN",
+      "titulo": "Ley Federal para el Fomento y Protección del Maíz Nativo",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFFPMN_130420.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lffpmn.htm",
+      "archivo": "LFFPMN_130420",
+      "dofOriginal": "2020-04-13",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2020-04-13",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFAEBSP",
+      "titulo": "Ley Federal para la Administración y Enajenación de Bienes del Sector Público",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFAEBSP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfaebsp.htm",
+      "archivo": "LFAEBSP",
+      "dofOriginal": "2002-12-19",
+      "ultimaReforma": "2024-04-30",
+      "vigenciaFallback": "2024-04-30",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFPIORPI",
+      "titulo": "Ley Federal para la Prevención e Identificación de Operaciones con Recursos de Procedencia Ilícita",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFPIORPI.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfpiorpi.htm",
+      "archivo": "LFPIORPI",
+      "dofOriginal": "2012-10-17",
+      "ultimaReforma": "2025-07-16",
+      "vigenciaFallback": "2025-07-16",
+      "materias": [
+        "pld",
+        "mercantil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFPPIPP",
+      "titulo": "Ley Federal para la Protección a Personas que Intervienen en el Procedimiento Penal",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFPPIPP_200521.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfppipp.htm",
+      "archivo": "LFPPIPP_200521",
+      "dofOriginal": "2012-06-08",
+      "ultimaReforma": "2021-05-20",
+      "vigenciaFallback": "2021-05-20",
+      "materias": [
+        "penal",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFPED",
+      "titulo": "Ley Federal para Prevenir y Eliminar la Discriminación",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFPED.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfped.htm",
+      "archivo": "LFPED",
+      "dofOriginal": "2003-06-11",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "derechos_humanos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFPSDMH",
+      "titulo": "Ley Federal para Prevenir y Sancionar los Delitos Cometidos en Materia de Hidrocarburos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFPSDMH.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfpsdmh.htm",
+      "archivo": "LFPSDMH",
+      "dofOriginal": "2016-01-12",
+      "ultimaReforma": "2021-11-12",
+      "vigenciaFallback": "2021-11-12",
+      "materias": [
+        "penal",
+        "energia"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFMZAAH",
+      "titulo": "Ley Federal sobre Monumentos y Zonas Arqueológicos, Artísticos e Históricos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFMZAAH.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfmzaah.htm",
+      "archivo": "LFMZAAH",
+      "dofOriginal": "1972-05-06",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "cultura"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGAMVLV",
+      "titulo": "Ley General de Acceso de las Mujeres a una Vida Libre de Violencias",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGAMVLV.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgamvlv.htm",
+      "archivo": "LGAMVLV",
+      "dofOriginal": "2007-02-01",
+      "ultimaReforma": "2026-01-15",
+      "vigenciaFallback": "2026-01-15",
+      "materias": [
+        "derechos_humanos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGAG",
+      "titulo": "Ley General de Aguas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGAg.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgag.htm",
+      "archivo": "LGAg",
+      "dofOriginal": "2025-12-11",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-12-11",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGA",
+      "titulo": "Ley General de Archivos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGA.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lga.htm",
+      "archivo": "LGA",
+      "dofOriginal": "2018-06-15",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGAHOTDU",
+      "titulo": "Ley General de Asentamientos Humanos, Ordenamiento Territorial y Desarrollo Urbano",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGAHOTDU.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgahotdu.htm",
+      "archivo": "LGAHOTDU",
+      "dofOriginal": "2016-11-28",
+      "ultimaReforma": "2024-04-01",
+      "vigenciaFallback": "2024-04-01",
+      "materias": [
+        "vivienda"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGB",
+      "titulo": "Ley General de Bibliotecas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGB.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgb.htm",
+      "archivo": "LGB",
+      "dofOriginal": "2021-06-01",
+      "ultimaReforma": "2023-11-29",
+      "vigenciaFallback": "2023-11-29",
+      "materias": [
+        "educacion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGBN",
+      "titulo": "Ley General de Bienes Nacionales",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGBN.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgbn.htm",
+      "archivo": "LGBN",
+      "dofOriginal": "2004-05-20",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGCC",
+      "titulo": "Ley General de Cambio Climático",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGCC.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgcc.htm",
+      "archivo": "LGCC",
+      "dofOriginal": "2012-06-06",
+      "ultimaReforma": "2024-04-01",
+      "vigenciaFallback": "2024-04-01",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGCS",
+      "titulo": "Ley General de Comunicación Social",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGCS.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgcs.htm",
+      "archivo": "LGCS",
+      "dofOriginal": "2018-05-11",
+      "ultimaReforma": "2024-04-01",
+      "vigenciaFallback": "2024-04-01",
+      "materias": [
+        "administrativo",
+        "telecomunicaciones"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGCG",
+      "titulo": "Ley General de Contabilidad Gubernamental",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGCG.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgcg.htm",
+      "archivo": "LGCG",
+      "dofOriginal": "2008-12-31",
+      "ultimaReforma": "2026-05-14",
+      "vigenciaFallback": "2026-05-14",
+      "materias": [
+        "hacienda_publica",
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGCFD",
+      "titulo": "Ley General de Cultura Física y Deporte",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGCFD.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgcfd.htm",
+      "archivo": "LGCFD",
+      "dofOriginal": "2013-06-07",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "cultura",
+        "deporte"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGCDC",
+      "titulo": "Ley General de Cultura y Derechos Culturales",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGCDC.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgcdc.htm",
+      "archivo": "LGCDC",
+      "dofOriginal": "2017-06-19",
+      "ultimaReforma": "2026-01-15",
+      "vigenciaFallback": "2026-01-15",
+      "materias": [
+        "cultura"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGDLPI",
+      "titulo": "Ley General de Derechos Lingüísticos de los Pueblos Indígenas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGDLPI.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgdlpi.htm",
+      "archivo": "LGDLPI",
+      "dofOriginal": "2003-03-13",
+      "ultimaReforma": "2023-10-18",
+      "vigenciaFallback": "2023-10-18",
+      "materias": [
+        "derechos_humanos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGDFS",
+      "titulo": "Ley General de Desarrollo Forestal Sustentable",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGDFS.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgdfs.htm",
+      "archivo": "LGDFS",
+      "dofOriginal": "2018-06-05",
+      "ultimaReforma": "2024-04-01",
+      "vigenciaFallback": "2024-04-01",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGDS",
+      "titulo": "Ley General de Desarrollo Social",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGDS.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgds.htm",
+      "archivo": "LGDS",
+      "dofOriginal": "2004-01-20",
+      "ultimaReforma": "2026-01-15",
+      "vigenciaFallback": "2026-01-15",
+      "materias": [
+        "derechos_humanos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGEC",
+      "titulo": "Ley General de Economía Circular",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGEC.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgec.htm",
+      "archivo": "LGEC",
+      "dofOriginal": "2026-01-19",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-01-19",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGE",
+      "titulo": "Ley General de Educación",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGE.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lge.htm",
+      "archivo": "LGE",
+      "dofOriginal": "2019-09-30",
+      "ultimaReforma": "2026-01-15",
+      "vigenciaFallback": "2026-01-15",
+      "materias": [
+        "educacion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGES",
+      "titulo": "Ley General de Educación Superior",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGES_200421.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lges.htm",
+      "archivo": "LGES_200421",
+      "dofOriginal": "2021-04-20",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2021-04-20",
+      "materias": [
+        "educacion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGIPE",
+      "titulo": "Ley General de Instituciones y Procedimientos Electorales",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGIPE.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgipe.htm",
+      "archivo": "LGIPE",
+      "dofOriginal": "2014-05-23",
+      "ultimaReforma": "2026-06-02",
+      "vigenciaFallback": "2026-06-02",
+      "materias": [
+        "electoral"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGAAS",
+      "titulo": "Ley General de la Alimentación Adecuada y Sostenible",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGAAS.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgaas.htm",
+      "archivo": "LGAAS",
+      "dofOriginal": "2024-04-17",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2024-04-17",
+      "materias": [
+        "salud"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGDNNA",
+      "titulo": "Ley General de los Derechos de Niñas, Niños y Adolescentes",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGDNNA.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgdnna.htm",
+      "archivo": "LGDNNA",
+      "dofOriginal": "2014-12-04",
+      "ultimaReforma": "2026-01-15",
+      "vigenciaFallback": "2026-01-15",
+      "materias": [
+        "derechos_humanos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGMIME",
+      "titulo": "Ley General de los Medios de Impugnación en Materia Electoral",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGMIME.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgmime.htm",
+      "archivo": "LGMIME",
+      "dofOriginal": "2023-03-02",
+      "ultimaReforma": "2023-11-24",
+      "vigenciaFallback": "2023-11-24",
+      "materias": [
+        "procesal",
+        "electoral"
+      ],
+      "excluida": "Declaratoria de invalidez de la ley (DOF 24/11/2023)."
+    },
+    {
+      "clave": "LGMASC",
+      "titulo": "Ley General de Mecanismos Alternativos de Solución de Controversias",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGMASC.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgmasc.htm",
+      "archivo": "LGMASC",
+      "dofOriginal": "2024-01-26",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2024-01-26",
+      "materias": [
+        "civil",
+        "mercantil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGMSV",
+      "titulo": "Ley General de Movilidad y Seguridad Vial",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGMSV.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgmsv.htm",
+      "archivo": "LGMSV",
+      "dofOriginal": "2022-05-17",
+      "ultimaReforma": "2023-12-29",
+      "vigenciaFallback": "2023-12-29",
+      "materias": [
+        "transporte",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGOAAC",
+      "titulo": "Ley General de Organizaciones y Actividades Auxiliares del Crédito",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGOAAC.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgoaac.htm",
+      "archivo": "LGOAAC",
+      "dofOriginal": "1985-01-14",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "financiero"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGPP",
+      "titulo": "Ley General de Partidos Políticos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGPP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgpp.htm",
+      "archivo": "LGPP",
+      "dofOriginal": "2014-05-23",
+      "ultimaReforma": "2023-11-24",
+      "vigenciaFallback": "2023-11-24",
+      "materias": [
+        "electoral"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGPAS",
+      "titulo": "Ley General de Pesca y Acuacultura Sustentables",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGPAS.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgpas.htm",
+      "archivo": "LGPAS",
+      "dofOriginal": "2007-07-24",
+      "ultimaReforma": "2024-04-01",
+      "vigenciaFallback": "2024-04-01",
+      "materias": [
+        "ambiental",
+        "cultura"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGP",
+      "titulo": "Ley General de Población",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgp.htm",
+      "archivo": "LGP",
+      "dofOriginal": "1974-01-07",
+      "ultimaReforma": "2025-07-16",
+      "vigenciaFallback": "2025-07-16",
+      "materias": [
+        "migracion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGPSACDII",
+      "titulo": "Ley General de Prestación de Servicios para la Atención, Cuidado y Desarrollo Integral Infantil",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGPSACDII.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgpsacdii.htm",
+      "archivo": "LGPSACDII",
+      "dofOriginal": "2011-10-24",
+      "ultimaReforma": "2024-04-01",
+      "vigenciaFallback": "2024-04-01",
+      "materias": [
+        "derechos_humanos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGPC",
+      "titulo": "Ley General de Protección Civil",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGPC.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgpc.htm",
+      "archivo": "LGPC",
+      "dofOriginal": "2012-06-06",
+      "ultimaReforma": "2023-12-21",
+      "vigenciaFallback": "2023-12-21",
+      "materias": [
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGPDPPSO",
+      "titulo": "Ley General de Protección de Datos Personales en Posesión de Sujetos Obligados",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGPDPPSO.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgpdppso.htm",
+      "archivo": "LGPDPPSO",
+      "dofOriginal": "2025-03-20",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "datos_personales",
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGRA",
+      "titulo": "Ley General de Responsabilidades Administrativas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGRA.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgra.htm",
+      "archivo": "LGRA",
+      "dofOriginal": "2016-07-18",
+      "ultimaReforma": "2025-12-15",
+      "vigenciaFallback": "2025-12-15",
+      "materias": [
+        "administrativo",
+        "servidores_publicos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGS",
+      "titulo": "Ley General de Salud",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGS.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgs.htm",
+      "archivo": "LGS",
+      "dofOriginal": "1984-02-07",
+      "ultimaReforma": "2026-01-15",
+      "vigenciaFallback": "2026-01-15",
+      "materias": [
+        "salud",
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGSC",
+      "titulo": "Ley General de Sociedades Cooperativas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGSC.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgsc.htm",
+      "archivo": "LGSC",
+      "dofOriginal": "1994-08-03",
+      "ultimaReforma": "2025-04-16",
+      "vigenciaFallback": "2025-04-16",
+      "materias": [
+        "mercantil",
+        "cooperativas"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGSM",
+      "titulo": "Ley General de Sociedades Mercantiles",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGSM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgsm.htm",
+      "archivo": "LGSM",
+      "dofOriginal": "1934-08-04",
+      "ultimaReforma": "2025-12-26",
+      "vigenciaFallback": "2025-12-26",
+      "materias": [
+        "mercantil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGTOC",
+      "titulo": "Ley General de Títulos y Operaciones de Crédito",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGTOC.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgtoc.htm",
+      "archivo": "LGTOC",
+      "dofOriginal": "1932-08-27",
+      "ultimaReforma": "2024-03-26",
+      "vigenciaFallback": "2024-03-26",
+      "materias": [
+        "mercantil",
+        "financiero"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGTAIP",
+      "titulo": "Ley General de Transparencia y Acceso a la Información Pública",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGTAIP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgtaip.htm",
+      "archivo": "LGTAIP",
+      "dofOriginal": "2025-03-20",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-03-20",
+      "materias": [
+        "transparencia",
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGT",
+      "titulo": "Ley General de Turismo",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGT.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgt.htm",
+      "archivo": "LGT",
+      "dofOriginal": "2009-06-17",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGV",
+      "titulo": "Ley General de Víctimas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGV.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgv.htm",
+      "archivo": "LGV",
+      "dofOriginal": "2013-01-09",
+      "ultimaReforma": "2024-04-01",
+      "vigenciaFallback": "2024-04-01",
+      "materias": [
+        "derechos_humanos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGVS",
+      "titulo": "Ley General de Vida Silvestre",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGVS.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgvs.htm",
+      "archivo": "LGVS",
+      "dofOriginal": "2000-07-03",
+      "ultimaReforma": "2025-07-16",
+      "vigenciaFallback": "2025-07-16",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGEEPA",
+      "titulo": "Ley General del Equilibrio Ecológico y la Protección al Ambiente",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGEEPA.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgeepa.htm",
+      "archivo": "LGEEPA",
+      "dofOriginal": "1988-01-28",
+      "ultimaReforma": "2026-01-19",
+      "vigenciaFallback": "2026-01-19",
+      "materias": [
+        "ambiental",
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGSMIME",
+      "titulo": "Ley General del Sistema de Medios de Impugnación en Materia Electoral",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGSMIME.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgsmime.htm",
+      "archivo": "LGSMIME",
+      "dofOriginal": "1996-11-22",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "procesal",
+        "electoral"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGSNA",
+      "titulo": "Ley General del Sistema Nacional Anticorrupción",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGSNA_200521.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgsna.htm",
+      "archivo": "LGSNA_200521",
+      "dofOriginal": "2016-07-18",
+      "ultimaReforma": "2021-05-20",
+      "vigenciaFallback": "2021-05-20",
+      "materias": [
+        "administrativo",
+        "servidores_publicos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGSNSP",
+      "titulo": "Ley General del Sistema Nacional de Seguridad Pública",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGSNSP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgsnsp.htm",
+      "archivo": "LGSNSP",
+      "dofOriginal": "2025-07-16",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-07-16",
+      "materias": [
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGSCMM",
+      "titulo": "Ley General del Sistema para la Carrera de las Maestras y los Maestros",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGSCMM_300919.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgscmm.htm",
+      "archivo": "LGSCMM_300919",
+      "dofOriginal": "2019-09-30",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2019-09-30",
+      "materias": [
+        "educacion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGMDE",
+      "titulo": "Ley General en Materia de Delitos Electorales",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGMDE_200521.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgmde.htm",
+      "archivo": "LGMDE_200521",
+      "dofOriginal": "2014-05-23",
+      "ultimaReforma": "2021-05-20",
+      "vigenciaFallback": "2021-05-20",
+      "materias": [
+        "penal",
+        "electoral"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGMDFP",
+      "titulo": "Ley General en Materia de Desaparición Forzada de Personas, Desaparición Cometida por Particulares y del Sistema Nacional de Búsqueda de Personas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGMDFP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgmdfp.htm",
+      "archivo": "LGMDFP",
+      "dofOriginal": "2017-11-17",
+      "ultimaReforma": "2025-07-16",
+      "vigenciaFallback": "2025-07-16",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGMHCTI",
+      "titulo": "Ley General en materia de Humanidades, Ciencias, Tecnologías e Innovación",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGMHCTI.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgmhcti.htm",
+      "archivo": "LGMHCTI",
+      "dofOriginal": "2023-05-08",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2023-05-08",
+      "materias": [
+        "educacion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGCT",
+      "titulo": "Ley General para el Control del Tabaco",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGCT.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgct.htm",
+      "archivo": "LGCT",
+      "dofOriginal": "2008-05-30",
+      "ultimaReforma": "2022-02-17",
+      "vigenciaFallback": "2022-02-17",
+      "materias": [
+        "salud"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGAPPCEA",
+      "titulo": "Ley General para la Atención y Protección a Personas con la Condición del Espectro Autista",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGAPPCEA_270516.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgappcea.htm",
+      "archivo": "LGAPPCEA_270516",
+      "dofOriginal": "2015-04-30",
+      "ultimaReforma": "2016-05-27",
+      "vigenciaFallback": "2016-05-27",
+      "materias": [
+        "salud"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGDOCIA",
+      "titulo": "Ley General para la Detección Oportuna del Cáncer en la Infancia y la Adolescencia",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGDOCIA_070121.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgdocia.htm",
+      "archivo": "LGDOCIA_070121",
+      "dofOriginal": "2021-01-07",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2021-01-07",
+      "materias": [
+        "salud"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGISMH",
+      "titulo": "Ley General para la Igualdad Sustantiva entre Mujeres y Hombres",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGISMH.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgimh.htm",
+      "archivo": "LGISMH",
+      "dofOriginal": "2006-08-02",
+      "ultimaReforma": "2026-01-15",
+      "vigenciaFallback": "2026-01-15",
+      "materias": [
+        "derechos_humanos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGIPD",
+      "titulo": "Ley General para la Inclusión de las Personas con Discapacidad",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGIPD.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgipd.htm",
+      "archivo": "LGIPD",
+      "dofOriginal": "2011-05-30",
+      "ultimaReforma": "2024-06-14",
+      "vigenciaFallback": "2024-06-14",
+      "materias": [
+        "derechos_humanos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGPSVD",
+      "titulo": "Ley General para la Prevención Social de la Violencia y la Delincuencia",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGPSVD_040521.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgpsvd.htm",
+      "archivo": "LGPSVD_040521",
+      "dofOriginal": "2012-01-24",
+      "ultimaReforma": "2021-05-04",
+      "vigenciaFallback": "2021-05-04",
+      "materias": [
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGPGIR",
+      "titulo": "Ley General para la Prevención y Gestión Integral de los Residuos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGPGIR.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgpgir.htm",
+      "archivo": "LGPGIR",
+      "dofOriginal": "2003-10-08",
+      "ultimaReforma": "2026-01-19",
+      "vigenciaFallback": "2026-01-19",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGPIST",
+      "titulo": "Ley General para Prevenir, Investigar y Sancionar la Tortura y Otros Tratos o Penas Crueles, Inhumanos o Degradantes",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGPIST.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgpist.htm",
+      "archivo": "LGPIST",
+      "dofOriginal": "2017-06-26",
+      "ultimaReforma": "2022-04-28",
+      "vigenciaFallback": "2022-04-28",
+      "materias": [
+        "penal",
+        "derechos_humanos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGPISDME",
+      "titulo": "Ley General para Prevenir, Investigar y Sancionar los Delitos en Materia de Extorsión, Reglamentaria de la fracción XXI del artículo 73 de la Constitución Política de los Estados Unidos Mexicanos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGPISDME.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgpisdme.htm",
+      "archivo": "LGPISDME",
+      "dofOriginal": "2025-11-28",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-11-28",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGPSEDMTP",
+      "titulo": "Ley General para Prevenir, Sancionar y Erradicar los Delitos en Materia de Trata de Personas y para la Protección y Asistencia a las Víctimas de estos Delitos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGPSEDMTP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgpsedmtp.htm",
+      "archivo": "LGPSEDMTP",
+      "dofOriginal": "2012-06-14",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "penal",
+        "derechos_humanos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LGPSDMS",
+      "titulo": "Ley General para Prevenir y Sancionar los Delitos en Materia de Secuestro, Reglamentaria de la fracción XXI del artículo 73 de la Constitución Política de los Estados Unidos Mexicanos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGPSDMS_200521.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lgpsdms.htm",
+      "archivo": "LGPSDMS_200521",
+      "dofOriginal": "2010-11-30",
+      "ultimaReforma": "2021-05-20",
+      "vigenciaFallback": "2021-05-20",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LMEUM",
+      "titulo": "Ley Monetaria de los Estados Unidos Mexicanos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LMEUM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lmeum.htm",
+      "archivo": "LMEUM",
+      "dofOriginal": "1931-07-27",
+      "ultimaReforma": "2026-01-19",
+      "vigenciaFallback": "2026-01-19",
+      "materias": [
+        "financiero"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LNEP",
+      "titulo": "Ley Nacional de Ejecución Penal",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LNEP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lnep.htm",
+      "archivo": "LNEP",
+      "dofOriginal": "2016-06-16",
+      "ultimaReforma": "2024-04-01",
+      "vigenciaFallback": "2024-04-01",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LNED",
+      "titulo": "Ley Nacional de Extinción de Dominio",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LNED.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lned.htm",
+      "archivo": "LNED",
+      "dofOriginal": "2019-08-09",
+      "ultimaReforma": "2025-11-28",
+      "vigenciaFallback": "2025-11-28",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LNMASCMP",
+      "titulo": "Ley Nacional de Mecanismos Alternativos de Solución de Controversias en Materia Penal",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LNMASCMP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lnmascmp.htm",
+      "archivo": "LNMASCMP",
+      "dofOriginal": "2014-12-29",
+      "ultimaReforma": "2024-04-01",
+      "vigenciaFallback": "2024-04-01",
+      "materias": [
+        "penal",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LNRD",
+      "titulo": "Ley Nacional del Registro de Detenciones",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LNRD_270519.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lnrd.htm",
+      "archivo": "LNRD_270519",
+      "dofOriginal": "2019-05-27",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2019-05-27",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LNSIJPA",
+      "titulo": "Ley Nacional del Sistema Integral de Justicia Penal para Adolescentes",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LNSIJPA.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lnsijpa.htm",
+      "archivo": "LNSIJPA",
+      "dofOriginal": "2016-06-16",
+      "ultimaReforma": "2022-12-20",
+      "vigenciaFallback": "2022-12-20",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LNETB",
+      "titulo": "Ley Nacional para Eliminar Trámites Burocráticos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LNETB.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lnetb.htm",
+      "archivo": "LNETB",
+      "dofOriginal": "2025-07-16",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-07-16",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LNUF",
+      "titulo": "Ley Nacional sobre el Uso de la Fuerza",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LNUF.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lnuf.htm",
+      "archivo": "LNUF",
+      "dofOriginal": "2019-05-27",
+      "ultimaReforma": "2024-01-24",
+      "vigenciaFallback": "2024-01-24",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LOAPF",
+      "titulo": "Ley Orgánica de la Administración Pública Federal",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LOAPF.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/loapf.htm",
+      "archivo": "LOAPF",
+      "dofOriginal": "1976-12-29",
+      "ultimaReforma": "2026-05-07",
+      "vigenciaFallback": "2026-05-07",
+      "materias": [
+        "administrativo",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LOAM",
+      "titulo": "Ley Orgánica de la Armada de México",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LOAM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/loam.htm",
+      "archivo": "LOAM",
+      "dofOriginal": "2025-11-07",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-11-07",
+      "materias": [
+        "militar",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LOPDC",
+      "titulo": "Ley Orgánica de la Procuraduría de la Defensa del Contribuyente",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LOPDC.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lopdc.htm",
+      "archivo": "LOPDC",
+      "dofOriginal": "2006-09-04",
+      "ultimaReforma": "2022-05-11",
+      "vigenciaFallback": "2022-05-11",
+      "materias": [
+        "fiscal",
+        "judicial"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LOPGJDF",
+      "titulo": "Ley Orgánica de la Procuraduría General de Justicia del Distrito Federal",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LOPGJDF.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lopgjdf.htm",
+      "archivo": "LOPGJDF",
+      "dofOriginal": "2011-06-20",
+      "ultimaReforma": "2012-02-24",
+      "vigenciaFallback": "2012-02-24",
+      "materias": [
+        "judicial",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LOUAAAN",
+      "titulo": "Ley Orgánica de la Universidad Autónoma Agraria Antonio Narro",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LOUAAAN.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/louaaan.htm",
+      "archivo": "LOUAAAN",
+      "dofOriginal": "2006-04-26",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2006-04-26",
+      "materias": [
+        "agrario",
+        "educacion",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LOUAM",
+      "titulo": "Ley Orgánica de la Universidad Autónoma Metropolitana",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/157.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/louam.htm",
+      "archivo": "157",
+      "dofOriginal": "1973-12-17",
+      "ultimaReforma": null,
+      "vigenciaFallback": "1973-12-17",
+      "materias": [
+        "educacion",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LOUNAM",
+      "titulo": "Ley Orgánica de la Universidad Nacional Autónoma de México",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/158.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lounam.htm",
+      "archivo": "158",
+      "dofOriginal": "1945-01-06",
+      "ultimaReforma": null,
+      "vigenciaFallback": "1945-01-06",
+      "materias": [
+        "educacion",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LOTA",
+      "titulo": "Ley Orgánica de los Tribunales Agrarios",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/159.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lota.htm",
+      "archivo": "159",
+      "dofOriginal": "1992-02-26",
+      "ultimaReforma": "1998-01-23",
+      "vigenciaFallback": "1998-01-23",
+      "materias": [
+        "judicial",
+        "agrario",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LONAFIN",
+      "titulo": "Ley Orgánica de Nacional Financiera",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/162.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lonf.htm",
+      "archivo": "162",
+      "dofOriginal": "1986-12-26",
+      "ultimaReforma": "2014-01-10",
+      "vigenciaFallback": "2014-01-10",
+      "materias": [
+        "financiero",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LOSHF",
+      "titulo": "Ley Orgánica de Sociedad Hipotecaria Federal",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LOSHF.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/loshf.htm",
+      "archivo": "LOSHF",
+      "dofOriginal": "2001-10-11",
+      "ultimaReforma": "2024-04-01",
+      "vigenciaFallback": "2024-04-01",
+      "materias": [
+        "financiero",
+        "vivienda",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LOBB",
+      "titulo": "Ley Orgánica del Banco del Bienestar",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/164_190719.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lobb.htm",
+      "archivo": "164_190719",
+      "dofOriginal": "2001-06-01",
+      "ultimaReforma": "2019-07-19",
+      "vigenciaFallback": "2019-07-19",
+      "materias": [
+        "financiero",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LOBNCE",
+      "titulo": "Ley Orgánica del Banco Nacional de Comercio Exterior",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LOBNCE.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lobnce.htm",
+      "archivo": "LOBNCE",
+      "dofOriginal": "1986-01-20",
+      "ultimaReforma": "2024-04-01",
+      "vigenciaFallback": "2024-04-01",
+      "materias": [
+        "financiero",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LOBNOSP",
+      "titulo": "Ley Orgánica del Banco Nacional de Obras y Servicios Públicos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LOBNOSP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lobnosp.htm",
+      "archivo": "LOBNOSP",
+      "dofOriginal": "1986-01-20",
+      "ultimaReforma": "2024-04-01",
+      "vigenciaFallback": "2024-04-01",
+      "materias": [
+        "financiero",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LOBANJERCITO",
+      "titulo": "Ley Orgánica del Banco Nacional del Ejército, Fuerza Aérea y Armada",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/167.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lobnefaa.htm",
+      "archivo": "167",
+      "dofOriginal": "1986-01-13",
+      "ultimaReforma": "2014-01-10",
+      "vigenciaFallback": "2014-01-10",
+      "materias": [
+        "financiero",
+        "militar",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LOCFCRL",
+      "titulo": "Ley Orgánica del Centro Federal de Conciliación y Registro Laboral",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LOCFCRL_060120.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/locfcrl.htm",
+      "archivo": "LOCFCRL_060120",
+      "dofOriginal": "2020-01-06",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2020-01-06",
+      "materias": [
+        "laboral",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LOCGEUM",
+      "titulo": "Ley Orgánica del Congreso General de los Estados Unidos Mexicanos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LOCGEUM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/locg.htm",
+      "archivo": "LOCGEUM",
+      "dofOriginal": "1999-09-03",
+      "ultimaReforma": "2025-07-07",
+      "vigenciaFallback": "2025-07-07",
+      "materias": [
+        "legislativo",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LOEFAM",
+      "titulo": "Ley Orgánica del Ejército y Fuerza Aérea Mexicanos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LOEFAM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/loefam.htm",
+      "archivo": "LOEFAM",
+      "dofOriginal": "1986-12-26",
+      "ultimaReforma": "2025-07-16",
+      "vigenciaFallback": "2025-07-16",
+      "materias": [
+        "militar",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LOINAH",
+      "titulo": "Ley Orgánica del Instituto Nacional de Antropología e Historia",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/170_171215.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/loinah.htm",
+      "archivo": "170_171215",
+      "dofOriginal": "1939-02-03",
+      "ultimaReforma": "2015-12-17",
+      "vigenciaFallback": "2015-12-17",
+      "materias": [
+        "cultura",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LOIPN",
+      "titulo": "Ley Orgánica del Instituto Politécnico Nacional",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/171.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/loipn.htm",
+      "archivo": "171",
+      "dofOriginal": "1981-12-29",
+      "ultimaReforma": null,
+      "vigenciaFallback": "1981-12-29",
+      "materias": [
+        "educacion",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LOPJF",
+      "titulo": "Ley Orgánica del Poder Judicial de la Federación",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LOPJF.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lopjf.htm",
+      "archivo": "LOPJF",
+      "dofOriginal": "2024-12-20",
+      "ultimaReforma": "2025-11-28",
+      "vigenciaFallback": "2025-11-28",
+      "materias": [
+        "judicial",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LOSCM",
+      "titulo": "Ley Orgánica del Seminario de Cultura Mexicana",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LOSCM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/loscm.htm",
+      "archivo": "LOSCM",
+      "dofOriginal": "1949-12-31",
+      "ultimaReforma": "2022-05-11",
+      "vigenciaFallback": "2022-05-11",
+      "materias": [
+        "cultura",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LOTFJA",
+      "titulo": "Ley Orgánica del Tribunal Federal de Justicia Administrativa",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LOTFJA.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lotfja.htm",
+      "archivo": "LOTFJA",
+      "dofOriginal": "2016-07-18",
+      "ultimaReforma": "2025-10-16",
+      "vigenciaFallback": "2025-10-16",
+      "materias": [
+        "fiscal",
+        "administrativo",
+        "judicial"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LCNP",
+      "titulo": "Ley para Conservar la Neutralidad del País",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/176_210618.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lcnp.htm",
+      "archivo": "176_210618",
+      "dofOriginal": "1939-11-10",
+      "ultimaReforma": "2018-06-21",
+      "vigenciaFallback": "2018-06-21",
+      "materias": [
+        "internacional",
+        "militar"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LDVUMA",
+      "titulo": "Ley para Determinar el Valor de la Unidad de Medida y Actualización",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LDVUMA_301216.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/ldvuma.htm",
+      "archivo": "LDVUMA_301216",
+      "dofOriginal": "2016-12-30",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2016-12-30",
+      "materias": [
+        "fiscal",
+        "laboral"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LDCMPME",
+      "titulo": "Ley para el Desarrollo de la Competitividad de la Micro, Pequeña y Mediana Empresa",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LDCMPME.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/ldcmpme.htm",
+      "archivo": "LDCMPME",
+      "dofOriginal": "2002-12-30",
+      "ultimaReforma": "2023-10-20",
+      "vigenciaFallback": "2023-10-20",
+      "materias": [
+        "mercantil",
+        "competencia"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LDCPDC",
+      "titulo": "Ley para el Diálogo, la Conciliación y la Paz Digna en Chiapas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/177.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/ldcpdch.htm",
+      "archivo": "177",
+      "dofOriginal": "1995-03-11",
+      "ultimaReforma": null,
+      "vigenciaFallback": "1995-03-11",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFIIEDB",
+      "titulo": "Ley para el Fomento de la Inversión en Infraestructura Estratégica para el Desarrollo con Bienestar",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFIIEDB.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfiiedb.htm",
+      "archivo": "LFIIEDB",
+      "dofOriginal": "2026-04-09",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-04-09",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LUPDECR",
+      "titulo": "Ley para el uso y protección de la denominación y del emblema de la Cruz Roja",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LUPDECR.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lupdecr.htm",
+      "archivo": "LUPDECR",
+      "dofOriginal": "2007-03-23",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2007-03-23",
+      "materias": [
+        "cultura"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LIISPCEN",
+      "titulo": "Ley para Impulsar el Incremento Sostenido de la Productividad y la Competitividad de la Economía Nacional",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LIISPCEN.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/liispcen.htm",
+      "archivo": "LIISPCEN",
+      "dofOriginal": "2015-05-06",
+      "ultimaReforma": "2024-04-17",
+      "vigenciaFallback": "2024-04-17",
+      "materias": [
+        "competencia"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LCACSAM",
+      "titulo": "Ley para la Comprobación, Ajuste y Cómputo de Servicios de la Armada de México",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/268.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lcacsam.htm",
+      "archivo": "268",
+      "dofOriginal": "2004-06-14",
+      "ultimaReforma": "2009-06-12",
+      "vigenciaFallback": "2009-06-12",
+      "materias": [
+        "militar"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LCACSEFAM",
+      "titulo": "Ley para la Comprobación, Ajuste y Cómputo de Servicios en el Ejército y Fuerza Aérea Mexicanos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LCACSEFAM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lcacsefam.htm",
+      "archivo": "LCACSEFAM",
+      "dofOriginal": "2006-02-09",
+      "ultimaReforma": "2024-05-03",
+      "vigenciaFallback": "2024-05-03",
+      "materias": [
+        "militar"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LPPDDHP",
+      "titulo": "Ley para la Protección de Personas Defensoras de Derechos Humanos y Periodistas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LPPDDHP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lppddhp.htm",
+      "archivo": "LPPDDHP",
+      "dofOriginal": "2012-06-25",
+      "ultimaReforma": "2022-04-28",
+      "vigenciaFallback": "2022-04-28",
+      "materias": [
+        "derechos_humanos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LTPCPIMCP",
+      "titulo": "Ley para la Transparencia, Prevención y Combate de Prácticas Indebidas en Materia de Contratación de Publicidad",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LTPCPIMCP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/ltpcpimcp.htm",
+      "archivo": "LTPCPIMCP",
+      "dofOriginal": "2021-06-03",
+      "ultimaReforma": "2023-12-22",
+      "vigenciaFallback": "2023-12-22",
+      "materias": [
+        "competencia",
+        "transparencia"
+      ],
+      "excluida": "Declaratoria de invalidez de la ley (SCJN)."
+    },
+    {
+      "clave": "LTOSF",
+      "titulo": "Ley para la Transparencia y Ordenamiento de los Servicios Financieros",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LTOSF.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/ltosf.htm",
+      "archivo": "LTOSF",
+      "dofOriginal": "2007-06-15",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "financiero"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LRASCAP",
+      "titulo": "Ley para Regular las Actividades de las Sociedades Cooperativas de Ahorro y Préstamo",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LRASCAP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lrascap.htm",
+      "archivo": "LRASCAP",
+      "dofOriginal": "2009-08-13",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "financiero",
+        "cooperativas"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LRAF",
+      "titulo": "Ley para Regular las Agrupaciones Financieras",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LRAF.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lraf.htm",
+      "archivo": "LRAF",
+      "dofOriginal": "2014-01-10",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "financiero"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LRITF",
+      "titulo": "Ley para Regular las Instituciones de Tecnología Financiera",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LRITF.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lritf.htm",
+      "archivo": "LRITF",
+      "dofOriginal": "2018-03-09",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "financiero"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LRSIC",
+      "titulo": "Ley para Regular las Sociedades de Información Crediticia",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LRSIC.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lrsic.htm",
+      "archivo": "LRSIC",
+      "dofOriginal": "2002-01-15",
+      "ultimaReforma": "2024-01-24",
+      "vigenciaFallback": "2024-01-24",
+      "materias": [
+        "financiero"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LABDC",
+      "titulo": "Ley que Aprueba la Adhesión de México al Convenio Constitutivo del Banco de Desarrollo del Caribe y su Ejecución",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/187_291214.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lmccbdc.htm",
+      "archivo": "187_291214",
+      "dofOriginal": "1982-01-05",
+      "ultimaReforma": "2014-12-29",
+      "vigenciaFallback": "2014-12-29",
+      "materias": [
+        "financiero",
+        "internacional"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFGFAGA",
+      "titulo": "Ley que Crea el Fondo de Garantía y Fomento para la Agricultura, Ganadería y Avicultura",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/192.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfgfaga.htm",
+      "archivo": "192",
+      "dofOriginal": "1954-12-31",
+      "ultimaReforma": "2012-04-09",
+      "vigenciaFallback": "2012-04-09",
+      "materias": [
+        "financiero",
+        "agrario",
+        "cultura",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LINBAL",
+      "titulo": "Ley que crea el Instituto Nacional de Bellas Artes y Literatura",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/193_171215.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/linbal.htm",
+      "archivo": "193_171215",
+      "dofOriginal": "1946-12-31",
+      "ultimaReforma": "2015-12-17",
+      "vigenciaFallback": "2015-12-17",
+      "materias": [
+        "cultura",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LAEM",
+      "titulo": "Ley que crea la Agencia Espacial Mexicana",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LAEM.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/laem.htm",
+      "archivo": "LAEM",
+      "dofOriginal": "2010-07-30",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2010-07-30",
+      "materias": [
+        "transporte",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LUACH",
+      "titulo": "Ley que crea la Universidad Autónoma Chapingo",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/195.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/luach.htm",
+      "archivo": "195",
+      "dofOriginal": "1974-12-30",
+      "ultimaReforma": "1977-12-30",
+      "vigenciaFallback": "1977-12-30",
+      "materias": [
+        "agrario",
+        "educacion",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LUEFA",
+      "titulo": "Ley que Crea la Universidad del Ejército y Fuerza Aérea",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/196.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/luefa.htm",
+      "archivo": "196",
+      "dofOriginal": "1975-12-29",
+      "ultimaReforma": null,
+      "vigenciaFallback": "1975-12-29",
+      "materias": [
+        "educacion",
+        "militar",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LRMNU",
+      "titulo": "Ley que Declara Reservas Mineras Nacionales los Yacimientos de Uranio, Torio y las demás Substancias de las cuales se Obtengan Isótopos Hendibles que puedan Producir Energía Nuclear",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/197.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lrmnyut.htm",
+      "archivo": "197",
+      "dofOriginal": "1950-01-26",
+      "ultimaReforma": "1972-01-12",
+      "vigenciaFallback": "1972-01-12",
+      "materias": [
+        "energia"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LCCAIF",
+      "titulo": "Ley que Establece Bases para la Ejecución en México, por el Poder Ejecutivo Federal, del Convenio Constitutivo de la Asociación Internacional de Fomento",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LCCAIF.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lccaif.htm",
+      "archivo": "LCCAIF",
+      "dofOriginal": "1960-12-31",
+      "ultimaReforma": "2025-06-06",
+      "vigenciaFallback": "2025-06-06",
+      "materias": [
+        "internacional"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LBID",
+      "titulo": "Ley que Establece Bases para la Ejecución en México, por el Poder Ejecutivo Federal, del Convenio Constitutivo del Banco Interamericano de Desarrollo",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/200_291214.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lccbid.htm",
+      "archivo": "200_291214",
+      "dofOriginal": "1959-12-19",
+      "ultimaReforma": "2014-12-29",
+      "vigenciaFallback": "2014-12-29",
+      "materias": [
+        "financiero",
+        "internacional"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LRART76-V",
+      "titulo": "Ley Reglamentaria de la Fracción V del Artículo 76 de la Constitución General de la República",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/202.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lrfv_art76.htm",
+      "archivo": "202",
+      "dofOriginal": "1978-12-29",
+      "ultimaReforma": null,
+      "vigenciaFallback": "1978-12-29",
+      "materias": [
+        "constitucional"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LRART76-VI",
+      "titulo": "Ley Reglamentaria de la fracción VI del artículo 76 de la Constitución Política de los Estados Unidos Mexicanos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LRArt76_fracVI.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lrart76_fracvi.htm",
+      "archivo": "LRArt76_fracVI",
+      "dofOriginal": "2007-08-31",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "constitucional"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LRART123-XIIIBIS",
+      "titulo": "Ley Reglamentaria de la Fracción XIII Bis del Apartado B, del Artículo 123 de la Constitución Política de los Estados Unidos Mexicanos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LRFXIIIB_Art123.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lrfxiiib_art123.htm",
+      "archivo": "LRFXIIIB_Art123",
+      "dofOriginal": "1983-12-30",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "constitucional"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LRART73-XVIII",
+      "titulo": "Ley Reglamentaria de la Fracción XVIII del Artículo 73 Constitucional, en lo que se Refiere a la Facultad del Congreso para Dictar Reglas para Determinar el Valor Relativo de la Moneda Extranjera",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/204.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lrfxviii_art73.htm",
+      "archivo": "204",
+      "dofOriginal": "1982-12-27",
+      "ultimaReforma": null,
+      "vigenciaFallback": "1982-12-27",
+      "materias": [
+        "constitucional"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LRART105",
+      "titulo": "Ley Reglamentaria de las Fracciones I y II del Artículo 105 de la Constitución Política de los Estados Unidos Mexicanos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LRFIyII_Art105.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lrfiyii_art105.htm",
+      "archivo": "LRFIyII_Art105",
+      "dofOriginal": "1995-05-11",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "constitucional"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LRART27-NUCLEAR",
+      "titulo": "Ley Reglamentaria del Artículo 27 Constitucional en Materia Nuclear",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/207.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lrart27_mn.htm",
+      "archivo": "207",
+      "dofOriginal": "1985-02-04",
+      "ultimaReforma": "2012-04-09",
+      "vigenciaFallback": "2012-04-09",
+      "materias": [
+        "energia"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LRART3-MMCE",
+      "titulo": "Ley Reglamentaria del Artículo 3o. de la Constitución Política de los Estados Unidos Mexicanos, en materia de Mejora Continua de la Educación",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LRArt3_MMCE_300919.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lrart3_mmce.htm",
+      "archivo": "LRArt3_MMCE_300919",
+      "dofOriginal": "2019-09-30",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2019-09-30",
+      "materias": [
+        "educacion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LPROF",
+      "titulo": "Ley Reglamentaria del Artículo 5o. Constitucional, relativo al ejercicio de las profesiones en la Ciudad de México",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/208_190118.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lrart5_prof.htm",
+      "archivo": "208_190118",
+      "dofOriginal": "1945-05-26",
+      "ultimaReforma": "2018-01-19",
+      "vigenciaFallback": "2018-01-19",
+      "materias": [
+        "administrativo",
+        "laboral"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LRART6-MDR",
+      "titulo": "Ley Reglamentaria del artículo 6o., párrafo primero, de la Constitución Política de los Estados Unidos Mexicanos, en materia del Derecho de Réplica",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LRArt6_MDR.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lrart6_mdr.htm",
+      "archivo": "LRArt6_MDR",
+      "dofOriginal": "2015-11-04",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "telecomunicaciones"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LRSF",
+      "titulo": "Ley Reglamentaria del Servicio Ferroviario",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LRSF.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lrsf.htm",
+      "archivo": "LRSF",
+      "dofOriginal": "1995-05-12",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "transporte"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LCA",
+      "titulo": "Ley sobre Cámaras Agrícolas, que en lo sucesivo se denominarán Asociaciones Agrícolas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/23.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lcaaa.htm",
+      "archivo": "23",
+      "dofOriginal": "1932-08-27",
+      "ultimaReforma": "2012-04-09",
+      "vigenciaFallback": "2012-04-09",
+      "materias": [
+        "agrario"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LSCS",
+      "titulo": "Ley Sobre el Contrato de Seguro",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/211.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lcs.htm",
+      "archivo": "211",
+      "dofOriginal": "1935-08-31",
+      "ultimaReforma": "2013-04-04",
+      "vigenciaFallback": "2013-04-04",
+      "materias": [
+        "seguros",
+        "mercantil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LEBHN",
+      "titulo": "Ley sobre el Escudo, la Bandera y el Himno Nacionales",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LEBHN.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lebhn.htm",
+      "archivo": "LEBHN",
+      "dofOriginal": "1984-02-08",
+      "ultimaReforma": "2025-07-21",
+      "vigenciaFallback": "2025-07-21",
+      "materias": [
+        "cultura"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LATIME",
+      "titulo": "Ley Sobre la Aprobación de Tratados Internacionales en Materia Económica",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/271.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/latime.htm",
+      "archivo": "271",
+      "dofOriginal": "2004-09-02",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2004-09-02",
+      "materias": [
+        "comercio_exterior",
+        "internacional"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LSCT",
+      "titulo": "Ley sobre la Celebración de Tratados",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LSCT.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lsct.htm",
+      "archivo": "LSCT",
+      "dofOriginal": "1992-01-02",
+      "ultimaReforma": "2025-11-14",
+      "vigenciaFallback": "2025-11-14",
+      "materias": [
+        "internacional"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LRPCAP",
+      "titulo": "Ley sobre Refugiados, Protección Complementaria y Asilo Político",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LRPCAP.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lrpcap.htm",
+      "archivo": "LRPCAP",
+      "dofOriginal": "2011-01-27",
+      "ultimaReforma": "2022-02-18",
+      "vigenciaFallback": "2022-02-18",
+      "materias": [
+        "derechos_humanos",
+        "migracion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "OGA",
+      "titulo": "Ordenanza General de la Armada DOF 01 al 08/01/1912",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/218.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/oga.htm",
+      "archivo": "218",
+      "dofOriginal": "2000-10-19",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2000-10-19",
+      "materias": [
+        "militar"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "PEF",
+      "titulo": "Presupuesto de Egresos de la Federación para el Ejercicio Fiscal 2026",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/PEF_2026.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/pef_2026.htm",
+      "archivo": "PEF_2026",
+      "dofOriginal": "2025-11-21",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-11-21",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ],
+      "excluida": "Presupuesto de Egresos: tablas presupuestales, no texto normativo citable por artículo."
+    },
+    {
+      "clave": "RCD",
+      "titulo": "Reglamento de la Cámara de Diputados",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/Reg_Diputados.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/reg_diputados.htm",
+      "archivo": "Reg_Diputados",
+      "dofOriginal": "2010-12-24",
+      "ultimaReforma": "2025-05-07",
+      "vigenciaFallback": "2025-05-07",
+      "materias": [
+        "legislativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "RSR",
+      "titulo": "Reglamento del Senado de la República",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/Reg_Senado.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/reg_senado.htm",
+      "archivo": "Reg_Senado",
+      "dofOriginal": "2010-06-04",
+      "ultimaReforma": "2024-12-06",
+      "vigenciaFallback": "2024-12-06",
+      "materias": [
+        "legislativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "RGICG",
+      "titulo": "Reglamento para el Gobierno Interior del Congreso General de los Estados Unidos Mexicanos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/219.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/rgic.htm",
+      "archivo": "219",
+      "dofOriginal": "1934-03-20",
+      "ultimaReforma": "2010-12-24",
+      "vigenciaFallback": "2010-12-24",
+      "materias": [
+        "legislativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "LFC",
+      "titulo": "Ley Federal de Cinematografía",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFC.pdf",
+      "urlRef": "https://www.diputados.gob.mx/LeyesBiblio/ref/lfc.htm",
+      "archivo": "LFC",
+      "dofOriginal": "1992-12-29",
+      "ultimaReforma": null,
+      "vigenciaFallback": "1992-12-29",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": "Abrogada: Ley Abrogada"
+    }
+  ]
+}

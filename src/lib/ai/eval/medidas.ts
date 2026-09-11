@@ -1,3 +1,4 @@
+import { alternanciaClaves } from "@/lib/fiscal-kb/ingest-leyes";
 // ─────────────────────────────────────────────────────────────────────────────
 // Medidas PURAS del eval del copiloto: tipos, normalización de citas, extracción
 // de citas de un texto y el resumen. Sin Prisma, sin Anthropic, sin next-auth —
@@ -67,7 +68,8 @@ export function normalizarCita(c: string): string {
   );
 }
 
-const RE_ART = /\bart(?:[íi]culo|\.)?\s*(\d+(?:-[A-Z]+)?(?:\s+bis)?)\s*(?:,?\s*(?:fracci[óo]n\s+[IVXL]+\s*)?)?(?:de\s+la\s+|del\s+)?(RLISR|RLIVA|RCFF|CCOM|LGSM|RLFPIORPI|LFPIORPI|LFDC|RACERF|RIPAEDI|LHPUE|CFPUE|CFCDMX|LISR|LIVA|CFF|LIEPS|LSS|LINFONAVIT|LFT)\b/gi;
+// Las claves salen del catálogo (más larga primero), como en fusion.ts.
+const RE_ART = new RegExp(String.raw`\bart(?:[íi]culo|\.)?\s*(\d+(?:-[A-Z]+)?(?:\s+bis)?)\s*(?:,?\s*(?:fracci[óo]n\s+[IVXL]+\s*)?)?(?:de\s+la\s+|del\s+)?(${alternanciaClaves()})\b`, "gi");
 const RE_REGLA = /\bregla\s+(\d+(?:\.\d+){2,3})\b(?:\s*(?:de\s+la\s+)?(RMF(?:-\d{4})?))?/gi;
 
 /** Citas a leyes/reglas que la RESPUESTA afirma (para detectar inventadas). */

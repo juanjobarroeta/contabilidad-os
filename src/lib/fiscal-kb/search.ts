@@ -29,6 +29,15 @@ export interface FiscalSearchOptions {
   fechaVigencia?: Date;
   /** Filtrar por tipo de fuente: LEY | RMF | CRITERIO | DOF | REGLAMENTO | TESIS | GUIA. */
   fuentes?: string[];
+  /**
+   * Materias del ordenamiento (fiscal, laboral, civil…; ver materias.ts).
+   * Vacío = todas. El hub pasa MATERIAS_CONTADOR desde el executor — el
+   * modelo no lo elige — y el producto legal busca sin filtro.
+   */
+  materias?: readonly string[];
+  /** Ámbito (FEDERAL | ESTATAL | MUNICIPAL | INTERNACIONAL) y entidad (PUE, CMX) del ordenamiento. */
+  ambito?: string;
+  entidad?: string;
   limit?: number;
   /** Piso de confianza del brazo vector — debajo se reporta «sin fundamento» antes que un match débil. */
   minSimilarity?: number;
@@ -60,7 +69,7 @@ export interface FiscalSearchResult {
   resultados: FiscalSearchHit[];
   fechaVigenciaConsultada: string;
   /** Qué brazos y ajustes produjeron el resultado (para la traza y el eval). */
-  busqueda: { modo: ModoBusqueda; rerank: boolean; candidatos: number; referenciasExactas: string[] };
+  busqueda: { modo: ModoBusqueda; rerank: boolean; candidatos: number; referenciasExactas: string[]; materias?: string[] };
   aviso?: string;
 }
 
@@ -128,14 +137,22 @@ function filtroFuentes(fuentes?: string[]) {
   return fuentes && fuentes.length > 0 ? Prisma.sql`AND d."source"::text IN (${Prisma.join(fuentes)})` : Prisma.empty;
 }
 
+/** Condiciones sobre el DOCUMENTO (fuente, materias, ámbito, entidad) que comparten los tres brazos. */
+function filtroDocumento(opts: Pick<FiscalSearchOptions, "fuentes" | "materias" | "ambito" | "entidad">) {
+  const materias = opts.materias && opts.materias.length > 0 ? Prisma.sql`AND d."materias" && ${[...opts.materias]}::text[]` : Prisma.empty;
+  const ambito = opts.ambito ? Prisma.sql`AND d."ambito" = ${opts.ambito}::"AmbitoJuridico"` : Prisma.empty;
+  const entidad = opts.entidad ? Prisma.sql`AND d."entidad" = ${opts.entidad}` : Prisma.empty;
+  return Prisma.sql`${filtroFuentes(opts.fuentes)} ${materias} ${ambito} ${entidad}`;
+}
+
 /** Brazo vector: vecinos más cercanos por coseno. */
-async function brazoVector(vec: string, fecha: Date, fuentes: string[] | undefined, n: number): Promise<Row[]> {
+async function brazoVector(vec: string, fecha: Date, filtroDoc: Prisma.Sql, n: number): Promise<Row[]> {
   return prisma.$queryRaw<Row[]>`
     SELECT ${COLUMNAS}, 1 - (c."embedding" <=> ${vec}::vector) AS "similitud"
     FROM "FiscalChunk" c
     JOIN "FiscalDocument" d ON d."id" = c."documentId"
     WHERE ${filtroVigencia(fecha)}
-      ${filtroFuentes(fuentes)}
+      ${filtroDoc}
     ORDER BY c."embedding" <=> ${vec}::vector
     LIMIT ${n}`;
 }
@@ -151,7 +168,7 @@ async function brazoVector(vec: string, fecha: Date, fuentes: string[] | undefin
  * híbrido medía igual que el vector. Con OR entra todo lo que comparte
  * vocabulario y ts_rank_cd premia al que comparte más.
  */
-async function brazoLexico(query: string, vec: string, fecha: Date, fuentes: string[] | undefined, n: number): Promise<Row[]> {
+async function brazoLexico(query: string, vec: string, fecha: Date, filtroDoc: Prisma.Sql, n: number): Promise<Row[]> {
   return prisma.$queryRaw<Row[]>`
     WITH q AS (
       SELECT to_tsquery('spanish', string_agg('''' || replace(lexeme, '''', '') || '''', ' | ')) AS tsq
@@ -164,7 +181,7 @@ async function brazoLexico(query: string, vec: string, fecha: Date, fuentes: str
     CROSS JOIN q
     WHERE q.tsq IS NOT NULL AND c."tsv" @@ q.tsq
       AND ${filtroVigencia(fecha)}
-      ${filtroFuentes(fuentes)}
+      ${filtroDoc}
     ORDER BY "rankLex" DESC
     LIMIT ${n}`;
 }
@@ -177,7 +194,7 @@ function variantesArticulo(articulo: string): string[] {
 }
 
 /** Brazo exacto: los chunks del artículo/regla que la pregunta nombra. */
-async function brazoExacto(query: string, vec: string, fecha: Date, fuentes: string[] | undefined): Promise<{ rows: Row[]; refs: string[] }> {
+async function brazoExacto(query: string, vec: string, fecha: Date, filtroDoc: Prisma.Sql): Promise<{ rows: Row[]; refs: string[] }> {
   const refs = referenciasExactas(query);
   const rows: Row[] = [];
   for (const r of refs) {
@@ -196,7 +213,7 @@ async function brazoExacto(query: string, vec: string, fecha: Date, fuentes: str
           AND (c."parte" IS NULL OR c."parte" > 0)
           ${filtroClave}
           AND ${filtroVigencia(fecha)}
-          ${filtroFuentes(fuentes)}
+          ${filtroDoc}
         ORDER BY 1 - (c."embedding" <=> ${vec}::vector) DESC
         LIMIT 6`)
     );
@@ -268,14 +285,15 @@ export async function searchFiscalKnowledge(query: string, opts: FiscalSearchOpt
   const candidatos = Math.min(limit * 4, 40);
 
   const vec = toVectorLiteral(await embedQuery(query, opts.cost ? { ...opts.cost, subtipo: "kb.embed_query" } : undefined));
+  const filtroDoc = filtroDocumento(opts);
 
   let ordenados: Row[];
   let refs: string[] = [];
   if (modo === "hibrido") {
     const [exacto, vector, lexico] = await Promise.all([
-      brazoExacto(query, vec, fecha, opts.fuentes),
-      brazoVector(vec, fecha, opts.fuentes, candidatos),
-      brazoLexico(query, vec, fecha, opts.fuentes, candidatos),
+      brazoExacto(query, vec, fecha, filtroDoc),
+      brazoVector(vec, fecha, filtroDoc, candidatos),
+      brazoLexico(query, vec, fecha, filtroDoc, candidatos),
     ]);
     refs = exacto.refs;
     const enVector = new Set(vector.map((r) => r.id));
@@ -288,7 +306,7 @@ export async function searchFiscalKnowledge(query: string, opts: FiscalSearchOpt
     const exactos = new Set(exacto.rows.map((r) => r.id));
     ordenados = [...sinPiso.filter((r) => exactos.has(r.id)), ...sinPiso.filter((r) => !exactos.has(r.id))];
   } else {
-    ordenados = (await brazoVector(vec, fecha, opts.fuentes, candidatos)).filter((r) => r.similitud >= minSim);
+    ordenados = (await brazoVector(vec, fecha, filtroDoc, candidatos)).filter((r) => r.similitud >= minSim);
   }
 
   ordenados = await sustituirResumenes(ordenados, vec, fecha);
@@ -311,7 +329,7 @@ export async function searchFiscalKnowledge(query: string, opts: FiscalSearchOpt
   const result: FiscalSearchResult = {
     resultados,
     fechaVigenciaConsultada: fecha.toISOString().slice(0, 10),
-    busqueda: { modo, rerank, candidatos: candidatosRerank, referenciasExactas: refs },
+    busqueda: { modo, rerank, candidatos: candidatosRerank, referenciasExactas: refs, ...(opts.materias && opts.materias.length > 0 ? { materias: [...opts.materias] } : {}) },
   };
   if (resultados.length === 0) {
     result.aviso =
