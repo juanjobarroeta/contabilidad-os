@@ -48,6 +48,10 @@ export interface ResultadoPregunta {
 
 /** «Art. 17-H Bis CFF» / «ART 17-H BIS CFF» / «artículo 17-H bis del CFF» → «ART. 17-H BIS CFF». */
 export function normalizarCita(c: string): string {
+  // Una tesis se identifica por su registro digital: «Jurisprudencia 1a./J.
+  // 215/2025 (11a.), reg. 2031002» y «registro 2031002» son la misma cita.
+  const reg = c.match(/\breg(?:istro)?\.?\s*(?:digital\s*)?(\d{6,7})\b/i);
+  if (reg) return `REG. ${reg[1]}`;
   return (
     c
       .toUpperCase()
@@ -72,11 +76,15 @@ export function normalizarCita(c: string): string {
 const RE_ART = new RegExp(String.raw`\bart(?:[íi]culo|\.)?\s*(\d+(?:-[A-Z]+)?(?:\s+bis)?)\s*(?:,?\s*(?:fracci[óo]n\s+[IVXL]+\s*)?)?(?:de\s+la\s+|del\s+)?(${alternanciaClaves()})\b`, "gi");
 const RE_REGLA = /\bregla\s+(\d+(?:\.\d+){2,3})\b(?:\s*(?:de\s+la\s+)?(RMF(?:-\d{4})?))?/gi;
 
-/** Citas a leyes/reglas que la RESPUESTA afirma (para detectar inventadas). */
+// «reg. 2031002», «registro digital 2031002»: la tesis citada por su registro.
+const RE_TESIS = /\breg(?:istro)?\.?\s*(?:digital\s*)?(\d{6,7})\b/gi;
+
+/** Citas a leyes/reglas/tesis que la RESPUESTA afirma (para detectar inventadas). */
 export function extraerCitas(texto: string): string[] {
   const out = new Set<string>();
   for (const m of texto.matchAll(RE_ART)) out.add(normalizarCita(`Art. ${m[1]} ${m[2]}`));
   for (const m of texto.matchAll(RE_REGLA)) out.add(normalizarCita(`Regla ${m[1]} ${m[2] ?? "RMF"}`));
+  for (const m of texto.matchAll(RE_TESIS)) out.add(`REG. ${m[1]}`);
   return [...out];
 }
 

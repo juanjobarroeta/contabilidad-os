@@ -23,8 +23,8 @@ export interface CandidatoRerank {
   texto: string;
 }
 
-const SYSTEM = `Eres un fiscalista mexicano experto. Recibes una pregunta y una lista numerada de fragmentos de leyes, reglamentos, reglas de la RMF o guías del SAT. Ordena los fragmentos de MÁS a MENOS útiles para fundamentar la respuesta a esa pregunta exacta.
-Criterios: (1) el fragmento responde directamente lo que se pregunta; (2) la LEY va antes que su reglamento cuando ambos tratan lo mismo; (3) el artículo exacto va antes que uno vecino que sólo comparte tema; (4) una guía de llenado sólo va arriba si la pregunta es de cómo llenar un CFDI.
+const SYSTEM = `Eres un fiscalista mexicano experto. Recibes una pregunta y una lista numerada de fragmentos de leyes, reglamentos, reglas de la RMF, guías del SAT o tesis del Semanario Judicial de la Federación. Ordena los fragmentos de MÁS a MENOS útiles para fundamentar la respuesta a esa pregunta exacta.
+Criterios: (1) el fragmento responde directamente lo que se pregunta; (2) la LEY va antes que su reglamento cuando ambos tratan lo mismo; (3) el artículo exacto va antes que uno vecino que sólo comparte tema; (4) una guía de llenado sólo va arriba si la pregunta es de cómo llenar un CFDI; (5) entre tesis, una «Jurisprudencia» (obligatoria) va antes que una «Tesis aislada», y la Época más reciente antes que una vieja sobre el mismo punto.
 Responde ÚNICAMENTE con JSON: {"orden": [números de los fragmentos, mejor primero]}. Incluye todos los números; no expliques.`;
 
 /** Aplica el orden que devolvió el modelo; lo que no mencione va al final en el orden original. */

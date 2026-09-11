@@ -38,6 +38,10 @@ export interface FiscalSearchOptions {
   /** Ámbito (FEDERAL | ESTATAL | MUNICIPAL | INTERNACIONAL) y entidad (PUE, CMX) del ordenamiento. */
   ambito?: string;
   entidad?: string;
+  /** Sólo TESIS: Épocas cortas («9a.», «11a.»), tipo de criterio, y si entran las interrumpidas/superadas (default no). */
+  epocas?: readonly string[];
+  tipoCriterio?: "JURISPRUDENCIA" | "AISLADA";
+  incluirNoVigentes?: boolean;
   limit?: number;
   /** Piso de confianza del brazo vector — debajo se reporta «sin fundamento» antes que un match débil. */
   minSimilarity?: number;
@@ -63,6 +67,11 @@ export interface FiscalSearchHit {
   vigenciaDesde: string; // ISO date
   publicadoDof: string | null;
   similitud: number;
+  /** Sólo TESIS. */
+  registro?: string | null;
+  numeroTesis?: string | null;
+  tipoCriterio?: string | null;
+  epoca?: string | null;
 }
 
 export interface FiscalSearchResult {
@@ -93,10 +102,21 @@ function rerankPorDefecto(): boolean {
   return !(v === "0" || v === "false");
 }
 
-/** Source-aware citation label: leyes cite artículos, RMF cita reglas, guías su título. */
-export function buildCita(source: string, clave: string, articulo: string | null, titulo: string): string {
+/** Source-aware citation label: leyes cite artículos, RMF cita reglas, guías su título, tesis su número y registro. */
+export function buildCita(
+  source: string,
+  clave: string,
+  articulo: string | null,
+  titulo: string,
+  tesis?: { numeroTesis?: string | null; tipoCriterio?: string | null }
+): string {
   if (articulo === "TRANSITORIOS") return `${clave} — TRANSITORIOS`;
   switch (source) {
+    case "TESIS": {
+      const etiqueta = tesis?.tipoCriterio === "JURISPRUDENCIA" ? "Jurisprudencia" : "Tesis aislada";
+      const registro = articulo ?? clave.replace(/^SJF-/, "");
+      return tesis?.numeroTesis ? `${etiqueta} ${tesis.numeroTesis}, reg. ${registro}` : `${etiqueta} reg. ${registro}`;
+    }
     case "LEY":
     case "REGLAMENTO":
       return articulo ? `Art. ${articulo} ${clave}` : clave;
@@ -123,11 +143,15 @@ interface Row {
   url: string;
   publicadoDof: Date | null;
   similitud: number;
+  numeroTesis: string | null;
+  tipoCriterio: string | null;
+  epoca: string | null;
 }
 
 const COLUMNAS = Prisma.sql`
   c."id", c."documentId", c."articulo", c."parte", c."contexto", c."texto", c."vigenciaDesde",
-  d."source"::text AS "source", d."clave", d."titulo", d."url", d."publicadoDof"`;
+  d."source"::text AS "source", d."clave", d."titulo", d."url", d."publicadoDof",
+  d."numeroTesis", d."tipoCriterio"::text AS "tipoCriterio", d."epoca"`;
 
 function filtroVigencia(fecha: Date) {
   return Prisma.sql`c."vigenciaDesde" <= ${fecha} AND (c."vigenciaHasta" IS NULL OR c."vigenciaHasta" >= ${fecha})`;
@@ -138,11 +162,16 @@ function filtroFuentes(fuentes?: string[]) {
 }
 
 /** Condiciones sobre el DOCUMENTO (fuente, materias, ámbito, entidad) que comparten los tres brazos. */
-function filtroDocumento(opts: Pick<FiscalSearchOptions, "fuentes" | "materias" | "ambito" | "entidad">) {
+function filtroDocumento(opts: Pick<FiscalSearchOptions, "fuentes" | "materias" | "ambito" | "entidad" | "epocas" | "tipoCriterio" | "incluirNoVigentes">) {
   const materias = opts.materias && opts.materias.length > 0 ? Prisma.sql`AND d."materias" && ${[...opts.materias]}::text[]` : Prisma.empty;
   const ambito = opts.ambito ? Prisma.sql`AND d."ambito" = ${opts.ambito}::"AmbitoJuridico"` : Prisma.empty;
   const entidad = opts.entidad ? Prisma.sql`AND d."entidad" = ${opts.entidad}` : Prisma.empty;
-  return Prisma.sql`${filtroFuentes(opts.fuentes)} ${materias} ${ambito} ${entidad}`;
+  const epocas = opts.epocas && opts.epocas.length > 0 ? Prisma.sql`AND d."epoca" IN (${Prisma.join([...opts.epocas])})` : Prisma.empty;
+  const tipo = opts.tipoCriterio ? Prisma.sql`AND d."tipoCriterio" = ${opts.tipoCriterio}::"TipoCriterio"` : Prisma.empty;
+  // Una tesis interrumpida, sustituida o superada no fundamenta nada hoy; sólo
+  // entra si se pide explícitamente (historia de un criterio).
+  const vigentes = opts.incluirNoVigentes ? Prisma.empty : Prisma.sql`AND (d."estadoCriterio" IS NULL OR d."estadoCriterio" = 'VIGENTE')`;
+  return Prisma.sql`${filtroFuentes(opts.fuentes)} ${materias} ${ambito} ${entidad} ${epocas} ${tipo} ${vigentes}`;
 }
 
 /** Brazo vector: vecinos más cercanos por coseno. */
@@ -254,8 +283,10 @@ async function sustituirResumenes(rows: Row[], vec: string, fecha: Date): Promis
 }
 
 function aHit(r: Row): FiscalSearchHit {
+  const tesis = r.source === "TESIS" ? { registro: r.articulo, numeroTesis: r.numeroTesis, tipoCriterio: r.tipoCriterio, epoca: r.epoca } : {};
   return {
-    cita: buildCita(r.source, r.clave, r.articulo, r.titulo),
+    ...tesis,
+    cita: buildCita(r.source, r.clave, r.articulo, r.titulo, r),
     texto: r.texto,
     fuente: r.source,
     ley: r.clave,
@@ -315,7 +346,7 @@ export async function searchFiscalKnowledge(query: string, opts: FiscalSearchOpt
     const top = ordenados.slice(0, candidatosRerank);
     const reordenados = await rerankCandidatos(
       query,
-      top.map((r) => ({ ...r, cita: buildCita(r.source, r.clave, r.articulo, r.titulo) })),
+      top.map((r) => ({ ...r, cita: buildCita(r.source, r.clave, r.articulo, r.titulo, r) })),
       { cost: opts.cost }
     );
     if (reordenados) ordenados = [...reordenados, ...ordenados.slice(candidatosRerank)];
@@ -373,7 +404,7 @@ export async function getArticulo(clave: string, articulo: string, fechaVigencia
   if (rows.length === 0) return null;
   const r = rows[0];
   return {
-    cita: buildCita(r.source, r.clave, r.articulo, r.titulo),
+    cita: buildCita(r.source, r.clave, r.articulo, r.titulo, r),
     ley: r.clave,
     titulo: r.titulo,
     url: r.url,
@@ -381,5 +412,65 @@ export async function getArticulo(clave: string, articulo: string, fechaVigencia
     contexto: r.contexto,
     vigenciaDesde: r.vigenciaDesde.toISOString().slice(0, 10),
     partes: rows.map((x) => ({ parte: x.parte, texto: x.texto })),
+  };
+}
+
+// ── Jurisprudencia (docs/MOTOR-JURIDICO.md F1) ───────────────────────────────
+
+/** La misma búsqueda, restringida a tesis del SJF. */
+export function searchJurisprudencia(query: string, opts: Omit<FiscalSearchOptions, "fuentes"> = {}): Promise<FiscalSearchResult> {
+  return searchFiscalKnowledge(query, { ...opts, fuentes: ["TESIS"] });
+}
+
+export interface TesisCompleta {
+  cita: string;
+  registro: string;
+  numeroTesis: string | null;
+  tipoCriterio: string | null;
+  estadoCriterio: string | null;
+  epoca: string | null;
+  instancia: string | null;
+  organo: string | null;
+  materias: string[];
+  fechaPublicacion: string | null;
+  /** Desde cuándo obliga (nota de publicación del SJF). */
+  obligatoriaDesde: string;
+  rubro: string;
+  url: string;
+  texto: string;
+}
+
+/** Una tesis entera por su registro digital (el «get_articulo» de la jurisprudencia). */
+export async function getTesis(registro: string): Promise<TesisCompleta | null> {
+  const reg = registro.trim().replace(/^SJF-/i, "");
+  const docs = await prisma.$queryRaw<
+    {
+      id: string; clave: string; titulo: string; url: string; registro: string | null; numeroTesis: string | null; tipoCriterio: string | null;
+      estadoCriterio: string | null; epoca: string | null; instancia: string | null; organo: string | null; materias: string[];
+      fechaPublicacion: Date | null; vigenciaDesde: Date;
+    }[]
+  >`
+    SELECT "id", "clave", "titulo", "url", "registro", "numeroTesis", "tipoCriterio"::text AS "tipoCriterio", "estadoCriterio"::text AS "estadoCriterio",
+      "epoca", "instancia", "organo", "materias", "fechaPublicacion", "vigenciaDesde"
+    FROM "FiscalDocument" WHERE "registro" = ${reg} LIMIT 1`;
+  const d = docs[0];
+  if (!d) return null;
+  const partes = await prisma.$queryRaw<{ texto: string }[]>`
+    SELECT "texto" FROM "FiscalChunk" WHERE "documentId" = ${d.id} AND ("parte" IS NULL OR "parte" > 0) ORDER BY "parte" ASC NULLS FIRST`;
+  return {
+    cita: buildCita("TESIS", d.clave, d.registro, d.titulo, d),
+    registro: d.registro ?? reg,
+    numeroTesis: d.numeroTesis,
+    tipoCriterio: d.tipoCriterio,
+    estadoCriterio: d.estadoCriterio,
+    epoca: d.epoca,
+    instancia: d.instancia,
+    organo: d.organo,
+    materias: d.materias,
+    fechaPublicacion: d.fechaPublicacion ? d.fechaPublicacion.toISOString().slice(0, 10) : null,
+    obligatoriaDesde: d.vigenciaDesde.toISOString().slice(0, 10),
+    rubro: d.titulo,
+    url: d.url,
+    texto: partes.map((p) => p.texto).join("\n"),
   };
 }
