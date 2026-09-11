@@ -48,6 +48,15 @@
 > (67.7 %) antes de F0. Las mediciones de la tarde (69/96) eran sin filtro de
 > materias, así que no comparan. Sin regresión.
 >
+> **Superficie de prueba (2026-09-11):** `/operador/juridico` — el perfil
+> abogado (`src/lib/ai/system-prompt-abogado.ts`, `tools-abogado.ts`,
+> `executor-abogado.ts`) sobre todo el corpus + jurisprudencia, sin empresa,
+> con verificación de citas siempre encendida, conversaciones guardadas
+> (`JuridicoConversacion` / `JuridicoMensaje`) y la traza de cada respuesta a
+> la vista (herramientas, fundamentos devueltos, verificación) más pulgar
+> arriba/abajo. Sólo operador; el gasto se registra al usuario (subtipo
+> `ai.juridico`). Es el embrión del chat del producto legal (§6).
+>
 > **Pendiente de F1:** preguntas doradas de jurisprudencia con `tesisEsperadas`
 > revisadas por el abogado y la métrica «tesis pertinente» en el eval; prueba
 > funcional de `search_jurisprudencia` desde el chat; los resúmenes por unidad
