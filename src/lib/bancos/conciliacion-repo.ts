@@ -23,6 +23,7 @@ import {
   type MovimientoParaConciliar,
   type SaldoEstadoCuenta,
 } from "./conciliacion";
+import { estadoDeMovimiento } from "./aplicaciones";
 
 /** Ventana UTC del mes — la MISMA que usa postMonth, para que el mes conciliado
  *  sea exactamente el mes contable. */
@@ -142,6 +143,9 @@ export async function conciliacionDelMes(
         id: true, fecha: true, descripcion: true, monto: true, status: true, notes: true, bankAccountId: true,
         contraparteNombre: true, contraparteRfc: true, conceptoPago: true, claveRastreo: true,
         contraparteClabe: true,
+        // Lo aplicado, para que el renglón diga cuánto FALTA (aplicaciones.ts).
+        invoiceId: true, taxDeclarationId: true,
+        conciliacionDetalles: { select: { montoAsignado: true } },
       },
       orderBy: { fecha: "asc" },
     }),
@@ -266,6 +270,18 @@ export async function conciliacionDelMes(
     conceptoPago: t.conceptoPago,
     claveRastreo: t.claveRastreo,
     contraparteClabe: t.contraparteClabe,
+    // Misma regla que aplicaciones.ts: porciones si hay; si no, el 1:1 legado
+    // cuenta por el importe completo; un impuesto conciliado cierra.
+    ...(() => {
+      const original = Math.abs(Number(t.monto));
+      const porciones = t.conciliacionDetalles.reduce((s, d) => s + Math.abs(Number(d.montoAsignado)), 0);
+      const asignado = Math.round((porciones > 0 ? porciones : t.status === "MATCHED" && t.invoiceId ? original : 0) * 100) / 100;
+      return {
+        asignado,
+        restante: Math.round(Math.max(0, original - asignado) * 100) / 100,
+        estadoAplicacion: estadoDeMovimiento(t.status as "UNMATCHED" | "MATCHED" | "IGNORED", original, asignado, !!t.taxDeclarationId),
+      };
+    })(),
   }));
 
   // Saldo del estado por cuenta: el capturado gana; si no hay, se propone el
