@@ -33,7 +33,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-const MAX_TOOL_ROUNDS = 6;
+// Revisar un contrato pide muchas consultas (varios artículos, jurisprudencia);
+// si se agotan, hay una última vuelta SIN herramientas para que redacte.
+const MAX_TOOL_ROUNDS = 10;
 const CHAT_MODEL = process.env.AI_CHAT_MODEL ?? "claude-fable-5";
 const CHAT_MODEL_FALLBACK = "claude-opus-4-8";
 const HEARTBEAT_MS = 10_000;
@@ -138,6 +140,7 @@ export async function POST(req: Request) {
         let currentMessages = [...messages];
         let toolRounds = 0;
         let model = CHAT_MODEL;
+        let rondasAgotadas = false;
 
         while (toolRounds < MAX_TOOL_ROUNDS) {
           const params: Anthropic.MessageCreateParamsStreaming = {
@@ -235,6 +238,37 @@ export async function POST(req: Request) {
           }
           currentMessages = [...currentMessages, { role: "assistant", content: toolUseBlocks }, { role: "user", content: toolResults }];
           toolRounds++;
+          rondasAgotadas = toolRounds >= MAX_TOOL_ROUNDS;
+        }
+        if (rondasAgotadas) {
+          // Se acabaron las rondas con herramientas pendientes: sin esto la
+          // respuesta se quedaba en «voy a fundamentar…» y nada más. Una vuelta
+          // final sin herramientas, con lo ya recuperado.
+          const ultimo = currentMessages[currentMessages.length - 1];
+          const contenido = Array.isArray(ultimo.content) ? ultimo.content : [{ type: "text" as const, text: String(ultimo.content) }];
+          const cierre: Anthropic.MessageParam[] = [
+            ...currentMessages.slice(0, -1),
+            { role: "user", content: [...contenido, { type: "text", text: "No hay más consultas disponibles en este turno. Redacta ahora la respuesta completa con lo que ya recuperaste y di explícitamente qué puntos no pudiste verificar en la base." }] },
+          ];
+          const final = await anthropic.messages.create({ model, max_tokens: 6144, system, tools, tool_choice: { type: "none" }, messages: cierre, stream: true });
+          let fin = 0;
+          let fout = 0;
+          let fcw = 0;
+          let fcr = 0;
+          for await (const event of final) {
+            if (event.type === "message_start") {
+              fin = event.message.usage?.input_tokens ?? 0;
+              fcw = event.message.usage?.cache_creation_input_tokens ?? 0;
+              fcr = event.message.usage?.cache_read_input_tokens ?? 0;
+            } else if (event.type === "message_delta") {
+              fout = event.usage?.output_tokens ?? fout;
+            } else if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+              assistantText += event.delta.text;
+              emitir({ type: "text", text: event.delta.text });
+            }
+          }
+          traza.cacheReadTokens += fcr;
+          await recordLlmCost(model, { input_tokens: fin, output_tokens: fout, cache_creation_input_tokens: fcw, cache_read_input_tokens: fcr }, { companyId: null, userId, subtipo: "ai.juridico" });
         }
         traza.modelo = model;
         traza.rondas = toolRounds;
