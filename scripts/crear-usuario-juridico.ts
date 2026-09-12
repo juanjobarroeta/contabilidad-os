@@ -19,6 +19,7 @@ if (!email || !nombre) {
 }
 const contrasena = contrasenaArg ?? randomBytes(9).toString("base64url").replace(/[-_]/g, "x").slice(0, 12);
 
+async function main() {
 const prisma = new PrismaClient();
 const hash = await bcrypt.hash(contrasena, 10);
 const u = await prisma.user.upsert({
@@ -31,3 +32,9 @@ const u = await prisma.user.upsert({
 console.log(JSON.stringify(u));
 console.log(`contraseña: ${contrasena}`);
 await prisma.$disconnect();
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

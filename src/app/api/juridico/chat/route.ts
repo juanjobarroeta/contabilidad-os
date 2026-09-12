@@ -9,6 +9,7 @@ import { recordLlmCost } from "@/lib/costos/record";
 import { MAX_BODY_BYTES, sanearHistorial } from "@/lib/ai/historial";
 import { fuentesDesdeToolResult, verificarRespuesta, type FuenteVerificacion } from "@/lib/ai/verificacion";
 import { bloqueDocumentosParaPrompt, toolsDocumentos, type DocumentoCargado, type Seccion } from "@/lib/juridico/documentos";
+import { ejecutarRedactar, toolRedactar } from "@/lib/juridico/redaccion";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/juridico/chat — el copiloto JURÍDICO (perfil abogado), en streaming.
@@ -24,7 +25,7 @@ import { bloqueDocumentosParaPrompt, toolsDocumentos, type DocumentoCargado, typ
 // Los documentos adjuntos a la conversación (POST /api/juridico/documentos) se
 // cargan aquí: su índice va en un bloque del system prompt (y el texto entero
 // si cabe) y el agente los recorre con leer_documento / buscar_en_documento.
-// Eventos SSE: conversation | text | tool_start | tool_done | replace | done | error
+// Eventos SSE: conversation | text | tool_start | tool_done | documento | replace | done | error
 // ─────────────────────────────────────────────────────────────────────────────
 
 const anthropic = new Anthropic();
@@ -117,7 +118,8 @@ export async function POST(req: Request) {
     { type: "text", text: buildSystemPromptAbogado(), cache_control: { type: "ephemeral" } },
     ...(documentos.length > 0 ? [{ type: "text" as const, text: bloqueDocumentosParaPrompt(documentos), cache_control: { type: "ephemeral" as const } }] : []),
   ];
-  const tools = documentos.length > 0 ? [...toolsAbogado, ...toolsDocumentos] : toolsAbogado;
+  // Redactar siempre está; leer/buscar sólo cuando hay documentos.
+  const tools = [...toolsAbogado, toolRedactar, ...(documentos.length > 0 ? toolsDocumentos : [])];
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -216,6 +218,17 @@ export async function POST(req: Request) {
           const salidas = await Promise.all(
             llamadas.map(async (block) => {
               const t0 = Date.now();
+              if (block.name === "redactar_documento") {
+                // Guarda el borrador y avisa al cliente (chip con descarga) sin esperar al final del turno.
+                const r = await ejecutarRedactar(block.input as Record<string, unknown>, { userId, conversacionId: convId! });
+                if (r.documento) emitir({ type: "documento", documento: r.documento });
+                if (r.cargado) {
+                  const i = documentos.findIndex((d) => d.id === r.cargado!.id);
+                  if (i >= 0) documentos[i] = r.cargado;
+                  else documentos.push(r.cargado);
+                }
+                return { block, result: r.salida, ms: Date.now() - t0 };
+              }
               const result = await ejecutarHerramientaAbogado(block.name, block.input as Record<string, unknown>, { userId, documentos });
               return { block, result, ms: Date.now() - t0 };
             })
