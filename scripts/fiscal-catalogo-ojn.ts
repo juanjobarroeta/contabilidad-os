@@ -40,6 +40,7 @@ async function html(url: string, init: RequestInit = {}): Promise<string> {
     await new Promise((r) => setTimeout(r, 1500 * intento));
   }
 }
+const HOY = new Date().toISOString().slice(0, 10);
 const pausa = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // El sitio a veces contesta 200 con una página vacía (sin filas) bajo carga:
@@ -80,6 +81,10 @@ async function main() {
     const e = entradaDesde(o, ctx, archivo);
     // Misma clave para dos ordenamientos distintos: se distingue por idArchivo.
     for (const otra of entradas.values()) if (otra.clave === e.clave && otra.idArchivo !== e.idArchivo) e.clave = `${e.clave}-${e.idArchivo}`;
+    // Sin fecha de publicación ni reforma (el OJN pone 00-00-0000): la ingesta
+    // lee la fecha del texto y, si tampoco la trae, vale la del rastreo — el
+    // texto estaba vigente al menos ese día.
+    if (!e.vigenciaFallback) e.vigenciaFallback = HOY;
     entradas.set(o.idArchivo, e);
   };
 

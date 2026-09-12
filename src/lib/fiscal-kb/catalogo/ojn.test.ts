@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ESTADOS, entradaDesde, esNormativoDeConstruccion, parsearFicha, parsearListado, parsearSelectores, slug } from "./ojn";
+import { ESTADOS, ddmmyyyy, entradaDesde, esNormativoDeConstruccion, parsearFicha, parsearListado, parsearSelectores, repararMojibake, slug } from "./ojn";
 
 const FILA = (id: string, titulo: string, pub: string, ref: string, tipo: string) =>
   `<tr><td bgcolor="" align=left><a href=javascript:void(window.open("fichaOrdenamiento.php?idArchivo=${id}&ambito=ESTATAL","","width=495"))>${titulo}</a></td><td align=center>${pub}</td><td align=center>${ref}</td><td align=center>${tipo}</td></tr>`;
@@ -15,6 +15,22 @@ describe("parsearListado", () => {
     expect(filas).toHaveLength(2);
     expect(filas[0]).toEqual({ idArchivo: "120421", titulo: "Reglamento Interior de la Fiscalia Anticorrupción del Gobierno del Estado", fechaPublicacion: "2010-09-06", ultimaReforma: null, tipo: "Reglamento" });
     expect(filas[1].ultimaReforma).toBe("2021-12-31");
+  });
+  it("«00-00-0000» y fechas imposibles son null, no una fecha inválida", () => {
+    expect(ddmmyyyy("00-00-0000")).toBeNull();
+    expect(ddmmyyyy("31-13-2010")).toBeNull();
+    expect(ddmmyyyy("05-06-2013")).toBe("2013-06-05");
+    const [f] = parsearListado(FILA("1", "Ley X", "00-00-0000", "00-00-0000", "Ley"));
+    expect(f.fechaPublicacion).toBeNull();
+    expect(f.ultimaReforma).toBeNull();
+    expect(entradaDesde(f, { sat: "BCS", municipio: null }, { url: "http://x/a.pdf", estatus: "Vigente" }).vigenciaFallback).toBeNull();
+  });
+  it("títulos con UTF-8 metido en latin1 se reparan (y los sanos no se tocan)", () => {
+    expect(repararMojibake("Reglamento de ProtecciÃ³n y Mejoramiento de la Imagen Urbana")).toBe("Reglamento de Protección y Mejoramiento de la Imagen Urbana");
+    expect(repararMojibake("Ley de Protección Civil")).toBe("Ley de Protección Civil");
+    const [f] = parsearListado(FILA("2", "Reglamento de TrÃ¡nsito y Vialidad", "01-02-2015", "Sin Reforma", "Reglamento"));
+    expect(f.titulo).toBe("Reglamento de Tránsito y Vialidad");
+    expect(entradaDesde(f, { sat: "JAL", municipio: "Puerto Vallarta" }, { url: "http://x/a.pdf", estatus: "Vigente" }).clave).toBe("JAL-M-PUERTO-VALLART-R-TRANSITO-VIALIDAD");
   });
   it("el filtro de construcción exige tipo normativo y título del ramo; los interiores quedan fuera", () => {
     expect(esNormativoDeConstruccion(filas[0])).toBe(false);
