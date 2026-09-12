@@ -4142,10 +4142,33 @@ model JuridicoConversacion {
   updatedAt  DateTime  @updatedAt
   archivedAt DateTime?
 
-  user     User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  mensajes JuridicoMensaje[]
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mensajes   JuridicoMensaje[]
+  documentos JuridicoDocumento[]
 
   @@index([userId, updatedAt])
+}
+
+// Un contrato, demanda o escrito que el abogado sube a la conversación para
+// que el copiloto lo lea. Se guarda el TEXTO extraído y un índice de secciones
+// (cláusulas/artículos con offsets), no el archivo: src/lib/juridico/documentos.ts.
+model JuridicoDocumento {
+  id             String   @id @default(cuid())
+  conversacionId String
+  userId         String
+  nombre         String
+  mime           String
+  bytes          Int
+  hash           String
+  paginas        Int?
+  caracteres     Int
+  texto          String   @db.Text
+  secciones      Json?
+  createdAt      DateTime @default(now())
+
+  conversacion JuridicoConversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+
+  @@index([conversacionId])
 }
 
 model JuridicoMensaje {
