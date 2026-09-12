@@ -1,20 +1,16 @@
 /**
- * POST /api/hospital/episodios/[id]/documentos/[docId]/archivo — guarda el
- *      archivo del documento (el PDF firmado del consentimiento, la foto de
- *      la identificación…): multipart con el campo `archivo`, o JSON
- *      { base64, mime, nombre? } para el cliente del satélite (apiFetch habla
- *      JSON). PDF/JPG/PNG/WebP, ≤ 10 MB. Un documento PENDIENTE pasa a
- *      RECIBIDO; el estado FIRMADO se sigue marcando con PATCH (o con las
- *      firmas electrónicas del paquete de admisión).
+ * POST /api/hospital/pacientes/[id]/documentos/[docId]/archivo — guarda el
+ *      archivo de un documento del PACIENTE: la identificación y la constancia
+ *      fiscal que el alta adjunta, una póliza… Multipart con el campo
+ *      `archivo`, o JSON { base64, mime, nombre? } para el cliente del
+ *      satélite. PDF/JPG/PNG/WebP, ≤ 10 MB. Un PENDIENTE pasa a RECIBIDO.
  * GET  …/archivo — descarga (siempre attachment) y registra el acceso como
  *      EXPORTACION (NOM-024 / LFPDPPP).
  *
- * P2: también sirve para los documentos del PACIENTE (episodioId null, p. ej.
- * la identificación del paquete de admisión) cuando el paciente es el del
- * episodio de la URL.
- *
- * Lo que se hace con los bytes (leer, validar, guardar, servir) vive en
- * lib/hospital/documento-archivo y lo comparte con la ruta por paciente.
+ * Es la misma operación que /episodios/[id]/documentos/[docId]/archivo, con
+ * otra regla de pertenencia: aquí el documento tiene que ser del paciente de
+ * la URL, tenga o no episodio — desde la ficha se baja también un
+ * consentimiento de una atención pasada.
  */
 
 import { NextResponse } from "next/server";
@@ -27,18 +23,13 @@ import { datosDeArchivo, errorDeTamano, leerArchivo, respuestaDescarga } from "@
 
 type Ctx = { params: Promise<{ id: string; docId: string }> };
 
-async function documentoDe(id: string, docId: string) {
+async function documentoDe(pacienteId: string, docId: string) {
   const doc = await prisma.hospDocumento.findUnique({
     where: { id: docId },
-    select: { id: true, episodioId: true, pacienteId: true, companyId: true, tipo: true, nombre: true, estado: true, mime: true, bytes: true, episodio: { select: { folio: true } } },
+    select: { id: true, episodioId: true, pacienteId: true, companyId: true, tipo: true, nombre: true, estado: true, mime: true, bytes: true, paciente: { select: { expedienteNumero: true } } },
   });
-  if (!doc) throw new AuthzError(404, "Documento no encontrado");
-  if (doc.episodioId !== id) {
-    const ep = doc.episodioId === null ? await prisma.hospEpisodio.findUnique({ where: { id }, select: { pacienteId: true, companyId: true, folio: true } }) : null;
-    if (!ep || ep.pacienteId !== doc.pacienteId || ep.companyId !== doc.companyId) throw new AuthzError(404, "Documento no encontrado");
-    return { ...doc, folio: ep.folio, episodioIdAcceso: id };
-  }
-  return { ...doc, folio: doc.episodio?.folio ?? null, episodioIdAcceso: doc.episodioId };
+  if (!doc || doc.pacienteId !== pacienteId) throw new AuthzError(404, "Documento no encontrado");
+  return doc;
 }
 
 export const POST = withHospital(async (req: Request, ctx: Ctx) => {
@@ -64,7 +55,7 @@ export const POST = withHospital(async (req: Request, ctx: Ctx) => {
     accion: "hospital.documento.archivo",
     entidad: "HospDocumento",
     entidadId: doc.id,
-    detalle: { folio: doc.folio, tipo: doc.tipo, nombre: doc.nombre, mime: archivo.mime, bytes: archivo.buffer.length, archivoNombre: archivo.nombre },
+    detalle: { expediente: doc.paciente.expedienteNumero, episodioId: doc.episodioId, tipo: doc.tipo, nombre: doc.nombre, mime: archivo.mime, bytes: archivo.buffer.length, archivoNombre: archivo.nombre },
   });
 
   return NextResponse.json(actualizado, { status: 201 });
@@ -83,9 +74,9 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
   registrarAcceso({
     companyId: doc.companyId,
     accion: "EXPORTACION",
-    episodioId: doc.episodioIdAcceso,
+    episodioId: doc.episodioId,
     pacienteId: doc.pacienteId,
-    detalle: `Descarga de «${doc.nombre}» (${doc.tipo})${doc.folio ? ` · ${doc.folio}` : ""}`,
+    detalle: `Descarga de «${doc.nombre}» (${doc.tipo})${doc.paciente.expedienteNumero ? ` · exp. ${doc.paciente.expedienteNumero}` : ""}`,
     user,
     req,
   });
