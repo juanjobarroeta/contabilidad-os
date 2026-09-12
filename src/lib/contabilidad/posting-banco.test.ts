@@ -177,7 +177,7 @@ import { repartoMovimiento } from "./posting";
 
 describe("repartoMovimiento — el sobrante no se diluye en Clientes", () => {
   it("porciones que cubren todo el movimiento: nada sobra", () => {
-    expect(repartoMovimiento(10000, null, [6000, 4000])).toEqual({ asignado: 10000, sobrante: 0 });
+    expect(repartoMovimiento(10000, null, [6000, 4000])).toEqual({ asignado: 10000, sobrante: 0, excedente: 0 });
   });
 
   it("caso terminal: un depósito cubre una fracción de varias cuentas", () => {
@@ -185,16 +185,16 @@ describe("repartoMovimiento — el sobrante no se diluye en Clientes", () => {
     // cuenta, tres mil a esta cuenta…» — el resto todavía no tiene factura que
     // lo explique y no puede abonarse a cuentas por cobrar.
     expect(repartoMovimiento(50000, null, [3000, 3000, 3000])).toEqual({
-      asignado: 9000, sobrante: 41000,
+      asignado: 9000, sobrante: 41000, excedente: 0,
     });
   });
 
   it("una sola factura parcial: ahora se puede expresar", () => {
-    expect(repartoMovimiento(10000, null, [6000])).toEqual({ asignado: 6000, sobrante: 4000 });
+    expect(repartoMovimiento(10000, null, [6000])).toEqual({ asignado: 6000, sobrante: 4000, excedente: 0 });
   });
 
   it("el match 1:1 explica el movimiento entero (el guard exige que empate)", () => {
-    expect(repartoMovimiento(10556, "inv-1", [])).toEqual({ asignado: 10556, sobrante: 0 });
+    expect(repartoMovimiento(10556, "inv-1", [])).toEqual({ asignado: 10556, sobrante: 0, excedente: 0 });
   });
 
   it("redondea a centavos: sin sobrantes fantasma por flotantes", () => {
@@ -203,7 +203,15 @@ describe("repartoMovimiento — el sobrante no se diluye en Clientes", () => {
     expect(r.sobrante).toBe(0);
   });
 
+  // Un depósito de $250,000.00 repartido en catorce facturas sumó
+  // $250,000.01: sin tope, el abono superaba al cargo y la póliza no cuadraba.
+  it("nunca abona más de lo que se movió", () => {
+    expect(repartoMovimiento(250000, null, [200000, 50000.01])).toEqual({
+      asignado: 250000, sobrante: 0, excedente: 0.01,
+    });
+  });
+
   it("las porciones se toman en valor absoluto (los pagos vienen negativos)", () => {
-    expect(repartoMovimiento(5000, null, [-2000, -1000])).toEqual({ asignado: 3000, sobrante: 2000 });
+    expect(repartoMovimiento(5000, null, [-2000, -1000])).toEqual({ asignado: 3000, sobrante: 2000, excedente: 0 });
   });
 });

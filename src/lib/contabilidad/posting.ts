@@ -20,6 +20,7 @@ import {
   cuentaAuxiliar,
 } from "./auxiliar-contraparte";
 import { COE_CODES } from "./catalog";
+import { esDepositoEnEfectivo } from "../bancos/deposito-efectivo";
 import { naturalezaPorTipo, saldosCoe } from "./coe-saldos";
 import { costoPeriodico } from "./inventario-periodico";
 import { classifyInvoice } from "./classify-egreso";
@@ -199,6 +200,52 @@ export const IGNORED_TAGS_VALIDOS = new Set([
   "BANK_NOISE",
 ]);
 
+/** Una pata del asiento de cobro, sin fecha ni descripción todavía. */
+export type PataCobro = {
+  chartAccountId: string;
+  monto: number;
+  tipo: EntryType;
+  /** Va en el asiento del traspaso caja→bancos, no en el del cobro. */
+  traspaso?: boolean;
+};
+
+/**
+ * Las patas de un cobro bancario. PURA.
+ *
+ * Un cobro normal es DR Bancos / AB Clientes. Uno EN EFECTIVO son dos hechos
+ * —el paciente paga en la caja, alguien deposita después— y el libro los tiene
+ * que contar como dos:
+ *
+ *     DR Caja   / AB Clientes   ← el cobro
+ *     DR Bancos / AB Caja       ← el depósito
+ *
+ * Vive aparte de postMonth porque ahí adentro no se puede probar: la función
+ * lee CFDIs, bancos y nómina y escribe en una transacción. El invariante que
+ * importa —que las patas cuadran y que Caja queda neta en cero— se prueba aquí.
+ */
+export function patasDeCobro(opts: {
+  enEfectivo: boolean;
+  ctaBancoId: string;
+  ctaCajaId: string;
+  ctaCobroId: string;
+  ctaAnticiposId: string;
+  absAmount: number;
+  asignado: number;
+  sobrante: number;
+}): PataCobro[] {
+  const { enEfectivo, ctaBancoId, ctaCajaId, ctaCobroId, ctaAnticiposId, absAmount, asignado, sobrante } = opts;
+  const patas: PataCobro[] = [
+    { chartAccountId: enEfectivo ? ctaCajaId : ctaBancoId, monto: absAmount, tipo: "CARGO" },
+  ];
+  if (enEfectivo) {
+    patas.push({ chartAccountId: ctaBancoId, monto: absAmount, tipo: "CARGO", traspaso: true });
+    patas.push({ chartAccountId: ctaCajaId, monto: absAmount, tipo: "ABONO", traspaso: true });
+  }
+  if (asignado > 0.005) patas.push({ chartAccountId: ctaCobroId, monto: asignado, tipo: "ABONO" });
+  if (sobrante > 0.005) patas.push({ chartAccountId: ctaAnticiposId, monto: sobrante, tipo: "ABONO" });
+  return patas;
+}
+
 /** Spec (pura) de la subcuenta contable de una cuenta bancaria. */
 export function subcuentaBancoSpec(
   base: {
@@ -238,12 +285,24 @@ export function repartoMovimiento(
   absAmount: number,
   invoiceId: string | null,
   montosAsignados: number[],
-): { asignado: number; sobrante: number } {
+): { asignado: number; sobrante: number; excedente: number } {
   const centavos = (n: number) => Math.round(n * 100) / 100;
-  const asignado = invoiceId
+  const pedido = invoiceId
     ? absAmount
     : centavos(montosAsignados.reduce((sum, m) => sum + Math.abs(m), 0));
-  return { asignado, sobrante: centavos(absAmount - asignado) };
+
+  // NUNCA se abona más de lo que se movió. Las porciones vienen de la
+  // conciliación de caja y pueden pasarse del movimiento por redondeo: un
+  // depósito de $250,000.00 repartido en catorce facturas sumó $250,000.01 y
+  // ese centavo dejaba la póliza sin cuadrar — cargos y abonos distintos, que
+  // en partida doble no es un detalle. El excedente se reporta para que se vea
+  // cuando sea algo más que redondeo.
+  const asignado = Math.min(pedido, absAmount);
+  return {
+    asignado,
+    sobrante: centavos(absAmount - asignado),
+    excedente: centavos(pedido - asignado),
+  };
 }
 
 export type PlanTraspaso =
@@ -395,6 +454,7 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     accCostoVenta,
     accAnticiposClientes,
     accAnticiposProveedores,
+    accCaja,
   ] = await Promise.all([
     resolveAccount(companyId, COE_CODES.BANCOS),
     resolveAccount(companyId, COE_CODES.CLIENTES_NACIONALES),
@@ -423,6 +483,7 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     resolveAccount(companyId, COE_CODES.COSTO_VENTA),
     resolveAccount(companyId, COE_CODES.ANTICIPOS_CLIENTES),
     resolveAccount(companyId, COE_CODES.ANTICIPOS_PROVEEDORES),
+    resolveAccount(companyId, COE_CODES.CAJA),
   ]);
 
   // ─── 1. CFDIs emitted (INGRESO) ────────────────────────────────────────
@@ -1136,7 +1197,7 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       // entre los saldos de clientes. Es exactamente el caso de las
       // liquidaciones de terminal: un depósito cubre varias cuentas de paciente
       // y sólo una fracción de cada factura.
-      const { asignado, sobrante } = repartoMovimiento(
+      const { asignado, sobrante, excedente } = repartoMovimiento(
         absAmount,
         tx.invoiceId,
         tx.conciliacionDetalles.map((d) => Number(d.montoAsignado)),
@@ -1152,12 +1213,36 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
           contraparteComun(customerPorInvoice, idsDelMatch),
         );
         const ctaCobroId = ctaCobroMod?.id ?? ctaCobroAux ?? accClientes.id;
-        drafts.push({ ...base, chartAccountId: ctaBanco(tx).id, monto: absAmount, tipo: "CARGO" });
-        if (asignado > 0.005) {
-          drafts.push({ ...base, chartAccountId: ctaCobroId, monto: asignado, tipo: "ABONO" });
-        }
-        if (sobrante > 0.005) {
-          drafts.push({ ...base, chartAccountId: accAnticiposClientes.id, monto: sobrante, tipo: "ABONO" });
+
+        // COBRO EN EFECTIVO: dos hechos, dos asientos.
+        //
+        // El paciente paga en la caja del hospital y alguien va a depositar
+        // después; el cliente nunca transfirió al banco. Cargarle el abono
+        // directo a Bancos cuenta una historia que no pasó y deja Caja (101.01)
+        // en ceros para siempre.
+        //
+        // Las dos patas llevan la fecha del DEPÓSITO porque es el único dato
+        // que hay: el movimiento bancario no sabe cuándo se cobró. Caja queda
+        // neta en cero dentro del mes, que es lo honesto mientras el cobro no
+        // se capture en su propio momento. El día que HospCobro registre el
+        // cobro en la caja con su fecha, la primera pata sale de ahí y Caja
+        // carga saldo real entre el cobro y el depósito.
+        const baseTraspaso = {
+          ...base,
+          descripcion: `Traspaso caja a bancos · ${base.descripcion}`.slice(0, 200),
+        };
+        for (const pata of patasDeCobro({
+          enEfectivo: esDepositoEnEfectivo(tx.descripcion),
+          ctaBancoId: ctaBanco(tx).id,
+          ctaCajaId: accCaja.id,
+          ctaCobroId,
+          ctaAnticiposId: accAnticiposClientes.id,
+          absAmount,
+          asignado,
+          sobrante,
+        })) {
+          const { traspaso, ...resto } = pata;
+          drafts.push({ ...(traspaso ? baseTraspaso : base), ...resto });
         }
       } else {
         // Pago: nómina liquida ACREEDORES (donde provisionó); lo demás, el
@@ -1179,6 +1264,15 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
         warnings.push(
           `${tx.fecha.toISOString().slice(0, 10)} ${tx.descripcion.slice(0, 32)}: ` +
             `$${sobrante.toFixed(2)} sin asignar a factura, registrados como anticipo.`,
+        );
+      }
+      // Las porciones suman MÁS que el movimiento. Un centavo es redondeo de
+      // quien repartió; más que eso es una asignación mal hecha, y el asiento
+      // sólo pudo abonar lo que de verdad se movió.
+      if (excedente > 0.005) {
+        warnings.push(
+          `${tx.fecha.toISOString().slice(0, 10)} ${tx.descripcion.slice(0, 32)}: ` +
+            `las porciones suman $${excedente.toFixed(2)} más que el movimiento; se abonó sólo lo movido.`,
         );
       }
 

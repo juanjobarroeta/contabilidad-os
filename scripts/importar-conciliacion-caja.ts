@@ -31,7 +31,9 @@
 // `--clasificar` marca IGNORED los movimientos que el archivo dice que NO son
 // cobro. Sin eso quedan en UNMATCHED, indistinguibles de un pendiente real:
 // agosto cerraba con 23 «sin conciliar» de los que 16 eran traspasos entre
-// cuentas propias.
+// cuentas propias. La naturaleza del Excel se TRADUCE a una etiqueta que el
+// cierre acepte (ver naturaleza-caja.ts); lo que no se pueda traducir se queda
+// pendiente a propósito.
 //
 // `--corregir` DESHACE lo conciliado que contradice al archivo. La
 // auto-conciliación empareja por MONTO Y FECHA cuando el movimiento no trae
@@ -45,6 +47,7 @@
 import * as XLSX from "xlsx";
 import { prisma } from "../src/lib/prisma";
 import { checkInvoiceMatchGuard, mergePagosConciliados } from "../src/lib/conciliacion";
+import { NOTA_DE_CAJA, etiquetaDeNaturaleza } from "../src/lib/bancos/naturaleza-caja";
 
 const PAT_AFILIACION = /\b(\d{7,})([CD])\b/;
 /** Ventana para casar el depósito del Excel con el movimiento del banco. */
@@ -218,7 +221,7 @@ async function main() {
   const movsRaw = await prisma.bankTransaction.findMany({
     where: { companyId: empresa.id, monto: { gt: 0 } },
     select: {
-      id: true, fecha: true, descripcion: true, monto: true, status: true, invoiceId: true,
+      id: true, fecha: true, descripcion: true, monto: true, status: true, invoiceId: true, notes: true,
       invoice: { select: { uuid: true } },
       conciliacionDetalles: { select: { id: true, invoice: { select: { uuid: true } } } },
     },
@@ -313,16 +316,35 @@ async function main() {
       // Dejarlo en UNMATCHED es dejarlo como pendiente, y no lo es: el archivo
       // ya dijo qué es. Agosto cerraba con 23 «sin conciliar» de los que 16 son
       // traspasos entre cuentas propias — ruido que alguien descarta a mano
-      // cada mes. IGNORED es la marca de «visto y no es cobro», y la nota deja
-      // dicho de dónde salió la clasificación.
-      if (clasificar && d.naturaleza && mov.status === "UNMATCHED") {
-        clasificados++;
-        console.log(`  ⊘ ${etiqueta}  «${d.naturaleza}» — no es cobro`);
-        if (aplicar) {
-          await prisma.bankTransaction.update({
-            where: { id: mov.id },
-            data: { status: "IGNORED", notes: `Excel de conciliación de caja: ${d.naturaleza}` },
-          });
+      // cada mes. IGNORED es la marca de «visto y no es cobro».
+      //
+      // `notes` es el campo de ETIQUETA, no una bitácora: el cierre sólo acepta
+      // las de IGNORED_TAGS_VALIDOS y bloquea el mes ante cualquier otra cosa.
+      // Lo que caja escribe hay que TRADUCIRLO, y lo que no se pueda traducir
+      // se queda pendiente para una persona.
+      if (clasificar) {
+        const tag = etiquetaDeNaturaleza(d.naturaleza);
+        const puestoPorEsteScript = (mov.notes ?? "").startsWith(NOTA_DE_CAJA);
+
+        if (tag && mov.status !== "IGNORED") {
+          clasificados++;
+          console.log(`  ⊘ ${etiqueta}  «${d.naturaleza}» → ${tag}`);
+          if (aplicar) {
+            await prisma.bankTransaction.update({ where: { id: mov.id }, data: { status: "IGNORED", notes: tag } });
+          }
+        } else if (tag && mov.notes !== tag && puestoPorEsteScript) {
+          // Reparación de la primera versión, que guardaba el texto del Excel.
+          clasificados++;
+          console.log(`  ⊘ ${etiqueta}  etiqueta corregida → ${tag}`);
+          if (aplicar) await prisma.bankTransaction.update({ where: { id: mov.id }, data: { notes: tag } });
+        } else if (!tag && puestoPorEsteScript) {
+          // Se marcó algo que no se sabe traducir: vuelve a pendiente.
+          console.log(`  ↺ ${etiqueta}  «${d.naturaleza}» sin etiqueta que le corresponda — vuelve a pendiente`);
+          if (aplicar) {
+            await prisma.bankTransaction.update({ where: { id: mov.id }, data: { status: "UNMATCHED", notes: null } });
+          }
+        } else if (!tag && d.naturaleza && mov.status === "UNMATCHED") {
+          console.log(`  ? ${etiqueta}  «${d.naturaleza}» — el archivo dice que no es cobro, pero no sé cómo etiquetarlo`);
         }
       }
       continue;
