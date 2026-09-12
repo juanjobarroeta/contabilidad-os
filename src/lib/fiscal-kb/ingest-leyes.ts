@@ -16,15 +16,24 @@
 // hub busca sólo lo que un contador cita y el producto legal busca todo.
 
 import federal from "./catalogo/federal.json";
+import reglamentos from "./catalogo/reglamentos-federales.json";
+import ojn from "./catalogo/ojn.json";
+import estatales from "./catalogo/estatales.json";
+import nom from "./catalogo/nom.json";
 import { LEYES_MANUALES } from "./catalogo/manuales";
+import { esNomConstruccion } from "./catalogo/nom";
 import type { Ambito, Materia } from "./materias";
+import type { DocKind } from "./chunk";
+import { extraerTexto, formatoDe } from "./texto";
 
 export interface LeyDescriptor {
   clave: string;
   titulo: string;
   url: string;
-  /** LEY (default) o REGLAMENTO — decide la cita: «Art. 3 RLIVA». */
-  source?: "LEY" | "REGLAMENTO";
+  /** LEY (default), REGLAMENTO o NOM — decide la cita: «Art. 3 RLIVA», «NOM-001-SEDE-2012 5.2». */
+  source?: "LEY" | "REGLAMENTO" | "NOM";
+  /** Cómo se parte: "ley" (artículos, default) o "guia" (secciones numeradas: NOM, NTC, guías). */
+  kind?: DocKind;
   /**
    * Vigencia de respaldo (YYYY-MM-DD) para una fuente cuyo encabezado NO trae
    * «Última reforma DOF» — un texto que nunca ha sido reformado sólo dice
@@ -35,8 +44,10 @@ export interface LeyDescriptor {
   /** Materias del ordenamiento (ver materias.ts). Nunca vacío. */
   materias: Materia[];
   ambito: Ambito;
-  /** Entidad federativa (clave SAT de 3 letras: PUE, CMX) cuando ambito = ESTATAL. */
+  /** Entidad federativa (clave SAT de 3 letras: PUE, CMX) cuando ambito = ESTATAL o MUNICIPAL. */
   entidad?: string;
+  /** Municipio cuando ambito = MUNICIPAL. */
+  municipio?: string;
   /** Página de reformas en Diputados (historia de decretos). */
   urlRef?: string | null;
 }
@@ -53,16 +64,51 @@ interface EntradaFederal {
 
 const ENTRADAS = (federal as { entradas: EntradaFederal[] }).entradas;
 
+interface EntradaReglamentoJson { clave: string; titulo: string; url: string; vigenciaFallback: string | null; materias: string[]; excluida: string | null }
+interface EntradaOjnJson { clave: string; titulo: string; url: string | null; ambito: "ESTATAL" | "MUNICIPAL"; entidad: string; municipio: string | null; tipo: string; vigenciaFallback: string | null; materias: string[]; excluida: string | null; reemplaza?: string[] }
+interface EntradaNomJson { clave: string; titulo: string; url: string | null; fechaDof: string | null; entradaEnVigor: string | null; materias: string[]; excluida: string | null }
+
+/** Las NOM entran por default sólo las de construcción; KB_NOM_TODAS=1 las mete todas. */
+const NOM_TODAS = process.env.KB_NOM_TODAS === "1";
+
 function construirCatalogo(): Record<string, LeyDescriptor> {
   const out: Record<string, LeyDescriptor> = {};
   for (const e of ENTRADAS) {
     if (e.excluida) continue;
+    out[e.clave] = { clave: e.clave, titulo: e.titulo, url: e.url, urlRef: e.urlRef, vigenciaFallback: e.vigenciaFallback ?? undefined, materias: e.materias as Materia[], ambito: "FEDERAL" };
+  }
+  for (const e of (reglamentos as { entradas: EntradaReglamentoJson[] }).entradas) {
+    if (e.excluida) continue;
+    out[e.clave] = { clave: e.clave, titulo: e.titulo, url: e.url, source: "REGLAMENTO", vigenciaFallback: e.vigenciaFallback ?? undefined, materias: e.materias as Materia[], ambito: "FEDERAL" };
+  }
+  // Estados y municipios: lo que rastrea el Orden Jurídico Nacional más lo curado
+  // a mano donde el OJN no llega (estatales.json manda si repite clave).
+  const curadas = (estatales as { entradas: EntradaOjnJson[] }).entradas;
+  const reemplazadas = new Set(curadas.flatMap((e) => e.reemplaza ?? []));
+  for (const e of [...(ojn as { entradas: EntradaOjnJson[] }).entradas, ...curadas]) {
+    if (e.excluida || !e.url || reemplazadas.has(e.clave)) continue;
     out[e.clave] = {
       clave: e.clave,
       titulo: e.titulo,
       url: e.url,
-      urlRef: e.urlRef,
+      source: /^Reglamento/i.test(e.tipo) ? "REGLAMENTO" : "LEY",
       vigenciaFallback: e.vigenciaFallback ?? undefined,
+      materias: e.materias as Materia[],
+      ambito: e.ambito,
+      entidad: e.entidad,
+      municipio: e.municipio ?? undefined,
+    };
+  }
+  for (const e of (nom as { entradas: EntradaNomJson[] }).entradas) {
+    if (e.excluida || !e.url) continue;
+    if (!NOM_TODAS && !esNomConstruccion(e.clave, e.titulo)) continue;
+    out[e.clave] = {
+      clave: e.clave,
+      titulo: e.titulo,
+      url: e.url,
+      source: "NOM",
+      kind: "guia",
+      vigenciaFallback: e.entradaEnVigor ?? e.fechaDof ?? undefined,
       materias: e.materias as Materia[],
       ambito: "FEDERAL",
     };
@@ -154,20 +200,11 @@ export async function fetchLey(clave: string): Promise<FetchedLey> {
     if (excluida) throw new Error(`Ley ${clave} excluida del catálogo: ${excluida.motivo}`);
     throw new Error(`Ley desconocida: ${clave}. El catálogo tiene ${CLAVES_LEYES.length} claves (ver catalogo/federal.json y catalogo/manuales.ts).`);
   }
-  const res = await fetch(descriptor.url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; contabilidad-os/fiscal-kb)", Accept: "application/pdf,*/*" } });
+  const res = await fetch(descriptor.url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; contabilidad-os/fiscal-kb)", Accept: "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,*/*" } });
   if (!res.ok) throw new Error(`Descarga falló (${res.status}) — ${descriptor.url}`);
   const buffer = new Uint8Array(await res.arrayBuffer());
-
-  // pdf-parse v2 exposes a class API; @types/pdf-parse targets v1, so we
-  // require() and type the surface we use. Lazy require INSIDE the function:
-  // pdf-parse → pdfjs touches DOMMatrix at load time and breaks Next.js'
-  // build-time page-data collection if imported at module scope.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { PDFParse } = require("pdf-parse") as {
-    PDFParse: new (opts: { data: Uint8Array }) => { getText(): Promise<{ text: string }> };
-  };
-  const parser = new PDFParse({ data: buffer });
-  const { text } = await parser.getText();
+  // PDF (Diputados, SAT, casi todo), .docx o .doc (Orden Jurídico Nacional): ver texto.ts.
+  const text = await extraerTexto(buffer, formatoDe(descriptor.url, res.headers.get("content-type"), buffer), clave);
   if (!text || text.length < TEXTO_MINIMO) {
     throw new Error(`PDF de ${clave} produjo texto sospechosamente corto (${text?.length ?? 0} chars)`);
   }

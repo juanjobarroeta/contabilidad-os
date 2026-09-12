@@ -26,6 +26,7 @@ export interface UpsertDocumentInput {
   materias: string[];
   ambito: Ambito;
   entidad?: string | null;
+  municipio?: string | null;
   /** Replace all existing versions of this clave even if the hash is unchanged.
    *  Use after a chunker/embedding change, where the source text is identical
    *  but the chunks differ (a normal upsert would hash-skip). */
@@ -52,9 +53,9 @@ function dayBefore(d: Date): Date {
 async function sincronizarMetadatos(input: UpsertDocumentInput): Promise<void> {
   await prisma.$executeRaw`
     UPDATE "FiscalDocument"
-    SET "materias" = ${input.materias}::text[], "ambito" = ${input.ambito}::"AmbitoJuridico", "entidad" = ${input.entidad ?? null}
+    SET "materias" = ${input.materias}::text[], "ambito" = ${input.ambito}::"AmbitoJuridico", "entidad" = ${input.entidad ?? null}, "municipio" = ${input.municipio ?? null}
     WHERE "clave" = ${input.clave}
-      AND ("materias" IS DISTINCT FROM ${input.materias}::text[] OR "ambito" IS DISTINCT FROM ${input.ambito}::"AmbitoJuridico" OR "entidad" IS DISTINCT FROM ${input.entidad ?? null})`;
+      AND ("materias" IS DISTINCT FROM ${input.materias}::text[] OR "ambito" IS DISTINCT FROM ${input.ambito}::"AmbitoJuridico" OR "entidad" IS DISTINCT FROM ${input.entidad ?? null} OR "municipio" IS DISTINCT FROM ${input.municipio ?? null})`;
 }
 
 export async function upsertFiscalDocument(input: UpsertDocumentInput): Promise<UpsertResult> {
@@ -105,11 +106,11 @@ export async function upsertFiscalDocument(input: UpsertDocumentInput): Promise<
       await tx.$executeRaw`
         INSERT INTO "FiscalDocument"
           ("id", "source", "clave", "titulo", "url", "publicadoDof", "vigenciaDesde", "vigenciaHasta", "hash", "createdAt",
-           "materias", "ambito", "entidad")
+           "materias", "ambito", "entidad", "municipio")
         VALUES
           (${documentId}, ${input.source}::"FiscalSource", ${input.clave}, ${input.titulo}, ${input.url},
            ${input.publicadoDof}, ${input.vigenciaDesde}, NULL, ${hash}, NOW(),
-           ${input.materias}::text[], ${input.ambito}::"AmbitoJuridico", ${input.entidad ?? null})`;
+           ${input.materias}::text[], ${input.ambito}::"AmbitoJuridico", ${input.entidad ?? null}, ${input.municipio ?? null})`;
 
       for (let i = 0; i < input.chunks.length; i++) {
         const c = input.chunks[i];

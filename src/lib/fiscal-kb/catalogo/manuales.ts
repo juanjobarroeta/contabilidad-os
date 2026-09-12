@@ -13,6 +13,30 @@
 import type { LeyDescriptor } from "../ingest-leyes";
 
 export const LEYES_MANUALES: Record<string, LeyDescriptor> = {
+  // ── Construcción · Ciudad de México (docs/MOTOR-JURIDICO.md F3) ──────────
+  // El Reglamento de Construcciones es artículo por artículo (chunker de ley);
+  // las diez Normas Técnicas Complementarias de 2023 vienen en un solo PDF de
+  // la Gaceta, numeradas por secciones: chunker genérico (kind "guia").
+  RCCDMX: {
+    clave: "RCCDMX",
+    titulo: "Reglamento de Construcciones para el Distrito Federal (Ciudad de México)",
+    url: "https://data.consejeria.cdmx.gob.mx/images/leyes/reglamentos/RGTO_DE_CONSTRUCCIONES_DEL_DISTRITO_FEDERAL_7.7.pdf",
+    source: "REGLAMENTO",
+    materias: ["construccion", "urbano"],
+    ambito: "ESTATAL",
+    entidad: "CMX",
+  },
+  "NTC-RCDF-2023": {
+    clave: "NTC-RCDF-2023",
+    titulo: "Normas Técnicas Complementarias del Reglamento de Construcciones para el Distrito Federal (Gaceta Oficial CDMX, 6 de noviembre de 2023)",
+    url: "https://data.consejeria.cdmx.gob.mx/portal_old/uploads/gacetas/b3c4f4ff37241d0a93cc6742a8b0bf2f.pdf",
+    source: "NOM",
+    kind: "guia",
+    vigenciaFallback: "2023-11-06",
+    materias: ["construccion"],
+    ambito: "ESTATAL",
+    entidad: "CMX",
+  },
   // ── Reglamentos fiscales ─────────────────────────────────────────────────────
   RLISR: {
     clave: "RLISR",

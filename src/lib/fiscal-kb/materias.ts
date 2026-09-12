@@ -49,6 +49,8 @@ export const MATERIAS = [
   "telecomunicaciones",
   "transporte",
   "vivienda",
+  "construccion",
+  "urbano",
   "militar",
   "seguridad_publica",
   "cooperativas",
@@ -131,6 +133,11 @@ const REGLAS: [RegExp, Materia[]][] = [
   [/Telecomunicaciones|Radiodifusi[óo]n|Derecho de R[ée]plica|Servicio Postal|Comunicaci[óo]n Social|Cine\b|Audiovisual/i, ["telecomunicaciones"]],
   [/Caminos|Autotransporte|Aviaci[óo]n|Aeropuertos|\bPuertos\b|Ferroviario|V[íi]as Generales|Navegaci[óo]n|Espacio A[ée]reo|Movilidad|Agencia Espacial/i, ["transporte"]],
   [/Vivienda|Asentamientos Humanos|Hipotecaria/i, ["vivienda"]],
+  // Construcción y desarrollo urbano: reglamentos de construcciones (casi todos
+  // municipales), NTC, obra pública, fraccionamientos, uso de suelo y las NOM
+  // que un constructor tiene que cumplir. Ver docs/MOTOR-JURIDICO.md (F3).
+  [/Construcci[óo]n|Edificaci[óo]n|Obras? P[úu]blica|Normas T[ée]cnicas Complementarias|Instalaciones El[ée]ctricas|Estructur|Ciment|Sism|Protecci[óo]n Civil|Fraccionamiento|Condominio|Imagen Urbana|Anuncios|Estacionamiento|Infraestructura/i, ["construccion"]],
+  [/Desarrollo Urbano|Asentamientos Humanos|Ordenamiento Territorial|Zonificaci[óo]n|Uso[s]? de[l]? Suelo|Fraccionamiento|Condominio|Imagen Urbana|Centro Hist[óo]rico|Urbaniz/i, ["urbano"]],
   [/Militar|Armada\b|Ej[ée]rcito|Fuerza A[ée]rea|Guardia Nacional|Fuerzas Armadas|Educaci[óo]n Naval|Neutralidad del Pa[íi]s/i, ["militar"]],
   [/Seguridad P[úu]blica|Seguridad Nacional|Seguridad Interior|Polic[íi]a|Guardia Nacional|Seguridad Privada|Protecci[óo]n Civil|Prevenci[óo]n Social de la Violencia|Investigaci[óo]n e Inteligencia|Registro P[úu]blico Vehicular|Seguridad Vial|Armas de Fuego/i, ["seguridad_publica"]],
   [/Cooperativ/i, ["cooperativas"]],
