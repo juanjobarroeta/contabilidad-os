@@ -59,7 +59,7 @@ describe("indexarDocumento", () => {
     expect(s[0].desde).toBe(0);
     expect(s[s.length - 1].hasta).toBe(ley.length);
     for (let i = 1; i < s.length; i++) expect(s[i].desde).toBe(s[i - 1].hasta);
-    expect(s[0].titulo).toMatch(/^Artículo 1\. … Artículo \d+/);
+    expect(s[0].titulo).toMatch(/^Artículo 1\. .*… Artículo \d+\./);
     const contrato = indexarDocumento(limpiarTexto(CONTRATO));
     expect(compactarSecciones(contrato)).toEqual(contrato);
   });
