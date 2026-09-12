@@ -115,7 +115,7 @@
 > ≤ 90 000 caracteres — y el agente recorre el documento con `leer_documento`
 > (índice / sección / rango) y `buscar_en_documento` (pasajes por términos);
 > el prompt le exige separar lo que el documento DICE, lo que la LEY dice
-> (fundamentado con el corpus) y su LECTURA. **Fotos y escaneos** (PR #PRNUM3):
+> (fundamentado con el corpus) y su LECTURA. **Fotos y escaneos** (PR #1037):
 > JPEG/PNG/WebP y los PDF sin capa de texto se transcriben con visión
 > (`vision.ts`, Sonnet 5 por lotes de 4 páginas en paralelo — un PDF se parte
 > con pdf-lib —, «— Página N —», `[ilegible]`/`[firma]`, costo en
