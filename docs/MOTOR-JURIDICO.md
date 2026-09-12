@@ -115,8 +115,16 @@
 > ≤ 90 000 caracteres — y el agente recorre el documento con `leer_documento`
 > (índice / sección / rango) y `buscar_en_documento` (pasajes por términos);
 > el prompt le exige separar lo que el documento DICE, lo que la LEY dice
-> (fundamentado con el corpus) y su LECTURA. Pendiente de este trozo: OCR para
-> escaneos, DOCX de salida para redactar, plantillas del abogado.
+> (fundamentado con el corpus) y su LECTURA. **Fotos y escaneos** (PR #1037):
+> JPEG/PNG/WebP y los PDF sin capa de texto se transcriben con visión
+> (`vision.ts`, Sonnet 5 por lotes de 4 páginas en paralelo — un PDF se parte
+> con pdf-lib —, «— Página N —», `[ilegible]`/`[firma]`, costo en
+> `ai.juridico.ocr`); varias fotos en una subida son UN documento; el satélite
+> reduce las fotos del teléfono a 2 000 px antes de mandarlas; HEIC se rechaza
+> con instrucción. Y el turno del abogado, si agota sus 10 rondas de
+> herramientas, cierra con una vuelta sin herramientas (antes se quedaba en
+> «voy a fundamentar…»). Pendiente: DOCX de salida para redactar, plantillas
+> del abogado, reanudar un turno cortado por un redespliegue del hub.
 >
 > **Carga inicial (2026-09-12, kb-worker):** dos corridas — la primera 731
 > ingeridos / 179 fallidos por el catálogo (PR #1029: «00-00-0000» y

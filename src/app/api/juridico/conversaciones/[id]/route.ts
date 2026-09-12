@@ -28,7 +28,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const documentos = await prisma.juridicoDocumento.findMany({
     where: { conversacionId: id },
     orderBy: { createdAt: "asc" },
-    select: { id: true, nombre: true, bytes: true, paginas: true, caracteres: true, createdAt: true },
+    select: { id: true, nombre: true, mime: true, bytes: true, paginas: true, caracteres: true, createdAt: true },
   });
   return NextResponse.json({ id: conv.id, titulo: conv.titulo, mensajes, documentos });
 }
