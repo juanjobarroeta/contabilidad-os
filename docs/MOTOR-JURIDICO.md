@@ -70,7 +70,7 @@
 > `ai.juridico`). Es el embrión del chat del producto legal (§6).
 >
 > **F3 (primer paquete) — construcción y urbanismo en los tres niveles
-> (2026-09-11, PR #PRNUM).** El catálogo pasó de 317 a **1 229 ordenamientos**:
+> (2026-09-11, PR #1028).** El catálogo pasó de 317 a **1 229 ordenamientos**:
 > 311 leyes federales, 138 reglamentos federales (Diputados `regla.htm`,
 > `catalogo/reglamentos-federales.json`), 124 NOM de construcción e
 > instalaciones (de las 1 228 vigentes que cataloga PLATIICA en
