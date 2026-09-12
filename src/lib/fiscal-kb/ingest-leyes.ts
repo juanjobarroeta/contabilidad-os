@@ -108,7 +108,9 @@ function construirCatalogo(): Record<string, LeyDescriptor> {
       url: e.url,
       source: "NOM",
       kind: "guia",
-      vigenciaFallback: e.entradaEnVigor ?? e.fechaDof ?? undefined,
+      // Sin entrada en vigor ni DOF en la ficha (3 NOM): la fecha del catálogo,
+      // que es cuando PLATIICA la listaba como vigente.
+      vigenciaFallback: e.entradaEnVigor ?? e.fechaDof ?? (nom as { generado?: string }).generado ?? undefined,
       materias: e.materias as Materia[],
       ambito: "FEDERAL",
     };
@@ -192,6 +194,7 @@ export function parseFechaVigencia(text: string): Date | null {
  * el umbral sólo detecta un PDF vacío o una página de error servida como PDF.
  */
 const TEXTO_MINIMO = 1_500;
+const UA_NAVEGADOR = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
 export async function fetchLey(clave: string): Promise<FetchedLey> {
   const descriptor = LEYES[clave];
@@ -200,11 +203,15 @@ export async function fetchLey(clave: string): Promise<FetchedLey> {
     if (excluida) throw new Error(`Ley ${clave} excluida del catálogo: ${excluida.motivo}`);
     throw new Error(`Ley desconocida: ${clave}. El catálogo tiene ${CLAVES_LEYES.length} claves (ver catalogo/federal.json y catalogo/manuales.ts).`);
   }
-  const res = await fetch(descriptor.url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; contabilidad-os/fiscal-kb)", Accept: "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,*/*" } });
+  // UA de navegador: varios portales estatales (buengobierno.sonora.gob.mx)
+  // contestan 403 a cualquier User-Agent que no parezca uno.
+  const res = await fetch(descriptor.url, { headers: { "User-Agent": UA_NAVEGADOR, Accept: "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,*/*", "Accept-Language": "es-MX,es;q=0.9" } });
   if (!res.ok) throw new Error(`Descarga falló (${res.status}) — ${descriptor.url}`);
   const buffer = new Uint8Array(await res.arrayBuffer());
   // PDF (Diputados, SAT, casi todo), .docx o .doc (Orden Jurídico Nacional): ver texto.ts.
-  const text = await extraerTexto(buffer, formatoDe(descriptor.url, res.headers.get("content-type"), buffer), clave);
+  // Sin NUL: algún PDF (NOM-024-SCT2-2010) trae el carácter 0 en el texto y
+  // Postgres rechaza la fila entera (22021).
+  const text = (await extraerTexto(buffer, formatoDe(descriptor.url, res.headers.get("content-type"), buffer), clave)).replace(/\u0000/g, "");
   if (!text || text.length < TEXTO_MINIMO) {
     throw new Error(`PDF de ${clave} produjo texto sospechosamente corto (${text?.length ?? 0} chars)`);
   }
