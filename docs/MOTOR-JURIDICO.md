@@ -105,6 +105,19 @@
 > (dos decretos de reforma sueltos en el P.O.); y los municipios más allá de
 > los principales (`--municipios todos` los rastrea, no se ha corrido).
 >
+> **Carga inicial (2026-09-12, kb-worker):** dos corridas — la primera 731
+> ingeridos / 179 fallidos por el catálogo (PR #1029: «00-00-0000» y
+> mojibake del OJN), la segunda 207 / 41. En producción quedan **1 235
+> ordenamientos vigentes** (federal: 311 leyes, 137 reglamentos, 111 NOM;
+> estatal: 307 leyes, 170 reglamentos; municipal: 199), 32 entidades, 60
+> municipios, ≈ 194 000 chunks. Los 41 que no entran: 18 PDF escaneados sin
+> texto (reglamentos municipales viejos: Puerto Vallarta, Bahía de Banderas,
+> Tulancingo…), 9 enlaces 404 de PLATIICA, 6 sitios que no responden
+> (CFCDMX otra vez), 3 con 403 al User-Agent (Sonora; corregido: UA de
+> navegador), 3 NOM sin fecha en la ficha (corregido: fecha del catálogo),
+> 1 PDF corrupto y 1 texto con NUL (corregido). Los escaneados necesitarían
+> OCR: decisión pendiente.
+>
 > **Pendiente de F1:** preguntas doradas de jurisprudencia con `tesisEsperadas`
 > revisadas por el abogado y la métrica «tesis pertinente» en el eval; prueba
 > funcional de `search_jurisprudencia` desde el chat; los resúmenes por unidad
