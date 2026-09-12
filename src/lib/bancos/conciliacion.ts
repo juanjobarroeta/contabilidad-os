@@ -144,6 +144,12 @@ export function resumenDelMes(
 
 /** Movimiento del estado de cuenta, con el signo del banco. */
 export interface MovimientoParaConciliar {
+  /** Lo aplicado a facturas (porciones + 1:1 legado), en positivo. */
+  asignado?: number;
+  /** |monto| − asignado, nunca negativo: lo que FALTA por aplicar. */
+  restante?: number;
+  /** Cuatro estados, no dos: un parcial ya no se disfraza de conciliado. */
+  estadoAplicacion?: "SIN_APLICAR" | "PARCIAL" | "COMPLETO" | "CATEGORIZADO";
   id: string;
   fecha: string; // ISO
   descripcion: string;

@@ -33,6 +33,8 @@ import {
   type PagoJuntoSugerido, type SeleccionFactura,
 } from "./resolver-tipos";
 import { VisorCep } from "./VisorCep";
+import { FichaAplicaciones, FichaMovimiento } from "./FichasAplicaciones";
+import type { ResumenMovimiento } from "@/lib/bancos/aplicaciones";
 
 /** Categorías sin factura: un toque las ignora CON su tag, que es lo que
  *  `postMonth` sabe postear. Deben ser las mismas en toda la aplicación. */
@@ -108,6 +110,10 @@ export function ResolverMovimiento({
   // Contra qué quedó cruzado el movimiento (facturas con su porción, o el pago
   // de impuestos). Para uno sin conciliar viene vacío.
   const [cruce, setCruce] = useState<CruceMovimiento | null>(null);
+  // La lectura única (lib/bancos/aplicaciones): original, aplicado, restante,
+  // estado, aplicaciones con su REP, CEP. Cuando llega, pinta las fichas
+  // Movimiento y Aplicaciones (spec §5-6); mientras no, los bloques de antes.
+  const [resumen, setResumen] = useState<ResumenMovimiento | null>(null);
   // Categoría SUGERIDA por el servidor, con su evidencia. Vivía sólo en la
   // mesa; al compartir el panel la gana también la lista de Movimientos.
   const [sugerencia, setSugerencia] = useState<SugerenciaMovimiento | null>(null);
@@ -161,6 +167,7 @@ export function ResolverMovimiento({
         setPagoJunto(data.pagoJunto ?? null);
         setSugerencia(data.sugerencia ?? null);
         setCruce(data.cruce ?? null);
+        setResumen(data.resumen ?? null);
       })
       .catch(() => {})
       .finally(() => { if (vivo) setCargando(false); });
@@ -386,7 +393,10 @@ export function ResolverMovimiento({
           candidatos que ofrecer, y lo que se necesita es abrir ESE CFDI y
           leerlo. La mesa decía «ya está conciliado» sin decir con qué — para
           investigarlo había que irse al archivo. */}
-      {cruzado && (
+      {resumen && <FichaMovimiento r={resumen} onVerCep={() => setCepAbierto(true)} clabe={tx.contraparteClabe} descripcion={tx.descripcion} />}
+      {resumen && <FichaAplicaciones r={resumen} onVerFactura={onVerFactura} />}
+
+      {!resumen && cruzado && (
         <div className="rounded-control border border-cos-jade-ink/25 bg-cos-jade-tint/50 px-3 py-2.5">
           <p className="text-[12.5px] font-semibold text-cos-jade-ink">
             {cruce!.impuesto
@@ -432,7 +442,7 @@ export function ResolverMovimiento({
       {/* El detalle fino y la cadena CRUDA del banco. Nunca se esconde: el
           estado de cuenta es la fuente de verdad y quien concilia a mano
           necesita poder leerla tal cual. */}
-      {(tx.contraparteClabe || tx.claveRastreo || tx.contraparteNombre) && (
+      {!resumen && (tx.contraparteClabe || tx.claveRastreo || tx.contraparteNombre) && (
         <div className="rounded-control bg-cos-paper px-3 py-2.5 text-[12.5px] text-cos-ink-soft">
           {tx.contraparteClabe && (
             <div>CLABE <span className="font-mono text-cos-ink">{tx.contraparteClabe}</span></div>
@@ -452,7 +462,7 @@ export function ResolverMovimiento({
           llegó a la cuenta de ESE beneficiario en ESA fecha — la evidencia de
           materialidad que se le enseña al SAT. Y le enseña a quien concilia DE
           DÓNDE salió el RFC, para que la sugerencia no parezca adivinada. */}
-      {cep && (
+      {!resumen && cep && (
         <div className="rounded-control border border-cos-line bg-cos-paper px-3 py-2.5 text-[12.5px]">
           <div className="flex items-center justify-between gap-2">
             <p className="font-semibold text-cos-ink">

@@ -78,7 +78,24 @@ interface Movimiento {
    *  entre «tiene factura» y «se categorizó sin factura». */
   status?: "UNMATCHED" | "MATCHED" | "IGNORED";
   notes?: string | null;
+  /** Lo aplicado y lo que falta (lib/bancos/aplicaciones). Un parcial ya no
+   *  se disfraza de conciliado: el renglón dice cuánto RESTA. */
+  asignado?: number;
+  restante?: number;
+  estadoAplicacion?: EstadoAplicacion;
 }
+type EstadoAplicacion = "SIN_APLICAR" | "PARCIAL" | "COMPLETO" | "CATEGORIZADO";
+/** Estado de cuatro valores; si el feed aún no lo manda, se deriva del status. */
+function estadoDe(m: Movimiento): EstadoAplicacion {
+  if (m.estadoAplicacion) return m.estadoAplicacion;
+  return m.status === "IGNORED" ? "CATEGORIZADO" : m.status === "MATCHED" ? "COMPLETO" : "SIN_APLICAR";
+}
+const CHIP_ESTADO: Record<EstadoAplicacion, { label: string; cls: string }> = {
+  SIN_APLICAR: { label: "Sin aplicar", cls: "border border-cos-line text-cos-ink-soft" },
+  PARCIAL: { label: "Parcial", cls: "bg-cos-amber-tint text-cos-amber-ink" },
+  COMPLETO: { label: "Completo", cls: "bg-cos-jade-tint text-cos-jade-ink" },
+  CATEGORIZADO: { label: "Categorizado", cls: "bg-cos-slate-tint text-cos-ink-soft" },
+};
 interface Cuenta {
   bankAccountId: string;
   etiqueta: string;
@@ -113,7 +130,7 @@ const fFecha = (s: string) =>
 /** Renglones que se pintan de una vez; «Ver más» agrega otro tanto. */
 const PAGINA = 80;
 
-type Filtro = "SIN_CONCILIAR" | "MATCHED" | "IGNORED" | "TODOS";
+type Filtro = "SIN_APLICAR" | "PARCIAL" | "COMPLETO" | "CATEGORIZADO" | "TODOS";
 
 /** La lista tal como se pinta: filtrada, buscada y con los pendientes arriba.
  *  Pura y a nivel de módulo — no toca el closure, y el orden de la izquierda
@@ -121,11 +138,7 @@ type Filtro = "SIN_CONCILIAR" | "MATCHED" | "IGNORED" | "TODOS";
 function armarLista(movs: Movimiento[], filtro: Filtro, buscar: string): Movimiento[] {
   const q = buscar.trim().toLowerCase();
   return movs
-    .filter((m) =>
-      filtro === "TODOS" ? true
-      : filtro === "SIN_CONCILIAR" ? !m.conciliado
-      : m.status === filtro,
-    )
+    .filter((m) => (filtro === "TODOS" ? true : estadoDe(m) === filtro))
     .filter((m) =>
       !q ? true
       : [m.descripcion, m.contraparteNombre ?? "", m.contraparteRfc ?? "", String(Math.abs(m.monto))]
@@ -159,7 +172,7 @@ export function ConciliacionWorkbench({
   // Filtro y búsqueda de la LISTA — lo que sólo tenía el tab Movimientos. La
   // mesa mostraba nada más los pendientes, así que revisar algo ya conciliado
   // obligaba a cambiar de pestaña, que es de donde venía la doble mesa.
-  const [filtro, setFiltro] = useState<Filtro>("SIN_CONCILIAR");
+  const [filtro, setFiltro] = useState<Filtro>("SIN_APLICAR");
   const [buscar, setBuscar] = useState("");
   // Selección en lote — lo último que sólo existía en el tab Movimientos.
   // Veinte comisiones se categorizan de un golpe sin salir de la mesa.
@@ -265,7 +278,7 @@ export function ConciliacionWorkbench({
     if (txInicial && entregado.current !== txInicial) {
       const m = data.movimientosBanco.find((x) => x.id === txInicial);
       if (m) {
-        const f: Filtro = !m.conciliado ? "SIN_CONCILIAR" : m.status === "MATCHED" ? "MATCHED" : "IGNORED";
+        const f: Filtro = estadoDe(m);
         entregado.current = txInicial;
         setFiltro(f);
         setBuscar("");
@@ -390,10 +403,11 @@ export function ConciliacionWorkbench({
   // lo lee entiende que le faltan 248 por conciliar cuando le faltan 119. Los
   // conciliados que esperan posteo ya se dicen en su tile y en el encabezado,
   // y salen del mes entero con un clic en el cierre.
-  const cuenta = {
-    SIN_CONCILIAR: delMes.filter((m) => !m.conciliado).length,
-    MATCHED: delMes.filter((m) => m.status === "MATCHED").length,
-    IGNORED: delMes.filter((m) => m.status === "IGNORED").length,
+  const cuenta: Record<Filtro, number> = {
+    SIN_APLICAR: delMes.filter((m) => estadoDe(m) === "SIN_APLICAR").length,
+    PARCIAL: delMes.filter((m) => estadoDe(m) === "PARCIAL").length,
+    COMPLETO: delMes.filter((m) => estadoDe(m) === "COMPLETO").length,
+    CATEGORIZADO: delMes.filter((m) => estadoDe(m) === "CATEGORIZADO").length,
     TODOS: delMes.length,
   };
   const lista = armarLista(delMes, filtro, buscar);
@@ -633,9 +647,10 @@ export function ConciliacionWorkbench({
               </p>
               <div className="flex flex-wrap items-center gap-1.5 border-b border-cos-line-soft px-5 py-2">
                 {([
-                  ["SIN_CONCILIAR", "Sin conciliar"],
-                  ["MATCHED", "Conciliados"],
-                  ["IGNORED", "Categorizados"],
+                  ["SIN_APLICAR", "Sin aplicar"],
+                  ["PARCIAL", "Parcial"],
+                  ["COMPLETO", "Completo"],
+                  ["CATEGORIZADO", "Categorizado"],
                   ["TODOS", "Todos"],
                 ] as const).map(([id, label]) => (
                   <button
@@ -711,7 +726,7 @@ export function ConciliacionWorkbench({
                     ) : (
                       <>
                         Ningún movimiento del mes está en{" "}
-                        <b>{filtro === "SIN_CONCILIAR" ? "sin conciliar" : filtro === "MATCHED" ? "conciliados" : "categorizados"}</b>.
+                        <b>{filtro === "TODOS" ? "el mes" : CHIP_ESTADO[filtro].label.toLowerCase()}</b>.
                         <button onClick={() => setFiltro("TODOS")} className="ml-1.5 font-semibold text-cos-brand-ink hover:underline">
                           Ver todos
                         </button>
@@ -753,15 +768,13 @@ export function ConciliacionWorkbench({
                             {m.contraparteNombre || m.descripcion || "(sin descripción)"}
                           </span>
                           <span className="block truncate font-mono text-[11px] text-cos-ink-faint">
-                            {/* Sin el chip, un movimiento ya conciliado (que en
-                                Movimientos luce ✓) aparece aquí idéntico a uno
-                                pendiente y parece trabajo por hacer — cuando
-                                sólo espera el posteo del mes. */}
-                            {m.conciliado && (
-                              <span className="mr-1.5 rounded-full bg-cos-jade-tint px-1.5 py-px font-sans text-[10px] font-semibold text-cos-jade-ink">
-                                Conciliado · por contabilizar
+                            {/* Chip de CUATRO estados (spec §4): un parcial ya
+                                no se disfraza de conciliado. */}
+                            {(() => { const e = CHIP_ESTADO[estadoDe(m)]; return (
+                              <span className={cn("mr-1.5 rounded-full px-1.5 py-px font-sans text-[10px] font-semibold uppercase tracking-wide", e.cls)}>
+                                {e.label}
                               </span>
-                            )}
+                            ); })()}
                             {fFecha(m.fecha)}
                             {m.contraparteRfc && <> · <span className="text-cos-ink-soft">{m.contraparteRfc}</span></>}
                             {m.conceptoPago && ` · ${m.conceptoPago}`}
@@ -769,10 +782,32 @@ export function ConciliacionWorkbench({
                             {etiquetaCuenta.get(m.cuentaBancariaId) && ` · ${etiquetaCuenta.get(m.cuentaBancariaId)}`}
                           </span>
                         </span>
-                        <Money
-                          value={m.monto}
-                          className={cn("text-[13px]", m.monto < 0 && "text-cos-red-ink")}
-                        />
+                        <span className="flex flex-col items-end">
+                          <Money
+                            value={m.monto}
+                            className={cn("text-[13px]", m.monto < 0 && "text-cos-red-ink")}
+                          />
+                          {/* Barra asignado/original + «restan»: lo que hace que
+                              un parcial se vea desde lejos (spec §4). */}
+                          {(() => {
+                            const e = estadoDe(m);
+                            if (e !== "PARCIAL" && e !== "COMPLETO") return null;
+                            const orig = Math.abs(m.monto);
+                            const pct = orig > 0 ? Math.min(100, Math.round(((m.asignado ?? orig) / orig) * 100)) : 100;
+                            return (
+                              <>
+                                <span className="mt-1 block h-[2px] w-[96px] overflow-hidden rounded-full bg-cos-line" aria-hidden>
+                                  <span className={cn("block h-full", e === "COMPLETO" ? "bg-cos-jade" : "bg-cos-amber")} style={{ width: `${pct}%` }} />
+                                </span>
+                                {e === "PARCIAL" && (m.restante ?? 0) > 0 && (
+                                  <span className="mt-0.5 font-mono text-[10.5px] text-cos-amber-ink">
+                                    restan ${(m.restante ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                                  </span>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </span>
                       </button>
                     </li>
                   );

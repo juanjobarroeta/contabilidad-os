@@ -30,6 +30,7 @@ import {
   periodosRecientes,
   scoreCandidatoImpuesto,
 } from "@/lib/conciliacion-impuestos";
+import { aplicacionesDeMovimiento } from "@/lib/bancos/aplicaciones-repo";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -683,5 +684,9 @@ export async function GET(req: Request, { params }: Params) {
     }
   }
 
-  return NextResponse.json({ transaction: tx, candidates: scored, impuestos, sugerencia, pagoJunto, cruce });
+  // La lectura única del movimiento (original, aplicado, restante, estado,
+  // aplicaciones con su REP, CEP): las fichas 1 y 2 del resolver se pintan
+  // de aquí. `cruce` se conserva para quien todavía lo lea.
+  const resumen = await aplicacionesDeMovimiento(tx.id, companyId);
+  return NextResponse.json({ transaction: tx, candidates: scored, impuestos, sugerencia, pagoJunto, cruce, resumen });
 }
