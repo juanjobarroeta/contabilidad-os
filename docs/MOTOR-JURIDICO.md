@@ -105,6 +105,19 @@
 > (dos decretos de reforma sueltos en el P.O.); y los municipios más allá de
 > los principales (`--municipios todos` los rastrea, no se ha corrido).
 >
+> **F2 (primer trozo) — leer y analizar documentos (2026-09-12, PR #PRNUM2).**
+> El satélite y `/api/juridico/documentos` aceptan PDF, DOCX y TXT (clip o
+> arrastrar al chat): se extrae el texto (pdf-parse / mammoth; .doc y escaneos
+> se rechazan con mensaje), se indexa por secciones (cláusulas, artículos,
+> apartados con offsets) y se guarda el texto, no el archivo, en
+> `JuridicoDocumento` (borrado real con DELETE). En el turno, el índice va en un
+> bloque propio del system prompt — y el texto entero si la conversación suma
+> ≤ 90 000 caracteres — y el agente recorre el documento con `leer_documento`
+> (índice / sección / rango) y `buscar_en_documento` (pasajes por términos);
+> el prompt le exige separar lo que el documento DICE, lo que la LEY dice
+> (fundamentado con el corpus) y su LECTURA. Pendiente de este trozo: OCR para
+> escaneos, DOCX de salida para redactar, plantillas del abogado.
+>
 > **Carga inicial (2026-09-12, kb-worker):** dos corridas — la primera 731
 > ingeridos / 179 fallidos por el catálogo (PR #1029: «00-00-0000» y
 > mojibake del OJN), la segunda 207 / 41. En producción quedan **1 235

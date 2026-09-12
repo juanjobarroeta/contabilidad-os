@@ -8,7 +8,7 @@ async function cargar(id: string, userId: string) {
   return conv;
 }
 
-// GET /api/juridico/conversaciones/[id] — el hilo completo con la traza de cada respuesta.
+// GET /api/juridico/conversaciones/[id] — el hilo completo con la traza de cada respuesta y sus documentos adjuntos.
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   let usuario: { id: string };
   try {
@@ -25,7 +25,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     orderBy: { createdAt: "asc" },
     select: { id: true, rol: true, contenido: true, meta: true, feedback: true, correccion: true, createdAt: true },
   });
-  return NextResponse.json({ id: conv.id, titulo: conv.titulo, mensajes });
+  const documentos = await prisma.juridicoDocumento.findMany({
+    where: { conversacionId: id },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, nombre: true, bytes: true, paginas: true, caracteres: true, createdAt: true },
+  });
+  return NextResponse.json({ id: conv.id, titulo: conv.titulo, mensajes, documentos });
 }
 
 // PATCH /api/juridico/conversaciones/[id] — feedback sobre una respuesta

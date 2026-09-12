@@ -32,18 +32,22 @@ function porExtension(url: string, contentType?: string | null): Formato {
   return "pdf";
 }
 
+/** Formato por bytes mágicos, o null si no se reconoce ninguno. */
+export function formatoPorBytes(buffer: Uint8Array | undefined): Formato | null {
+  if (!buffer || buffer.length < 8) return null;
+  const b = buffer;
+  if (b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) return "pdf"; // %PDF
+  if (b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04) return "docx"; // PK zip (OOXML)
+  if (b[0] === 0xd0 && b[1] === 0xcf && b[2] === 0x11 && b[3] === 0xe0) return "doc"; // OLE2 (Word 97)
+  if (b[0] === 0x7b && b[1] === 0x5c && b[2] === 0x72 && b[3] === 0x74 && b[4] === 0x66) return "rtf"; // {\rtf
+  const inicio = Buffer.from(b.subarray(0, 512)).toString("latin1").trimStart().toLowerCase();
+  if (inicio.startsWith("<!doctype html") || inicio.startsWith("<html")) return "html";
+  return null;
+}
+
 /** Formato por bytes mágicos; si no se reconocen, por extensión / content-type. */
 export function formatoDe(url: string, contentType?: string | null, buffer?: Uint8Array): Formato {
-  if (buffer && buffer.length >= 8) {
-    const b = buffer;
-    if (b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) return "pdf"; // %PDF
-    if (b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04) return "docx"; // PK zip (OOXML)
-    if (b[0] === 0xd0 && b[1] === 0xcf && b[2] === 0x11 && b[3] === 0xe0) return "doc"; // OLE2 (Word 97)
-    if (b[0] === 0x7b && b[1] === 0x5c && b[2] === 0x72 && b[3] === 0x74 && b[4] === 0x66) return "rtf"; // {\rtf
-    const inicio = Buffer.from(b.subarray(0, 512)).toString("latin1").trimStart().toLowerCase();
-    if (inicio.startsWith("<!doctype html") || inicio.startsWith("<html")) return "html";
-  }
-  return porExtension(url, contentType);
+  return formatoPorBytes(buffer) ?? porExtension(url, contentType);
 }
 
 async function conArchivoTemporal<T>(buffer: Uint8Array, ext: string, fn: (ruta: string) => Promise<T>): Promise<T> {

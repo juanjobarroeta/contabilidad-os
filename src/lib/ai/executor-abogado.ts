@@ -8,6 +8,7 @@
 import { getArticulo, getTesis, searchFiscalKnowledge, searchJurisprudencia } from "@/lib/fiscal-kb/search";
 import { consultarValorFiscal, type ConsultaValorFiscal } from "@/lib/fiscal/valores";
 import type { CostCtx } from "@/lib/costos/record";
+import { ejecutarHerramientaDocumento, type DocumentoCargado } from "@/lib/juridico/documentos";
 
 type Entrada = Record<string, unknown>;
 
@@ -18,10 +19,14 @@ const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : t
 const str = (v: unknown) => (typeof v === "string" && v.trim() !== "" ? v.trim() : undefined);
 const fecha = (v: unknown) => (typeof v === "string" && v.trim() !== "" ? new Date(v) : undefined);
 
-export async function ejecutarHerramientaAbogado(nombre: string, input: Entrada, ctx: { userId: string }): Promise<string> {
+export async function ejecutarHerramientaAbogado(nombre: string, input: Entrada, ctx: { userId: string; documentos?: DocumentoCargado[] }): Promise<string> {
   const cost: CostCtx = { companyId: null, userId: ctx.userId, subtipo: "ai.juridico" };
   try {
     switch (nombre) {
+      case "leer_documento":
+      case "buscar_en_documento":
+        // Documentos adjuntos a la conversación (src/lib/juridico/documentos.ts): puro, sin costo.
+        return ejecutarHerramientaDocumento(nombre, input, ctx.documentos ?? []);
       case "search_fiscal_knowledge":
         return JSON.stringify(
           await searchFiscalKnowledge(String(input.query ?? ""), {

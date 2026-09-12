@@ -8,6 +8,7 @@ import { buildSystemPromptAbogado } from "@/lib/ai/system-prompt-abogado";
 import { recordLlmCost } from "@/lib/costos/record";
 import { MAX_BODY_BYTES, sanearHistorial } from "@/lib/ai/historial";
 import { fuentesDesdeToolResult, verificarRespuesta, type FuenteVerificacion } from "@/lib/ai/verificacion";
+import { bloqueDocumentosParaPrompt, toolsDocumentos, type DocumentoCargado, type Seccion } from "@/lib/juridico/documentos";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/juridico/chat — el copiloto JURÍDICO (perfil abogado), en streaming.
@@ -20,6 +21,9 @@ import { fuentesDesdeToolResult, verificarRespuesta, type FuenteVerificacion } f
 // CostEvent (subtipo ai.juridico) a nombre del usuario.
 //
 // Body: { messages: [{role, content}], conversacionId?: string }
+// Los documentos adjuntos a la conversación (POST /api/juridico/documentos) se
+// cargan aquí: su índice va en un bloque del system prompt (y el texto entero
+// si cabe) y el agente los recorre con leer_documento / buscar_en_documento.
 // Eventos SSE: conversation | text | tool_start | tool_done | replace | done | error
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -39,14 +43,16 @@ interface Traza {
   rondas: number;
   tools: { name: string; ms: number; resumen?: string }[];
   fundamentos: { cita: string; similitud: number; fuente?: string }[];
+  documentos?: string[];
   verificacion?: { verificada: boolean; corregida: boolean; problemas: number; citasNoVerificables: string[]; ms: number };
   cacheReadTokens: number;
 }
 
 function resumenDeResultado(nombre: string, out: string): string | undefined {
   try {
-    const parsed = JSON.parse(out) as { resultados?: { cita: string }[]; cita?: string; error?: string; aviso?: string };
+    const parsed = JSON.parse(out) as { resultados?: { cita: string }[]; cita?: string; error?: string; aviso?: string; resumen?: string };
     if (parsed.error) return `error: ${parsed.error.slice(0, 80)}`;
+    if (typeof parsed.resumen === "string") return parsed.resumen;
     if (Array.isArray(parsed.resultados)) return parsed.resultados.length === 0 ? "sin resultados" : parsed.resultados.map((r) => r.cita).slice(0, 6).join(" · ");
     if (typeof parsed.cita === "string") return parsed.cita;
   } catch {
@@ -96,7 +102,20 @@ export async function POST(req: Request) {
     convCreada = true;
   }
 
-  const system: Anthropic.TextBlockParam[] = [{ type: "text", text: buildSystemPromptAbogado(), cache_control: { type: "ephemeral" } }];
+  // Documentos de la conversación: bloque propio del system (cacheado aparte del
+  // prompt base, que es igual para todas las conversaciones).
+  const documentos: DocumentoCargado[] = (
+    await prisma.juridicoDocumento.findMany({
+      where: { conversacionId: convId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, nombre: true, paginas: true, caracteres: true, texto: true, secciones: true },
+    })
+  ).map((d) => ({ ...d, secciones: (d.secciones as unknown as Seccion[] | null) ?? [] }));
+  const system: Anthropic.TextBlockParam[] = [
+    { type: "text", text: buildSystemPromptAbogado(), cache_control: { type: "ephemeral" } },
+    ...(documentos.length > 0 ? [{ type: "text" as const, text: bloqueDocumentosParaPrompt(documentos), cache_control: { type: "ephemeral" as const } }] : []),
+  ];
+  const tools = documentos.length > 0 ? [...toolsAbogado, ...toolsDocumentos] : toolsAbogado;
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -112,7 +131,7 @@ export async function POST(req: Request) {
       emitir({ type: "conversation", id: convId, nueva: convCreada });
 
       let assistantText = "";
-      const traza: Traza = { modelo: CHAT_MODEL, rondas: 0, tools: [], fundamentos: [], cacheReadTokens: 0 };
+      const traza: Traza = { modelo: CHAT_MODEL, rondas: 0, tools: [], fundamentos: [], cacheReadTokens: 0, ...(documentos.length > 0 ? { documentos: documentos.map((d) => d.nombre) } : {}) };
       const fuentesTurno: FuenteVerificacion[] = [];
 
       try {
@@ -125,7 +144,7 @@ export async function POST(req: Request) {
             model,
             max_tokens: 6144,
             system,
-            tools: toolsAbogado,
+            tools,
             messages: currentMessages,
             stream: true,
           };
@@ -194,7 +213,7 @@ export async function POST(req: Request) {
           const salidas = await Promise.all(
             llamadas.map(async (block) => {
               const t0 = Date.now();
-              const result = await ejecutarHerramientaAbogado(block.name, block.input as Record<string, unknown>, { userId });
+              const result = await ejecutarHerramientaAbogado(block.name, block.input as Record<string, unknown>, { userId, documentos });
               return { block, result, ms: Date.now() - t0 };
             })
           );
