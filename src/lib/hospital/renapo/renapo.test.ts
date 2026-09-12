@@ -204,3 +204,47 @@ describe("obtenerProveedor (variables de entorno)", () => {
     expect(obtenerProveedor({ RENAPO_PROVEEDOR: "Nubarium", NUBARIUM_USUARIO: "u", NUBARIUM_PASSWORD: "p" }, fetchImpl)?.nombre).toBe("nubarium");
   });
 });
+
+describe("Tláloc: búsqueda de quien sólo tiene un apellido", () => {
+  // Tláloc exige `second_last_name`. Omitirlo contesta 422 «Provide either
+  // 'curp' or all of…», que el mapeo de errores traduce a «formato inválido»:
+  // el usuario veía un error de captura y en realidad nunca se buscó.
+  // Verificado contra la API: con X la consulta entra.
+  function capturarParams(segundoApellido: string | null) {
+    let visto: URL | null = null;
+    const fetchImpl = (async (url: string) => {
+      visto = new URL(url);
+      return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
+    }) as unknown as typeof fetch;
+    const prov = proveedorTlaloc("k", { fetchImpl });
+    return prov
+      .buscarPorDatos({
+        nombres: "JUAN",
+        primerApellido: "PEREZ",
+        segundoApellido,
+        fechaNacimiento: "1990-05-05",
+        sexo: "H",
+        entidadClave: "DF",
+      })
+      .then(() => visto!.searchParams);
+  }
+
+  it("manda X cuando no hay segundo apellido", async () => {
+    expect((await capturarParams(null)).get("second_last_name")).toBe("X");
+  });
+
+  it("trata una cadena vacía como ausencia, no la manda vacía", async () => {
+    expect((await capturarParams("   ")).get("second_last_name")).toBe("X");
+  });
+
+  it("manda el apellido cuando sí lo hay", async () => {
+    expect((await capturarParams("LOPEZ")).get("second_last_name")).toBe("LOPEZ");
+  });
+
+  it("siempre manda los seis parámetros que Tláloc exige", async () => {
+    const p = await capturarParams(null);
+    for (const k of ["names", "first_last_name", "second_last_name", "date_of_birth", "gender", "state_of_birth"]) {
+      expect(p.get(k), k).toBeTruthy();
+    }
+  });
+});

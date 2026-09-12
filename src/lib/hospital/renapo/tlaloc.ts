@@ -116,7 +116,13 @@ export function proveedorTlaloc(apiKey: string, opts: { fetchImpl?: FetchLike; t
         gender: q.sexo,
         state_of_birth: q.entidadClave,
       };
-      if (q.segundoApellido?.trim()) params.second_last_name = q.segundoApellido.trim();
+      // Tláloc EXIGE el segundo apellido: sin él —o vacío— contesta 422
+      // «Provide either 'curp' or all of…», que aquí se traducía a «formato
+      // inválido» y dejaba sin buscar a quien sólo tiene un apellido. La
+      // convención de RENAPO para ese hueco es X, la misma que ya usan
+      // `letrasCurp` y `letrasRfc`. Verificado contra la API: sin el
+      // parámetro 422, con X la consulta entra y contesta 404 si no existe.
+      params.second_last_name = q.segundoApellido?.trim() || "X";
       const { body, referencia } = await llamar(params);
       return desempacar(body).map((r) => normalizarTlaloc(r, referencia));
     },
