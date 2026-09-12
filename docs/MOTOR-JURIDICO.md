@@ -143,9 +143,28 @@
 > manifest, iconos, service worker sin caché de datos (sólo página «sin
 > conexión»), botón «Instalar app» (prompt nativo en Android/Chrome; pasos
 > Compartir → Añadir a inicio en iPhone), cajón lateral y safe areas en
-> teléfono. Pendiente: plantillas del abogado, PDF de salida, reanudar un
-> turno cortado por un redespliegue del hub, cambio de contraseña en el
-> satélite.
+> teléfono.
+>
+> **Turnos reanudables (PR #1042).** La primera prueba real de la abogada
+> (alegatos de cinco tipos para un juicio oral familiar en Chihuahua, 8
+> minutos) murió con «Load failed» en el iPhone. Dos causas, las dos
+> corregidas: (1) `max_tokens` 6 144 cortaba a la mitad la llamada a
+> `redactar_documento` con el escrito entero y la ronda siguiente moría con
+> «user messages must have non-empty content» — ahora 16 000 tokens, el bloque
+> abierto se cierra al terminar el stream, una llamada cortada se le dice al
+> modelo en vez de ejecutarse con `{}`, y una ronda sin llamadas no manda un
+> turno vacío; (2) el turno vivía en la conexión HTTP — ahora corre como tarea
+> del proceso (`src/lib/juridico/turnos.ts`): guarda cada evento, el mensaje
+> del usuario se persiste al arrancar y la respuesta (o lo que alcanzó, con
+> `meta.error`) al terminar; la respuesta HTTP es una vista y
+> `GET /api/juridico/chat?conversacionId=&desde=N` reengancha desde el último
+> evento visto. El satélite reintenta con backoff hasta 15 min y, si el hub ya
+> no tiene el turno en memoria (se redesplegó), recarga la conversación. Los
+> errores del turno se reportan a Sentry (antes se tragaban).
+> `RAILWAY_DEPLOYMENT_DRAINING_SECONDS=300` en el hub: un redespliegue deja
+> terminar los turnos en curso. Límites de Railway: 15 min por petición, 5 min
+> sin datos (los pings cada 10 s lo cubren). Pendiente: plantillas del abogado,
+> PDF de salida, cambio de contraseña en el satélite.
 >
 > **Carga inicial (2026-09-12, kb-worker):** dos corridas — la primera 731
 > ingeridos / 179 fallidos por el catálogo (PR #1029: «00-00-0000» y
