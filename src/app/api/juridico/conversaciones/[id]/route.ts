@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { AuthzError, isOperador, requireUser } from "@/lib/authz";
+import { AuthzError, puedeUsarJuridico, requireUser } from "@/lib/authz";
 
 async function cargar(id: string, userId: string) {
   const conv = await prisma.juridicoConversacion.findUnique({ where: { id }, select: { id: true, userId: true, titulo: true, archivedAt: true } });
@@ -16,7 +16,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   } catch (e) {
     return NextResponse.json({ error: e instanceof AuthzError ? e.message : "Unauthorized" }, { status: e instanceof AuthzError ? e.status : 401 });
   }
-  if (!(await isOperador(usuario.id))) return NextResponse.json({ error: "Sólo el operador" }, { status: 403 });
+  if (!(await puedeUsarJuridico(usuario.id))) return NextResponse.json({ error: "Tu cuenta no tiene acceso al copiloto jurídico" }, { status: 403 });
   const { id } = await params;
   const conv = await cargar(id, usuario.id);
   if (!conv) return NextResponse.json({ error: "Conversación no encontrada" }, { status: 404 });
@@ -42,7 +42,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   } catch (e) {
     return NextResponse.json({ error: e instanceof AuthzError ? e.message : "Unauthorized" }, { status: e instanceof AuthzError ? e.status : 401 });
   }
-  if (!(await isOperador(usuario.id))) return NextResponse.json({ error: "Sólo el operador" }, { status: 403 });
+  if (!(await puedeUsarJuridico(usuario.id))) return NextResponse.json({ error: "Tu cuenta no tiene acceso al copiloto jurídico" }, { status: 403 });
   const { id } = await params;
   const conv = await cargar(id, usuario.id);
   if (!conv) return NextResponse.json({ error: "Conversación no encontrada" }, { status: 404 });
@@ -73,7 +73,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   } catch (e) {
     return NextResponse.json({ error: e instanceof AuthzError ? e.message : "Unauthorized" }, { status: e instanceof AuthzError ? e.status : 401 });
   }
-  if (!(await isOperador(usuario.id))) return NextResponse.json({ error: "Sólo el operador" }, { status: 403 });
+  if (!(await puedeUsarJuridico(usuario.id))) return NextResponse.json({ error: "Tu cuenta no tiene acceso al copiloto jurídico" }, { status: 403 });
   const { id } = await params;
   const conv = await cargar(id, usuario.id);
   if (!conv) return NextResponse.json({ error: "Conversación no encontrada" }, { status: 404 });

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { AuthzError, isOperador, requireUser } from "@/lib/authz";
+import { AuthzError, puedeUsarJuridico, requireUser } from "@/lib/authz";
 import type { Seccion } from "@/lib/juridico/documentos";
 
 async function autorizar(req: Request) {
   const usuario = await requireUser(req);
-  if (!(await isOperador(usuario.id))) throw new AuthzError(403, "Sólo el operador");
+  if (!(await puedeUsarJuridico(usuario.id))) throw new AuthzError(403, "Tu cuenta no tiene acceso al copiloto jurídico");
   return usuario.id;
 }
 

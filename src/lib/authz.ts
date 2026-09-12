@@ -113,6 +113,16 @@ export async function isOperador(userId: string): Promise<boolean> {
 }
 
 /**
+ * Copiloto jurídico (/api/juridico/*): el operador y quien tenga
+ * `accesoJuridico` (el abogado que lo prueba). NO es el back office: no da
+ * nada más que el chat jurídico y sus documentos.
+ */
+export async function puedeUsarJuridico(userId: string): Promise<boolean> {
+  const u = await prisma.user.findUnique({ where: { id: userId }, select: { esOperador: true, accesoJuridico: true } });
+  return u?.esOperador === true || u?.accesoJuridico === true;
+}
+
+/**
  * Maps a DespachoRole into an implicit MemberRole on every company the
  * despacho owns. Despacho OWNER/ADMIN → company ADMIN; despacho ACCOUNTANT →
  * company ACCOUNTANT. Despacho members never get implicit OWNER of a company
