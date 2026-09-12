@@ -285,3 +285,50 @@ describe("identidadDePaciente", () => {
     expect(r.pendientes[1]).toMatch(/CURP calculada/);
   });
 });
+
+describe("RFC propuesto en la ficha", () => {
+  const base = {
+    nombre: "MARIA FERNANDA",
+    apellidoPaterno: "ORTEGA",
+    apellidoMaterno: "RIVAS",
+    fechaNacimiento: "1992-03-14",
+    curp: "OERF920314MPLRVR09",
+    sinCurp: false, sinCurpMotivo: null, curpValidada: true, curpOrigen: null, curpEstatus: null,
+    curpVerificadaAt: null, curpVerificadaFuente: null, curpVerificadaRef: null, renapoCoincide: null,
+    curpProbable: false, rfc: null, rfcFuente: null,
+    identificacionTipo: null, identificacionNumero: null, identificacionVigencia: null,
+    avisoPrivacidadVersion: null, avisoPrivacidadAceptadoAt: null,
+  } as const;
+
+  it("propone el RFC cuando hay nombre y fecha", () => {
+    const r = identidadDePaciente({ ...base }, null);
+    expect(r.rfc.calculado).toBe("OERF920314FV3");
+    expect(r.rfc.valor).toBeNull();
+  });
+
+  it("sin fecha de nacimiento no propone nada", () => {
+    expect(identidadDePaciente({ ...base, fechaNacimiento: null }, null).rfc.calculado).toBeNull();
+  });
+
+  it("sin nombre no propone nada", () => {
+    expect(identidadDePaciente({ ...base, apellidoPaterno: "" }, null).rfc.calculado).toBeNull();
+  });
+
+  // LO QUE NO DEBE PASAR. La homoclave la asigna el SAT y ante homonimia le
+  // toca otra a cada quien: el calculado puede diferir del real siendo los dos
+  // correctos. Convertir esa diferencia en un pendiente llenaría la ficha de
+  // alarmas falsas justo en los pacientes que SÍ traen su RFC bueno.
+  it("que el calculado difiera del RFC en ficha no levanta pendiente", () => {
+    const r = identidadDePaciente({ ...base, rfc: "OERF920314QZ8", rfcFuente: "CSF" }, null);
+    expect(r.rfc.calculado).toBe("OERF920314FV3");
+    expect(r.rfc.valor).toBe("OERF920314QZ8");
+    expect(r.pendientes.join(" ")).not.toMatch(/RFC/i);
+  });
+
+  // El cruce con la CURP sí es un error real: son los mismos diez caracteres.
+  it("pero un RFC de otra persona sí lo levanta", () => {
+    const r = identidadDePaciente({ ...base, rfc: "PECJ680602CS5", rfcFuente: "CAPTURA" }, null);
+    expect(r.rfc.cruceCurp).toBe("DIFIERE");
+    expect(r.pendientes.join(" ")).toMatch(/no coincide con la CURP/i);
+  });
+});

@@ -381,6 +381,12 @@ export function dividirNombre(nombreCompleto: string | null | undefined): Partes
 // ── El bloque `identidad` de la ficha ────────────────────────────────────────
 
 export interface PacienteIdentidadEntrada {
+  /** Nombre y fecha: con eso se propone el RFC. Opcionales para no romper a
+   *  quien ya arma este objeto sin ellos; sin nombre no se propone nada. */
+  nombre?: string | null;
+  apellidoPaterno?: string | null;
+  apellidoMaterno?: string | null;
+  fechaNacimiento?: Date | string | null;
   curp: string | null;
   sinCurp: boolean;
   sinCurpMotivo: string | null;
@@ -418,7 +424,23 @@ export interface IdentidadPacienteResumen {
     sinCurp: boolean;
     sinCurpMotivo: string | null;
   };
-  rfc: { valor: string | null; fuente: HospRfcFuente | null; generico: boolean; cruceCurp: CruceCurpRfc };
+  rfc: {
+    valor: string | null;
+    fuente: HospRfcFuente | null;
+    generico: boolean;
+    cruceCurp: CruceCurpRfc;
+    /**
+     * El RFC que sale del nombre y la fecha con el algoritmo del SAT, para
+     * PROPONERLO en la captura en vez de pedir que alguien lo teclee.
+     *
+     * Es una propuesta, nunca una verificación. La homoclave la asigna el SAT
+     * y ante homonimia —mismo nombre y misma fecha— le toca otra a cada quien,
+     * así que el calculado puede diferir del real siendo los dos correctos.
+     * Por eso una diferencia con `valor` NO levanta pendiente: sólo la
+     * constancia (o el SAT) dicen cuál es.
+     */
+    calculado: string | null;
+  };
   identificacion: { tipo: HospIdentificacionTipo | null; numero: string | null; vigencia: Date | null; vencida: boolean };
   avisoPrivacidad: { version: string | null; aceptadoAt: Date | null; vigente: boolean };
   pendientes: string[];
@@ -442,6 +464,16 @@ export function identidadDePaciente(
 
   const rfc = p.rfc?.trim().toUpperCase() || null;
   const cruceCurp = cruzarCurpRfc(p.curp, rfc);
+  const propuesto =
+    p.nombre?.trim() && p.apellidoPaterno?.trim() && p.fechaNacimiento
+      ? calcularRfc({
+          nombres: p.nombre,
+          primerApellido: p.apellidoPaterno,
+          segundoApellido: p.apellidoMaterno ?? null,
+          fechaNacimiento: p.fechaNacimiento,
+        })
+      : null;
+  const rfcCalculado = propuesto?.ok ? propuesto.rfc : null;
   if (cruceCurp === "DIFIERE") pendientes.push("El RFC no coincide con la CURP (10 primeros caracteres)");
 
   const vencida = !!p.identificacionVigencia && p.identificacionVigencia.getTime() < hoy.getTime();
@@ -469,7 +501,7 @@ export function identidadDePaciente(
       sinCurp: p.sinCurp,
       sinCurpMotivo: p.sinCurpMotivo,
     },
-    rfc: { valor: rfc, fuente: p.rfcFuente, generico: !!rfc && RFC_GENERICOS.has(rfc), cruceCurp },
+    rfc: { valor: rfc, calculado: rfcCalculado, fuente: p.rfcFuente, generico: !!rfc && RFC_GENERICOS.has(rfc), cruceCurp },
     identificacion: { tipo: p.identificacionTipo, numero: p.identificacionNumero, vigencia: p.identificacionVigencia, vencida },
     avisoPrivacidad: { version: p.avisoPrivacidadVersion, aceptadoAt: p.avisoPrivacidadAceptadoAt, vigente: avisoVigente },
     pendientes,
