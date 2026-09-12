@@ -134,8 +134,18 @@
 > tipo de documento antes de escribir, [___] para lo que no se sabe, y
 > presentarlo como borrador para revisión del abogado. Acceso: el operador o
 > `User.accesoJuridico` (PR #1039, `scripts/crear-usuario-juridico.ts`).
-> Pendiente: plantillas del abogado, PDF de salida, reanudar un turno cortado
-> por un redespliegue del hub.
+> **Contestar demandas** (PR #1041): el prompt del abogado trae el flujo
+> completo — leer la demanda entera, recuperar la vía y sus plazos (CNPCF /
+> local / CCOM / LFT / CFF), contestar hecho por hecho, proponer excepciones
+> procesales y de fondo con fundamento, criterio, prueba y fuerza (y cuáles
+> NO oponer), entregar la estrategia en el chat y el escrito de contestación
+> completo con `redactar_documento` (tipo `contestacion`). **PWA** (satélite):
+> manifest, iconos, service worker sin caché de datos (sólo página «sin
+> conexión»), botón «Instalar app» (prompt nativo en Android/Chrome; pasos
+> Compartir → Añadir a inicio en iPhone), cajón lateral y safe areas en
+> teléfono. Pendiente: plantillas del abogado, PDF de salida, reanudar un
+> turno cortado por un redespliegue del hub, cambio de contraseña en el
+> satélite.
 >
 > **Carga inicial (2026-09-12, kb-worker):** dos corridas — la primera 731
 > ingeridos / 179 fallidos por el catálogo (PR #1029: «00-00-0000» y

@@ -22,12 +22,12 @@ const MIN_CARACTERES = 300;
 export const toolRedactar: Anthropic.Tool = {
   name: "redactar_documento",
   description:
-    "Guarda un documento REDACTADO por ti (contrato, convenio, demanda, escrito, carta, dictamen) como documento de la conversación, listo para descargarse en Word. Úsala cuando el usuario pida redactar, preparar o modificar un documento. En `markdown` va el texto COMPLETO y final (no un resumen, no un esqueleto, no «[continúa]»), con la estructura usual en México: título; proemio con las partes; DECLARACIONES; CLÁUSULAS numeradas en ordinal («**PRIMERA.- OBJETO.**» al inicio del párrafo); cláusulas de vigencia, incumplimiento, jurisdicción y firmas. Los datos que no tengas van como [___] (nunca inventes nombres, montos, fechas ni números de artículo). Para cambiar un borrador ya guardado manda su `documento_id` con el texto completo actualizado. Después de guardar, responde al usuario en pocas líneas: qué decidiste y por qué, qué datos faltan ([___]) y qué cláusulas conviene que revise el abogado — no repitas el documento en el chat.",
+    "Guarda un documento REDACTADO por ti (contrato, convenio, demanda, contestación de demanda, escrito, carta, dictamen) como documento de la conversación, listo para descargarse en Word. Úsala cuando el usuario pida redactar, preparar o modificar un documento. En `markdown` va el texto COMPLETO y final (no un resumen, no un esqueleto, no «[continúa]»), con la estructura usual en México: título; proemio con las partes; DECLARACIONES; CLÁUSULAS numeradas en ordinal («**PRIMERA.- OBJETO.**» al inicio del párrafo); cláusulas de vigencia, incumplimiento, jurisdicción y firmas. Los datos que no tengas van como [___] (nunca inventes nombres, montos, fechas ni números de artículo). Para cambiar un borrador ya guardado manda su `documento_id` con el texto completo actualizado. Después de guardar, responde al usuario en pocas líneas: qué decidiste y por qué, qué datos faltan ([___]) y qué cláusulas conviene que revise el abogado — no repitas el documento en el chat.",
   input_schema: {
     type: "object",
     properties: {
       titulo: { type: "string", description: "Título del documento, p. ej. «Contrato de mutuo con interés y garantía prendaria»." },
-      tipo: { type: "string", description: "contrato | convenio | demanda | escrito | carta | dictamen | otro" },
+      tipo: { type: "string", description: "contrato | convenio | demanda | contestacion | escrito | carta | dictamen | otro" },
       markdown: {
         type: "string",
         description: "Texto completo en Markdown: `#` para el título, `##` para apartados (DECLARACIONES, CLÁUSULAS, TRANSITORIOS), `**PRIMERA.- OBJETO.**` al inicio de cada cláusula, párrafos separados por una línea en blanco, listas con `-` o `1.`, líneas de firma con «_____». Sin tablas.",
