@@ -123,8 +123,19 @@
 > reduce las fotos del teléfono a 2 000 px antes de mandarlas; HEIC se rechaza
 > con instrucción. Y el turno del abogado, si agota sus 10 rondas de
 > herramientas, cierra con una vuelta sin herramientas (antes se quedaba en
-> «voy a fundamentar…»). Pendiente: DOCX de salida para redactar, plantillas
-> del abogado, reanudar un turno cortado por un redespliegue del hub.
+> «voy a fundamentar…»). **Redacción** (PR #PRNUM4): `redactar_documento`
+> guarda lo que el copiloto escribe (contrato, convenio, demanda, escrito)
+> como documento de la conversación (mime `text/markdown`; el mismo
+> `documento_id` para sustituir un borrador tras pedir cambios) y
+> `GET /api/juridico/documentos/[id]/docx` lo entrega en Word (`docx`:
+> Times 12 justificado, apartados centrados, folio al pie); el satélite lo
+> muestra como chip «borrador» con vista previa y descarga, y avisa por SSE
+> (`documento`) en cuanto se guarda. El prompt exige recuperar las normas del
+> tipo de documento antes de escribir, [___] para lo que no se sabe, y
+> presentarlo como borrador para revisión del abogado. Acceso: el operador o
+> `User.accesoJuridico` (PR #1039, `scripts/crear-usuario-juridico.ts`).
+> Pendiente: plantillas del abogado, PDF de salida, reanudar un turno cortado
+> por un redespliegue del hub.
 >
 > **Carga inicial (2026-09-12, kb-worker):** dos corridas — la primera 731
 > ingeridos / 179 fallidos por el catálogo (PR #1029: «00-00-0000» y

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, puedeUsarJuridico, requireUser } from "@/lib/authz";
 import type { Seccion } from "@/lib/juridico/documentos";
+import { MIME_BORRADOR } from "@/lib/juridico/redaccion";
 
 async function autorizar(req: Request) {
   const usuario = await requireUser(req);
@@ -9,7 +10,7 @@ async function autorizar(req: Request) {
   return usuario.id;
 }
 
-// GET /api/juridico/documentos/[id] — metadatos e índice de secciones (sin el texto).
+// GET /api/juridico/documentos/[id] — metadatos e índice de secciones; el texto sólo si es un borrador redactado.
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   let userId: string;
   try {
@@ -20,11 +21,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const { id } = await params;
   const doc = await prisma.juridicoDocumento.findUnique({
     where: { id },
-    select: { id: true, userId: true, conversacionId: true, nombre: true, bytes: true, paginas: true, caracteres: true, secciones: true, createdAt: true },
+    select: { id: true, userId: true, conversacionId: true, nombre: true, mime: true, bytes: true, paginas: true, caracteres: true, secciones: true, texto: true, createdAt: true },
   });
   if (!doc || doc.userId !== userId) return NextResponse.json({ error: "Documento no encontrado" }, { status: 404 });
   const secciones = ((doc.secciones as unknown as Seccion[] | null) ?? []).map((s) => ({ n: s.n, titulo: s.titulo, caracteres: s.hasta - s.desde }));
-  return NextResponse.json({ ...doc, userId: undefined, secciones });
+  // El texto sólo de los borradores redactados (para la vista previa); lo subido es confidencial y ya lo tiene el usuario.
+  const { texto, userId: _u, ...meta } = doc;
+  return NextResponse.json({ ...meta, secciones, ...(doc.mime === MIME_BORRADOR ? { texto } : {}) });
 }
 
 // DELETE /api/juridico/documentos/[id] — borra el documento y su texto (no se archiva: es confidencial).
