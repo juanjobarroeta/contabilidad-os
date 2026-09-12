@@ -100,8 +100,17 @@ export interface OrdenamientoOjn {
 
 const ENTIDADES: Record<string, string> = { aacute: "á", eacute: "é", iacute: "í", oacute: "ó", uacute: "ú", ntilde: "ñ", Aacute: "Á", Eacute: "É", Iacute: "Í", Oacute: "Ó", Uacute: "Ú", Ntilde: "Ñ", uuml: "ü" };
 
+/** Algunas filas del OJN vienen con UTF-8 metido en una página latin1
+ *  («ProtecciÃ³n»): se detecta la firma Ã+continuación y se vuelve a decodificar. */
+export function repararMojibake(s: string): string {
+  if (!/[ÃÂ][\u0080-\u00BF]/.test(s)) return s;
+  const bytes = Buffer.from(s, "latin1");
+  const utf8 = bytes.toString("utf8");
+  return utf8.includes("\uFFFD") ? s : utf8;
+}
+
 function decode(s: string): string {
-  return s
+  return repararMojibake(s)
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&quot;/g, '"')
@@ -109,10 +118,16 @@ function decode(s: string): string {
     .replace(/&(aacute|eacute|iacute|oacute|uacute|ntilde|Aacute|Eacute|Iacute|Oacute|Uacute|Ntilde|uuml);/g, (_, e: string) => ENTIDADES[e] ?? "");
 }
 
-function ddmmyyyy(s: string | null | undefined): string | null {
+/** «dd-mm-aaaa» → ISO; «00-00-0000» (fecha desconocida en el OJN) y fechas
+ *  imposibles → null, que no es lo mismo que una fecha inválida en la BD. */
+export function ddmmyyyy(s: string | null | undefined): string | null {
   if (!s) return null;
   const m = s.match(/(\d{2})-(\d{2})-(\d{4})/);
-  return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
+  if (!m) return null;
+  const [d, mo, y] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  if (y < 1800 || mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  const iso = `${m[3]}-${m[2]}-${m[1]}`;
+  return Number.isNaN(Date.parse(`${iso}T00:00:00Z`)) ? null : iso;
 }
 
 /** Filas de despliegaedo.php o de obtenerOrdenamientosMu.php (mismo formato). */

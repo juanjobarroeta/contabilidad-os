@@ -31,8 +31,9 @@ async function main() {
     tot.fallidas += r.fallidas;
     for (const x of r.resultados) {
       if (!x.ok) {
-        fallidas.push(`${x.clave}: ${x.error?.slice(0, 160)}`);
-        log(`  ✗ ${x.clave}: ${x.error?.slice(0, 160)}`);
+        const motivo = (x.error ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
+        fallidas.push(`${x.clave}: ${motivo}`);
+        log(`  ✗ ${x.clave}: ${motivo}`);
       } else if (!x.skipped) log(`  ✓ ${x.clave}: ${x.chunkCount} chunks (${x.unidades} unidades), vigente desde ${x.vigenciaDesde}`);
     }
     log(`vuelta ${vuelta}: ${r.procesadas} procesadas, ${r.ingeridas} ingeridas, ${r.sinCambios} sin cambios, ${r.fallidas} fallidas · siguiente=${r.siguiente} de ${r.total}`);

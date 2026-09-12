@@ -450,8 +450,26 @@
       "excluida": null
     },
     {
-      "clave": "BCN-M-ENSENADA-R-PROTECCIA-N-MEJORAMIENTO-IMA",
-      "titulo": "Reglamento de ProtecciÃ³n y Mejoramiento de la Imagen Urbana de la Zona TurÃ­stica del Centro de la Ciudad de Ensenada",
+      "clave": "BCN-M-ENSENADA-R-PROTECCION-CIVIL-ENSENADA",
+      "titulo": "Reglamento Municipal de Protección Civil de Ensenada",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Baja%20California/Todos%20los%20Municipios/wo100472.doc",
+      "ambito": "MUNICIPAL",
+      "entidad": "BCN",
+      "municipio": "Ensenada",
+      "tipo": "Reglamento",
+      "idArchivo": "100472",
+      "fechaPublicacion": "2001-04-28",
+      "ultimaReforma": "2011-05-13",
+      "vigenciaFallback": "2011-05-13",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "BCN-M-ENSENADA-R-PROTECCION-MEJORAMIENTO-IMAG",
+      "titulo": "Reglamento de Protección y Mejoramiento de la Imagen Urbana de la Zona Turística del Centro de la Ciudad de Ensenada",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Baja%20California/Todos%20los%20Municipios/wo100605.doc",
       "ambito": "MUNICIPAL",
       "entidad": "BCN",
@@ -468,8 +486,8 @@
       "excluida": null
     },
     {
-      "clave": "BCN-M-ENSENADA-R-ZONIFICACIA-N-USOS-SUELO-INS",
-      "titulo": "Reglamento de ZonificaciÃ³n y Usos de Suelo para la InstalaciÃ³n, ConstrucciÃ³n y OperaciÃ³n de Estaciones de CarburaciÃ³n y de Servicio de Productos Derivados del PetrÃ³leo para el Municipio de Ensenada",
+      "clave": "BCN-M-ENSENADA-R-ZONIFICACION-USOS-SUELO-INST",
+      "titulo": "Reglamento de Zonificación y Usos de Suelo para la Instalación, Construcción y Operación de Estaciones de Carburación y de Servicio de Productos Derivados del Petróleo para el Municipio de Ensenada",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Baja%20California/Todos%20los%20Municipios/wo100603.doc",
       "ambito": "MUNICIPAL",
       "entidad": "BCN",
@@ -480,13 +498,15 @@
       "ultimaReforma": null,
       "vigenciaFallback": "2008-01-04",
       "materias": [
+        "energia",
+        "construccion",
         "urbano"
       ],
       "excluida": null
     },
     {
-      "clave": "BCN-M-MEXICALI-R-GENERAL-ACCIONES-URBANIZACIA",
-      "titulo": "Reglamento General de Acciones de UrbanizaciÃ³n para el Municipio de Mexicali",
+      "clave": "BCN-M-MEXICALI-R-GENERAL-ACCIONES-URBANIZACIO",
+      "titulo": "Reglamento General de Acciones de Urbanización para el Municipio de Mexicali",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Baja%20California/Todos%20los%20Municipios/wo100253.doc",
       "ambito": "MUNICIPAL",
       "entidad": "BCN",
@@ -516,6 +536,24 @@
       "materias": [
         "construccion",
         "urbano"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "BCN-M-MEXICALI-R-PROTECCION-CIVIL-MEXICALI",
+      "titulo": "Reglamento Municipal de Protección Civil de Mexicali",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Baja%20California/Todos%20los%20Municipios/wo100279.doc",
+      "ambito": "MUNICIPAL",
+      "entidad": "BCN",
+      "municipio": "Mexicali",
+      "tipo": "Reglamento",
+      "idArchivo": "100279",
+      "fechaPublicacion": "2004-12-03",
+      "ultimaReforma": "2006-02-10",
+      "vigenciaFallback": "2006-02-10",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
       ],
       "excluida": null
     },
@@ -708,9 +746,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "20074",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -726,9 +764,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "20081",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "urbano"
       ],
@@ -743,9 +781,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "20085",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "ambiental",
         "construccion"
@@ -778,9 +816,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "20122",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "vivienda",
         "construccion"
@@ -796,9 +834,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "20104",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -832,9 +870,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "20109",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "urbano"
@@ -850,9 +888,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "20110",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "seguridad_publica"
@@ -886,9 +924,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "20157",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "urbano"
@@ -1818,8 +1856,8 @@
       "excluida": null
     },
     {
-      "clave": "CHP-M-TAPACHULA-R-CONSTRUCCIA-N-TAPACHULA-CHIA",
-      "titulo": "Reglamento de ConstrucciÃ³n para el Municipio de Tapachula, Chiapas",
+      "clave": "CHP-M-TAPACHULA-R-CONSTRUCCION-TAPACHULA-CHIAP",
+      "titulo": "Reglamento de Construcción para el Municipio de Tapachula, Chiapas",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Chiapas/Todos%20los%20Municipios/wo101617.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "CHP",
@@ -1830,7 +1868,6 @@
       "ultimaReforma": null,
       "vigenciaFallback": "2014-03-19",
       "materias": [
-        "administrativo",
         "construccion"
       ],
       "excluida": null
@@ -1853,8 +1890,8 @@
       "excluida": null
     },
     {
-      "clave": "CHP-M-TUXTLA-GUTIERR-R-CONSTRUCCIA-N-TUXTLA-GUTIA-R",
-      "titulo": "Reglamento de ConstrucciÃ³n para el Municipio de Tuxtla GutiÃ©rrez, Chiapas",
+      "clave": "CHP-M-TUXTLA-GUTIERR-R-CONSTRUCCION-TUXTLA-GUTIERRE",
+      "titulo": "Reglamento de Construcción para el Municipio de Tuxtla Gutiérrez, Chiapas",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Chiapas/Todos%20los%20Municipios/wo101668.doc",
       "ambito": "MUNICIPAL",
       "entidad": "CHP",
@@ -1865,14 +1902,13 @@
       "ultimaReforma": "2009-11-11",
       "vigenciaFallback": "2009-11-11",
       "materias": [
-        "administrativo",
         "construccion"
       ],
       "excluida": null
     },
     {
-      "clave": "CHP-M-TUXTLA-GUTIERR-R-ORGANIZACIA-N-ASAMBLEA-BARRI",
-      "titulo": "Reglamento para la OrganizaciÃ³n de la Asamblea de Barrio: en los Barrios, Colonias, Ejidos y Fraccionamientos del Municipio de Tuxtla GutiÃ©rrez, Chiapas",
+      "clave": "CHP-M-TUXTLA-GUTIERR-R-ORGANIZACION-ASAMBLEA-BARRIO",
+      "titulo": "Reglamento para la Organización de la Asamblea de Barrio: en los Barrios, Colonias, Ejidos y Fraccionamientos del Municipio de Tuxtla Gutiérrez, Chiapas",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Chiapas/Todos%20los%20Municipios/wo101672.doc",
       "ambito": "MUNICIPAL",
       "entidad": "CHP",
@@ -1889,8 +1925,26 @@
       "excluida": null
     },
     {
+      "clave": "CHP-M-TUXTLA-GUTIERR-R-PROTECCION-CIVIL-TUXTLA-GUTI",
+      "titulo": "Reglamento Municipal de Protección Civil de Tuxtla Gutiérrez",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Chiapas/Todos%20los%20Municipios/wo101662.doc",
+      "ambito": "MUNICIPAL",
+      "entidad": "CHP",
+      "municipio": "Tuxtla Gutiérrez",
+      "tipo": "Reglamento",
+      "idArchivo": "101662",
+      "fechaPublicacion": "1999-01-06",
+      "ultimaReforma": "2010-05-12",
+      "vigenciaFallback": "2010-05-12",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
       "clave": "CHP-M-TUXTLA-GUTIERR-R-USO-SUELO-COMERCIAL-PRESTACI",
-      "titulo": "Reglamento para el Uso del Suelo Comercial y la PrestaciÃ³n de Servicios Establecidos en el Municipio de Tuxtla GutiÃ©rrez, Chiapas",
+      "titulo": "Reglamento para el Uso del Suelo Comercial y la Prestación de Servicios Establecidos en el Municipio de Tuxtla Gutiérrez, Chiapas",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Chiapas/Todos%20los%20Municipios/wo101667.doc",
       "ambito": "MUNICIPAL",
       "entidad": "CHP",
@@ -2638,8 +2692,8 @@
       "excluida": null
     },
     {
-      "clave": "COA-M-SALTILLO-R-EQUILIBRIO-ECOLA-GICO-PROTEC",
-      "titulo": "Reglamento del Equilibrio EcolÃ³gico y la ProtecciÃ³n Ambiental del Municipio de Saltillo, Coahuila",
+      "clave": "COA-M-SALTILLO-R-EQUILIBRIO-ECOLOGICO-PROTECC",
+      "titulo": "Reglamento del Equilibrio Ecológico y la Protección Ambiental del Municipio de Saltillo, Coahuila",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Coahuila%20de%20Zaragoza/Todos%20los%20Municipios/wo100944.doc",
       "ambito": "MUNICIPAL",
       "entidad": "COA",
@@ -2656,8 +2710,8 @@
       "excluida": null
     },
     {
-      "clave": "COA-M-TORREON-R-MOVILIDAD-URBANA-TORREA-N-CO",
-      "titulo": "Reglamento de Movilidad Urbana del Municipio de TorreÃ³n, Coahuila",
+      "clave": "COA-M-TORREON-R-MOVILIDAD-URBANA-TORREON-COA",
+      "titulo": "Reglamento de Movilidad Urbana del Municipio de Torreón, Coahuila",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Coahuila%20de%20Zaragoza/Todos%20los%20Municipios/wo100986.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "COA",
@@ -3016,7 +3070,7 @@
     },
     {
       "clave": "COL-M-COLIMA-L-QUE-ESTABLECE-CUOTAS-TARIFAS",
-      "titulo": "Ley que Establece las Cuotas y Tarifas para el Pago de Derechos por los Servicios PÃºblicos de Agua Potable, Alcantarillado y Saneamiento del Municipio de Comala",
+      "titulo": "Ley que Establece las Cuotas y Tarifas para el Pago de Derechos por los Servicios Públicos de Agua Potable, Alcantarillado y Saneamiento del Municipio de Comala",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Colima/Todos%20los%20Municipios/wo101135.doc",
       "ambito": "MUNICIPAL",
       "entidad": "COL",
@@ -3033,8 +3087,8 @@
       "excluida": null
     },
     {
-      "clave": "COL-M-COLIMA-R-CONSTRUCCIA-N-COLIMA",
-      "titulo": "Reglamento de ConstrucciÃ³n para el Municipio de Colima",
+      "clave": "COL-M-COLIMA-R-CONSTRUCCION-COLIMA",
+      "titulo": "Reglamento de Construcción para el Municipio de Colima",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Colima/Todos%20los%20Municipios/wo101123.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "COL",
@@ -3045,14 +3099,13 @@
       "ultimaReforma": null,
       "vigenciaFallback": "2014-05-10",
       "materias": [
-        "administrativo",
         "construccion"
       ],
       "excluida": null
     },
     {
       "clave": "COL-M-COLIMA-R-FUNCIONES-SEGURIDAD-PUBLICA",
-      "titulo": "Reglamento de las Funciones de Seguridad Publica, TrÃ¡nsito y Vialidad del Municipio de Colima",
+      "titulo": "Reglamento de las Funciones de Seguridad Publica, Tránsito y Vialidad del Municipio de Colima",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Colima/Todos%20los%20Municipios/wo101129.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "COL",
@@ -3070,7 +3123,7 @@
     },
     {
       "clave": "COL-M-COLIMA-R-QUE-ESTABLECE-CUOTAS-TARIFAS",
-      "titulo": "Ley que Establece las Cuotas y Tarifas para el Pago de Derechos por los Servicios PÃºblicos de Agua Potable, Alcantarillado y Saneamiento de los Municipios de Colima y Villa de Ãlvarez en el Estado de Colima",
+      "titulo": "Ley que Establece las Cuotas y Tarifas para el Pago de Derechos por los Servicios Públicos de Agua Potable, Alcantarillado y Saneamiento de los Municipios de Colima y Villa de Álvarez en el Estado de Colima",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Colima/Todos%20los%20Municipios/wo101122.doc",
       "ambito": "MUNICIPAL",
       "entidad": "COL",
@@ -3088,7 +3141,7 @@
     },
     {
       "clave": "COL-M-MANZANILLO-L-QUE-ESTABLECE-CUOTAS-TARIFAS",
-      "titulo": "Ley que Establece las Cuotas y Tarifas para el Pago de Derechos por los Servicios PÃºblicos de Agua Potable, Alcantarillado y Saneamiento del Municipio de Manzanillo",
+      "titulo": "Ley que Establece las Cuotas y Tarifas para el Pago de Derechos por los Servicios Públicos de Agua Potable, Alcantarillado y Saneamiento del Municipio de Manzanillo",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Colima/Todos%20los%20Municipios/wo101172.doc",
       "ambito": "MUNICIPAL",
       "entidad": "COL",
@@ -3123,7 +3176,7 @@
     },
     {
       "clave": "COL-M-MANZANILLO-R-SERVICIO-PROFESIONAL-CARRERA",
-      "titulo": "Reglamento del Servicio Profesional de Carrera Policial para la DirecciÃ³n General de Seguridad PÃºblica y Vialidad del Honorable Ayuntamiento del Municipio de Manzanillo",
+      "titulo": "Reglamento del Servicio Profesional de Carrera Policial para la Dirección General de Seguridad Pública y Vialidad del Honorable Ayuntamiento del Municipio de Manzanillo",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Colima/Todos%20los%20Municipios/wo101174.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "COL",
@@ -3397,12 +3450,29 @@
       "municipio": "Durango",
       "tipo": "Reglamento",
       "idArchivo": "67449",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "DUR-M-DURANGO-R-CENTRO-HISTORICO-CIUDAD-VICT",
+      "titulo": "Reglamento del Centro Histórico de la Ciudad de Victoria de Durango",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Durango/Todos%20los%20Municipios/wo67521.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "DUR",
+      "municipio": "Durango",
+      "tipo": "Reglamento",
+      "idArchivo": "67521",
+      "fechaPublicacion": "2009-01-09",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2009-01-09",
+      "materias": [
+        "urbano"
       ],
       "excluida": null
     },
@@ -3415,9 +3485,9 @@
       "municipio": "Durango",
       "tipo": "Reglamento",
       "idArchivo": "67512",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
@@ -3442,8 +3512,26 @@
       "excluida": null
     },
     {
-      "clave": "DUR-M-DURANGO-R-TRA-NSITO-ESTACIONAMIENTOS-D",
-      "titulo": "Reglamento de TrÃ¡nsito y Estacionamientos del Municipio de Durango",
+      "clave": "DUR-M-DURANGO-R-PROTECCION-CIVIL-DURANGO",
+      "titulo": "Reglamento de Protección Civil del Municipio de Durango",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Durango/Todos%20los%20Municipios/wo67446.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "DUR",
+      "municipio": "Durango",
+      "tipo": "Reglamento",
+      "idArchivo": "67446",
+      "fechaPublicacion": "1998-04-24",
+      "ultimaReforma": null,
+      "vigenciaFallback": "1998-04-24",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "DUR-M-DURANGO-R-TRANSITO-ESTACIONAMIENTOS-DU",
+      "titulo": "Reglamento de Tránsito y Estacionamientos del Municipio de Durango",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Durango/Todos%20los%20Municipios/wo67519.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "DUR",
@@ -3459,17 +3547,17 @@
       "excluida": null
     },
     {
-      "clave": "DUR-M-GOMEZ-PALACIO-R-ANUNCIOS-GA-MEZ-PALACIO-DURA",
-      "titulo": "Reglamento de Anuncios para el Municipio de GÃ³mez Palacio, Durango",
+      "clave": "DUR-M-GOMEZ-PALACIO-R-ANUNCIOS-GOMEZ-PALACIO-DURAN",
+      "titulo": "Reglamento de Anuncios para el Municipio de Gómez Palacio, Durango",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Durango/Todos%20los%20Municipios/wo81508.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "DUR",
       "municipio": "Gómez Palacio",
       "tipo": "Reglamento",
       "idArchivo": "81508",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
@@ -3477,16 +3565,16 @@
     },
     {
       "clave": "DUR-M-GOMEZ-PALACIO-R-CONSTRUCCIONES-DESARROLLO-UR",
-      "titulo": "Reglamento de Construcciones y Desarrollo Urbano para el Municipio de GÃ³mez Palacio, Durango",
+      "titulo": "Reglamento de Construcciones y Desarrollo Urbano para el Municipio de Gómez Palacio, Durango",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Durango/Todos%20los%20Municipios/wo81512.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "DUR",
       "municipio": "Gómez Palacio",
       "tipo": "Reglamento",
       "idArchivo": "81512",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "urbano"
@@ -3494,17 +3582,17 @@
       "excluida": null
     },
     {
-      "clave": "DUR-M-GOMEZ-PALACIO-R-EQUILIBRIO-ECOLA-GICO-PROTEC",
-      "titulo": "Reglamento del Equilibrio EcolÃ³gico y la ProtecciÃ³n al Ambiente del Municipio de GÃ³mez Palacio, Durango",
+      "clave": "DUR-M-GOMEZ-PALACIO-R-EQUILIBRIO-ECOLOGICO-PROTECC",
+      "titulo": "Reglamento del Equilibrio Ecológico y la Protección al Ambiente del Municipio de Gómez Palacio, Durango",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Durango/Todos%20los%20Municipios/wo81513.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "DUR",
       "municipio": "Gómez Palacio",
       "tipo": "Reglamento",
       "idArchivo": "81513",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "ambiental",
         "construccion"
@@ -3512,17 +3600,17 @@
       "excluida": null
     },
     {
-      "clave": "DUR-M-GOMEZ-PALACIO-R-INSTITUTO-VIVIENDA-GA-MEZ-PA",
-      "titulo": "Reglamento del Instituto Municipal de Vivienda de GÃ³mez Palacio, Durango",
+      "clave": "DUR-M-GOMEZ-PALACIO-R-INSTITUTO-VIVIENDA-GOMEZ-PAL",
+      "titulo": "Reglamento del Instituto Municipal de Vivienda de Gómez Palacio, Durango",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Durango/Todos%20los%20Municipios/wo81522.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "DUR",
       "municipio": "Gómez Palacio",
       "tipo": "Reglamento",
       "idArchivo": "81522",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "vivienda",
         "construccion"
@@ -3530,17 +3618,17 @@
       "excluida": null
     },
     {
-      "clave": "DUR-M-GOMEZ-PALACIO-R-INSTITUTO-VIVIENDA-GA-MEZ-PA-81523",
-      "titulo": "Reglamento del Instituto Municipal de Vivienda de GÃ³mez Palacio, Durango",
+      "clave": "DUR-M-GOMEZ-PALACIO-R-INSTITUTO-VIVIENDA-GOMEZ-PAL-81523",
+      "titulo": "Reglamento del Instituto Municipal de Vivienda de Gómez Palacio, Durango",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Durango/Todos%20los%20Municipios/wo81523.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "DUR",
       "municipio": "Gómez Palacio",
       "tipo": "Reglamento",
       "idArchivo": "81523",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "vivienda",
         "construccion"
@@ -3548,17 +3636,17 @@
       "excluida": null
     },
     {
-      "clave": "DUR-M-GOMEZ-PALACIO-R-PROTECCIA-N-AL-AMBIENTE-MATE",
-      "titulo": "Reglamento de ProtecciÃ³n al Ambiente en Materia de Control de ContaminaciÃ³n de Agua Residual del Sistema Descentralizado de Agua Potable y Alcantarillado para el Municipio de GÃ³mez Palacio, Durango",
+      "clave": "DUR-M-GOMEZ-PALACIO-R-PROTECCION-AL-AMBIENTE-MATER",
+      "titulo": "Reglamento de Protección al Ambiente en Materia de Control de Contaminación de Agua Residual del Sistema Descentralizado de Agua Potable y Alcantarillado para el Municipio de Gómez Palacio, Durango",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Durango/Todos%20los%20Municipios/wo81505.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "DUR",
       "municipio": "Gómez Palacio",
       "tipo": "Reglamento",
       "idArchivo": "81505",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "ambiental",
         "construccion"
@@ -3566,17 +3654,35 @@
       "excluida": null
     },
     {
-      "clave": "DUR-M-GOMEZ-PALACIO-R-TRA-NSITO-VIALIDAD-GA-MEZ-PA",
-      "titulo": "Reglamento de TrÃ¡nsito y Vialidad del Municipio de GÃ³mez Palacio, Durango",
+      "clave": "DUR-M-GOMEZ-PALACIO-R-PROTECCION-CIVIL-GOMEZ-PALAC",
+      "titulo": "Reglamento de Protección Civil del Municipio de Gómez Palacio, Estado de Durango",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Durango/Todos%20los%20Municipios/wo81555.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "DUR",
+      "municipio": "Gómez Palacio",
+      "tipo": "Reglamento",
+      "idArchivo": "81555",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "DUR-M-GOMEZ-PALACIO-R-TRANSITO-VIALIDAD-GOMEZ-PALA",
+      "titulo": "Reglamento de Tránsito y Vialidad del Municipio de Gómez Palacio, Durango",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Durango/Todos%20los%20Municipios/wo81560.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "DUR",
       "municipio": "Gómez Palacio",
       "tipo": "Reglamento",
       "idArchivo": "81560",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -3592,9 +3698,9 @@
       "municipio": "Lerdo",
       "tipo": "Reglamento",
       "idArchivo": "67623",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "urbano"
@@ -3602,17 +3708,17 @@
       "excluida": null
     },
     {
-      "clave": "DUR-M-LERDO-R-PROTECCIA-N-AL-MEDIO-AMBIENT",
-      "titulo": "Reglamento de ProtecciÃ³n al Medio Ambiente de Lerdo, Estado de Durango",
+      "clave": "DUR-M-LERDO-R-PROTECCION-AL-MEDIO-AMBIENTE",
+      "titulo": "Reglamento de Protección al Medio Ambiente de Lerdo, Estado de Durango",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Durango/Todos%20los%20Municipios/wo67617.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "DUR",
       "municipio": "Lerdo",
       "tipo": "Reglamento",
       "idArchivo": "67617",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "ambiental",
         "construccion"
@@ -3620,17 +3726,17 @@
       "excluida": null
     },
     {
-      "clave": "DUR-M-LERDO-R-TRA-NSITO-VIALIDAD-LERDO-DUR",
-      "titulo": "Reglamento de TrÃ¡nsito y Vialidad para el Municipio de Lerdo, Durango",
+      "clave": "DUR-M-LERDO-R-TRANSITO-VIALIDAD-LERDO-DURA",
+      "titulo": "Reglamento de Tránsito y Vialidad para el Municipio de Lerdo, Durango",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Durango/Todos%20los%20Municipios/wo67635.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "DUR",
       "municipio": "Lerdo",
       "tipo": "Reglamento",
       "idArchivo": "67635",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -3735,9 +3841,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "36542",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -3753,9 +3859,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "36544",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "urbano"
       ],
@@ -3770,9 +3876,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "36616",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "ambiental",
         "construccion"
@@ -3788,9 +3894,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "36559",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -3806,9 +3912,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "36563",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "urbano"
@@ -3824,9 +3930,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "36565",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "seguridad_publica"
@@ -3842,9 +3948,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "36576",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -3860,9 +3966,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "36578",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "vivienda",
         "construccion"
@@ -3878,9 +3984,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "35994",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
@@ -3895,9 +4001,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "35999",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "seguridad_publica"
@@ -3913,9 +4019,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "36009",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "vivienda",
         "construccion"
@@ -3931,9 +4037,9 @@
       "municipio": null,
       "tipo": "Reglamento",
       "idArchivo": "35109",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
@@ -4191,20 +4297,72 @@
       "excluida": null
     },
     {
-      "clave": "HID-M-MINERAL-REFORM-R-CONSTRUCCIA-N-MINERAL-REFORM",
-      "titulo": "Reglamento de ConstrucciÃ³n del Municipio de Mineral de la Reforma",
+      "clave": "HID-M-MINERAL-REFORM-R-CONSTRUCCION-MINERAL-REFORMA",
+      "titulo": "Reglamento de Construcción del Municipio de Mineral de la Reforma",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Hidalgo/Todos%20los%20Municipios/wo51598.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "HID",
       "municipio": "Mineral de la Reforma",
       "tipo": "Reglamento",
       "idArchivo": "51598",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
-        "administrativo",
         "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "HID-M-MINERAL-REFORM-R-PROTECCION-CIVIL-MINERAL-REF",
+      "titulo": "Reglamento de Protección Civil del Municipio de Mineral de la Reforma",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/HIDALGO/Municipios/Mineral%20de%20la%20Reforma/MineraldelaRefoReg02.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "HID",
+      "municipio": "Mineral de la Reforma",
+      "tipo": "Reglamento",
+      "idArchivo": "23531",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "HID-M-MINERAL-REFORM-R-PROTECCION-CIVIL-MINERAL-REF-104449",
+      "titulo": "Reglamento de Protección Civil del Municipio de Mineral de la Reforma, Hidalgo",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Hidalgo/Todos%20los%20Municipios/wo104449.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "HID",
+      "municipio": "Mineral de la Reforma",
+      "tipo": "Reglamento",
+      "idArchivo": "104449",
+      "fechaPublicacion": "2014-11-03",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2014-11-03",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "HID-M-PACHUCA-SOTO-L-PROTECCION-CONSERVACION-CENT",
+      "titulo": "Ley sobre Protección y Conservación del Centro Histórico y del Patrimonio Cultural de la Ciudad de Pachuca de Soto, Hgo.",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/HIDALGO/Municipios/Pachuca/PachucaLey01.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "HID",
+      "municipio": "Pachuca de Soto",
+      "tipo": "Ley",
+      "idArchivo": "23514",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "urbano"
       ],
       "excluida": null
     },
@@ -4217,17 +4375,17 @@
       "municipio": "Pachuca de Soto",
       "tipo": "Reglamento",
       "idArchivo": "23516",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
       "excluida": null
     },
     {
-      "clave": "HID-M-PACHUCA-SOTO-R-COMISIA-N-HONOR-JUSTICIA-SEC",
-      "titulo": "Reglamento de la ComisiÃ³n de Honor y Justicia de la Secretaria de Seguridad Publica, TrÃ¡nsito y Vialidad de Pachuca de Soto, Hidalgo",
+      "clave": "HID-M-PACHUCA-SOTO-R-COMISION-HONOR-JUSTICIA-SECR",
+      "titulo": "Reglamento de la Comisión de Honor y Justicia de la Secretaria de Seguridad Publica, Tránsito y Vialidad de Pachuca de Soto, Hidalgo",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Hidalgo/Todos%20los%20Municipios/wo104582.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "HID",
@@ -4252,17 +4410,17 @@
       "municipio": "Pachuca de Soto",
       "tipo": "Reglamento",
       "idArchivo": "23518",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
       "excluida": null
     },
     {
-      "clave": "HID-M-PACHUCA-SOTO-R-CONTROL-ESTACIONAMIENTO-VA-A",
-      "titulo": "Reglamento para el Control de Estacionamiento en las VÃ­as PÃºblicas Regulado por ParquÃ­metros del Municipio de Pachuca de Soto, Hidalgo",
+      "clave": "HID-M-PACHUCA-SOTO-R-CONTROL-ESTACIONAMIENTO-VIAS",
+      "titulo": "Reglamento para el Control de Estacionamiento en las Vías Públicas Regulado por Parquímetros del Municipio de Pachuca de Soto, Hidalgo",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Hidalgo/Todos%20los%20Municipios/wo104579.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "HID",
@@ -4278,8 +4436,8 @@
       "excluida": null
     },
     {
-      "clave": "HID-M-PACHUCA-SOTO-R-CONTROL-ESTACIONAMIENTO-VA-A-120813",
-      "titulo": "Reglamento para el Control de Estacionamiento en las VÃ­as PÃºblicas Regulados por ParquÃ­metros del Municipio de Pachuca de Soto, Hidalgo",
+      "clave": "HID-M-PACHUCA-SOTO-R-CONTROL-ESTACIONAMIENTO-VIAS-120813",
+      "titulo": "Reglamento para el Control de Estacionamiento en las Vías Públicas Regulados por Parquímetros del Municipio de Pachuca de Soto, Hidalgo",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Hidalgo/Todos%20los%20Municipios/wo120813.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "HID",
@@ -4295,17 +4453,17 @@
       "excluida": null
     },
     {
-      "clave": "HID-M-PACHUCA-SOTO-R-EQUILIBRIO-ECOLA-GICO-PROTEC",
-      "titulo": "Reglamento del Equilibrio EcolÃ³gico y ProtecciÃ³n al Ambiente",
+      "clave": "HID-M-PACHUCA-SOTO-R-EQUILIBRIO-ECOLOGICO-PROTECC",
+      "titulo": "Reglamento del Equilibrio Ecológico y Protección al Ambiente",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/HIDALGO/Municipios/Pachuca/PachucaReg06.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "HID",
       "municipio": "Pachuca de Soto",
       "tipo": "Reglamento",
       "idArchivo": "23522",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "ambiental",
         "construccion"
@@ -4321,26 +4479,26 @@
       "municipio": "Pachuca de Soto",
       "tipo": "Reglamento",
       "idArchivo": "50732",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
       "excluida": null
     },
     {
-      "clave": "HID-M-PACHUCA-SOTO-R-EXPLOTACIA-N-BANCOS-MATERIAL",
-      "titulo": "Reglamento para la ExplotaciÃ³n de Bancos de Material de ConstrucciÃ³n y OrnamentaciÃ³n en el Municipio de Pachuca de Soto, Hidalgo",
+      "clave": "HID-M-PACHUCA-SOTO-R-EXPLOTACION-BANCOS-MATERIAL",
+      "titulo": "Reglamento para la Explotación de Bancos de Material de Construcción y Ornamentación en el Municipio de Pachuca de Soto, Hidalgo",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Hidalgo/Todos%20los%20Municipios/wo50743.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "HID",
       "municipio": "Pachuca de Soto",
       "tipo": "Reglamento",
       "idArchivo": "50743",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "financiero",
         "construccion"
@@ -4356,9 +4514,9 @@
       "municipio": "Pachuca de Soto",
       "tipo": "Reglamento",
       "idArchivo": "50745",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "urbano"
@@ -4366,17 +4524,35 @@
       "excluida": null
     },
     {
-      "clave": "HID-M-PACHUCA-SOTO-R-TRA-NSITO-VIALIDAD-PACHUCA-S",
-      "titulo": "Reglamento de TrÃ¡nsito y Vialidad para el Municipio de Pachuca de Soto, Estado de Hidalgo",
+      "clave": "HID-M-PACHUCA-SOTO-R-PROTECCION-CIVIL-PACHUCA-SOT",
+      "titulo": "Reglamento de Protección Civil para el Municipio de Pachuca de Soto, Estado de Hidalgo",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Hidalgo/Todos%20los%20Municipios/wo50735.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "HID",
+      "municipio": "Pachuca de Soto",
+      "tipo": "Reglamento",
+      "idArchivo": "50735",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "HID-M-PACHUCA-SOTO-R-TRANSITO-VIALIDAD-PACHUCA-SO",
+      "titulo": "Reglamento de Tránsito y Vialidad para el Municipio de Pachuca de Soto, Estado de Hidalgo",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Hidalgo/Todos%20los%20Municipios/wo45267.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "HID",
       "municipio": "Pachuca de Soto",
       "tipo": "Reglamento",
       "idArchivo": "45267",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -4384,37 +4560,36 @@
       "excluida": null
     },
     {
-      "clave": "HID-M-TULANCINGO-BRA-R-BOMBEROS-PROTECCIA-N-CIVIL",
-      "titulo": "Reglamento de Bomberos y ProtecciÃ³n Civil",
+      "clave": "HID-M-TULANCINGO-BRA-R-BOMBEROS-PROTECCION-CIVIL",
+      "titulo": "Reglamento de Bomberos y Protección Civil",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Hidalgo/Todos%20los%20Municipios/wo45272.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "HID",
       "municipio": "Tulancingo de Bravo",
       "tipo": "Reglamento",
       "idArchivo": "45272",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
-        "administrativo",
-        "construccion"
+        "construccion",
+        "seguridad_publica"
       ],
       "excluida": null
     },
     {
-      "clave": "HID-M-TULANCINGO-BRA-R-CONSTRUCCIA-N-TULANCINGO-BRA",
-      "titulo": "Reglamento de ConstrucciÃ³n del Municipio de Tulancingo de Bravo, Hidalgo",
+      "clave": "HID-M-TULANCINGO-BRA-R-CONSTRUCCION-TULANCINGO-BRAV",
+      "titulo": "Reglamento de Construcción del Municipio de Tulancingo de Bravo, Hidalgo",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Hidalgo/Todos%20los%20Municipios/wo39215.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "HID",
       "municipio": "Tulancingo de Bravo",
       "tipo": "Reglamento",
       "idArchivo": "39215",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
-        "administrativo",
         "construccion"
       ],
       "excluida": null
@@ -4438,8 +4613,8 @@
       "excluida": null
     },
     {
-      "clave": "HID-M-TULANCINGO-BRA-R-E-CONSTRUCCIA-N-TULANCINGO-B",
-      "titulo": "Reglamento e ConstrucciÃ³n del Municipio de Tulancingo de Bravo, Hidalgo",
+      "clave": "HID-M-TULANCINGO-BRA-R-E-CONSTRUCCION-TULANCINGO-BR",
+      "titulo": "Reglamento e Construcción del Municipio de Tulancingo de Bravo, Hidalgo",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Hidalgo/Todos%20los%20Municipios/wo120749.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "HID",
@@ -4450,7 +4625,6 @@
       "ultimaReforma": null,
       "vigenciaFallback": "2016-06-25",
       "materias": [
-        "administrativo",
         "construccion"
       ],
       "excluida": null
@@ -4644,9 +4818,9 @@
       "municipio": null,
       "tipo": "Reglamento",
       "idArchivo": "23407",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -4989,9 +5163,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "34235",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -5097,9 +5271,9 @@
       "municipio": "Guadalajara",
       "tipo": "Reglamento",
       "idArchivo": "74638",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
@@ -5114,9 +5288,9 @@
       "municipio": "Guadalajara",
       "tipo": "Reglamento",
       "idArchivo": "74778",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "transporte",
         "construccion"
@@ -5124,17 +5298,51 @@
       "excluida": null
     },
     {
+      "clave": "JAL-M-GUADALAJARA-R-CONSEJO-CONSULTIVO-CIUDADANO",
+      "titulo": "Reglamento del Consejo Consultivo Ciudadano Coordinador del Centro Histórico en el Municipio de Guadalajara",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo74779.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "JAL",
+      "municipio": "Guadalajara",
+      "tipo": "Reglamento",
+      "idArchivo": "74779",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "urbano"
+      ],
+      "excluida": null
+    },
+    {
       "clave": "JAL-M-GUADALAJARA-R-CONSEJO-CONSULTIVO-SOCIAL-CO",
-      "titulo": "Reglamento del Consejo Consultivo Social para la ConstrucciÃ³n de la Villa Panamericana",
+      "titulo": "Reglamento del Consejo Consultivo Social para la Construcción de la Villa Panamericana",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo74794.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "JAL",
       "municipio": "Guadalajara",
       "tipo": "Reglamento",
       "idArchivo": "74794",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-M-GUADALAJARA-R-CONSEJO-TECNICO-CATASTRO-GUA",
+      "titulo": "Reglamento del Consejo Técnico de Catastro del Municipio de Guadalajara",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo75263.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "JAL",
+      "municipio": "Guadalajara",
+      "tipo": "Reglamento",
+      "idArchivo": "75263",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -5142,20 +5350,53 @@
       "excluida": null
     },
     {
-      "clave": "JAL-M-GUADALAJARA-R-CONSEJO-TA-CNICO-CATASTRO-GU",
-      "titulo": "Reglamento del Consejo TÃ©cnico de Catastro del Municipio de Guadalajara",
-      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo75263.pdf",
+      "clave": "JAL-M-GUADALAJARA-R-CONSERVACION-PATRIMONIO-CULT",
+      "titulo": "Reglamento de Conservación del Patrimonio Cultural Urbano en el Municipio de Guadalajara SD 1 \"Centro Histórico - Belén",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo74612.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "JAL",
       "municipio": "Guadalajara",
       "tipo": "Reglamento",
-      "idArchivo": "75263",
-      "fechaPublicacion": "0000-00-00",
+      "idArchivo": "74612",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
-        "administrativo",
-        "construccion"
+        "urbano"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-M-GUADALAJARA-R-CONSERVACION-PATRIMONIO-CULT-74613",
+      "titulo": "Reglamento de Conservación del Patrimonio Cultural Urbano en el Municipio de Guadalajara SD 2 \"Centro Histórico - Analco\"",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo74613.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "JAL",
+      "municipio": "Guadalajara",
+      "tipo": "Reglamento",
+      "idArchivo": "74613",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "urbano"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-M-GUADALAJARA-R-CONSERVACION-PATRIMONIO-CULT-74614",
+      "titulo": "Reglamento de Conservación del Patrimonio Cultural Urbano en el Municipio de Guadalajara SD 3 \"Centro Histórico - Mexicaltzingo\"",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo74614.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "JAL",
+      "municipio": "Guadalajara",
+      "tipo": "Reglamento",
+      "idArchivo": "74614",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "urbano"
       ],
       "excluida": null
     },
@@ -5168,26 +5409,26 @@
       "municipio": "Guadalajara",
       "tipo": "Reglamento",
       "idArchivo": "74623",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
       "excluida": null
     },
     {
-      "clave": "JAL-M-GUADALAJARA-R-GESTIA-N-DESARROLLO-URBANO-G",
-      "titulo": "Reglamento de GestiÃ³n del Desarrollo Urbano para el Municipio de Guadalajara",
+      "clave": "JAL-M-GUADALAJARA-R-GESTION-DESARROLLO-URBANO-GU",
+      "titulo": "Reglamento de Gestión del Desarrollo Urbano para el Municipio de Guadalajara",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo74626.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "JAL",
       "municipio": "Guadalajara",
       "tipo": "Reglamento",
       "idArchivo": "74626",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "urbano"
       ],
@@ -5202,9 +5443,9 @@
       "municipio": "Guadalajara",
       "tipo": "Reglamento",
       "idArchivo": "74627",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "urbano"
@@ -5212,17 +5453,34 @@
       "excluida": null
     },
     {
-      "clave": "JAL-M-GUADALAJARA-R-ORGANISMO-PA-BLICO-DESCENTRA",
-      "titulo": "Reglamento del Organismo PÃºblico Descentralizado Denominado Instituto Municipal de la Vivienda de Guadalajara",
+      "clave": "JAL-M-GUADALAJARA-R-OBRA-PUBLICA-GUADALAJARA",
+      "titulo": "Reglamento de Obra Pública para el Municipio de Guadalajara",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo74641.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "JAL",
+      "municipio": "Guadalajara",
+      "tipo": "Reglamento",
+      "idArchivo": "74641",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-M-GUADALAJARA-R-ORGANISMO-PUBLICO-DESCENTRAL",
+      "titulo": "Reglamento del Organismo Público Descentralizado Denominado Instituto Municipal de la Vivienda de Guadalajara",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo75281.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "JAL",
       "municipio": "Guadalajara",
       "tipo": "Reglamento",
       "idArchivo": "75281",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "vivienda",
         "construccion"
@@ -5230,17 +5488,52 @@
       "excluida": null
     },
     {
-      "clave": "JAL-M-GUADALAJARA-R-PROTECCIA-N-MEDIO-AMBIENTE-E",
-      "titulo": "Reglamento para la ProtecciÃ³n del Medio Ambiente y EcologÃ­a en el Municipio de Guadalajara",
+      "clave": "JAL-M-GUADALAJARA-R-PATRONATO-CENTRO-HISTORICO-B",
+      "titulo": "Reglamento del Patronato del Centro Histórico, Barrios y Zonas Tradicionales de la Ciudad de Guadalajara",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo75292.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "JAL",
+      "municipio": "Guadalajara",
+      "tipo": "Reglamento",
+      "idArchivo": "75292",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "urbano"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-M-GUADALAJARA-R-PROTECCION-CIVIL-GUADALAJARA",
+      "titulo": "Reglamento de Protección Civil para el Municipio de Guadalajara",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo74648.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "JAL",
+      "municipio": "Guadalajara",
+      "tipo": "Reglamento",
+      "idArchivo": "74648",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-M-GUADALAJARA-R-PROTECCION-MEDIO-AMBIENTE-EC",
+      "titulo": "Reglamento para la Protección del Medio Ambiente y Ecología en el Municipio de Guadalajara",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo75330.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "JAL",
       "municipio": "Guadalajara",
       "tipo": "Reglamento",
       "idArchivo": "75330",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "ambiental",
         "construccion"
@@ -5248,17 +5541,17 @@
       "excluida": null
     },
     {
-      "clave": "JAL-M-GUADALAJARA-R-REGULARIZACIA-N-FRACCIONAMIE",
-      "titulo": "Reglamento para la RegularizaciÃ³n de Fraccionamientos o Asentamientos Humanos Irregulares en Predios de Propiedad Privada en el Municipio de Guadalajara",
+      "clave": "JAL-M-GUADALAJARA-R-REGULARIZACION-FRACCIONAMIEN",
+      "titulo": "Reglamento para la Regularización de Fraccionamientos o Asentamientos Humanos Irregulares en Predios de Propiedad Privada en el Municipio de Guadalajara",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo75333.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "JAL",
       "municipio": "Guadalajara",
       "tipo": "Reglamento",
       "idArchivo": "75333",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "vivienda",
         "construccion",
@@ -5267,38 +5560,53 @@
       "excluida": null
     },
     {
-      "clave": "JAL-M-GUADALAJARA-R-ZONIFICACIA-N-ESPECA-FICA-ES",
-      "titulo": "Reglamento de ZonificaciÃ³n EspecÃ­fica para Estaciones de Servicio o Gasolineras del Municipio de Guadalajara",
+      "clave": "JAL-M-GUADALAJARA-R-ZONA-DENOMINADA-COMO-CENTRO",
+      "titulo": "Reglamento para la Zona Denominada como Centro Histórico, Barrios y Zonas Tradicionales de Guadalajara",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo75334.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "JAL",
+      "municipio": "Guadalajara",
+      "tipo": "Reglamento",
+      "idArchivo": "75334",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "urbano"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-M-GUADALAJARA-R-ZONIFICACION-ESPECIFICA-ESTA",
+      "titulo": "Reglamento de Zonificación Específica para Estaciones de Servicio o Gasolineras del Municipio de Guadalajara",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo74768.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "JAL",
       "municipio": "Guadalajara",
       "tipo": "Reglamento",
       "idArchivo": "74768",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
-        "administrativo",
-        "construccion"
+        "urbano"
       ],
       "excluida": null
     },
     {
-      "clave": "JAL-M-GUADALAJARA-R-ZONIFICACIA-N-URBANA-GUADALA",
-      "titulo": "Reglamento de ZonificaciÃ³n Urbana del Municipio de Guadalajara",
+      "clave": "JAL-M-GUADALAJARA-R-ZONIFICACION-URBANA-GUADALAJ",
+      "titulo": "Reglamento de Zonificación Urbana del Municipio de Guadalajara",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo74770.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "JAL",
       "municipio": "Guadalajara",
       "tipo": "Reglamento",
       "idArchivo": "74770",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
-        "administrativo",
-        "construccion"
+        "urbano"
       ],
       "excluida": null
     },
@@ -5311,9 +5619,27 @@
       "municipio": "Puerto Vallarta",
       "tipo": "Ley",
       "idArchivo": "33472",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "administrativo",
+        "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-M-PUERTO-VALLART-R-ADJUDICACION-ASIGNACION-CONT",
+      "titulo": "Reglamento de Adjudicación, Asignación y Contratación de Obras Públicas para el Municipio de Puerto Vallarta, Jalisco",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo80682.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "JAL",
+      "municipio": "Puerto Vallarta",
+      "tipo": "Reglamento",
+      "idArchivo": "80682",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -5329,65 +5655,62 @@
       "municipio": "Puerto Vallarta",
       "tipo": "Reglamento",
       "idArchivo": "80731",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "urbano"
       ],
       "excluida": null
     },
     {
-      "clave": "JAL-M-PUERTO-VALLART-R-CONSTRUCCIA-N-PUERTO-VALLART",
-      "titulo": "Reglamento de ConstrucciÃ³n de Puerto Vallarta, Jalisco",
+      "clave": "JAL-M-PUERTO-VALLART-R-CONSTRUCCION-PUERTO-VALLARTA",
+      "titulo": "Reglamento de Construcción de Puerto Vallarta, Jalisco",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo80691.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "JAL",
       "municipio": "Puerto Vallarta",
       "tipo": "Reglamento",
       "idArchivo": "80691",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
-        "administrativo",
         "construccion"
       ],
       "excluida": null
     },
     {
-      "clave": "JAL-M-PUERTO-VALLART-R-ESTATAL-ZONIFICACIA-N-PUERTO",
-      "titulo": "Reglamento Estatal de ZonificaciÃ³n (de Puerto Vallarta, Jalisco Parte 2)",
+      "clave": "JAL-M-PUERTO-VALLART-R-ESTATAL-ZONIFICACION-PUERTO",
+      "titulo": "Reglamento Estatal de Zonificación (de Puerto Vallarta, Jalisco Parte 2)",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo80718.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "JAL",
       "municipio": "Puerto Vallarta",
       "tipo": "Reglamento",
       "idArchivo": "80718",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
-        "administrativo",
-        "construccion"
+        "urbano"
       ],
       "excluida": null
     },
     {
-      "clave": "JAL-M-PUERTO-VALLART-R-ESTATAL-ZONIFICACIA-N-PUERTO-80717",
-      "titulo": "Reglamento Estatal de ZonificaciÃ³n de Puerto Vallarta, Jalisco (Parte 1)",
+      "clave": "JAL-M-PUERTO-VALLART-R-ESTATAL-ZONIFICACION-PUERTO-80717",
+      "titulo": "Reglamento Estatal de Zonificación de Puerto Vallarta, Jalisco (Parte 1)",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo80717.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "JAL",
       "municipio": "Puerto Vallarta",
       "tipo": "Reglamento",
       "idArchivo": "80717",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
-        "administrativo",
-        "construccion"
+        "urbano"
       ],
       "excluida": null
     },
@@ -5400,9 +5723,9 @@
       "municipio": "Puerto Vallarta",
       "tipo": "Reglamento",
       "idArchivo": "80704",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "vivienda",
         "construccion"
@@ -5410,17 +5733,34 @@
       "excluida": null
     },
     {
-      "clave": "JAL-M-PUERTO-VALLART-R-PRESTACIA-N-SERVICIOS-AGUA-P",
-      "titulo": "Reglamento para la PrestaciÃ³n de los Servicios de Agua Potable, Alcantarillado y Saneamiento del Municipio de Puerto Vallarta",
+      "clave": "JAL-M-PUERTO-VALLART-R-PATRONATO-CENTRO-HISTORICO-P",
+      "titulo": "Reglamento del Patronato del Centro Histórico del Municipio de Puerto Vallarta, Jalisco",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo80701.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "JAL",
+      "municipio": "Puerto Vallarta",
+      "tipo": "Reglamento",
+      "idArchivo": "80701",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "urbano"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-M-PUERTO-VALLART-R-PRESTACION-SERVICIOS-AGUA-PO",
+      "titulo": "Reglamento para la Prestación de los Servicios de Agua Potable, Alcantarillado y Saneamiento del Municipio de Puerto Vallarta",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo80713.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "JAL",
       "municipio": "Puerto Vallarta",
       "tipo": "Reglamento",
       "idArchivo": "80713",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -5428,17 +5768,35 @@
       "excluida": null
     },
     {
-      "clave": "JAL-M-PUERTO-VALLART-R-TRA-NSITO-VIALIDAD-PUERTO-VA",
-      "titulo": "Reglamento de TrÃ¡nsito y Vialidad para el Municipio de Puerto Vallarta, Jalisco",
+      "clave": "JAL-M-PUERTO-VALLART-R-PROTECCION-CIVIL-PUERTO-VALL",
+      "titulo": "Reglamento Municipal de Protección Civil de Puerto Vallarta, Jalisco",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo80709.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "JAL",
+      "municipio": "Puerto Vallarta",
+      "tipo": "Reglamento",
+      "idArchivo": "80709",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-M-PUERTO-VALLART-R-TRANSITO-VIALIDAD-PUERTO-VAL",
+      "titulo": "Reglamento de Tránsito y Vialidad para el Municipio de Puerto Vallarta, Jalisco",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo80695.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "JAL",
       "municipio": "Puerto Vallarta",
       "tipo": "Reglamento",
       "idArchivo": "80695",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -5446,17 +5804,34 @@
       "excluida": null
     },
     {
-      "clave": "JAL-M-TLAQUEPAQUE-R-CONSEJO-TA-CNICO-CATASTRO-GO",
-      "titulo": "Reglamento del Consejo TÃ©cnico de Catastro del Gobierno Constitucional del Municipio de Tlaquepaque, Jalisco",
+      "clave": "JAL-M-TLAQUEPAQUE-R-CENTRO-HISTORICO-ZONAS-PATRI",
+      "titulo": "Reglamento del Centro Histórico y Zonas Patrimoniales del Municipio de Tlaquepaque",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo78982.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "JAL",
+      "municipio": "Tlaquepaque",
+      "tipo": "Reglamento",
+      "idArchivo": "78982",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "urbano"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-M-TLAQUEPAQUE-R-CONSEJO-TECNICO-CATASTRO-GOB",
+      "titulo": "Reglamento del Consejo Técnico de Catastro del Gobierno Constitucional del Municipio de Tlaquepaque, Jalisco",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo78708.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "JAL",
       "municipio": "Tlaquepaque",
       "tipo": "Reglamento",
       "idArchivo": "78708",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -5472,44 +5847,43 @@
       "municipio": "Tlaquepaque",
       "tipo": "Reglamento",
       "idArchivo": "78714",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
       "excluida": null
     },
     {
-      "clave": "JAL-M-TLAQUEPAQUE-R-ELABORACIA-N-PROYECTOS-CONST",
-      "titulo": "Reglamento para la ElaboraciÃ³n de Proyectos, ConstrucciÃ³n y Entrega de Sistemas de Alumbrado PÃºblico al Ayuntamiento de Tlaquepaque, Jalisco",
+      "clave": "JAL-M-TLAQUEPAQUE-R-ELABORACION-PROYECTOS-CONSTR",
+      "titulo": "Reglamento para la Elaboración de Proyectos, Construcción y Entrega de Sistemas de Alumbrado Público al Ayuntamiento de Tlaquepaque, Jalisco",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo78974.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "JAL",
       "municipio": "Tlaquepaque",
       "tipo": "Reglamento",
       "idArchivo": "78974",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
-        "administrativo",
         "construccion"
       ],
       "excluida": null
     },
     {
-      "clave": "JAL-M-TLAQUEPAQUE-R-EQUILIBRIO-ECOLA-GICO-PROTEC",
-      "titulo": "Reglamento Municipal del Equilibrio EcolÃ³gico y la ProtecciÃ³n al Ambiente",
+      "clave": "JAL-M-TLAQUEPAQUE-R-EQUILIBRIO-ECOLOGICO-PROTECC",
+      "titulo": "Reglamento Municipal del Equilibrio Ecológico y la Protección al Ambiente",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo78783.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "JAL",
       "municipio": "Tlaquepaque",
       "tipo": "Reglamento",
       "idArchivo": "78783",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "ambiental",
         "construccion"
@@ -5525,9 +5899,9 @@
       "municipio": "Tlaquepaque",
       "tipo": "Reglamento",
       "idArchivo": "78808",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "urbano"
@@ -5535,34 +5909,17 @@
       "excluida": null
     },
     {
-      "clave": "JAL-M-TLAQUEPAQUE-R-SERVICIO-PA-BLICO-ESTACIONAM",
-      "titulo": "Reglamento del Servicio PÃºblico de Estacionamientos y EstacionÃ³metros en el Municipio de Tlaquepaque",
-      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo78784.pdf",
+      "clave": "JAL-M-TLAQUEPAQUE-R-OBRAS-PUBLICAS-TLAQUEPAQUE",
+      "titulo": "Reglamento Obras Públicas para el Municipio de Tlaquepaque",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo78996.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "JAL",
       "municipio": "Tlaquepaque",
       "tipo": "Reglamento",
-      "idArchivo": "78784",
-      "fechaPublicacion": "0000-00-00",
+      "idArchivo": "78996",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
-      "materias": [
-        "construccion"
-      ],
-      "excluida": null
-    },
-    {
-      "clave": "JAL-M-TLAQUEPAQUE-R-ZONIFICACIA-N-ESPECA-FICA-ES",
-      "titulo": "Reglamento de ZonificaciÃ³n EspecÃ­fica para Estaciones de Servicio o Gasolineras del Municipio de Tlaquepaque",
-      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo79039.pdf",
-      "ambito": "MUNICIPAL",
-      "entidad": "JAL",
-      "municipio": "Tlaquepaque",
-      "tipo": "Reglamento",
-      "idArchivo": "79039",
-      "fechaPublicacion": "0000-00-00",
-      "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -5570,34 +5927,86 @@
       "excluida": null
     },
     {
-      "clave": "JAL-M-TONALA-R-ANUNCIOS-TONALA-JALISCO",
-      "titulo": "Reglamento de Anuncios para el Municipio de TonalÃ¡, Jalisco",
-      "url": "http://www.ordenjuridico.gob.mx/Estatal/JALISCO/Municipios/Tonala/TONReg1.pdf",
+      "clave": "JAL-M-TLAQUEPAQUE-R-OBRAS-PUBLICAS-TLAQUEPAQUE-S",
+      "titulo": "Reglamento Obras Públicas para el Municipio de Tlaquepaque S.I.A.P.A.",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo78998.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "JAL",
-      "municipio": "Tonalá",
+      "municipio": "Tlaquepaque",
       "tipo": "Reglamento",
-      "idArchivo": "33520",
-      "fechaPublicacion": "0000-00-00",
+      "idArchivo": "78998",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "administrativo",
+        "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-M-TLAQUEPAQUE-R-SERVICIO-PUBLICO-ESTACIONAMI",
+      "titulo": "Reglamento del Servicio Público de Estacionamientos y Estacionómetros en el Municipio de Tlaquepaque",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo78784.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "JAL",
+      "municipio": "Tlaquepaque",
+      "tipo": "Reglamento",
+      "idArchivo": "78784",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
       "excluida": null
     },
     {
-      "clave": "JAL-M-TONALA-R-CONSEJO-TA-CNICO-CATASTRAL-T",
-      "titulo": "Reglamento del Consejo TÃ©cnico Catastral del Municipio de TonalÃ¡, Jalisco",
+      "clave": "JAL-M-TLAQUEPAQUE-R-ZONIFICACION-ESPECIFICA-ESTA",
+      "titulo": "Reglamento de Zonificación Específica para Estaciones de Servicio o Gasolineras del Municipio de Tlaquepaque",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/Todos%20los%20Municipios/wo79039.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "JAL",
+      "municipio": "Tlaquepaque",
+      "tipo": "Reglamento",
+      "idArchivo": "79039",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "urbano"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-M-TONALA-R-ANUNCIOS-TONALA-JALISCO",
+      "titulo": "Reglamento de Anuncios para el Municipio de Tonalá, Jalisco",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/JALISCO/Municipios/Tonala/TONReg1.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "JAL",
+      "municipio": "Tonalá",
+      "tipo": "Reglamento",
+      "idArchivo": "33520",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-M-TONALA-R-CONSEJO-TECNICO-CATASTRAL-TO",
+      "titulo": "Reglamento del Consejo Técnico Catastral del Municipio de Tonalá, Jalisco",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/JALISCO/Municipios/Tonala/TONReg11.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "JAL",
       "municipio": "Tonalá",
       "tipo": "Reglamento",
       "idArchivo": "33532",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -5606,18 +6015,70 @@
     },
     {
       "clave": "JAL-M-TONALA-R-ESTACIONAMIENTOS-TONALA-JALI",
-      "titulo": "Reglamento de Estacionamientos para el Municipio de TonalÃ¡, Jalisco",
+      "titulo": "Reglamento de Estacionamientos para el Municipio de Tonalá, Jalisco",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/JALISCO/Municipios/Tonala/TONReg4.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "JAL",
       "municipio": "Tonalá",
       "tipo": "Reglamento",
       "idArchivo": "33523",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-M-TONALA-R-OBRA-PUBLICA-SERVICIOS-RELAC",
+      "titulo": "Reglamento de Obra Pública y Servicios Relacionados con la misma del S.I.A.P.A.",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/JALISCO/Municipios/Tonala/TONReg20.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "JAL",
+      "municipio": "Tonalá",
+      "tipo": "Reglamento",
+      "idArchivo": "33527",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-M-TONALA-R-OBRA-PUBLICA-TONALA-JALISCO",
+      "titulo": "Reglamento de Obra Pública para el Municipio de Tonalá, Jalisco",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/JALISCO/Municipios/Tonala/TONReg6.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "JAL",
+      "municipio": "Tonalá",
+      "tipo": "Reglamento",
+      "idArchivo": "33526",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-M-TONALA-R-PROTECCION-CIVIL-TONALA-JALI",
+      "titulo": "Reglamento Municipal de Protección Civil de Tonalá, Jalisco",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/JALISCO/Municipios/Tonala/TONReg15.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "JAL",
+      "municipio": "Tonalá",
+      "tipo": "Reglamento",
+      "idArchivo": "33537",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
       ],
       "excluida": null
     },
@@ -5630,9 +6091,26 @@
       "municipio": "Zapopan",
       "tipo": "Reglamento",
       "idArchivo": "34023",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-M-ZAPOPAN-R-ASIGNACION-CONTRATACION-OBRA",
+      "titulo": "Reglamento de Asignación y Contratación de Obra Pública para el Municipio de Zapopan, Jalisco",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/JALISCO/Municipios/Zapopan/ZPPReg4.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "JAL",
+      "municipio": "Zapopan",
+      "tipo": "Reglamento",
+      "idArchivo": "34024",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
@@ -5647,9 +6125,9 @@
       "municipio": "Zapopan",
       "tipo": "Reglamento",
       "idArchivo": "34027",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "urbano"
@@ -5657,17 +6135,17 @@
       "excluida": null
     },
     {
-      "clave": "JAL-M-ZAPOPAN-R-DISEA-O-CONSTRUCCIA-N-ORDENA",
-      "titulo": "Reglamento de DiseÃ±o, ConstrucciÃ³n y Ordenamiento del Fraccionamiento Pinar de la Venta",
+      "clave": "JAL-M-ZAPOPAN-R-DISENO-CONSTRUCCION-ORDENAMI",
+      "titulo": "Reglamento de Diseño, Construcción y Ordenamiento del Fraccionamiento Pinar de la Venta",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/JALISCO/Municipios/Zapopan/ZPPReg8.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "JAL",
       "municipio": "Zapopan",
       "tipo": "Reglamento",
       "idArchivo": "34028",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "urbano"
@@ -5675,52 +6153,69 @@
       "excluida": null
     },
     {
-      "clave": "JAL-M-ZAPOPAN-R-ESTACIONAMIENTOS-ESTACIONA-M",
-      "titulo": "Reglamento de Estacionamientos y EstacionÃ³metros del Municipio de Zapopan, Jalisco.",
+      "clave": "JAL-M-ZAPOPAN-R-ESTACIONAMIENTOS-ESTACIONOME",
+      "titulo": "Reglamento de Estacionamientos y Estacionómetros del Municipio de Zapopan, Jalisco.",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/JALISCO/Municipios/Zapopan/ZPPReg9.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "JAL",
       "municipio": "Zapopan",
       "tipo": "Reglamento",
       "idArchivo": "34029",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
       "excluida": null
     },
     {
-      "clave": "JAL-M-ZAPOPAN-R-ESTATAL-ZONIFICACIA-N",
-      "titulo": "Reglamento Estatal de ZonificaciÃ³n",
+      "clave": "JAL-M-ZAPOPAN-R-ESTATAL-ZONIFICACION",
+      "titulo": "Reglamento Estatal de Zonificación",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/JALISCO/Municipios/Zapopan/ZPPReg24.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "JAL",
       "municipio": "Zapopan",
       "tipo": "Reglamento",
       "idArchivo": "34045",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
-        "administrativo",
-        "construccion"
+        "urbano"
       ],
       "excluida": null
     },
     {
-      "clave": "JAL-M-ZAPOPAN-R-PROTECCIA-N-AL-MEDIO-AMBIENT",
-      "titulo": "Reglamento de ProtecciÃ³n al Medio Ambiente y Equilibrio EcolÃ³gico para el Municipio de Zapopan, Jalisco",
+      "clave": "JAL-M-ZAPOPAN-R-ORGANIZACION-FUNCIONAMIENTO",
+      "titulo": "Reglamento para la Organización y Funcionamiento del Consejo Municipal de Protección Civil de Zapopan, Jalisco",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/JALISCO/Municipios/Zapopan/ZPPReg36.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "JAL",
+      "municipio": "Zapopan",
+      "tipo": "Reglamento",
+      "idArchivo": "34057",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-M-ZAPOPAN-R-PROTECCION-AL-MEDIO-AMBIENTE",
+      "titulo": "Reglamento de Protección al Medio Ambiente y Equilibrio Ecológico para el Municipio de Zapopan, Jalisco",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/JALISCO/Municipios/Zapopan/ZPPReg13.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "JAL",
       "municipio": "Zapopan",
       "tipo": "Reglamento",
       "idArchivo": "34033",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "ambiental",
         "construccion"
@@ -6058,9 +6553,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "31327",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "vivienda",
         "organico",
@@ -6077,9 +6572,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "31328",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "organico",
         "construccion"
@@ -6095,9 +6590,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "31340",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "urbano"
@@ -6131,9 +6626,9 @@
       "municipio": null,
       "tipo": "Reglamento",
       "idArchivo": "30268",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "civil",
         "construccion",
@@ -6185,9 +6680,9 @@
       "municipio": null,
       "tipo": "Reglamento",
       "idArchivo": "30191",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
@@ -6202,9 +6697,9 @@
       "municipio": null,
       "tipo": "Reglamento",
       "idArchivo": "30478",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "ambiental",
         "construccion"
@@ -6220,9 +6715,9 @@
       "municipio": null,
       "tipo": "Reglamento",
       "idArchivo": "30187",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "urbano"
@@ -6238,9 +6733,9 @@
       "municipio": null,
       "tipo": "Reglamento",
       "idArchivo": "30188",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
@@ -6327,9 +6822,9 @@
       "municipio": null,
       "tipo": "Reglamento",
       "idArchivo": "30245",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "ambiental",
         "construccion"
@@ -6397,9 +6892,9 @@
       "municipio": null,
       "tipo": "Reglamento",
       "idArchivo": "30225",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "seguridad_publica"
@@ -6415,9 +6910,9 @@
       "municipio": null,
       "tipo": "Reglamento",
       "idArchivo": "30301",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -6450,9 +6945,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "33250",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -6468,9 +6963,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "33257",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -6503,9 +6998,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "33288",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -6521,9 +7016,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "33311",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "vivienda",
         "organico",
@@ -6540,9 +7035,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "33294",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "seguridad_publica"
@@ -6558,9 +7053,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "33325",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "urbano"
@@ -6576,9 +7071,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "33298",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -6594,9 +7089,9 @@
       "municipio": null,
       "tipo": "Reglamento",
       "idArchivo": "32740",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -6612,9 +7107,9 @@
       "municipio": null,
       "tipo": "Reglamento",
       "idArchivo": "32748",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "ambiental",
         "construccion"
@@ -6630,9 +7125,9 @@
       "municipio": null,
       "tipo": "Reglamento",
       "idArchivo": "32760",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "ambiental",
         "construccion"
@@ -6648,9 +7143,9 @@
       "municipio": null,
       "tipo": "Reglamento",
       "idArchivo": "32743",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -6666,9 +7161,9 @@
       "municipio": null,
       "tipo": "Reglamento",
       "idArchivo": "32745",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "seguridad_publica"
@@ -6684,9 +7179,9 @@
       "municipio": null,
       "tipo": "Reglamento",
       "idArchivo": "32746",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -6891,17 +7386,17 @@
       "excluida": null
     },
     {
-      "clave": "NAY-M-BAHIA-BANDERAS-R-ANUNCIOS-BAHA-A-BANDERAS-NAY",
-      "titulo": "Reglamento de Anuncios para el Municipio de BahÃ­a de Banderas, Nayarit",
+      "clave": "NAY-M-BAHIA-BANDERAS-R-ANUNCIOS-BAHIA-BANDERAS-NAYA",
+      "titulo": "Reglamento de Anuncios para el Municipio de Bahía de Banderas, Nayarit",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/NAYARIT/Municipios/Bahia%20de%20Banderas/2REGBAHIA.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "NAY",
       "municipio": "Bahía de Banderas",
       "tipo": "Reglamento",
       "idArchivo": "23734",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
@@ -6909,33 +7404,16 @@
     },
     {
       "clave": "NAY-M-BAHIA-BANDERAS-R-DESARROLLO-URBANO-CONSTRUCCI",
-      "titulo": "Reglamento de Desarrollo Urbano y ConstrucciÃ³n para el Municipio de BahÃ­a de Banderas, Nayarit",
+      "titulo": "Reglamento de Desarrollo Urbano y Construcción para el Municipio de Bahía de Banderas, Nayarit",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/NAYARIT/Municipios/Bahia%20de%20Banderas/7REG.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "NAY",
       "municipio": "Bahía de Banderas",
       "tipo": "Reglamento",
       "idArchivo": "23736",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
-      "materias": [
-        "urbano"
-      ],
-      "excluida": null
-    },
-    {
-      "clave": "NAY-M-BAHIA-BANDERAS-R-ESTACIONAMIENTO-A-REAS-ESTAC",
-      "titulo": "Reglamento para el Estacionamiento y Ãreas de Estacionamiento en el Fraccionamiento NÃ¡utico TurÃ­stico y Residencial, Nuevo Vallarta",
-      "url": "http://www.ordenjuridico.gob.mx/Estatal/NAYARIT/Municipios/Bahia%20de%20Banderas/9REG.pdf",
-      "ambito": "MUNICIPAL",
-      "entidad": "NAY",
-      "municipio": "Bahía de Banderas",
-      "tipo": "Reglamento",
-      "idArchivo": "23750",
-      "fechaPublicacion": "0000-00-00",
-      "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "urbano"
@@ -6943,17 +7421,53 @@
       "excluida": null
     },
     {
-      "clave": "NAY-M-BAHIA-BANDERAS-R-ZONIFICACIA-N-USOS-SUELO-BAH",
-      "titulo": "Reglamento Municipal de ZonificaciÃ³n y Usos del Suelo de BahÃ­a de Banderas, Nayarit",
+      "clave": "NAY-M-BAHIA-BANDERAS-R-ESTACIONAMIENTO-AREAS-ESTACI",
+      "titulo": "Reglamento para el Estacionamiento y Áreas de Estacionamiento en el Fraccionamiento Náutico Turístico y Residencial, Nuevo Vallarta",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/NAYARIT/Municipios/Bahia%20de%20Banderas/9REG.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "NAY",
+      "municipio": "Bahía de Banderas",
+      "tipo": "Reglamento",
+      "idArchivo": "23750",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion",
+        "urbano"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "NAY-M-BAHIA-BANDERAS-R-PROTECCION-CIVIL-BAHIA-BANDE",
+      "titulo": "Reglamento de Protección Civil, para el Municipio de Bahía de banderas, Nayarit",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/NAYARIT/Municipios/Bahia%20de%20Banderas/3REG.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "NAY",
+      "municipio": "Bahía de Banderas",
+      "tipo": "Reglamento",
+      "idArchivo": "23741",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "NAY-M-BAHIA-BANDERAS-R-ZONIFICACION-USOS-SUELO-BAHI",
+      "titulo": "Reglamento Municipal de Zonificación y Usos del Suelo de Bahía de Banderas, Nayarit",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/NAYARIT/Municipios/Bahia%20de%20Banderas/5REG.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "NAY",
       "municipio": "Bahía de Banderas",
       "tipo": "Reglamento",
       "idArchivo": "23748",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "urbano"
       ],
@@ -6968,9 +7482,9 @@
       "municipio": "Tepic",
       "tipo": "Reglamento",
       "idArchivo": "23670",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
@@ -6985,43 +7499,61 @@
       "municipio": "Tepic",
       "tipo": "Reglamento",
       "idArchivo": "23672",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
       "excluida": null
     },
     {
-      "clave": "NAY-M-TEPIC-R-ESTACIONAMIENTO-VEHA-CULOS-M",
-      "titulo": "Reglamento para el Estacionamiento de VehÃ­culos de Motor en la VÃ­a PÃºblica",
+      "clave": "NAY-M-TEPIC-R-ESTACIONAMIENTO-VEHICULOS-MO",
+      "titulo": "Reglamento para el Estacionamiento de Vehículos de Motor en la Vía Pública",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/NAYARIT/Municipios/Tepic/25Regestacionamiento.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "NAY",
       "municipio": "Tepic",
       "tipo": "Reglamento",
       "idArchivo": "23696",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
       "excluida": null
     },
     {
-      "clave": "NAY-M-TEPIC-R-TRA-NSITO-VIALIDAD-TEPIC-NAY",
-      "titulo": "Reglamento de TrÃ¡nsito y Vialidad del Municipio de Tepic, Nayarit",
+      "clave": "NAY-M-TEPIC-R-PROTECCION-CIVIL-TEPIC-NAYAR",
+      "titulo": "Reglamento de Protección Civil para el Municipio de Tepic, Nayarit",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/NAYARIT/Municipios/Tepic/10Regproteccion.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "NAY",
+      "municipio": "Tepic",
+      "tipo": "Reglamento",
+      "idArchivo": "23680",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "NAY-M-TEPIC-R-TRANSITO-VIALIDAD-TEPIC-NAYA",
+      "titulo": "Reglamento de Tránsito y Vialidad del Municipio de Tepic, Nayarit",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/NAYARIT/Municipios/Tepic/12transito.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "NAY",
       "municipio": "Tepic",
       "tipo": "Reglamento",
       "idArchivo": "23682",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -7029,17 +7561,17 @@
       "excluida": null
     },
     {
-      "clave": "NAY-M-TEPIC-R-ZONIFICACIA-N-USOS-SUELO-CIU",
-      "titulo": "Reglamento de ZonificaciÃ³n y Usos del Suelo para la Ciudad de Tepic; Nayarit",
+      "clave": "NAY-M-TEPIC-R-ZONIFICACION-USOS-SUELO-CIUD",
+      "titulo": "Reglamento de Zonificación y Usos del Suelo para la Ciudad de Tepic; Nayarit",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/NAYARIT/Municipios/Tepic/TEPREG01.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "NAY",
       "municipio": "Tepic",
       "tipo": "Reglamento",
       "idArchivo": "23684",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "urbano"
       ],
@@ -7695,9 +8227,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "31958",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -7713,9 +8245,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "32006",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "ambiental",
         "construccion"
@@ -7731,9 +8263,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "31985",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
@@ -7748,9 +8280,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "31685",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "seguridad_publica"
@@ -7766,9 +8298,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "32045",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "ambiental",
         "construccion"
@@ -7784,9 +8316,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "32021",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "vivienda",
         "urbano"
@@ -7802,9 +8334,9 @@
       "municipio": null,
       "tipo": "Reglamento",
       "idArchivo": "31760",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
@@ -7819,9 +8351,9 @@
       "municipio": null,
       "tipo": "Reglamento",
       "idArchivo": "31753",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -8034,9 +8566,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "31611",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "seguridad_publica"
@@ -8062,37 +8594,54 @@
       "excluida": null
     },
     {
-      "clave": "ROO-M-BENITO-JUAREZ-R-CONSTRUCCIA-N-BENITO-JUA-REZ",
-      "titulo": "Reglamento de ConstrucciÃ³n para el Municipio de Benito JuÃ¡rez, Quintana Roo",
+      "clave": "ROO-M-BENITO-JUAREZ-R-CONSTRUCCION-BENITO-JUAREZ-Q",
+      "titulo": "Reglamento de Construcción para el Municipio de Benito Juárez, Quintana Roo",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Quintana%20Roo/Todos%20los%20Municipios/wo95265.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "ROO",
       "municipio": "Benito Juárez",
       "tipo": "Reglamento",
       "idArchivo": "95265",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
-        "administrativo",
         "construccion"
       ],
       "excluida": null
     },
     {
-      "clave": "ROO-M-BENITO-JUAREZ-R-ESTACIONAMIENTOS-BENITO-JUA",
-      "titulo": "Reglamento de Estacionamientos del Municipio de Benito JuÃ¡rez, Quintana Roo",
+      "clave": "ROO-M-BENITO-JUAREZ-R-ESTACIONAMIENTOS-BENITO-JUAR",
+      "titulo": "Reglamento de Estacionamientos del Municipio de Benito Juárez, Quintana Roo",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Quintana%20Roo/Todos%20los%20Municipios/wo95270.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "ROO",
       "municipio": "Benito Juárez",
       "tipo": "Reglamento",
       "idArchivo": "95270",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "ROO-M-BENITO-JUAREZ-R-SISTEMA-PROTECCION-CIVIL-BEN",
+      "titulo": "Reglamento del Sistema Municipal de Protección Civil de Benito Juárez, Quintana Roo",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Quintana%20Roo/Todos%20los%20Municipios/wo95311.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "ROO",
+      "municipio": "Benito Juárez",
+      "tipo": "Reglamento",
+      "idArchivo": "95311",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
       ],
       "excluida": null
     },
@@ -8105,9 +8654,9 @@
       "municipio": "Othón P. Blanco",
       "tipo": "Reglamento",
       "idArchivo": "41435",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -8115,17 +8664,17 @@
       "excluida": null
     },
     {
-      "clave": "ROO-M-OTHON-P-BLANCO-R-CATASTRO-OTHA-N-P-BLANCO",
-      "titulo": "Reglamento del Catastro del Municipio de OthÃ³n P. Blanco",
+      "clave": "ROO-M-OTHON-P-BLANCO-R-CATASTRO-OTHON-P-BLANCO",
+      "titulo": "Reglamento del Catastro del Municipio de Othón P. Blanco",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Quintana%20Roo/Todos%20los%20Municipios/wo41446.doc",
       "ambito": "MUNICIPAL",
       "entidad": "ROO",
       "municipio": "Othón P. Blanco",
       "tipo": "Reglamento",
       "idArchivo": "41446",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -8134,16 +8683,16 @@
     },
     {
       "clave": "ROO-M-OTHON-P-BLANCO-R-DESARROLLO-URBANO-SEGURIDAD",
-      "titulo": "Reglamento de Desarrollo Urbano y Seguridad Estructural para el Municipio de OthÃ³n P. Blanco",
+      "titulo": "Reglamento de Desarrollo Urbano y Seguridad Estructural para el Municipio de Othón P. Blanco",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/QUINTANA%20ROO/Municipios/Othon%20Blanco/OTBReg2.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "ROO",
       "municipio": "Othón P. Blanco",
       "tipo": "Reglamento",
       "idArchivo": "31490",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "urbano"
@@ -8151,17 +8700,17 @@
       "excluida": null
     },
     {
-      "clave": "ROO-M-OTHON-P-BLANCO-R-EQUILIBRIO-ECOLA-GICO-PROTEC",
-      "titulo": "Reglamento del Equilibrio EcolÃ³gico y la ProtecciÃ³n al Ambiente para el Municipio de OthÃ³n P. Blanco",
+      "clave": "ROO-M-OTHON-P-BLANCO-R-EQUILIBRIO-ECOLOGICO-PROTECC",
+      "titulo": "Reglamento del Equilibrio Ecológico y la Protección al Ambiente para el Municipio de Othón P. Blanco",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Quintana%20Roo/Todos%20los%20Municipios/wo41448.doc",
       "ambito": "MUNICIPAL",
       "entidad": "ROO",
       "municipio": "Othón P. Blanco",
       "tipo": "Reglamento",
       "idArchivo": "41448",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "ambiental",
         "construccion"
@@ -8169,17 +8718,17 @@
       "excluida": null
     },
     {
-      "clave": "ROO-M-OTHON-P-BLANCO-R-IMAGEN-URBANA-CENTRO-HISTA-R",
-      "titulo": "Reglamento de Imagen Urbana del Centro HistÃ³rico de Bacalar del Municipio de Othon P. Blanco, Quintana Roo",
+      "clave": "ROO-M-OTHON-P-BLANCO-R-IMAGEN-URBANA-CENTRO-HISTORI",
+      "titulo": "Reglamento de Imagen Urbana del Centro Histórico de Bacalar del Municipio de Othon P. Blanco, Quintana Roo",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Quintana%20Roo/Todos%20los%20Municipios/wo41439.doc",
       "ambito": "MUNICIPAL",
       "entidad": "ROO",
       "municipio": "Othón P. Blanco",
       "tipo": "Reglamento",
       "idArchivo": "41439",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "urbano"
@@ -8188,60 +8737,95 @@
     },
     {
       "clave": "ROO-M-OTHON-P-BLANCO-R-IMAGEN-URBANA-CENTRO-POBLACI",
-      "titulo": "Reglamento de Imagen Urbana del Centro de PoblaciÃ³n de Mahahual, OthÃ³n P. Blanco, Quintana Roo",
+      "titulo": "Reglamento de Imagen Urbana del Centro de Población de Mahahual, Othón P. Blanco, Quintana Roo",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Quintana%20Roo/Todos%20los%20Municipios/wo41437.doc",
       "ambito": "MUNICIPAL",
       "entidad": "ROO",
       "municipio": "Othón P. Blanco",
       "tipo": "Reglamento",
       "idArchivo": "41437",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
+        "migracion",
         "construccion",
         "urbano"
       ],
       "excluida": null
     },
     {
-      "clave": "ROO-M-OTHON-P-BLANCO-R-USO-ANUNCIOS-OTHA-N-P-BLANCO",
-      "titulo": "Reglamento para el Uso de Anuncios en el Municipio de OthÃ³n P. Blanco",
+      "clave": "ROO-M-OTHON-P-BLANCO-R-OBRA-PUBLICA-SERVICIOS-RELAC",
+      "titulo": "Reglamento de Obra Pública y Servicios Relacionados con la Misma para el Municipio de Othón P. Blanco",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Quintana%20Roo/Todos%20los%20Municipios/wo41442.doc",
+      "ambito": "MUNICIPAL",
+      "entidad": "ROO",
+      "municipio": "Othón P. Blanco",
+      "tipo": "Reglamento",
+      "idArchivo": "41442",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "ROO-M-OTHON-P-BLANCO-R-SISTEMA-PROTECCION-CIVIL-OTH",
+      "titulo": "Reglamento del Sistema Municipal de Protección Civil de Othón P. Blanco",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/QUINTANA%20ROO/Municipios/Othon%20Blanco/OTBReg11.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "ROO",
+      "municipio": "Othón P. Blanco",
+      "tipo": "Reglamento",
+      "idArchivo": "31499",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "ROO-M-OTHON-P-BLANCO-R-USO-ANUNCIOS-OTHON-P-BLANCO",
+      "titulo": "Reglamento para el Uso de Anuncios en el Municipio de Othón P. Blanco",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/QUINTANA%20ROO/Municipios/Othon%20Blanco/OTBReg18.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "ROO",
       "municipio": "Othón P. Blanco",
       "tipo": "Reglamento",
       "idArchivo": "31508",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
       "excluida": null
     },
     {
-      "clave": "ROO-M-OTHON-P-BLANCO-R-ZONIFICACIA-N-COMERCIAL-OTHA",
-      "titulo": "Reglamento de ZonificaciÃ³n Comercial para el Municipio OthÃ³n P. Blanco y la Ciudad de Chetumal",
+      "clave": "ROO-M-OTHON-P-BLANCO-R-ZONIFICACION-COMERCIAL-OTHON",
+      "titulo": "Reglamento de Zonificación Comercial para el Municipio Othón P. Blanco y la Ciudad de Chetumal",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/QUINTANA%20ROO/Municipios/Othon%20Blanco/OTBReg8.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "ROO",
       "municipio": "Othón P. Blanco",
       "tipo": "Reglamento",
       "idArchivo": "31496",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
-        "administrativo",
-        "construccion"
+        "urbano"
       ],
       "excluida": null
     },
     {
-      "clave": "ROO-M-SOLIDARIDAD-R-CONSTRUCCIA-N-SOLIDARIDAD-QU",
-      "titulo": "Reglamento de ConstrucciÃ³n del Municipio de Solidaridad, Quintana Roo",
+      "clave": "ROO-M-SOLIDARIDAD-R-CONSTRUCCION-SOLIDARIDAD-QUI",
+      "titulo": "Reglamento de Construcción del Municipio de Solidaridad, Quintana Roo",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Quintana%20Roo/Todos%20los%20Municipios/wo91259.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "ROO",
@@ -8252,14 +8836,13 @@
       "ultimaReforma": null,
       "vigenciaFallback": "2007-06-08",
       "materias": [
-        "administrativo",
         "construccion"
       ],
       "excluida": null
     },
     {
-      "clave": "ROO-M-SOLIDARIDAD-R-EQUILIBRIO-ECOLA-GICO-PROTEC",
-      "titulo": "Reglamento del Equilibrio EcolÃ³gico y ProtecciÃ³n Ambiental del Municipio de Solidaridad, Quintana Roo",
+      "clave": "ROO-M-SOLIDARIDAD-R-EQUILIBRIO-ECOLOGICO-PROTECC",
+      "titulo": "Reglamento del Equilibrio Ecológico y Protección Ambiental del Municipio de Solidaridad, Quintana Roo",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Quintana%20Roo/Todos%20los%20Municipios/wo91312.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "ROO",
@@ -8310,20 +8893,55 @@
       "excluida": null
     },
     {
-      "clave": "ROO-M-TULUM-R-CONSTRUCCIA-N-TULUM-QUINTANA",
-      "titulo": "Reglamento de ConstrucciÃ³n para el Municipio de Tulum, Quintana Roo",
+      "clave": "ROO-M-SOLIDARIDAD-R-SISTEMA-PROTECCION-CIVIL-SOL",
+      "titulo": "Reglamento del Sistema Municipal de Protección Civil de Solidaridad, Quintana Roo",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Quintana%20Roo/Todos%20los%20Municipios/wo91316.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "ROO",
+      "municipio": "Solidaridad",
+      "tipo": "Reglamento",
+      "idArchivo": "91316",
+      "fechaPublicacion": "1999-06-30",
+      "ultimaReforma": null,
+      "vigenciaFallback": "1999-06-30",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "ROO-M-TULUM-R-CONSTRUCCION-TULUM-QUINTANA",
+      "titulo": "Reglamento de Construcción para el Municipio de Tulum, Quintana Roo",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Quintana%20Roo/Todos%20los%20Municipios/wo74455.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "ROO",
       "municipio": "Tulum",
       "tipo": "Reglamento",
       "idArchivo": "74455",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
-        "administrativo",
         "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "ROO-M-TULUM-R-PROTECCION-CIVIL-TULUM-QUINT",
+      "titulo": "Reglamento de Protección Civil del Municipio de Tulum, Quintana Roo",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Quintana%20Roo/Todos%20los%20Municipios/wo74460.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "ROO",
+      "municipio": "Tulum",
+      "tipo": "Reglamento",
+      "idArchivo": "74460",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
       ],
       "excluida": null
     },
@@ -8562,16 +9180,16 @@
     },
     {
       "clave": "SIN-M-AHOME-R-CUERPO-VOLUNTARIO-BOMBEROS-M",
-      "titulo": "Reglamento del Cuerpo voluntario de Bomberos \"Miguel Ãngel Camelo Vega\" de Los Mochis, Sinaloa, para la prevenciÃ³n, control de incendios y siniestros en el Municipio de Ahome",
+      "titulo": "Reglamento del Cuerpo voluntario de Bomberos \"Miguel Ángel Camelo Vega\" de Los Mochis, Sinaloa, para la prevención, control de incendios y siniestros en el Municipio de Ahome",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Sinaloa/Todos%20los%20Municipios/wo69481.doc",
       "ambito": "MUNICIPAL",
       "entidad": "SIN",
       "municipio": "Ahome",
       "tipo": "Reglamento",
       "idArchivo": "69481",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -8579,8 +9197,26 @@
       "excluida": null
     },
     {
-      "clave": "SIN-M-CULIACAN-R-ANUNCIOS-CULIACA-N-SINALOA",
-      "titulo": "Reglamento de Anuncios del Municipio de CuliacÃ¡n, Sinaloa",
+      "clave": "SIN-M-AHOME-R-PROTECCION-CIVIL-AHOME-SINAL",
+      "titulo": "Reglamento de Protección Civil del Municipio de Ahome Sinaloa",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Sinaloa/Todos%20los%20Municipios/wo69509.doc",
+      "ambito": "MUNICIPAL",
+      "entidad": "SIN",
+      "municipio": "Ahome",
+      "tipo": "Reglamento",
+      "idArchivo": "69509",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "SIN-M-CULIACAN-R-ANUNCIOS-CULIACAN-SINALOA",
+      "titulo": "Reglamento de Anuncios del Municipio de Culiacán, Sinaloa",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Sinaloa/Todos%20los%20Municipios/wo69708.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "SIN",
@@ -8596,8 +9232,8 @@
       "excluida": null
     },
     {
-      "clave": "SIN-M-CULIACAN-R-CONSTRUCCIONES-CULIACA-N-SIN",
-      "titulo": "Reglamento de Construcciones para el Municipio de CuliacÃ¡n, Sinaloa",
+      "clave": "SIN-M-CULIACAN-R-CONSTRUCCIONES-CULIACAN-SINA",
+      "titulo": "Reglamento de Construcciones para el Municipio de Culiacán, Sinaloa",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Sinaloa/Todos%20los%20Municipios/wo69721.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "SIN",
@@ -8613,8 +9249,8 @@
       "excluida": null
     },
     {
-      "clave": "SIN-M-CULIACAN-R-ESTACIONAMIENTOS-PA-BLICOS-C",
-      "titulo": "Reglamento de Estacionamientos PÃºblicos para el Municipio de CuliacÃ¡n, Sinaloa",
+      "clave": "SIN-M-CULIACAN-R-ESTACIONAMIENTOS-PUBLICOS-CU",
+      "titulo": "Reglamento de Estacionamientos Públicos para el Municipio de Culiacán, Sinaloa",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Sinaloa/Todos%20los%20Municipios/wo69736.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "SIN",
@@ -8630,8 +9266,8 @@
       "excluida": null
     },
     {
-      "clave": "SIN-M-CULIACAN-R-INSTITUTO-VIVIENDA-CULIACA-N",
-      "titulo": "Reglamento del Instituto de Vivienda del Municipio de CuliacÃ¡n, Sinaloa",
+      "clave": "SIN-M-CULIACAN-R-INSTITUTO-VIVIENDA-CULIACAN",
+      "titulo": "Reglamento del Instituto de Vivienda del Municipio de Culiacán, Sinaloa",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Sinaloa/Todos%20los%20Municipios/wo69758.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "SIN",
@@ -8648,8 +9284,26 @@
       "excluida": null
     },
     {
+      "clave": "SIN-M-CULIACAN-R-PROTECCION-CIVIL-CULIACAN-SI",
+      "titulo": "Reglamento de Protección Civil del Municipio de Culiacán, Sinaloa",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Sinaloa/Todos%20los%20Municipios/wo69750.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "SIN",
+      "municipio": "Culiacán",
+      "tipo": "Reglamento",
+      "idArchivo": "69750",
+      "fechaPublicacion": "2009-11-06",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2009-11-06",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
       "clave": "SIN-M-MAZATLAN-R-BIENES-MUEBLES-JUNTA-AGUA-PO",
-      "titulo": "Reglamento de Bienes Muebles de la Junta Municipal de Agua Potable y Alcantarillado de MazatlÃ¡n, Sinaloa",
+      "titulo": "Reglamento de Bienes Muebles de la Junta Municipal de Agua Potable y Alcantarillado de Mazatlán, Sinaloa",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Sinaloa/Todos%20los%20Municipios/wo120531.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "SIN",
@@ -8667,7 +9321,7 @@
     },
     {
       "clave": "SIN-M-MAZATLAN-R-BIENES-MUEBLES-JUNTA-AGUA-PO-120532",
-      "titulo": "Reglamento de Bienes Muebles de la Junta Municipal de Agua Potable y Alcantarillado de MazatlÃ¡n, Sinaloa",
+      "titulo": "Reglamento de Bienes Muebles de la Junta Municipal de Agua Potable y Alcantarillado de Mazatlán, Sinaloa",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Sinaloa/Todos%20los%20Municipios/wo120532.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "SIN",
@@ -8685,7 +9339,7 @@
     },
     {
       "clave": "SIN-M-MAZATLAN-R-BIENES-MUEBLES-JUNTA-AGUA-PO-120533",
-      "titulo": "Reglamento de Bienes Muebles de la Junta Municipal de Agua Potable y Alcantarillado de MazatlÃ¡n, Sinaloa",
+      "titulo": "Reglamento de Bienes Muebles de la Junta Municipal de Agua Potable y Alcantarillado de Mazatlán, Sinaloa",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Sinaloa/Todos%20los%20Municipios/wo120533.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "SIN",
@@ -8703,7 +9357,7 @@
     },
     {
       "clave": "SIN-M-MAZATLAN-R-BIENES-MUEBLES-JUNTA-AGUA-PO-120534",
-      "titulo": "Reglamento de Bienes Muebles de la Junta Municipal de Agua Potable y Alcantarillado de MazatlÃ¡n, Sinaloa",
+      "titulo": "Reglamento de Bienes Muebles de la Junta Municipal de Agua Potable y Alcantarillado de Mazatlán, Sinaloa",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Sinaloa/Todos%20los%20Municipios/wo120534.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "SIN",
@@ -8720,26 +9374,25 @@
       "excluida": null
     },
     {
-      "clave": "SIN-M-MAZATLAN-R-CONSTRUCCIA-N-MAZATLA-N",
-      "titulo": "Reglamento de ConstrucciÃ³n para el Municipio de MazatlÃ¡n",
+      "clave": "SIN-M-MAZATLAN-R-CONSTRUCCION-MAZATLAN",
+      "titulo": "Reglamento de Construcción para el Municipio de Mazatlán",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/SINALOA/Municipios/Mazatlan/MAZREG02.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "SIN",
       "municipio": "Mazatlán",
       "tipo": "Reglamento",
       "idArchivo": "27084",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
-        "administrativo",
         "construccion"
       ],
       "excluida": null
     },
     {
-      "clave": "SIN-M-MAZATLAN-R-JUNTA-CATASTRO-MAZATLA-N",
-      "titulo": "Reglamento de la Junta Municipal de Catastro del Municipio de MazatlÃ¡n",
+      "clave": "SIN-M-MAZATLAN-R-JUNTA-CATASTRO-MAZATLAN",
+      "titulo": "Reglamento de la Junta Municipal de Catastro del Municipio de Mazatlán",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Sinaloa/Todos%20los%20Municipios/wo120544.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "SIN",
@@ -8756,17 +9409,17 @@
       "excluida": null
     },
     {
-      "clave": "SIN-M-MAZATLAN-R-OPERACIA-N-PROMOCIA-N-PUBLIC",
-      "titulo": "Reglamento para la OperaciÃ³n de la PromociÃ³n, Publicidad, ComercializaciÃ³n y Venta de Condominios e Inmuebles en Tiempo Compartido en el Municipio de MazatlÃ¡n, Sinaloa",
+      "clave": "SIN-M-MAZATLAN-R-OPERACION-PROMOCION-PUBLICID",
+      "titulo": "Reglamento para la Operación de la Promoción, Publicidad, Comercialización y Venta de Condominios e Inmuebles en Tiempo Compartido en el Municipio de Mazatlán, Sinaloa",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/SINALOA/Municipios/Mazatlan/MAZREG21.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "SIN",
       "municipio": "Mazatlán",
       "tipo": "Reglamento",
       "idArchivo": "27103",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "urbano"
@@ -8774,20 +9427,56 @@
       "excluida": null
     },
     {
-      "clave": "SIN-M-MAZATLAN-R-PROTECCIA-N-AL-MEDIO-AMBIENT",
-      "titulo": "Reglamento de ProtecciÃ³n al Medio Ambiente para el Municipio de MazatlÃ¡n, Sinaloa",
+      "clave": "SIN-M-MAZATLAN-R-PROTECCION-AL-MEDIO-AMBIENTE",
+      "titulo": "Reglamento de Protección al Medio Ambiente para el Municipio de Mazatlán, Sinaloa",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/SINALOA/Municipios/Mazatlan/MAZREG12.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "SIN",
       "municipio": "Mazatlán",
       "tipo": "Reglamento",
       "idArchivo": "27094",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "ambiental",
         "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "SIN-M-MAZATLAN-R-PROTECCION-CIVIL-MAZATLAN-SI",
+      "titulo": "Reglamento de Protección Civil del Municipio de Mazatlán, Sinaloa",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/SINALOA/Municipios/Mazatlan/MAZREG13.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "SIN",
+      "municipio": "Mazatlán",
+      "tipo": "Reglamento",
+      "idArchivo": "27095",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "SIN-M-MAZATLAN-R-PROTECCION-CIVIL-MAZATLAN-SI-120572",
+      "titulo": "Reglamento de Protección Civil para el Municipio de Mazatlán, Sinaloa",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Sinaloa/Todos%20los%20Municipios/wo120572.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "SIN",
+      "municipio": "Mazatlán",
+      "tipo": "Reglamento",
+      "idArchivo": "120572",
+      "fechaPublicacion": "2010-11-29",
+      "ultimaReforma": "2015-06-19",
+      "vigenciaFallback": "2015-06-19",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
       ],
       "excluida": null
     },
@@ -8988,25 +9677,25 @@
       "excluida": null
     },
     {
-      "clave": "SLP-M-SAN-LUIS-POTOS-R-ANUNCIOS-SAN-LUIS-POTOSA",
-      "titulo": "Reglamento de Anuncios del Municipio Libre de San Luis PotosÃ­",
+      "clave": "SLP-M-SAN-LUIS-POTOS-R-ANUNCIOS-SAN-LUIS-POTOSI",
+      "titulo": "Reglamento de Anuncios del Municipio Libre de San Luis Potosí",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/SAN%20LUIS%20POTOSI/Municipios/San%20Luis%20Potosi/3Reganuncios.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "SLP",
       "municipio": "San Luis Potosí",
       "tipo": "Reglamento",
       "idArchivo": "29305",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
-      "excluida": "Estatus: Abrogado"
+      "excluida": null
     },
     {
-      "clave": "SLP-M-SAN-LUIS-POTOS-R-ANUNCIOS-SAN-LUIS-POTOSA-48817",
-      "titulo": "Reglamento de Anuncios del Municipio Libre de San Luis PotosÃ­",
+      "clave": "SLP-M-SAN-LUIS-POTOS-R-ANUNCIOS-SAN-LUIS-POTOSI-48817",
+      "titulo": "Reglamento de Anuncios del Municipio Libre de San Luis Potosí",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/San%20Luis%20Potosi/Todos%20los%20Municipios/wo48817.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "SLP",
@@ -9023,33 +9712,51 @@
     },
     {
       "clave": "SLP-M-SAN-LUIS-POTOS-R-CONSTRUCCIONES-SAN-LUIS-POTO",
-      "titulo": "Reglamento de Construcciones del Municipio de San Luis PotosÃ­",
+      "titulo": "Reglamento de Construcciones del Municipio de San Luis Potosí",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/SAN%20LUIS%20POTOSI/Municipios/San%20Luis%20Potosi/6Regconstrucciones.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "SLP",
       "municipio": "San Luis Potosí",
       "tipo": "Reglamento",
       "idArchivo": "29308",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
       "excluida": null
     },
     {
-      "clave": "SLP-M-SAN-LUIS-POTOS-R-SERVICIO-PA-BLICO-ESTACIONAM",
-      "titulo": "Reglamento del Servicio PÃºblico de Estacionamiento en la VÃ­a PÃºblica",
+      "clave": "SLP-M-SAN-LUIS-POTOS-R-PROTECCION-CIVIL-SAN-LUIS-PO",
+      "titulo": "Reglamento de Protección Civil del Municipio Libre de San Luis Potosí, S.L.P.",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/SAN%20LUIS%20POTOSI/Municipios/San%20Luis%20Potosi/12Regproteccioncivil.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "SLP",
+      "municipio": "San Luis Potosí",
+      "tipo": "Reglamento",
+      "idArchivo": "29314",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "SLP-M-SAN-LUIS-POTOS-R-SERVICIO-PUBLICO-ESTACIONAMI",
+      "titulo": "Reglamento del Servicio Público de Estacionamiento en la Vía Pública",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/SAN%20LUIS%20POTOSI/Municipios/San%20Luis%20Potosi/17RegEstacionamientoSLP.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "SLP",
       "municipio": "San Luis Potosí",
       "tipo": "Reglamento",
       "idArchivo": "29319",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
@@ -9281,9 +9988,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "26190",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -9299,9 +10006,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "26260",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "urbano"
       ],
@@ -9316,9 +10023,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "26200",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "transporte",
         "construccion"
@@ -9334,9 +10041,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "26205",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "urbano"
@@ -9369,9 +10076,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "26224",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -9387,9 +10094,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "26233",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "seguridad_publica"
@@ -9405,9 +10112,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "26278",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "urbano"
@@ -9423,9 +10130,9 @@
       "municipio": null,
       "tipo": "Reglamento",
       "idArchivo": "26066",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
@@ -9440,9 +10147,9 @@
       "municipio": null,
       "tipo": "Reglamento",
       "idArchivo": "26101",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -9458,9 +10165,9 @@
       "municipio": null,
       "tipo": "Reglamento",
       "idArchivo": "26074",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "seguridad_publica"
@@ -9511,9 +10218,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "25851",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
@@ -9528,9 +10235,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "25855",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -9546,9 +10253,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "25856",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "urbano"
       ],
@@ -9563,9 +10270,9 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "25861",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "seguridad_publica"
@@ -9617,9 +10324,9 @@
       "municipio": null,
       "tipo": "Reglamento",
       "idArchivo": "25754",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "seguridad_publica"
@@ -9806,20 +10513,38 @@
       "excluida": null
     },
     {
-      "clave": "VER-M-BOCA-RIO-R-PROTECCIA-N-AL-MEDIO-AMBIENT",
-      "titulo": "Reglamento de ProtecciÃ³n al Medio Ambiente y Especies Animales del Municipio de Boca del RÃ­o, Estado de Veracruz de Ignacio de La Llave",
+      "clave": "VER-M-BOCA-RIO-R-PROTECCION-AL-MEDIO-AMBIENTE",
+      "titulo": "Reglamento de Protección al Medio Ambiente y Especies Animales del Municipio de Boca del Río, Estado de Veracruz de Ignacio de La Llave",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/VERACRUZ/Municipios/Boca%20del%20Rio/7Regambiente.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "VER",
       "municipio": "Boca del Río",
       "tipo": "Reglamento",
       "idArchivo": "21303",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "ambiental",
         "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "VER-M-BOCA-RIO-R-PROTECCION-CIVIL-BOCA-RIO-VE",
+      "titulo": "Reglamento de Protección Civil del Municipio de Boca del Río, Estado de Veracruz de Ignacio de La Llave",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/VERACRUZ/Municipios/Boca%20del%20Rio/8Regcivil.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "VER",
+      "municipio": "Boca del Río",
+      "tipo": "Reglamento",
+      "idArchivo": "21304",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
       ],
       "excluida": null
     },
@@ -9849,28 +10574,64 @@
       "municipio": "Veracruz",
       "tipo": "Reglamento",
       "idArchivo": "19995",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
       ],
       "excluida": null
     },
     {
-      "clave": "VER-M-VERACRUZ-R-EQUILIBRIO-ECOLA-GICO-PROTEC",
-      "titulo": "Reglamento Municipal del Equilibrio EcolÃ³gico y la ProtecciÃ³n al Ambiente",
+      "clave": "VER-M-VERACRUZ-R-EQUILIBRIO-ECOLOGICO-PROTECC",
+      "titulo": "Reglamento Municipal del Equilibrio Ecológico y la Protección al Ambiente",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/VERACRUZ/Municipios/Veracruz/VERREG09.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "VER",
       "municipio": "Veracruz",
       "tipo": "Reglamento",
       "idArchivo": "20005",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "ambiental",
+        "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "VER-M-VERACRUZ-R-PROTECCION-CIVIL-VERACRUZ-VE",
+      "titulo": "Reglamento de Protección Civil del Municipio de Veracruz, Veracruz",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Veracruz/Todos%20los%20Municipios/wo71132.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "VER",
+      "municipio": "Veracruz",
+      "tipo": "Reglamento",
+      "idArchivo": "71132",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "VER-M-XALAPA-R-ADQUISICIONES-ARRENDAMIENTOS",
+      "titulo": "Reglamento de Adquisiciones, Arrendamientos, Administración, Enajenación de Bienes Muebles y Obra Pública",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/VERACRUZ/Municipios/Xalapa/XALAReg1.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "VER",
+      "municipio": "Xalapa",
+      "tipo": "Reglamento",
+      "idArchivo": "20645",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "administrativo",
         "construccion"
       ],
       "excluida": null
@@ -9884,17 +10645,35 @@
       "municipio": "Xalapa",
       "tipo": "Reglamento",
       "idArchivo": "20646",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "urbano"
       ],
       "excluida": null
     },
     {
-      "clave": "VER-M-XALAPA-R-SUBCOMITA-ADQUISICIONES-ARRE",
-      "titulo": "Reglamento del SubcomitÃ© de Adquisiciones, Arrendamientos, AdministraciÃ³n, EnajenaciÃ³n de Bienes Muebles y Obra PÃºblica de la ComisiÃ³n Municipal de Agua Potable y Saneamiento de Xalapa, Veracruz.",
+      "clave": "VER-M-XALAPA-R-PROTECCION-CIVIL-XALAPA-VERA",
+      "titulo": "Reglamento de Protección Civil de Xalapa, Veracruz",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Veracruz/Todos%20los%20Municipios/wo71133.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "VER",
+      "municipio": "Xalapa",
+      "tipo": "Reglamento",
+      "idArchivo": "71133",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "VER-M-XALAPA-R-SUBCOMITE-ADQUISICIONES-ARRE",
+      "titulo": "Reglamento del Subcomité de Adquisiciones, Arrendamientos, Administración, Enajenación de Bienes Muebles y Obra Pública de la Comisión Municipal de Agua Potable y Saneamiento de Xalapa, Veracruz.",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Veracruz/Todos%20los%20Municipios/wo59746.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "VER",
@@ -9911,17 +10690,17 @@
       "excluida": null
     },
     {
-      "clave": "VER-M-XALAPA-R-TRA-NSITO-VIALIDAD",
-      "titulo": "Reglamento de TrÃ¡nsito y Vialidad",
+      "clave": "VER-M-XALAPA-R-TRANSITO-VIALIDAD",
+      "titulo": "Reglamento de Tránsito y Vialidad",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/VERACRUZ/Municipios/Xalapa/XALAReg7.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "VER",
       "municipio": "Xalapa",
       "tipo": "Reglamento",
       "idArchivo": "20652",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "administrativo",
         "construccion"
@@ -10576,7 +11355,7 @@
     },
     {
       "clave": "ZAC-M-GUADALUPE-R-IMAGEN-URBANA-ZONAS-PATRIMON",
-      "titulo": "Reglamento de Imagen Urbana para Zonas Patrimoniales, de TransiciÃ³n y Contexto en el Municipio de Guadalupe, Zacatecas",
+      "titulo": "Reglamento de Imagen Urbana para Zonas Patrimoniales, de Transición y Contexto en el Municipio de Guadalupe, Zacatecas",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Zacatecas/Todos%20los%20Municipios/wo65350.pdf",
       "ambito": "MUNICIPAL",
       "entidad": "ZAC",
@@ -10601,12 +11380,30 @@
       "municipio": "Zacatecas",
       "tipo": "Reglamento",
       "idArchivo": "19684",
-      "fechaPublicacion": "0000-00-00",
+      "fechaPublicacion": null,
       "ultimaReforma": null,
-      "vigenciaFallback": "0000-00-00",
+      "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion",
         "urbano"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "ZAC-M-ZACATECAS-R-PROTECCION-CIVIL",
+      "titulo": "Reglamento Municipal de Protección Civil",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/ZACATECAS/Municipios/Zacatecas/ZACREG01.pdf",
+      "ambito": "MUNICIPAL",
+      "entidad": "ZAC",
+      "municipio": "Zacatecas",
+      "tipo": "Reglamento",
+      "idArchivo": "19696",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-12",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
       ],
       "excluida": null
     },
