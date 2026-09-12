@@ -145,7 +145,7 @@
 > Compartir → Añadir a inicio en iPhone), cajón lateral y safe areas en
 > teléfono.
 >
-> **Turnos reanudables (PR #PRNUM6).** La primera prueba real de la abogada
+> **Turnos reanudables (PR #1042).** La primera prueba real de la abogada
 > (alegatos de cinco tipos para un juicio oral familiar en Chihuahua, 8
 > minutos) murió con «Load failed» en el iPhone. Dos causas, las dos
 > corregidas: (1) `max_tokens` 6 144 cortaba a la mitad la llamada a

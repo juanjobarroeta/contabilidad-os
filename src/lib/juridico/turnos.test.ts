@@ -50,7 +50,7 @@ describe("turnos reanudables", () => {
     await new Promise((r) => setTimeout(r, 5));
     const ev = await leerTodo(respuestaSse(t, 2));
     expect(ev.map((e) => e.type)).toEqual(["turno", "done"]);
-    expect((ev[0] as { estado: string }).estado).toBe("terminado");
+    expect((ev[0] as unknown as { estado: string }).estado).toBe("terminado");
   });
 
   it("un turno que falla queda en error y no bloquea el siguiente; dos a la vez en la misma conversación no", async () => {
