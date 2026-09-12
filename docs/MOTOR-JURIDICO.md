@@ -134,7 +134,7 @@
 > tipo de documento antes de escribir, [___] para lo que no se sabe, y
 > presentarlo como borrador para revisión del abogado. Acceso: el operador o
 > `User.accesoJuridico` (PR #1039, `scripts/crear-usuario-juridico.ts`).
-> **Contestar demandas** (PR #PRNUM5): el prompt del abogado trae el flujo
+> **Contestar demandas** (PR #1041): el prompt del abogado trae el flujo
 > completo — leer la demanda entera, recuperar la vía y sus plazos (CNPCF /
 > local / CCOM / LFT / CFF), contestar hecho por hecho, proponer excepciones
 > procesales y de fondo con fundamento, criterio, prueba y fuerza (y cuáles
