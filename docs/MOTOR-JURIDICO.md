@@ -69,6 +69,42 @@
 > arriba/abajo. Sólo operador; el gasto se registra al usuario (subtipo
 > `ai.juridico`). Es el embrión del chat del producto legal (§6).
 >
+> **F3 (primer paquete) — construcción y urbanismo en los tres niveles
+> (2026-09-11, PR #PRNUM).** El catálogo pasó de 317 a **1 229 ordenamientos**:
+> 311 leyes federales, 138 reglamentos federales (Diputados `regla.htm`,
+> `catalogo/reglamentos-federales.json`), 124 NOM de construcción e
+> instalaciones (de las 1 228 vigentes que cataloga PLATIICA en
+> `catalogo/nom.json`; `KB_NOM_TODAS=1` mete todas), y **493 estatales +
+> 164 municipales de las 32 entidades y 62 municipios**: lo que rastrea el
+> Orden Jurídico Nacional (`scripts/fiscal-catalogo-ojn.ts` → `catalogo/ojn.json`,
+> 32 estados × 4 poderes + capital y municipios principales, filtrado a
+> ley/código/reglamento de construcción, obra pública, desarrollo urbano,
+> protección civil, catastro, fraccionamientos, condominios e imagen urbana)
+> más un catálogo **curado a mano** (`catalogo/estatales.src.json` →
+> `estatales.json`) para lo que el OJN no tiene: Morelos, Nuevo León, Sonora y
+> Guanajuato sólo publican acuerdos ahí, y Puebla, Estado de México, Guerrero,
+> Querétaro, San Luis Potosí y Tlaxcala no traen los códigos de construcción
+> municipales (COREMUN de Puebla, Código Territorial de Guanajuato, Libro Quinto
+> del Código Administrativo mexiquense, Monterrey, León, Toluca…). Cada URL
+> curada se verificó con `curl` (200 + PDF/Word real) y una entrada puede
+> `reemplaza`r la del OJN cuando abrogó a la ley que el OJN sigue listando.
+> CDMX entra a mano: Reglamento de Construcciones (Consejería) y las Normas
+> Técnicas Complementarias 2023 (Gaceta, como «guía» por secciones).
+>
+> Lo que hizo falta tocar: el OJN publica la mitad en Word y la extensión
+> miente (muchos «.doc» son OOXML), así que `texto.ts` detecta el formato por
+> bytes mágicos — PDF, .docx (mammoth), .doc de Word 97 (antiword) y RTF
+> (unrtf), los dos últimos sólo en la imagen del worker
+> (`Dockerfile.ce-worker`). Ingesta por lotes en un servicio Railway propio,
+> `kb-worker` (`npm run kb:worker`, modo `faltantes`), en vez del workflow de
+> GitHub. Materias nuevas `construccion` y `urbano`, `municipio` en
+> `FiscalDocument`, `FiscalSource.NOM`. Huecos conocidos: municipios sin
+> reglamento propio localizable (San Pedro Garza García, Apodaca, Ecatepec,
+> Huixquilucan, Cuautlancingo, Tlaxcala capital, Apizaco, San Juan del Río
+> con portal roto); Ley 790 de Guerrero sin texto consolidado posterior a 2018
+> (dos decretos de reforma sueltos en el P.O.); y los municipios más allá de
+> los principales (`--municipios todos` los rastrea, no se ha corrido).
+>
 > **Pendiente de F1:** preguntas doradas de jurisprudencia con `tesisEsperadas`
 > revisadas por el abogado y la métrica «tesis pertinente» en el eval; prueba
 > funcional de `search_jurisprudencia` desde el chat; los resúmenes por unidad
@@ -353,7 +389,7 @@ ahí el módulo legal y el contable se tocan).
 | **F0 — Corpus federal completo** | Catálogo generado desde Diputados (317 ordenamientos + reglamentos), etiquetas de materia/ámbito, filtro de materias fijo en el hub, `CLAVES` derivadas, refresco por lotes, resúmenes para lo nuevo. | 1 semana | Todo ingerido y refrescándose solo; **el eval fiscal no baja** (recuperación ≥ 65 %, fundamento correcto ≥ 97 %). |
 | **F1 — Jurisprudencia SCJN** | URL base de la API de datos abiertos leída desde navegador; ingesta 9a.–12a. Época (Playwright si la API no alcanza); esquema §5.1; `search_jurisprudencia` + `get_tesis`; cita y verificación; medición de tamaño (§3.2); 40 preguntas doradas legales revisadas por un abogado. | 2 semanas | «Tesis pertinente» ≥ 70 % en top-6; decisión tomada sobre dónde vive el corpus. |
 | **F2 — Producto legal MVP** | Satélite: chat con perfil `abogado`, expediente, leer documento con verificación, 3 plantillas de contrato, 1 vía de escrito (amparo indirecto o contencioso administrativo, que además sirve al despacho contable). Módulo `JURIDICO`, tier de IA, términos. | 3–4 semanas | 5 despachos piloto usándolo; costo de IA por despacho medido en `CostEvent`. |
-| **F3 — Cobertura** | TFJA (Playwright), estatales por demanda (Orden Jurídico Nacional + congresos), DOF diario, sentencias completas (SIJ), tratados. | Continuo, por demanda | Cada fuente con su eval. |
+| **F3 — Cobertura** | **Hecho el primer paquete (construcción/urbanismo, 2026-09-11, ver status):** reglamentos federales, NOM, OJN estatal/municipal + curado a mano. Sigue: TFJA (Playwright), el resto de la legislación estatal por demanda, DOF diario, sentencias completas (SIJ), tratados. | Continuo, por demanda | Cada fuente con su eval. |
 
 Costos de construcción del corpus, orden de magnitud: embeddings de las 317
 leyes < 5 USD; resúmenes con Haiku ≈ 0.001 USD por artículo (decenas de miles

@@ -1,0 +1,1823 @@
+{
+  "fuente": "https://www.diputados.gob.mx/LeyesBiblio/regla.htm",
+  "generado": "2026-09-12",
+  "entradas": [
+    {
+      "clave": "R-LADUA",
+      "titulo": "Reglamento de la Ley Aduanera",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LAdua.pdf",
+      "archivo": "Reg_LAdua",
+      "dofOriginal": "2015-04-20",
+      "ultimaReforma": "2026-02-23",
+      "vigenciaFallback": "2026-02-23",
+      "materias": [
+        "aduanero",
+        "fiscal",
+        "comercio_exterior"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LAGRA-MCDETS",
+      "titulo": "Reglamento de la Ley Agraria en Materia de Certificación de Derechos Ejidales y Titulación de Solares",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LAgra_MCDETS.pdf",
+      "archivo": "Reg_LAgra_MCDETS",
+      "dofOriginal": "1993-01-06",
+      "ultimaReforma": null,
+      "vigenciaFallback": "1993-01-06",
+      "materias": [
+        "agrario"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LAGRA-MOPR",
+      "titulo": "Reglamento de la Ley Agraria en Materia de Ordenamiento de la Propiedad Rural",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LAgra_MOPR.pdf",
+      "archivo": "Reg_LAgra_MOPR",
+      "dofOriginal": "2012-11-28",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2012-11-28",
+      "materias": [
+        "agrario"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LAGRA-FODMC",
+      "titulo": "Reglamento de la Ley Agraria para Fomentar la Organización y Desarrollo de la Mujer Campesina",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LAgra_FODMC.pdf",
+      "archivo": "Reg_LAgra_FODMC",
+      "dofOriginal": "1998-05-08",
+      "ultimaReforma": null,
+      "vigenciaFallback": "1998-05-08",
+      "materias": [
+        "agrario"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LAASSP",
+      "titulo": "Reglamento de la Ley de Adquisiciones, Arrendamientos y Servicios del Sector Público",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LAASSP.pdf",
+      "archivo": "Reg_LAASSP",
+      "dofOriginal": "2025-12-18",
+      "ultimaReforma": "2026-03-27",
+      "vigenciaFallback": "2026-03-27",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LAERO",
+      "titulo": "Reglamento de la Ley de Aeropuertos Nueva reforma",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LAero.pdf",
+      "archivo": "Reg_LAero",
+      "dofOriginal": "2000-02-17",
+      "ultimaReforma": "2026-06-09",
+      "vigenciaFallback": "2026-06-09",
+      "materias": [
+        "transporte"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LAN",
+      "titulo": "Reglamento de la Ley de Aguas Nacionales",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LAN_250814.pdf",
+      "archivo": "Reg_LAN_250814",
+      "dofOriginal": "1994-01-12",
+      "ultimaReforma": "2014-08-25",
+      "vigenciaFallback": "2014-08-25",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LAAM",
+      "titulo": "Reglamento de la Ley de Ascensos de la Armada de México",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LAAM.pdf",
+      "archivo": "Reg_LAAM",
+      "dofOriginal": "2006-11-09",
+      "ultimaReforma": "2026-04-02",
+      "vigenciaFallback": "2026-04-02",
+      "materias": [
+        "militar"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LAREFAGN",
+      "titulo": "Reglamento de la Ley de Ascensos y Recompensas del Ejército, Fuerza Aérea y Guardia Nacional",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LAREFAGN.pdf",
+      "archivo": "Reg_LAREFAGN",
+      "dofOriginal": "2004-07-19",
+      "ultimaReforma": "2026-03-20",
+      "vigenciaFallback": "2026-03-20",
+      "materias": [
+        "militar",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LAPP",
+      "titulo": "Reglamento de la Ley de Asociaciones Público Privadas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LAPP_200217.pdf",
+      "archivo": "Reg_LAPP_200217",
+      "dofOriginal": "2012-11-05",
+      "ultimaReforma": "2017-02-20",
+      "vigenciaFallback": "2017-02-20",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LARCP",
+      "titulo": "Reglamento de la Ley de Asociaciones Religiosas y Culto Público",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LARCP.pdf",
+      "archivo": "Reg_LARCP",
+      "dofOriginal": "2003-11-06",
+      "ultimaReforma": "2012-09-28",
+      "vigenciaFallback": "2012-09-28",
+      "materias": [
+        "religioso"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LAC",
+      "titulo": "Reglamento de la Ley de Aviación Civil",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LAC.pdf",
+      "archivo": "Reg_LAC",
+      "dofOriginal": "1998-12-07",
+      "ultimaReforma": "2023-05-31",
+      "vigenciaFallback": "2023-05-31",
+      "materias": [
+        "transporte"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LAAT",
+      "titulo": "Reglamento de la Ley de Ayuda Alimentaria para los Trabajadores",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LAAT_040615.pdf",
+      "archivo": "Reg_LAAT_040615",
+      "dofOriginal": "2015-06-04",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2015-06-04",
+      "materias": [
+        "laboral"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LBIO",
+      "titulo": "Reglamento de la Ley de Biocombustibles",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LBio.pdf",
+      "archivo": "Reg_LBio",
+      "dofOriginal": "2025-10-03",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-10-03",
+      "materias": [
+        "energia"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LBOGM",
+      "titulo": "Reglamento de la Ley de Bioseguridad de Organismos Genéticamente Modificados",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LBOGM.pdf",
+      "archivo": "Reg_LBOGM",
+      "dofOriginal": "2008-03-19",
+      "ultimaReforma": "2009-03-06",
+      "vigenciaFallback": "2009-03-06",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LCEC",
+      "titulo": "Reglamento de la Ley de Cámaras Empresariales y sus Confederaciones",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LCEC.pdf",
+      "archivo": "Reg_LCEC",
+      "dofOriginal": "2012-02-09",
+      "ultimaReforma": "2013-02-13",
+      "vigenciaFallback": "2013-02-13",
+      "materias": [
+        "mercantil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LCE",
+      "titulo": "Reglamento de la Ley de Comercio Exterior",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LCE.pdf",
+      "archivo": "Reg_LCE",
+      "dofOriginal": "1993-12-30",
+      "ultimaReforma": "2014-05-22",
+      "vigenciaFallback": "2014-05-22",
+      "materias": [
+        "comercio_exterior"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LDRS-MOIRSSE",
+      "titulo": "Reglamento de la Ley de Desarrollo Rural Sustentable en Materia de Organismos, Instancias de Representación, Sistemas y Servicios Especializados",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LDRS_MOIRSSE.pdf",
+      "archivo": "Reg_LDRS_MOIRSSE",
+      "dofOriginal": "2004-10-05",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2004-10-05",
+      "materias": [
+        "agrario"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LEMEFAGN",
+      "titulo": "Reglamento de la Ley de Educación Militar del Ejército, Fuerza Aérea y Guardia Nacional",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LEMEFAGN.pdf",
+      "archivo": "Reg_LEMEFAGN",
+      "dofOriginal": "2006-08-14",
+      "ultimaReforma": "2026-03-20",
+      "vigenciaFallback": "2026-03-20",
+      "materias": [
+        "educacion",
+        "militar",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LEN",
+      "titulo": "Reglamento de la Ley de Educación Naval",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LEN_270120.pdf",
+      "archivo": "Reg_LEN_270120",
+      "dofOriginal": "2020-01-27",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2020-01-27",
+      "materias": [
+        "educacion",
+        "militar"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LECAMPO",
+      "titulo": "Reglamento de la Ley de Energía para el Campo",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LECampo.pdf",
+      "archivo": "Reg_LECampo",
+      "dofOriginal": "2003-12-04",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2003-12-04",
+      "materias": [
+        "energia",
+        "agrario"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFEA",
+      "titulo": "Reglamento de la Ley de Firma Electrónica Avanzada",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFEA.pdf",
+      "archivo": "Reg_LFEA",
+      "dofOriginal": "2014-03-21",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2014-03-21",
+      "materias": [
+        "mercantil",
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFLL",
+      "titulo": "Reglamento de la Ley de Fomento para la Lectura y el Libro",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFLL.pdf",
+      "archivo": "Reg_LFLL",
+      "dofOriginal": "2010-04-23",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2010-04-23",
+      "materias": [
+        "educacion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGEO",
+      "titulo": "Reglamento de la Ley de Geotermia",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGeo.pdf",
+      "archivo": "Reg_LGeo",
+      "dofOriginal": "2025-10-03",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-10-03",
+      "materias": [
+        "energia"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LIEG",
+      "titulo": "Reglamento de la Ley de Información Estadística y Geográfica",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LIEG.pdf",
+      "archivo": "Reg_LIEG",
+      "dofOriginal": "1982-11-03",
+      "ultimaReforma": "2004-03-24",
+      "vigenciaFallback": "2004-03-24",
+      "materias": [
+        "estadistica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LIH",
+      "titulo": "Reglamento de la Ley de Ingresos sobre Hidrocarburos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LIH.pdf",
+      "archivo": "Reg_LIH",
+      "dofOriginal": "2014-10-31",
+      "ultimaReforma": "2025-10-03",
+      "vigenciaFallback": "2025-10-03",
+      "materias": [
+        "fiscal",
+        "energia"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LIERNIE",
+      "titulo": "Reglamento de la Ley de Inversión Extranjera y del Registro Nacional de Inversiones Extranjeras",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LIERNIE_170816.pdf",
+      "archivo": "Reg_LIERNIE_170816",
+      "dofOriginal": "1998-09-08",
+      "ultimaReforma": "2016-08-17",
+      "vigenciaFallback": "2016-08-17",
+      "materias": [
+        "comercio_exterior"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LEPECFE",
+      "titulo": "Reglamento de la Ley de la Empresa Pública del Estado, Comisión Federal de Electricidad",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LEPECFE.pdf",
+      "archivo": "Reg_LEPECFE",
+      "dofOriginal": "2025-12-02",
+      "ultimaReforma": "2025-12-29",
+      "vigenciaFallback": "2025-12-29",
+      "materias": [
+        "energia",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LEPEPM",
+      "titulo": "Reglamento de la Ley de la Empresa Pública del Estado, Petróleos Mexicanos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LEPEPM.pdf",
+      "archivo": "Reg_LEPEPM",
+      "dofOriginal": "2025-12-03",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-12-03",
+      "materias": [
+        "energia",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGN",
+      "titulo": "Reglamento de la Ley de la Guardia Nacional",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGN_111220.pdf",
+      "archivo": "Reg_LGN_111220",
+      "dofOriginal": "2019-06-29",
+      "ultimaReforma": "2020-12-11",
+      "vigenciaFallback": "2020-12-11",
+      "materias": [
+        "militar",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LPF",
+      "titulo": "Reglamento de la Ley de la Policía Federal",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LPF_220814.pdf",
+      "archivo": "Reg_LPF_220814",
+      "dofOriginal": "2010-05-17",
+      "ultimaReforma": "2014-08-22",
+      "vigenciaFallback": "2014-08-22",
+      "materias": [
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LSAR",
+      "titulo": "Reglamento de la Ley de los Sistemas de Ahorro para el Retiro",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LSAR.pdf",
+      "archivo": "Reg_LSAR",
+      "dofOriginal": "2009-08-24",
+      "ultimaReforma": "2024-09-27",
+      "vigenciaFallback": "2024-09-27",
+      "materias": [
+        "seguridad_social"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LMIGRA",
+      "titulo": "Reglamento de la Ley de Migración",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LMigra.pdf",
+      "archivo": "Reg_LMigra",
+      "dofOriginal": "2012-09-28",
+      "ultimaReforma": "2014-05-23",
+      "vigenciaFallback": "2014-05-23",
+      "materias": [
+        "migracion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LNAC",
+      "titulo": "Reglamento de la Ley de Nacionalidad",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LNac.pdf",
+      "archivo": "Reg_LNac",
+      "dofOriginal": "2009-06-17",
+      "ultimaReforma": "2013-11-25",
+      "vigenciaFallback": "2013-11-25",
+      "materias": [
+        "migracion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LNCM",
+      "titulo": "Reglamento de la Ley de Navegación y Comercio Marítimos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LNCM_040315.pdf",
+      "archivo": "Reg_LNCM_040315",
+      "dofOriginal": "2015-03-04",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2015-03-04",
+      "materias": [
+        "mercantil",
+        "transporte"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LOPSRM",
+      "titulo": "Reglamento de la Ley de Obras Públicas y Servicios Relacionados con las Mismas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LOPSRM.pdf",
+      "archivo": "Reg_LOPSRM",
+      "dofOriginal": "2010-07-28",
+      "ultimaReforma": "2023-02-24",
+      "vigenciaFallback": "2023-02-24",
+      "materias": [
+        "administrativo",
+        "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LOGAN",
+      "titulo": "Reglamento de la Ley de Organizaciones Ganaderas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LOGan.pdf",
+      "archivo": "Reg_LOGan",
+      "dofOriginal": "1999-12-24",
+      "ultimaReforma": "2000-01-10",
+      "vigenciaFallback": "2000-01-10",
+      "materias": [
+        "agrario"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LPESCA",
+      "titulo": "Reglamento de la Ley de Pesca",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LPesca.pdf",
+      "archivo": "Reg_LPesca",
+      "dofOriginal": "1999-09-29",
+      "ultimaReforma": "2004-01-28",
+      "vigenciaFallback": "2004-01-28",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LPTE",
+      "titulo": "Reglamento de la Ley de Planeación y Transición Energética",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LPTE.pdf",
+      "archivo": "Reg_LPTE",
+      "dofOriginal": "2025-10-03",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-10-03",
+      "materias": [
+        "administrativo",
+        "energia"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LPO",
+      "titulo": "Reglamento de la Ley de Productos Orgánicos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LPO.pdf",
+      "archivo": "Reg_LPO",
+      "dofOriginal": "2010-04-01",
+      "ultimaReforma": "2010-04-08",
+      "vigenciaFallback": "2010-04-08",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LPEAM",
+      "titulo": "Reglamento de la Ley de Protección del Espacio Aéreo Mexicano",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LPEAM.pdf",
+      "archivo": "Reg_LPEAM",
+      "dofOriginal": "2026-02-10",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-02-10",
+      "materias": [
+        "transporte"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LPUE",
+      "titulo": "Reglamento de la Ley de Puertos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LPue.pdf",
+      "archivo": "Reg_LPue",
+      "dofOriginal": "2021-12-16",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2021-12-16",
+      "materias": [
+        "transporte"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LTF",
+      "titulo": "Reglamento de la Ley de Tesorería de la Federación",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LTF_300617.pdf",
+      "archivo": "Reg_LTF_300617",
+      "dofOriginal": "2017-06-30",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2017-06-30",
+      "materias": [
+        "hacienda_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "RLIVA",
+      "titulo": "Reglamento de la Ley del Impuesto al Valor Agregado",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LIVA_250914.pdf",
+      "archivo": "Reg_LIVA_250914",
+      "dofOriginal": "2006-12-04",
+      "ultimaReforma": "2014-09-25",
+      "vigenciaFallback": "2014-09-25",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LIEPS",
+      "titulo": "Reglamento de la Ley del Impuesto Especial sobre Producción y Servicios",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LIEPS.pdf",
+      "archivo": "Reg_LIEPS",
+      "dofOriginal": "2006-12-04",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2006-12-04",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "RLISR",
+      "titulo": "Reglamento de la Ley del Impuesto sobre la Renta",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LISR_060516.pdf",
+      "archivo": "Reg_LISR_060516",
+      "dofOriginal": "2015-10-08",
+      "ultimaReforma": "2016-05-06",
+      "vigenciaFallback": "2016-05-06",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LINFONAVIT-MTAI",
+      "titulo": "Reglamento de la Ley del Instituto del Fondo Nacional de la Vivienda para los Trabajadores en Materia de Transparencia y Acceso a la Información",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LInfonavit_MTAI.pdf",
+      "archivo": "Reg_LInfonavit_MTAI",
+      "dofOriginal": "2005-12-12",
+      "ultimaReforma": "2006-02-24",
+      "vigenciaFallback": "2006-02-24",
+      "materias": [
+        "laboral",
+        "seguridad_social",
+        "transparencia",
+        "vivienda"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LIFNCT",
+      "titulo": "Reglamento de la Ley del Instituto del Fondo Nacional para el Consumo de los Trabajadores",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LIFNCT.pdf",
+      "archivo": "Reg_LIFNCT",
+      "dofOriginal": "2006-11-30",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2006-11-30",
+      "materias": [
+        "laboral"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LRPV",
+      "titulo": "Reglamento de la Ley del Registro Público Vehicular",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LRPV.pdf",
+      "archivo": "Reg_LRPV",
+      "dofOriginal": "2007-12-05",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2007-12-05",
+      "materias": [
+        "administrativo",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LSE",
+      "titulo": "Reglamento de la Ley del Sector Eléctrico",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LSE.pdf",
+      "archivo": "Reg_LSE",
+      "dofOriginal": "2025-10-03",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-10-03",
+      "materias": [
+        "energia"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LSH",
+      "titulo": "Reglamento de la Ley del Sector Hidrocarburos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LSH.pdf",
+      "archivo": "Reg_LSH",
+      "dofOriginal": "2025-10-03",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-10-03",
+      "materias": [
+        "energia"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LSS-MAEBA",
+      "titulo": "Reglamento de la Ley del Seguro Social, en materia de administración y enajenación de bienes adjudicados con motivo de la aplicación del procedimiento administrativo de ejecución",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LSS_MAEBA.pdf",
+      "archivo": "Reg_LSS_MAEBA",
+      "dofOriginal": "2012-11-20",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2012-11-20",
+      "materias": [
+        "seguridad_social",
+        "procesal",
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "RACERF",
+      "titulo": "Reglamento de la Ley del Seguro Social en Materia de Afiliación, Clasificación de Empresas, Recaudación y Fiscalización",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LSS_MACERF.pdf",
+      "archivo": "Reg_LSS_MACERF",
+      "dofOriginal": "2002-11-01",
+      "ultimaReforma": "2005-07-15",
+      "vigenciaFallback": "2005-07-15",
+      "materias": [
+        "seguridad_social"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LSS-RFARGFA",
+      "titulo": "Reglamento de la Ley del Seguro Social para la constitución, inversión y uso para la operación de las Reservas Financieras y Actuariales y la Reserva General Financiera y Actuarial, así como para la determinación de los costos financieros que deberán reintegrarse a la Reserva de Operación para Contingencias y Financiamiento",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LSS_RFARGFA.pdf",
+      "archivo": "Reg_LSS_RFARGFA",
+      "dofOriginal": "2013-08-20",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2013-08-20",
+      "materias": [
+        "seguridad_social"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LSEM",
+      "titulo": "Reglamento de la Ley del Servicio Exterior Mexicano",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LSEM.pdf",
+      "archivo": "Reg_LSEM",
+      "dofOriginal": "2017-04-28",
+      "ultimaReforma": "2025-05-27",
+      "vigenciaFallback": "2025-05-27",
+      "materias": [
+        "internacional"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LSM",
+      "titulo": "Reglamento de la Ley del Servicio Militar",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LSM_060647.pdf",
+      "archivo": "Reg_LSM_060647",
+      "dofOriginal": "1942-11-10",
+      "ultimaReforma": "1947-06-06",
+      "vigenciaFallback": "1947-06-06",
+      "materias": [
+        "militar"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LSPCAPF",
+      "titulo": "Reglamento de la Ley del Servicio Profesional de Carrera en la Administración Pública Federal",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LSPCAPF.pdf",
+      "archivo": "Reg_LSPCAPF",
+      "dofOriginal": "2007-09-06",
+      "ultimaReforma": "2024-01-04",
+      "vigenciaFallback": "2024-01-04",
+      "materias": [
+        "laboral",
+        "administrativo",
+        "servidores_publicos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LSPEE-MA",
+      "titulo": "Reglamento de la Ley del Servicio Público de Energía Eléctrica, en Materia de Aportaciones",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LSPEE_MA.pdf",
+      "archivo": "Reg_LSPEE_MA",
+      "dofOriginal": "1998-11-10",
+      "ultimaReforma": "2025-10-03",
+      "vigenciaFallback": "2025-10-03",
+      "materias": [
+        "energia"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFA",
+      "titulo": "Reglamento de la Ley Federal de Archivos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFA.pdf",
+      "archivo": "Reg_LFA",
+      "dofOriginal": "2014-05-13",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2014-05-13",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFAFE",
+      "titulo": "Reglamento de la Ley Federal de Armas de Fuego y Explosivos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFAFE.pdf",
+      "archivo": "Reg_LFAFE",
+      "dofOriginal": "1972-05-06",
+      "ultimaReforma": null,
+      "vigenciaFallback": "1972-05-06",
+      "materias": [
+        "penal",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFCINE",
+      "titulo": "Reglamento de la Ley Federal de Cinematografía",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFCine.pdf",
+      "archivo": "Reg_LFCine",
+      "dofOriginal": "2001-03-29",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2001-03-29",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFCE",
+      "titulo": "Reglamento de la Ley Federal de Competencia Económica",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFCE.pdf",
+      "archivo": "Reg_LFCE",
+      "dofOriginal": "2007-10-12",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2007-10-12",
+      "materias": [
+        "competencia"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFCP",
+      "titulo": "Reglamento de la Ley Federal de Correduría Pública",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFCP.pdf",
+      "archivo": "Reg_LFCP",
+      "dofOriginal": "1993-06-04",
+      "ultimaReforma": "2012-11-26",
+      "vigenciaFallback": "2012-11-26",
+      "materias": [
+        "mercantil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFFAROSC",
+      "titulo": "Reglamento de la Ley Federal de Fomento a las Actividades Realizadas por Organizaciones de la Sociedad Civil",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFFAROSC.pdf",
+      "archivo": "Reg_LFFAROSC",
+      "dofOriginal": "2005-06-07",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2005-06-07",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFJS",
+      "titulo": "Reglamento de la Ley Federal de Juegos y Sorteos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFJS.pdf",
+      "archivo": "Reg_LFJS",
+      "dofOriginal": "2004-09-17",
+      "ultimaReforma": "2023-11-16",
+      "vigenciaFallback": "2023-11-16",
+      "materias": [
+        "juegos_sorteos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFEP",
+      "titulo": "Reglamento de la Ley Federal de las Entidades Paraestatales",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFEP.pdf",
+      "archivo": "Reg_LFEP",
+      "dofOriginal": "1990-01-26",
+      "ultimaReforma": "2010-11-23",
+      "vigenciaFallback": "2010-11-23",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFPRH",
+      "titulo": "Reglamento de la Ley Federal de Presupuesto y Responsabilidad Hacendaria",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFPRH.pdf",
+      "archivo": "Reg_LFPRH",
+      "dofOriginal": "2006-06-28",
+      "ultimaReforma": "2025-08-08",
+      "vigenciaFallback": "2025-08-08",
+      "materias": [
+        "hacienda_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFPCCS",
+      "titulo": "Reglamento de la Ley Federal de Producción, Certificación y Comercio de Semillas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFPCCS.pdf",
+      "archivo": "Reg_LFPCCS",
+      "dofOriginal": "2011-09-02",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2011-09-02",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFPPI",
+      "titulo": "Reglamento de la Ley Federal de Protección a la Propiedad Industrial",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFPPI.pdf",
+      "archivo": "Reg_LFPPI",
+      "dofOriginal": "2026-04-28",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-04-28",
+      "materias": [
+        "propiedad_intelectual"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFPC",
+      "titulo": "Reglamento de la Ley Federal de Protección al Consumidor",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFPC_191219.pdf",
+      "archivo": "Reg_LFPC_191219",
+      "dofOriginal": "2019-12-19",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2019-12-19",
+      "materias": [
+        "consumidor"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFPDPPP",
+      "titulo": "Reglamento de la Ley Federal de Protección de Datos Personales en Posesión de los Particulares",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFPDPPP.pdf",
+      "archivo": "Reg_LFPDPPP",
+      "dofOriginal": "2011-12-21",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2011-12-21",
+      "materias": [
+        "datos_personales"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFRT-MCPCTRT",
+      "titulo": "Reglamento de la Ley Federal de Radio y Televisión, en Materia de Concesiones, Permisos y Contenido de las Transmisiones de Radio y Televisión",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFRT_MCPCTRT.pdf",
+      "archivo": "Reg_LFRT_MCPCTRT",
+      "dofOriginal": "2002-10-10",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2002-10-10",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFSA",
+      "titulo": "Reglamento de la Ley Federal de Sanidad Animal",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFSA.pdf",
+      "archivo": "Reg_LFSA",
+      "dofOriginal": "2012-05-21",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2012-05-21",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFSV",
+      "titulo": "Reglamento de la Ley Federal de Sanidad Vegetal",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFSV.pdf",
+      "archivo": "Reg_LFSV",
+      "dofOriginal": "2016-07-15",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2016-07-15",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFSP",
+      "titulo": "Reglamento de la Ley Federal de Seguridad Privada",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFSP.pdf",
+      "archivo": "Reg_LFSP",
+      "dofOriginal": "2011-10-18",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2011-10-18",
+      "materias": [
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFTR-MCSRE",
+      "titulo": "Reglamento de la Ley Federal de Telecomunicaciones y Radiodifusión en Materia de Capacidad Satelital como Reserva del Estado",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFTR_MCSRE.pdf",
+      "archivo": "Reg_LFTR_MCSRE",
+      "dofOriginal": "2024-04-25",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2024-04-25",
+      "materias": [
+        "telecomunicaciones"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFTAIPG",
+      "titulo": "Reglamento de la Ley Federal de Transparencia y Acceso a la Información Pública Gubernamental",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFTAIPG.pdf",
+      "archivo": "Reg_LFTAIPG",
+      "dofOriginal": "2003-06-11",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2003-06-11",
+      "materias": [
+        "transparencia"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFVV",
+      "titulo": "Reglamento de la Ley Federal de Variedades Vegetales",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFVV.pdf",
+      "archivo": "Reg_LFVV",
+      "dofOriginal": "1998-09-24",
+      "ultimaReforma": null,
+      "vigenciaFallback": "1998-09-24",
+      "materias": [
+        "propiedad_intelectual"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFZEE",
+      "titulo": "Reglamento de la Ley Federal de Zonas Económicas Especiales",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFZEE_290917.pdf",
+      "archivo": "Reg_LFZEE_290917",
+      "dofOriginal": "2016-06-30",
+      "ultimaReforma": "2017-09-29",
+      "vigenciaFallback": "2017-09-29",
+      "materias": [
+        "comercio_exterior"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFDA",
+      "titulo": "Reglamento de la Ley Federal del Derecho de Autor",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFDA.pdf",
+      "archivo": "Reg_LFDA",
+      "dofOriginal": "1998-05-22",
+      "ultimaReforma": "2005-09-14",
+      "vigenciaFallback": "2005-09-14",
+      "materias": [
+        "propiedad_intelectual"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFCPRECQUIM",
+      "titulo": "Reglamento de la Ley Federal para el Control de Precursores Químicos, Productos Químicos Esenciales y Máquinas para Elaborar Cápsulas, Tabletas y/o Comprimidos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFCPrecQuim.pdf",
+      "archivo": "Reg_LFCPrecQuim",
+      "dofOriginal": "1999-09-15",
+      "ultimaReforma": null,
+      "vigenciaFallback": "1999-09-15",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFAEBSP",
+      "titulo": "Reglamento de la Ley Federal para la Administración y Enajenación de Bienes del Sector Público",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFAEBSP.pdf",
+      "archivo": "Reg_LFAEBSP",
+      "dofOriginal": "2003-06-17",
+      "ultimaReforma": "2006-11-29",
+      "vigenciaFallback": "2006-11-29",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "RLFPIORPI",
+      "titulo": "Reglamento de la Ley Federal para la Prevención e Identificación de Operaciones con Recursos de Procedencia Ilícita",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFPIORPI.pdf",
+      "archivo": "Reg_LFPIORPI",
+      "dofOriginal": "2013-08-16",
+      "ultimaReforma": "2026-03-27",
+      "vigenciaFallback": "2026-03-27",
+      "materias": [
+        "pld"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFMN",
+      "titulo": "Reglamento de la Ley Federal Sobre Metrología y Normalización",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFMN.pdf",
+      "archivo": "Reg_LFMN",
+      "dofOriginal": "1999-01-14",
+      "ultimaReforma": "2012-11-28",
+      "vigenciaFallback": "2012-11-28",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFMZAAH",
+      "titulo": "Reglamento de la Ley Federal Sobre Monumentos y Zonas Arqueológicas, Artísticos e Históricos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFMZAAH_031220.pdf",
+      "archivo": "Reg_LFMZAAH_031220",
+      "dofOriginal": "1975-12-08",
+      "ultimaReforma": "2020-12-03",
+      "vigenciaFallback": "2020-12-03",
+      "materias": [
+        "cultura"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGAMVLV",
+      "titulo": "Reglamento de la Ley General de Acceso de las Mujeres a una Vida Libre de Violencia",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGAMVLV.pdf",
+      "archivo": "Reg_LGAMVLV",
+      "dofOriginal": "2008-03-11",
+      "ultimaReforma": "2014-03-14",
+      "vigenciaFallback": "2014-03-14",
+      "materias": [
+        "derechos_humanos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGCC-MRNE",
+      "titulo": "Reglamento de la Ley General de Cambio Climático en Materia del Registro Nacional de Emisiones",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGCC_MRNE_281014.pdf",
+      "archivo": "Reg_LGCC_MRNE_281014",
+      "dofOriginal": "2014-10-28",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2014-10-28",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGCFD",
+      "titulo": "Reglamento de la Ley General de Cultura Física y Deporte",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGCFD.pdf",
+      "archivo": "Reg_LGCFD",
+      "dofOriginal": "2014-05-23",
+      "ultimaReforma": "2024-04-01",
+      "vigenciaFallback": "2024-04-01",
+      "materias": [
+        "cultura",
+        "deporte"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGCDC",
+      "titulo": "Reglamento de la Ley General de Cultura y Derechos Culturales",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGCDC_291118.pdf",
+      "archivo": "Reg_LGCDC_291118",
+      "dofOriginal": "2018-11-29",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2018-11-29",
+      "materias": [
+        "cultura"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGDFS",
+      "titulo": "Reglamento de la Ley General de Desarrollo Forestal Sustentable",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGDFS.pdf",
+      "archivo": "Reg_LGDFS",
+      "dofOriginal": "2020-12-09",
+      "ultimaReforma": "2025-11-20",
+      "vigenciaFallback": "2025-11-20",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGDS",
+      "titulo": "Reglamento de la Ley General de Desarrollo Social",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGDS.pdf",
+      "archivo": "Reg_LGDS",
+      "dofOriginal": "2006-01-18",
+      "ultimaReforma": "2008-08-28",
+      "vigenciaFallback": "2008-08-28",
+      "materias": [
+        "derechos_humanos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGIFE",
+      "titulo": "Reglamento de la Ley General de la Infraestructura Física Educativa",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGIFE.pdf",
+      "archivo": "Reg_LGIFE",
+      "dofOriginal": "2013-07-05",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2013-07-05",
+      "materias": [
+        "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGDNNA",
+      "titulo": "Reglamento de la Ley General de los Derechos de Niñas, Niños y Adolescentes",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGDNNA.pdf",
+      "archivo": "Reg_LGDNNA",
+      "dofOriginal": "2015-12-02",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2015-12-02",
+      "materias": [
+        "derechos_humanos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGP",
+      "titulo": "Reglamento de la Ley General de Población",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGP.pdf",
+      "archivo": "Reg_LGP",
+      "dofOriginal": "2000-04-14",
+      "ultimaReforma": "2012-09-28",
+      "vigenciaFallback": "2012-09-28",
+      "materias": [
+        "migracion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGPSACDII",
+      "titulo": "Reglamento de la Ley General de Prestación de Servicios para la Atención, Cuidado y Desarrollo Integral Infantil",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGPSACDII_100516.pdf",
+      "archivo": "Reg_LGPSACDII_100516",
+      "dofOriginal": "2012-08-22",
+      "ultimaReforma": "2016-05-10",
+      "vigenciaFallback": "2016-05-10",
+      "materias": [
+        "derechos_humanos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGPC",
+      "titulo": "Reglamento de la Ley General de Protección Civil",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGPC_091215.pdf",
+      "archivo": "Reg_LGPC_091215",
+      "dofOriginal": "2014-05-13",
+      "ultimaReforma": "2015-12-09",
+      "vigenciaFallback": "2015-12-09",
+      "materias": [
+        "construccion",
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGS-MCSAEPS",
+      "titulo": "Reglamento de la Ley General de Salud en Materia de Control Sanitario de Actividades, Establecimientos, Productos y Servicios",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGS_MCSAEPS_281204.pdf",
+      "archivo": "Reg_LGS_MCSAEPS_281204",
+      "dofOriginal": "1988-01-18",
+      "ultimaReforma": "2004-12-28",
+      "vigenciaFallback": "2004-12-28",
+      "materias": [
+        "salud"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGS-MCSOTCSH-FE-09JUL85",
+      "titulo": "Reglamento de la Ley General de Salud en Materia de Control Sanitario de la Disposición de Órganos, Tejidos y Cadáveres de Seres Humanos Original DOF 20 /02/1985 , Fe de E. DOF",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGS_MCSOTCSH_fe_09jul85.pdf",
+      "archivo": "Reg_LGS_MCSOTCSH_fe_09jul85",
+      "dofOriginal": "1985-07-09",
+      "ultimaReforma": "2014-03-26",
+      "vigenciaFallback": "2014-03-26",
+      "materias": [
+        "salud"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGS-MCSPIUMC",
+      "titulo": "Reglamento de la Ley General de Salud en Materia de Control Sanitario para la Producción, Investigación y Uso Medicinal de la Cannabis y sus Derivados Farmacológicos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGS_MCSPIUMC_120121.pdf",
+      "archivo": "Reg_LGS_MCSPIUMC_120121",
+      "dofOriginal": "2021-01-12",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2021-01-12",
+      "materias": [
+        "salud"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGS-MIS",
+      "titulo": "Reglamento de la Ley General de Salud en Materia de Investigación para la Salud",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGS_MIS.pdf",
+      "archivo": "Reg_LGS_MIS",
+      "dofOriginal": "1987-01-06",
+      "ultimaReforma": "2014-04-02",
+      "vigenciaFallback": "2014-04-02",
+      "materias": [
+        "salud"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGS-MPSAM",
+      "titulo": "Reglamento de la Ley General de Salud en Materia de Prestación de Servicios de Atención Médica",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGS_MPSAM_170718.pdf",
+      "archivo": "Reg_LGS_MPSAM_170718",
+      "dofOriginal": "1986-05-14",
+      "ultimaReforma": "2018-07-17",
+      "vigenciaFallback": "2018-07-17",
+      "materias": [
+        "salud"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGS-MP",
+      "titulo": "Reglamento de la Ley General de Salud en Materia de Publicidad Original DOF 04 /05/2000 Reformas DOF",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGS_MP.pdf",
+      "archivo": "Reg_LGS_MP",
+      "dofOriginal": "2006-04-06",
+      "ultimaReforma": "2022-09-08",
+      "vigenciaFallback": "2022-09-08",
+      "materias": [
+        "salud"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGS-MSI",
+      "titulo": "Reglamento de la Ley General de Salud en Materia de Sanidad Internacional",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGS_MSI.pdf",
+      "archivo": "Reg_LGS_MSI",
+      "dofOriginal": "1985-02-18",
+      "ultimaReforma": "1985-07-10",
+      "vigenciaFallback": "1985-07-10",
+      "materias": [
+        "ambiental",
+        "salud"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGS-MT",
+      "titulo": "Reglamento de la Ley General de Salud en Materia de Trasplantes",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGS_MT.pdf",
+      "archivo": "Reg_LGS_MT",
+      "dofOriginal": "2014-03-26",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2014-03-26",
+      "materias": [
+        "salud"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGT",
+      "titulo": "Reglamento de la Ley General de Turismo",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGT.pdf",
+      "archivo": "Reg_LGT",
+      "dofOriginal": "2015-07-06",
+      "ultimaReforma": "2025-11-25",
+      "vigenciaFallback": "2025-11-25",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGV",
+      "titulo": "Reglamento de la Ley General de Víctimas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGV.pdf",
+      "archivo": "Reg_LGV",
+      "dofOriginal": "2014-11-28",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2014-11-28",
+      "materias": [
+        "derechos_humanos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGVS",
+      "titulo": "Reglamento de la Ley General de Vida Silvestre",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGVS.pdf",
+      "archivo": "Reg_LGVS",
+      "dofOriginal": "2006-11-30",
+      "ultimaReforma": "2014-05-09",
+      "vigenciaFallback": "2014-05-09",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGEEPA-ANP",
+      "titulo": "Reglamento de la Ley General del Equilibrio Ecológico y la Protección al Ambiente en Materia de Áreas Naturales Protegidas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGEEPA_ANP.pdf",
+      "archivo": "Reg_LGEEPA_ANP",
+      "dofOriginal": "2000-11-30",
+      "ultimaReforma": "2014-05-21",
+      "vigenciaFallback": "2014-05-21",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGEEPA-MAAA",
+      "titulo": "Reglamento de la Ley General del Equilibrio Ecológico y la Protección al Ambiente en Materia de Autorregulación y Auditorías Ambientales",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGEEPA_MAAA_311014.pdf",
+      "archivo": "Reg_LGEEPA_MAAA_311014",
+      "dofOriginal": "2010-04-29",
+      "ultimaReforma": "2014-10-31",
+      "vigenciaFallback": "2014-10-31",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGEEPA-MEIA",
+      "titulo": "Reglamento de la Ley General del Equilibrio Ecológico y la Protección al Ambiente en Materia de Evaluación del Impacto Ambiental",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGEEPA_MEIA_311014.pdf",
+      "archivo": "Reg_LGEEPA_MEIA_311014",
+      "dofOriginal": "2000-05-30",
+      "ultimaReforma": "2014-10-31",
+      "vigenciaFallback": "2014-10-31",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGEEPA-MOE",
+      "titulo": "Reglamento de la Ley General del Equilibrio Ecológico y la Protección al Ambiente en Materia de Ordenamiento Ecológico",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGEEPA_MOE_311014.pdf",
+      "archivo": "Reg_LGEEPA_MOE_311014",
+      "dofOriginal": "2003-08-08",
+      "ultimaReforma": "2014-10-31",
+      "vigenciaFallback": "2014-10-31",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGEEPA-MPCCA",
+      "titulo": "Reglamento de la Ley General del Equilibrio Ecológico y la Protección al Ambiente en Materia de Prevención y Control de la Contaminación de la Atmósfera",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGEEPA_MPCCA_311014.pdf",
+      "archivo": "Reg_LGEEPA_MPCCA_311014",
+      "dofOriginal": "1988-11-25",
+      "ultimaReforma": "2014-10-31",
+      "vigenciaFallback": "2014-10-31",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGEEPA-MRETC",
+      "titulo": "Reglamento de la Ley General del Equilibrio Ecológico y la Protección al Ambiente en Materia de Registro de Emisiones y Transferencia de Contaminantes",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGEEPA_MRETC_311014.pdf",
+      "archivo": "Reg_LGEEPA_MRETC_311014",
+      "dofOriginal": "2004-06-03",
+      "ultimaReforma": "2014-10-31",
+      "vigenciaFallback": "2014-10-31",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGCT",
+      "titulo": "Reglamento de la Ley General para el Control del Tabaco",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGCT.pdf",
+      "archivo": "Reg_LGCT",
+      "dofOriginal": "2009-05-31",
+      "ultimaReforma": "2022-12-16",
+      "vigenciaFallback": "2022-12-16",
+      "materias": [
+        "salud"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGAPPCEA",
+      "titulo": "Reglamento de la Ley General para la Atención y Protección a Personas con la Condición del Espectro Autista",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGAPPCEA.pdf",
+      "archivo": "Reg_LGAPPCEA",
+      "dofOriginal": "2016-07-21",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2016-07-21",
+      "materias": [
+        "salud"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGIPD",
+      "titulo": "Reglamento de la Ley General para la Inclusión de las Personas con Discapacidad",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGIPD.pdf",
+      "archivo": "Reg_LGIPD",
+      "dofOriginal": "2012-11-30",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2012-11-30",
+      "materias": [
+        "derechos_humanos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGPSVD",
+      "titulo": "Reglamento de la Ley General para la Prevención Social de la Violencia y la Delincuencia",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGPSVD_190914.pdf",
+      "archivo": "Reg_LGPSVD_190914",
+      "dofOriginal": "2014-09-19",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2014-09-19",
+      "materias": [
+        "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGPGIR",
+      "titulo": "Reglamento de la Ley General para la Prevención y Gestión Integral de los Residuos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGPGIR_311014.pdf",
+      "archivo": "Reg_LGPGIR_311014",
+      "dofOriginal": "2006-11-30",
+      "ultimaReforma": "2014-10-31",
+      "vigenciaFallback": "2014-10-31",
+      "materias": [
+        "ambiental"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LGPSEDMTP",
+      "titulo": "Reglamento de la Ley General para Prevenir, Sancionar y Erradicar los Delitos en Materia de Trata de Personas y para la Protección y Asistencia a las Víctimas de estos Delitos",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGPSEDMTP.pdf",
+      "archivo": "Reg_LGPSEDMTP",
+      "dofOriginal": "2013-09-23",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2013-09-23",
+      "materias": [
+        "penal",
+        "derechos_humanos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LMIN",
+      "titulo": "Reglamento de la Ley Minera",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LMin.pdf",
+      "archivo": "Reg_LMin",
+      "dofOriginal": "2012-10-12",
+      "ultimaReforma": "2025-12-11",
+      "vigenciaFallback": "2025-12-11",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LOPGJDF",
+      "titulo": "Reglamento de la Ley Orgánica de la Procuraduría General de Justicia del Distrito Federal",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LOPGJDF.pdf",
+      "archivo": "Reg_LOPGJDF",
+      "dofOriginal": "2011-10-24",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2011-10-24",
+      "materias": [
+        "judicial",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LOPGR",
+      "titulo": "Reglamento de la Ley Orgánica de la Procuraduría General de la República",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LOPGR.pdf",
+      "archivo": "Reg_LOPGR",
+      "dofOriginal": "2012-07-23",
+      "ultimaReforma": "2012-09-21",
+      "vigenciaFallback": "2012-09-21",
+      "materias": [
+        "judicial",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LOINAH",
+      "titulo": "Reglamento de la Ley Orgánica del Instituto Nacional de Antropología e Historia",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LOINAH_240521.pdf",
+      "archivo": "Reg_LOINAH_240521",
+      "dofOriginal": "2021-05-24",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2021-05-24",
+      "materias": [
+        "cultura",
+        "organico"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LDCMPME",
+      "titulo": "Reglamento de la Ley para el Desarrollo de la Competitividad de la Micro, Pequeña y Mediana Empresa",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LDCMPME_240518.pdf",
+      "archivo": "Reg_LDCMPME_240518",
+      "dofOriginal": "2006-05-24",
+      "ultimaReforma": "2018-05-24",
+      "vigenciaFallback": "2018-05-24",
+      "materias": [
+        "mercantil",
+        "competencia"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFIIEDB",
+      "titulo": "Reglamento de la Ley para el Fomento de la Inversión en Infraestructura Estratégica para el Desarrollo con Bienestar Nuevo Reglamento",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFIIEDB.pdf",
+      "archivo": "Reg_LFIIEDB",
+      "dofOriginal": "2026-05-08",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-05-08",
+      "materias": [
+        "administrativo",
+        "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LUPDECR",
+      "titulo": "Reglamento de la Ley para el Uso y Protección de la Denominación y del Emblema de la Cruz Roja",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LUPDECR.pdf",
+      "archivo": "Reg_LUPDECR",
+      "dofOriginal": "2014-03-25",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2014-03-25",
+      "materias": [
+        "cultura"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LPPDDHP",
+      "titulo": "Reglamento de la Ley para la Protección de Personas Defensoras de Derechos Humanos y Periodistas",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LPPDDHP.pdf",
+      "archivo": "Reg_LPPDDHP",
+      "dofOriginal": "2012-11-30",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2012-11-30",
+      "materias": [
+        "derechos_humanos"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFGFAGA-FE-16MAY55",
+      "titulo": "Reglamento de la Ley que Crea el Fondo de Garantía y Fomento para la Agricultura, Ganadería y Avicultura",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFGFAGA_fe_16may55.pdf",
+      "archivo": "Reg_LFGFAGA_fe_16may55",
+      "dofOriginal": "1955-05-06",
+      "ultimaReforma": "2007-05-10",
+      "vigenciaFallback": "2007-05-10",
+      "materias": [
+        "financiero",
+        "agrario",
+        "cultura"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LRMINERAS",
+      "titulo": "Reglamento de la Ley que Declara Reservas Mineras Nacionales los Yacimientos de Uranio, Torio y las demás Substancias de las cuales se Obtengan Isótopos Hendibles que puedan Producir Energía Nuclear",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LRMineras.pdf",
+      "archivo": "Reg_LRMineras",
+      "dofOriginal": "1952-01-17",
+      "ultimaReforma": null,
+      "vigenciaFallback": "1952-01-17",
+      "materias": [
+        "energia"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LRART5C",
+      "titulo": "Reglamento de la Ley Reglamentaria del Artículo 5o. Constitucional, Relativo al Ejercicio de las Profesiones en el Distrito Federal",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LRArt5C_050418.pdf",
+      "archivo": "Reg_LRArt5C_050418",
+      "dofOriginal": "1945-10-01",
+      "ultimaReforma": "2018-04-05",
+      "vigenciaFallback": "2018-04-05",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LEBHN",
+      "titulo": "Reglamento de la Ley sobre el Escudo, la Bandera y el Himno Nacionales",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LEBHN.pdf",
+      "archivo": "Reg_LEBHN",
+      "dofOriginal": "2025-09-09",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2025-09-09",
+      "materias": [
+        "cultura"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LRPC",
+      "titulo": "Reglamento de la Ley sobre Refugiados y Protección Complementaria",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LRPC.pdf",
+      "archivo": "Reg_LRPC",
+      "dofOriginal": "2012-02-21",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2012-02-21",
+      "materias": [
+        "derechos_humanos",
+        "migracion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-ART121-122-LFT",
+      "titulo": "Reglamento de los Artículos 121 y 122 de la Ley Federal del Trabajo",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_Art121-122_LFT_050614.pdf",
+      "archivo": "Reg_Art121-122_LFT_050614",
+      "dofOriginal": "2014-06-05",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2014-06-05",
+      "materias": [
+        "laboral"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFPC-ART122",
+      "titulo": "Reglamento del Artículo 122 de la Ley Federal de Protección al Consumidor",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFPC_Art122.pdf",
+      "archivo": "Reg_LFPC_Art122",
+      "dofOriginal": "1997-08-27",
+      "ultimaReforma": null,
+      "vigenciaFallback": "1997-08-27",
+      "materias": [
+        "consumidor"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-LFIF-ART95",
+      "titulo": "Reglamento del Artículo 95 de la Ley Federal de Instituciones de Fianzas, para el Cobro de Fianzas Otorgadas a Favor de la Federación, del Distrito Federal, de los Estados y de los Municipios, Distintas de las que Garantizan Obligaciones Fiscales Federales a cargo de Terceros",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LFIF_Art95.pdf",
+      "archivo": "Reg_LFIF_Art95",
+      "dofOriginal": "1991-01-15",
+      "ultimaReforma": null,
+      "vigenciaFallback": "1991-01-15",
+      "materias": [
+        "seguros"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "R-CCOMER-MPSC",
+      "titulo": "Reglamento del Código de Comercio en Materia de Prestadores de Servicios de Certificación",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_CComer_MPSC.pdf",
+      "archivo": "Reg_CComer_MPSC",
+      "dofOriginal": "2004-07-19",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2004-07-19",
+      "materias": [
+        "mercantil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "RCFF",
+      "titulo": "Reglamento del Código Fiscal de la Federación",
+      "url": "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_CFF.pdf",
+      "archivo": "Reg_CFF",
+      "dofOriginal": "2014-04-02",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2014-04-02",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    }
+  ]
+}

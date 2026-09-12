@@ -8,10 +8,11 @@ describe("toolsAbogado", () => {
     expect(nombres.sort()).toEqual(["get_articulo", "get_tesis", "get_valor_fiscal", "search_fiscal_knowledge", "search_jurisprudencia"]);
     expect(nombres.some((n) => n.startsWith("proponer_") || n.startsWith("query_"))).toBe(false);
   });
-  it("get_articulo acepta cualquier clave del catálogo (CNPCF, LAMP, CPF…) y la RMF", () => {
+  it("get_articulo acepta cualquier clave del catálogo (sin enum: son más de mil)", () => {
     const ga = toolsAbogado.find((t) => t.name === "get_articulo")!;
-    const props = (ga.input_schema as { properties: Record<string, { enum?: string[] }> }).properties;
-    expect(props.ley.enum).toEqual(expect.arrayContaining(["CNPCF", "LAMP", "CPF", "CCF", "LISR", "RMF"]));
+    const props = (ga.input_schema as { properties: Record<string, { enum?: string[]; description?: string }> }).properties;
+    expect(props.ley.enum).toBeUndefined();
+    expect(props.ley.description).toMatch(/CNPCF/);
     // El contador sigue con su lista corta.
     const gaContador = tools.find((t) => t.name === "get_articulo")!;
     const propsC = (gaContador.input_schema as { properties: Record<string, { enum?: string[] }> }).properties;

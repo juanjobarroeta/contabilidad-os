@@ -26,7 +26,7 @@ describe("catálogo de leyes", () => {
     for (const d of Object.values(LEYES)) {
       expect(d.materias.length, d.clave).toBeGreaterThan(0);
       expect(["FEDERAL", "ESTATAL", "MUNICIPAL", "INTERNACIONAL"]).toContain(d.ambito);
-      expect(d.url).toMatch(/^https:\/\//);
+      expect(d.url).toMatch(/^https?:\/\//);
     }
     expect(LEYES_EXCLUIDAS.map((e) => e.clave)).toContain("PEF");
     expect(LEYES.PEF).toBeUndefined();
@@ -41,6 +41,20 @@ describe("catálogo de leyes", () => {
     expect(LEYES.LINFONAVIT.url).toMatch(/pdf_mov\//);
     expect(LEYES.LISR.url).toBe("https://www.diputados.gob.mx/LeyesBiblio/pdf/LISR.pdf");
     expect(LEYES.LISR.materias).toEqual(["fiscal"]);
+  });
+  it("estados y municipios: el OJN y lo curado a mano entran con ámbito, entidad y municipio", () => {
+    const nle = Object.values(LEYES).filter((d) => d.entidad === "NLE");
+    expect(nle.map((d) => d.clave)).toContain("NLE-L-ASENTAMIENTOS-HUMANOS-ORDENA");
+    const mty = nle.filter((d) => d.municipio === "Monterrey");
+    expect(mty.map((d) => d.clave).sort()).toEqual(["NLE-M-MONTERREY-R-CONSTRUCCIONES-MONTERREY-NUE", "NLE-M-MONTERREY-R-ZONIFICACION-USO-SUELO-MONTE"]);
+    expect(mty.every((d) => d.ambito === "MUNICIPAL" && d.source === "REGLAMENTO")).toBe(true);
+    // Una ley curada que abroga a la del OJN la saca del catálogo (Guerrero: Ley 240 sustituye a la 557).
+    expect(LEYES["GRO-L-PROPIEDAD-CONDOMINIO-GUERRER"]).toBeUndefined();
+    expect(LEYES["GRO-L-NUMERO-240-PROPIEDAD-CONDOMI"]?.vigenciaFallback).toBe("2025-05-27");
+    // La URL curada sin extensión no se excluye: el formato se detecta por bytes.
+    expect(Object.values(LEYES).find((d) => d.entidad === "MOR")?.url).toMatch(/marcojuridico\.morelos\.gob\.mx/);
+    // Lo rastreado del OJN: Jalisco trae estatal y municipal.
+    expect(Object.values(LEYES).filter((d) => d.entidad === "JAL" && d.ambito === "MUNICIPAL").length).toBeGreaterThan(10);
   });
   it("la manual gana a la generada con la misma clave, pero hereda lo que no redefine", () => {
     expect(LEYES.LINFONAVIT.urlRef).toMatch(/ref\/lifnvt\.htm$/);

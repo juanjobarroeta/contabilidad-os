@@ -1,0 +1,577 @@
+{
+  "nota": "Ordenamientos estatales y municipales de construcción/urbanismo que el Orden Jurídico Nacional NO tiene (o tiene desactualizados), con URL oficial verificada a mano (curl 200 + PDF/Word real). Se compila con `npx tsx scripts/fiscal-catalogo-estatales.ts` → estatales.json.",
+  "entradas": [
+    {
+      "entidad": "GRO",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Número 240 de Propiedad en Condominio para el Estado de Guerrero",
+      "url": "https://congresogro.gob.mx/legislacion/ordinarias/ARCHI/ley-propiedad-en-condominio-240.pdf",
+      "ultimaReforma": "2025-05-27",
+      "verificado": "2026-09-11",
+      "reemplaza": [
+        "GRO-L-PROPIEDAD-CONDOMINIO-GUERRER"
+      ],
+      "nota": "La Ley 240 (P.O. 27-may-2025) abroga la Ley 557 de 2002, que el OJN sigue listando como vigente."
+    },
+    {
+      "entidad": "GRO",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Número 790 de Asentamientos Humanos, Ordenamiento Territorial y Desarrollo Urbano del Estado de Guerrero",
+      "url": "https://congresogro.gob.mx/legislacion/ordinarias/ARCHI/LEY-DE-ASENTAMIENTOS-HUMANOS-ORDENAMIENTO-TERRITORIAL-Y-DESARROLLO-URBANO-DEL-ESTADO-DE-GUERRERO-790.pdf",
+      "ultimaReforma": "2018-08-31",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "GRO",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Número 861 de Gestión Integral de Riesgos y Protección Civil del Estado de Guerrero",
+      "url": "https://congresogro.gob.mx/legislacion/ordinarias/ARCHI/ley-no-861-gestion-integral-riesgos-proteccion-civil-estado-2024-10-15.pdf",
+      "ultimaReforma": "2024-09-13",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "GRO",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Obras Públicas y sus Servicios del Estado de Guerrero Número 266",
+      "url": "https://congresogro.gob.mx/legislacion/ordinarias/ARCHI/LEY-DE-OBRAS-PUBLICAS-Y-SUS-SERVICIOS-DEL-ESTADO-DE-GUERRERO-266-2021-03-10.pdf",
+      "ultimaReforma": "2016-11-04",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "GRO",
+      "municipio": "Acapulco de Juárez",
+      "tipo": "Reglamento",
+      "titulo": "Reglamento de Construcciones para el Municipio de Acapulco de Juárez, Guerrero",
+      "url": "https://acapulco.gob.mx/transparencia/descargar.php?d=%2Ftransparencia%2Fwp-content%2Fuploads%2Fmarcojuridico%2Freglamentos%2FReglamento_Construcciones.pdf",
+      "ultimaReforma": null,
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "GRO",
+      "municipio": "Chilpancingo de los Bravo",
+      "tipo": "Reglamento",
+      "titulo": "Reglamento de Construcciones para el Municipio de Chilpancingo de los Bravo, Guerrero",
+      "url": "https://chilpancingo.gob.mx/transparencia/wp-content/uploads/2023/09/REGLAMENTO-DE-CONSTRUCCIONES-MPIO.pdf",
+      "ultimaReforma": null,
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "GUA",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Territorial para el Estado y los Municipios de Guanajuato",
+      "url": "https://congreso-gto.s3.amazonaws.com/uploads/reforma/pdf/3717/d408088a-d425-49ce-bd8e-c9c455e4df2a.pdf",
+      "ultimaReforma": "2026-05-27",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "GUA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Obra Pública y Servicios Relacionados con la Misma para el Estado y los Municipios de Guanajuato",
+      "url": "https://congreso-gto.s3.amazonaws.com/uploads/reforma/pdf/3422/LOPYSRLMG_REF_28Oct2022.pdf",
+      "ultimaReforma": "2022-10-28",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "GUA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Propiedad en Condominio de Inmuebles para el Estado de Guanajuato",
+      "url": "https://congreso-gto.s3.amazonaws.com/uploads/reforma/pdf/3427/LPCIEG_REF_30Nov2022.pdf",
+      "ultimaReforma": "2022-11-30",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "GUA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Protección Civil para el Estado de Guanajuato",
+      "url": "https://congreso-gto.s3.amazonaws.com/uploads/reforma/pdf/1431/Ley_de_Protecci_n_Civil_para_el_Estado_de_Guanajuato_20181010.pdf",
+      "ultimaReforma": "2018-09-21",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "GUA",
+      "municipio": "Celaya",
+      "tipo": "Reglamento",
+      "titulo": "Reglamento de Ordenamiento Territorial para el Municipio de Celaya, Guanajuato",
+      "url": "https://www.celaya.gob.mx/wp-content/uploads/2019/07/reglamento_ordenamiento_territorial.pdf",
+      "ultimaReforma": null,
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "GUA",
+      "municipio": "Guanajuato",
+      "tipo": "Reglamento",
+      "titulo": "Reglamento de Desarrollo Urbano y Ordenamiento Territorial para el Municipio de Guanajuato, Gto.",
+      "url": "https://www.implanguanajuato.gob.mx/archivos/reglamento_de_desarrollo_urbano_y_ordenamiento_territorial_para_el_municipio_de_guanajuato_gto._(feb_2026)_vigente.pdf",
+      "ultimaReforma": "2026-02-04",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "GUA",
+      "municipio": "Irapuato",
+      "tipo": "Reglamento",
+      "titulo": "Reglamento del Código Territorial para el Municipio de Irapuato, Guanajuato",
+      "url": "https://www.irapuato.gob.mx/uploads/files/remure/DGDU/reglamento_codigo/reglamento_codigo_territorial.pdf",
+      "ultimaReforma": "2023-12-06",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "GUA",
+      "municipio": "León",
+      "tipo": "Código",
+      "titulo": "Código Reglamentario de Desarrollo Urbano para el Municipio de León, Guanajuato",
+      "url": "https://normatividadmunicipal.leon.gob.mx/archivos/202307191213190.230713%20C%C3%B3digo%20Reglamentario%20de%20Desarrollo%20Urbano%202023.pdf",
+      "ultimaReforma": "2023-07-12",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "MEX",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Administrativo del Estado de México",
+      "url": "https://legislacion.edomex.gob.mx/sites/legislacion.edomex.gob.mx/files/files/pdf/cod/vig/codvig008.pdf",
+      "ultimaReforma": "2026-09-02",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "MEX",
+      "municipio": null,
+      "tipo": "Reglamento",
+      "titulo": "Reglamento del Libro Quinto del Código Administrativo del Estado de México",
+      "url": "https://legislacion.edomex.gob.mx/sites/legislacion.edomex.gob.mx/files/files/pdf/rgl/vig/rglvig107.pdf",
+      "ultimaReforma": "2021-07-07",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "MEX",
+      "municipio": "Naucalpan de Juárez",
+      "tipo": "Reglamento",
+      "titulo": "Reglamento del Ordenamiento Territorial de los Asentamientos Humanos y Desarrollo Urbano del Municipio de Naucalpan de Juárez, México",
+      "url": "https://naucalpan.gob.mx/wp-content/uploads/2026/05/REGLAMENTO-DEL-ORDENAMIENTO-TERRITORIAL.pdf",
+      "ultimaReforma": null,
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "MEX",
+      "municipio": "Tlalnepantla de Baz",
+      "tipo": "Reglamento",
+      "titulo": "Reglamento de Construcciones de Tlalnepantla de Baz, Estado de México",
+      "url": "https://repositorio.tlalnepantla.gob.mx/files/pdf/repositorio/6088cmr.pdf",
+      "ultimaReforma": "2023-12-01",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "MEX",
+      "municipio": "Toluca",
+      "tipo": "Código",
+      "titulo": "Código Reglamentario Municipal de Toluca",
+      "url": "https://www2.toluca.gob.mx/wp-content/uploads/2025/09/27-Gaceta-01-de-septiembre-de-2025-codigo.pdf",
+      "ultimaReforma": "2025-09-01",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "MOR",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Estatal de Protección Civil de Morelos",
+      "url": "https://marcojuridico.morelos.gob.mx/documentos/2829/download",
+      "ultimaReforma": "2024-10-30",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "MOR",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Obra Pública y Servicios Relacionados con la Misma del Estado de Morelos",
+      "url": "https://marcojuridico.morelos.gob.mx/documentos/2801/download",
+      "ultimaReforma": "2024-10-30",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "MOR",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Ordenamiento Territorial y Desarrollo Urbano Sustentable del Estado de Morelos",
+      "url": "https://marcojuridico.morelos.gob.mx/documentos/2795/download",
+      "ultimaReforma": "2026-05-19",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "MOR",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley sobre el Régimen de Condominio de Inmuebles para el Estado de Morelos",
+      "url": "https://marcojuridico.morelos.gob.mx/documentos/2748/download",
+      "ultimaReforma": "2024-10-29",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "MOR",
+      "municipio": null,
+      "tipo": "Reglamento",
+      "titulo": "Reglamento de la Ley de Ordenamiento Territorial y Desarrollo Urbano Sustentable del Estado de Morelos, en Materia de Ordenamiento Territorial",
+      "url": "https://marcojuridico.morelos.gob.mx/documentos/3066/download",
+      "ultimaReforma": "2024-12-03",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "MOR",
+      "municipio": "Cuautla",
+      "tipo": "Reglamento",
+      "titulo": "Reglamento de Construcciones para el Municipio de Cuautla, Morelos",
+      "url": "https://marcojuridico.morelos.gob.mx/documentos/3882/download",
+      "ultimaReforma": "2019-05-17",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "MOR",
+      "municipio": "Cuernavaca",
+      "tipo": "Reglamento",
+      "titulo": "Reglamento de Construcción del Municipio de Cuernavaca",
+      "url": "https://marcojuridico.morelos.gob.mx/documentos/3753/download",
+      "ultimaReforma": "2019-05-31",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "MOR",
+      "municipio": "Jiutepec",
+      "tipo": "Reglamento",
+      "titulo": "Reglamento de Construcción de la Ciudad de Jiutepec, Morelos",
+      "url": "https://marcojuridico.morelos.gob.mx/documentos/3707/download",
+      "ultimaReforma": "2019-06-05",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "MOR",
+      "municipio": "Temixco",
+      "tipo": "Reglamento",
+      "titulo": "Reglamento de Construcción del Municipio de Temixco, Morelos",
+      "url": "https://marcojuridico.morelos.gob.mx/documentos/3572/download",
+      "ultimaReforma": "2019-06-12",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "NLE",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Asentamientos Humanos, Ordenamiento Territorial y Desarrollo Urbano para el Estado de Nuevo León",
+      "url": "https://www.hcnl.gob.mx/trabajo_legislativo/leyes/pdf/LEY%20DE%20ASENTAMIENTOS%20HUMANOS%20ORDENAMIENTO%20TERRITORIAL%20Y%20DESARROLLO%20URBANO%20PARA%20EL%20ESTADO%20DE%20NUEVO%20LEON.pdf",
+      "ultimaReforma": "2026-03-09",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "NLE",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Obras Públicas para el Estado y Municipios de Nuevo León",
+      "url": "https://www.hcnl.gob.mx/trabajo_legislativo/leyes/pdf/LEY%20DE%20OBRAS%20PUBLICAS%20PARA%20EL%20ESTADO.pdf",
+      "ultimaReforma": "2020-12-30",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "NLE",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Propiedad en Condominio de Inmuebles para el Estado de Nuevo León",
+      "url": "https://www.hcnl.gob.mx/trabajo_legislativo/leyes/pdf/LEY%20DE%20PROPIEDAD%20EN%20CONDOMINIO%20DE%20INMUEBLES%20PARA%20EL%20ESTADO%20DE%20NUEVO%20LEON.pdf",
+      "ultimaReforma": "2023-10-11",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "NLE",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Protección Civil para el Estado de Nuevo León",
+      "url": "https://www.hcnl.gob.mx/trabajo_legislativo/leyes/pdf/LEY%20DE%20PROTECCION%20CIVIL%20PARA%20EL%20ESTADO%20DE%20NUEVO%20LEON.pdf",
+      "ultimaReforma": "2026-06-15",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "NLE",
+      "municipio": "Guadalupe",
+      "tipo": "Reglamento",
+      "titulo": "Reglamento de Construcción del Municipio de Guadalupe, Nuevo León",
+      "url": "https://guadalupe.gob.mx/Transparencia/Formatos/Articulo95/Articulo_95_1/Reglamentos/Reglamento%20de%20Construcci%C3%B3n%20del%20Municipio%20de%20Guadalupe%2C%20Nuevo%20Le%C3%B3n.pdf",
+      "ultimaReforma": "2025-12-05",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "NLE",
+      "municipio": "Monterrey",
+      "tipo": "Reglamento",
+      "titulo": "Reglamento de Zonificación y Uso de Suelo del Municipio de Monterrey",
+      "url": "https://www.monterrey.gob.mx/pdf/reglamentos/1/Reglamento_de_Zonificacion_y_Uso_de_Suelo_del_Municipio_de_Monterrey.pdf",
+      "ultimaReforma": null,
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "NLE",
+      "municipio": "Monterrey",
+      "tipo": "Reglamento",
+      "titulo": "Reglamento para las Construcciones del Municipio de Monterrey, Nuevo León",
+      "url": "https://www.monterrey.gob.mx/pdf/reglamentos/1/Reglamento_para_las_Construcciones_del_Municipio_de_Monterrey.pdf",
+      "ultimaReforma": "2016-11-08",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "NLE",
+      "municipio": "San Nicolás de los Garza",
+      "tipo": "Reglamento",
+      "titulo": "Reglamento de Zonificación, Usos del Suelo y Construcción para el Municipio de San Nicolás de los Garza, Nuevo León",
+      "url": "https://pagina.sanicolas.gob.mx/SITIO_OFICIAL_PC/Gobierno/Abrir_Reglamento?id=64",
+      "ultimaReforma": "2025-04-09",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "PUE",
+      "municipio": "Atlixco",
+      "tipo": "Reglamento",
+      "titulo": "Reglamento de Construcciones para el Municipio de Atlixco, Puebla",
+      "url": "https://ojp.puebla.gob.mx/media/k2/attachments/atlixco__reglamento_de_construcciones__para_el_municipio_de_atlixco_del_estado_de_puebla.pdf",
+      "ultimaReforma": "1998-04-24",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "PUE",
+      "municipio": "Puebla",
+      "tipo": "Código",
+      "titulo": "Código Reglamentario para el Municipio de Puebla",
+      "url": "https://gaceta.pueblacapital.gob.mx/media/k2/attachments/COREMUN.pdf",
+      "ultimaReforma": "2025-12-10",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "PUE",
+      "municipio": "San Andrés Cholula",
+      "tipo": "Código",
+      "titulo": "Código Reglamentario de Desarrollo Urbano y Medio Ambiente para el Municipio de San Andrés Cholula, Puebla",
+      "url": "https://ojp.puebla.gob.mx/normatividad-municipal/item/download/4277_73acfa3633bb45c36094a908756f63b6",
+      "ultimaReforma": "2020-05-22",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "PUE",
+      "municipio": "San Pedro Cholula",
+      "tipo": "Reglamento",
+      "titulo": "Reglamento de Imagen Urbana, Usos, Áreas Verdes, Anuncios y Mobiliario Urbano del Municipio de San Pedro Cholula, Puebla",
+      "url": "https://ojp.puebla.gob.mx/media/k2/attachments/Reglamento_de_imagen_urbana_usos_areas_verdes_anuncios_mobiliario_urbano_mpo_san_pedro_cholula.pdf",
+      "ultimaReforma": "2016-10-10",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "QUE",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Urbano del Estado de Querétaro",
+      "url": "http://site.legislaturaqueretaro.gob.mx/CloudPLQ/InvEst/Codigos/COD-ID-06.pdf",
+      "ultimaReforma": "2023-11-17",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "QUE",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Obra Pública del Estado de Querétaro",
+      "url": "http://site.legislaturaqueretaro.gob.mx/CloudPLQ/InvEst/Leyes/LEY-ID-043.pdf",
+      "ultimaReforma": "2022-11-29",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "QUE",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Sistema Estatal de Protección Civil, Prevención y Mitigación de Desastres para el Estado de Querétaro",
+      "url": "http://site.legislaturaqueretaro.gob.mx/CloudPLQ/InvEst/Leyes/LEY-ID-074.pdf",
+      "ultimaReforma": "2021-10-22",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "QUE",
+      "municipio": "Corregidora",
+      "tipo": "Reglamento",
+      "titulo": "Reglamento de Construcciones para el Municipio de Corregidora, Querétaro",
+      "url": "https://www.corregidora.gob.mx/Documentos/2024-2027/Transparencia/portal_fiscal/I/E/REGLAMENTO_CONSTRUCCIONES.pdf",
+      "ultimaReforma": "2021-04-29",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "QUE",
+      "municipio": "Querétaro",
+      "tipo": "Reglamento",
+      "titulo": "Reglamento de Construcción para el Municipio de Querétaro",
+      "url": "https://municipiodequeretaro.gob.mx/municipio/repositorios/transparencia/a66/sayu/REGLAMENTODECONSTRUCCIONPARAELMUNICIPIODEQUERETARO.pdf",
+      "ultimaReforma": "2000-09-12",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "SLP",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Sobre el Régimen de Propiedad en Condominio para el Estado de San Luis Potosí",
+      "url": "http://congresosanluis.gob.mx/sites/default/files/unpload/legislacion/leyes/2026/07/Ley%20sobre%20el%20Regimen%20de%20Propiedad%20en%20Condominio%20%28al%2001%20de%20julio%20de%202026%29.pdf",
+      "ultimaReforma": "2026-07-01",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "SLP",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Obras Públicas y Servicios Relacionados con las Mismas del Estado de San Luis Potosí",
+      "url": "http://congresosanluis.gob.mx/sites/default/files/unpload/legislacion/leyes/2024/07/Ley_de_Obras_Publicas_y_Servicios_Relacionados_con_las_mismas05_Julio_2024.pdf",
+      "ultimaReforma": "2024-07-05",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "SLP",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Ordenamiento Territorial y Desarrollo Urbano del Estado de San Luis Potosí",
+      "url": "http://congresosanluis.gob.mx/sites/default/files/unpload/legislacion/leyes/2026/07/Ley%20de%20Ordenamiento%20Territorial%20y%20Desarrollo%20Urbano%20%28al%2001%20de%20julio%20de%202026%29.pdf",
+      "ultimaReforma": "2026-07-01",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "SLP",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Sistema de Protección Civil del Estado de San Luis Potosí",
+      "url": "http://congresosanluis.gob.mx/sites/default/files/unpload/legislacion/leyes/2025/08/Ley%20del%20Sistema%20de%20Proteccion%20Civil%20%28al%2011%20%20Julio%202025%29.pdf",
+      "ultimaReforma": "2025-07-11",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "SLP",
+      "municipio": "San Luis Potosí",
+      "tipo": "Reglamento",
+      "titulo": "Reglamento de Construcciones del Municipio de San Luis Potosí",
+      "url": "https://sitio.sanluis.gob.mx/pagAyuntamientoCMS/storage/Medios/2024/06/2ultm%2030%2010%20232023%20REGLAMENTO%20DE%20CONSTRUCCIONES%20DEL%20MUNICIPIO%20DE%20SAN%20LUIS%20POTOSI%20.pdf",
+      "ultimaReforma": "2023-10-30",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "SLP",
+      "municipio": "Soledad de Graciano Sánchez",
+      "tipo": "Reglamento",
+      "titulo": "Reglamento de Construcciones para el Municipio de Soledad de Graciano Sánchez",
+      "url": "https://www.municipiosoledad.gob.mx/sites/default/files/transparencia/2023-10/Construcciones%20Soledad%20(10-Feb-2009).pdf",
+      "ultimaReforma": "2009-02-10",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "SON",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Obras Públicas y Servicios Relacionados con las Mismas para el Estado de Sonora",
+      "url": "https://stjsonora.gob.mx/acceso_informacion/marco_normativo/LeyObrasPublicasYServicios.pdf",
+      "ultimaReforma": "2024-01-31",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "SON",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Ordenamiento Territorial y Desarrollo Urbano del Estado de Sonora",
+      "url": "https://buengobierno.sonora.gob.mx/servicios-e-informacion/informacion-de-interes/compendio-legislativo-basico-estatal/leyes/8178-ley-de-ordenamiento-territorial-y-desarrollo-urbano-del-estado-de-sonora-1/file.html",
+      "ultimaReforma": "2021-05-14",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "SON",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Protección Civil para el Estado de Sonora",
+      "url": "https://proteccioncivil.sonora.gob.mx/images/123/LEY%20DE%20PROTECCION%20CIVIL%20PARA%20EL%20ESTADO%20DE%20SONORA.pdf",
+      "ultimaReforma": "2020-12-24",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "SON",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley sobre el Régimen de Propiedad en Condominio de Inmuebles para el Estado de Sonora",
+      "url": "https://buengobierno.sonora.gob.mx/servicios-e-informacion/informacion-de-interes/compendio-legislativo-basico-estatal/leyes/497-ley-sobre-el-regimen-de-propiedad-en-condominio-de-inmuebles/file.html",
+      "ultimaReforma": null,
+      "verificado": "2026-09-11",
+      "nota": "Ley 293 (1993) en el compendio legislativo del estado; hay iniciativa de ley nueva (sep-2026): revisar vigencia al refrescar."
+    },
+    {
+      "entidad": "SON",
+      "municipio": "Hermosillo",
+      "tipo": "Reglamento",
+      "titulo": "Reglamento de Construcción para el Municipio de Hermosillo",
+      "url": "https://www.hermosillo.gob.mx/download.aspx?r=%2Ftransparencia2014%5Carchivos%5Cleyes%5C&file=REGLAMENTO+DE+CONSTRUCCI%C3%93N+boletin+oficial.pdf",
+      "ultimaReforma": "2024-05-13",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "SON",
+      "municipio": "Nogales",
+      "tipo": "Reglamento",
+      "titulo": "Reglamento de Construcciones del Municipio de Nogales, Sonora",
+      "url": "https://transparencia.heroicanogales.gob.mx/storage/rules/zaQhEvkLlXYhuMWt2OAXvWEkLe8WPZaWWGsKwtgt.pdf",
+      "ultimaReforma": null,
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "SON",
+      "municipio": "San Luis Río Colorado",
+      "tipo": "Reglamento",
+      "titulo": "Reglamento de Construcción para el Municipio de San Luis Río Colorado, Sonora",
+      "url": "https://sanluisrc.gob.mx/media/gobierno/normativa/0REGLAMENTO%20DE%20CONSTRUCCION_2015.pdf",
+      "ultimaReforma": null,
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "TLA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Asentamientos Humanos, Ordenamiento Territorial y Desarrollo Urbano del Estado de Tlaxcala",
+      "url": "https://congresodetlaxcala.gob.mx/archivo/leyes2020/pdf/14_Ley_de_asentami.pdf",
+      "ultimaReforma": "2018-09-04",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "TLA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Obras Públicas para el Estado de Tlaxcala y sus Municipios",
+      "url": "https://congresodetlaxcala.gob.mx/archivo/leyes2020/pdf/61_Ley_de_obras_pu.pdf",
+      "ultimaReforma": "2023-05-24",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "TLA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Protección Civil para el Estado de Tlaxcala",
+      "url": "https://congresodetlaxcala.gob.mx/archivo/leyes2020/pdf/68_Ley_de_protecci.pdf",
+      "ultimaReforma": "2013-07-05",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "TLA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de la Construcción del Estado de Tlaxcala",
+      "url": "https://congresodetlaxcala.gob.mx/archivo/leyes2020/pdf/53_Ley_de_la_const.pdf",
+      "ultimaReforma": "2021-02-10",
+      "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "TLA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley que Regula el Régimen de Propiedad en Condominio de Bienes Inmuebles para el Estado de Tlaxcala",
+      "url": "https://congresodetlaxcala.gob.mx/archivo/leyes2020/pdf/138_Ley_que_regula.pdf",
+      "ultimaReforma": "2016-12-08",
+      "verificado": "2026-09-11"
+    }
+  ]
+}

@@ -35,8 +35,10 @@ export async function ingestLey(
       `${clave}: no se detectó la fecha de última reforma — sin ella no hay versionado de vigencia. Manda {"vigencia":"YYYY-MM-DD"} en el job.`
     );
   }
-  const clean = cleanLawText(ley.rawText);
-  const chunks = chunkLaw(clean);
+  // Una NOM o unas NTC no van por artículos: se parten por secciones (kind "guia").
+  const kind = ley.descriptor.kind ?? "ley";
+  const clean = kind === "ley" ? cleanLawText(ley.rawText) : ley.rawText;
+  const chunks = kind === "ley" ? chunkLaw(clean) : chunkDocument(ley.rawText, kind);
   const r = await upsertFiscalDocument({
     source: ley.descriptor.source ?? "LEY",
     clave: ley.descriptor.clave,
@@ -49,6 +51,7 @@ export async function ingestLey(
     materias: ley.descriptor.materias,
     ambito: ley.descriptor.ambito,
     entidad: ley.descriptor.entidad ?? null,
+    municipio: ley.descriptor.municipio ?? null,
     force: opts.force,
   });
   return {

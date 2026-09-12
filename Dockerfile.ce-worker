@@ -15,6 +15,10 @@ FROM mcr.microsoft.com/playwright:v1.62.0-jammy
 WORKDIR /app
 ENV CI=1
 
+# antiword (.doc de Word 97) y unrtf (RTF): así publica el Orden Jurídico
+# Nacional la legislación estatal y municipal (src/lib/fiscal-kb/texto.ts).
+RUN apt-get update && apt-get install -y --no-install-recommends antiword unrtf && rm -rf /var/lib/apt/lists/*
+
 # Dependencias (incluye devDeps: ahí viven playwright, ts-node y tsconfig-paths).
 COPY package*.json ./
 RUN npm ci --include=dev
