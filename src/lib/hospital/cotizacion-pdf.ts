@@ -122,8 +122,11 @@ const LINEA = rgb(0.82, 0.82, 0.85);
 const SUAVE = rgb(0.955, 0.955, 0.965);
 
 // Columnas de la tabla (x absolutas; las numéricas se alinean a la derecha).
-const COL = { concepto: MARGEN, cant: 392, unitario: 470, iva: 508, importe: CARTA[0] - MARGEN };
+// El importe necesita sitio para «$1,234,567.89» sin pisar el IVA de al lado.
+const COL = { concepto: MARGEN, cant: 350, unitario: 434, iva: 450, importe: CARTA[0] - MARGEN };
 const ANCHO_CONCEPTO = COL.cant - 30 - MARGEN;
+// Totales: etiqueta alineada a la derecha, lejos del importe.
+const X_ETIQUETA_TOTAL = COL.importe - 116;
 
 type Lienzo = { pdf: PDFDocument; page: PDFPage; y: number; regular: PDFFont; negrita: PDFFont; paginas: PDFPage[] };
 
@@ -221,7 +224,6 @@ export async function generarPdfCotizacion(c: CotizacionParaPdf, emisor: EmisorP
 
   // ── Totales ───────────────────────────────────────────────────────────────
   if (l.y < MARGEN + 110) nuevaPagina(l);
-  const xEtq = COL.unitario - 40;
   l.y -= 4;
   const totales: Array<[string, string, PDFFont, number]> = [
     ["Subtotal", dinero(c.subtotal), regular, 9.5],
@@ -229,7 +231,7 @@ export async function generarPdfCotizacion(c: CotizacionParaPdf, emisor: EmisorP
     ["Total estimado", dinero(c.total), negrita, 12],
   ];
   for (const [k, v, font, size] of totales) {
-    l.page.drawText(k, { x: xEtq, y: l.y, size: size === 12 ? 10 : 9, font: font === negrita ? negrita : regular, color: font === negrita ? TINTA : GRIS });
+    textoDerecha(l.page, k, X_ETIQUETA_TOTAL, l.y, font === negrita ? negrita : regular, size === 12 ? 10 : 9, font === negrita ? TINTA : GRIS);
     textoDerecha(l.page, v, COL.importe - 6, l.y, font, size);
     l.y -= size + 6;
   }
