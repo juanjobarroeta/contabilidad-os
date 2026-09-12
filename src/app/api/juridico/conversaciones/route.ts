@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { AuthzError, isOperador, requireUser } from "@/lib/authz";
+import { AuthzError, puedeUsarJuridico, requireUser } from "@/lib/authz";
 
 // GET /api/juridico/conversaciones — las conversaciones del copiloto jurídico
 // del usuario (sólo operador por ahora: es la superficie de prueba de
@@ -12,7 +12,7 @@ export async function GET(req: Request) {
   } catch (e) {
     return NextResponse.json({ error: e instanceof AuthzError ? e.message : "Unauthorized" }, { status: e instanceof AuthzError ? e.status : 401 });
   }
-  if (!(await isOperador(usuario.id))) return NextResponse.json({ error: "Sólo el operador" }, { status: 403 });
+  if (!(await puedeUsarJuridico(usuario.id))) return NextResponse.json({ error: "Tu cuenta no tiene acceso al copiloto jurídico" }, { status: 403 });
 
   const convs = await prisma.juridicoConversacion.findMany({
     where: { userId: usuario.id, archivedAt: null },

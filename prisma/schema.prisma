@@ -26,6 +26,9 @@ model User {
   // empresas activas de todos los despachos (soporte/supervisión de pilotos).
   // Sólo se activa por script (scripts/set-operador.mjs) — nunca self-serve.
   esOperador Boolean @default(false)
+  // Copiloto jurídico (satélite): quien lo puede usar sin ser operador — el
+  // abogado que lo prueba. Lo enciende el operador (scripts/crear-usuario-juridico.ts).
+  accesoJuridico Boolean @default(false)
 
   // Subscription / trial — billing-per-RFC, sub lives on the account owner
   subscriptionStatus   SubscriptionStatus @default(TRIALING)

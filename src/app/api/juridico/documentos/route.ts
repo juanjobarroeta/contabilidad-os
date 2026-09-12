@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { AuthzError, isOperador, requireUser } from "@/lib/authz";
+import { AuthzError, puedeUsarJuridico, requireUser } from "@/lib/authz";
 import {
   MAX_BYTES_DOCUMENTO,
   MAX_CARACTERES_POR_CONVERSACION,
@@ -111,7 +111,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: e instanceof AuthzError ? e.message : "Unauthorized" }, { status: e instanceof AuthzError ? e.status : 401 });
   }
   const userId = usuario.id;
-  if (!(await isOperador(userId))) return NextResponse.json({ error: "Sólo el operador puede usar el copiloto jurídico por ahora" }, { status: 403 });
+  if (!(await puedeUsarJuridico(userId))) return NextResponse.json({ error: "Tu cuenta no tiene acceso al copiloto jurídico" }, { status: 403 });
 
   let form: FormData;
   try {
