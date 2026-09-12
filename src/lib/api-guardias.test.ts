@@ -37,6 +37,7 @@ const AUTENTICADORES: RegExp[] = [
   /\bgetEffectiveCompanyMembership\b/,
   /\bempresasAccesiblesIds\b/,
   /\bisOperador\b/,
+  /\bpuedeUsarJuridico\b/, // copiloto jurídico: operador o User.accesoJuridico, sin empresa
   // Capa despacho (src/lib/despacho.ts, src/lib/invitations-server.ts)
   /\brequireDespachoRole\b/,
   /\brequireOwnDespacho\b/,
@@ -84,6 +85,7 @@ const ESCOPADORES: RegExp[] = [
   /\bgetEffectiveCompanyMembership\b/,
   /\bempresasAccesiblesIds\b/,
   /\bisOperador\b/,
+  /\bpuedeUsarJuridico\b/, // copiloto jurídico: operador o User.accesoJuridico, sin empresa
   /\brequireDespachoRole\b/,
   /\brequireOwnDespacho\b/,
   /\brequireDespachoAdminForCompany\b/,
