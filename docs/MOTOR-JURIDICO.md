@@ -242,6 +242,12 @@
 > sin crédito y el borrador quedó íntegro en la BD. Desde entonces el turno
 > traduce ese error (y saturación / llave rechazada) a un mensaje en español
 > para el abogado (`src/lib/juridico/errores.ts`) en vez del JSON crudo.
+> **Y Sentry no se enteró (PR #1054):** `reportError` sí escribía en el
+> log pero no mandaba nada, porque Next empaqueta `observability.ts` en cada
+> chunk del servidor y el `initialized` de la copia de la ruta era false;
+> ahora pregunta a `Sentry.getClient()` (el cliente sí es uno solo). Ningún
+> error de servidor del hub había llegado a Sentry hasta hoy; sólo los del
+> navegador.
 >
 > **Turnos reanudables (PR #1042).** La primera prueba real de la abogada
 > (alegatos de cinco tipos para un juicio oral familiar en Chihuahua, 8
