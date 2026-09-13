@@ -233,6 +233,15 @@
 > observaciones de la relectura en la vista previa. Lo corto sigue en
 > `redactar_documento` de una vez. Pendiente: plantillas del abogado, PDF
 > de salida, comparar versiones en la UI.
+> **Probado en producción (13-sep-2026, contrato de arrendamiento comercial
+> en Puebla):** partes + esquema de 17 apartados en 90 s; 19 secciones en
+> 515 s (60k caracteres, 2 correcciones de coherencia), relectura con 13
+> observaciones (con altas, como debe ser en un primer borrador),
+> `editar_seccion` sobre la sección 14, Word de 28 KB. El guardado parcial
+> sirvió: la respuesta final murió porque la cuenta de Anthropic se quedó
+> sin crédito y el borrador quedó íntegro en la BD. Desde entonces el turno
+> traduce ese error (y saturación / llave rechazada) a un mensaje en español
+> para el abogado (`src/lib/juridico/errores.ts`) en vez del JSON crudo.
 >
 > **Turnos reanudables (PR #1042).** La primera prueba real de la abogada
 > (alegatos de cinco tipos para un juicio oral familiar en Chihuahua, 8
