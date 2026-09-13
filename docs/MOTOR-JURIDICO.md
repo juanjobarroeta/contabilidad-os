@@ -164,7 +164,7 @@
 > varios estados sin ley propia de responsabilidades (aplican la general).
 > El prompt del abogado ya no dice «Puebla y CDMX» y le exige buscar el
 > ordenamiento estatal por nombre antes de declararlo ausente.
-> **Expedientes completos (PR #PRNUM8, 2026-09-13).** «She might be working
+> **Expedientes completos (PR #1045, 2026-09-13).** «She might be working
 > full expediente: a lot of PDFs». Límites de expediente: 60 MB por archivo, 25
 > documentos y 3 000 000 de caracteres por conversación; escaneos de hasta 400
 > páginas (lotes de 4 en paralelo, 6 a la vez). Un documento de más de 40 000
