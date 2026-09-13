@@ -214,7 +214,7 @@
 > redacción por esquema y cláusula (job servidor), revisión antes de entregar,
 > edición por sección con versiones.
 >
-> **Redacción por esquema (PR #PRNUM10, 2026-09-13).** «I'm worried he will get
+> **Redacción por esquema (PR #1052, 2026-09-13).** «I'm worried he will get
 > lost writing big documents.» Para documentos de fondo el copiloto ya no
 > escribe de un tirón: `planear_documento` guarda el ESQUEMA (secciones con
 > propósito, datos del asunto y normas) como borrador en estado «esquema»
