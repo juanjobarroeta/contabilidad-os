@@ -4223,6 +4223,13 @@ model JuridicoDocumento {
   secciones      Json?
   // Documentos largos: resumen general y por sección (documentos.ts → resumirDocumento).
   resumenes      Json?
+  // Borradores redactados por esquema (redaccion-estructurada.ts): el plan
+  // (secciones con propósito, datos y normas), el estado del borrador, la
+  // última revisión (observaciones por sección) y las versiones anteriores.
+  plan           Json?
+  estado         String   @default("final") // final | esquema | redactando | borrador | revisado
+  revision       Json?
+  versiones      Json?
   createdAt      DateTime @default(now())
 
   conversacion JuridicoConversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)

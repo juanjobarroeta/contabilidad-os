@@ -214,6 +214,26 @@
 > redacción por esquema y cláusula (job servidor), revisión antes de entregar,
 > edición por sección con versiones.
 >
+> **Redacción por esquema (PR #1052, 2026-09-13).** «I'm worried he will get
+> lost writing big documents.» Para documentos de fondo el copiloto ya no
+> escribe de un tirón: `planear_documento` guarda el ESQUEMA (secciones con
+> propósito, datos del asunto y normas) como borrador en estado «esquema»
+> para que el abogado lo corrija antes de la prosa; `redactar_por_secciones`
+> escribe cada sección en su propia llamada (olas de 3) con el asunto de la
+> BD, las secciones anteriores y las normas que la base devuelve para esa
+> sección, guarda parcialmente por ola, y cierra con una pasada de coherencia
+> (términos, referencias cruzadas, numeración) que aplica correcciones
+> puntuales; `revisar_documento` es la relectura obligatoria antes de
+> entregar (partes contra la BD, alcance y decisiones, contenido obligatorio,
+> [___], citas no verificables como observación alta) y deja el borrador en
+> «revisado» sólo sin observaciones altas; `editar_seccion` cambia una
+> sección con el resto como contexto y guarda la versión anterior
+> (`JuridicoDocumento.plan/estado/revision/versiones`, migración `20260922`).
+> El satélite muestra «Redactando 7 de 24: …», el estado del chip y las
+> observaciones de la relectura en la vista previa. Lo corto sigue en
+> `redactar_documento` de una vez. Pendiente: plantillas del abogado, PDF
+> de salida, comparar versiones en la UI.
+>
 > **Turnos reanudables (PR #1042).** La primera prueba real de la abogada
 > (alegatos de cinco tipos para un juicio oral familiar en Chihuahua, 8
 > minutos) murió con «Load failed» en el iPhone. Dos causas, las dos

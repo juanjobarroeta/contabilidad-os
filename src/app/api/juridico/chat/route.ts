@@ -11,6 +11,7 @@ import { fuentesDesdeToolResult, verificarRespuesta, type FuenteVerificacion } f
 import { bloqueDocumentosParaPrompt, toolsDocumentos, type DocumentoCargado, type Resumenes, type Seccion } from "@/lib/juridico/documentos";
 import { ejecutarRedactar, toolRedactar } from "@/lib/juridico/redaccion";
 import { asuntoDeConversacion, bloqueAsuntoParaPrompt, ejecutarHerramientaAsunto, toolsAsunto, type Asunto } from "@/lib/juridico/asuntos";
+import { NOMBRES_REDACCION_ESTRUCTURADA, ejecutarRedaccionEstructurada, toolsRedaccionEstructurada } from "@/lib/juridico/redaccion-estructurada";
 import { iniciarTurno, respuestaSse, turnoEnCurso, turnoReciente, type EventoTurno } from "@/lib/juridico/turnos";
 import { reportError } from "@/lib/observability";
 
@@ -34,7 +35,7 @@ import { reportError } from "@/lib/observability";
 // Railway corta el stream, GET ?conversacionId=&desde=N reproduce lo que falta.
 // El mensaje del usuario se guarda al arrancar; la respuesta al terminar (o lo
 // que alcanzó a escribir, con meta.error, si el turno falla).
-// Eventos SSE: turno | conversation | text | tool_start | tool_done | documento | asunto | replace | done | error
+// Eventos SSE: turno | conversation | text | tool_start | tool_done | documento | documento_progreso | asunto | replace | done | error
 // ─────────────────────────────────────────────────────────────────────────────
 
 const anthropic = new Anthropic();
@@ -141,7 +142,7 @@ export async function POST(req: Request) {
     { type: "text", text: bloqueAsuntoParaPrompt(asunto) },
   ];
   // Redactar y el asunto siempre están; leer/buscar sólo cuando hay documentos.
-  const tools = [...toolsAbogado, toolRedactar, ...toolsAsunto, ...(documentos.length > 0 ? toolsDocumentos : [])];
+  const tools = [...toolsAbogado, toolRedactar, ...toolsRedaccionEstructurada, ...toolsAsunto, ...(documentos.length > 0 ? toolsDocumentos : [])];
 
   // El mensaje del usuario se guarda YA: si el turno muere, la conversación lo conserva.
   let mensajeUsuarioId: string | null = null;
@@ -273,6 +274,16 @@ export async function POST(req: Request) {
                   asunto = r.asunto;
                   system[system.length - 1] = { type: "text", text: bloqueAsuntoParaPrompt(asunto) };
                   if (block.name !== "consultar_asunto") emitir({ type: "asunto", asunto });
+                }
+                return { block, result: r.salida, ms: Date.now() - t0 };
+              }
+              if (NOMBRES_REDACCION_ESTRUCTURADA.has(block.name)) {
+                // Esquema → secciones → revisión → edición: avisa al cliente por SSE mientras corre.
+                const r = await ejecutarRedaccionEstructurada(block.name, block.input as Record<string, unknown>, { anthropic, userId, conversacionId: convId!, asunto, emitir });
+                if (r.cargado) {
+                  const i = documentos.findIndex((d) => d.id === r.cargado!.id);
+                  if (i >= 0) documentos[i] = r.cargado;
+                  else documentos.push(r.cargado);
                 }
                 return { block, result: r.salida, ms: Date.now() - t0 };
               }
