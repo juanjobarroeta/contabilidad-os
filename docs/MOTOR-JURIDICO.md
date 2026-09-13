@@ -164,6 +164,21 @@
 > varios estados sin ley propia de responsabilidades (aplican la general).
 > El prompt del abogado ya no dice «Puebla y CDMX» y le exige buscar el
 > ordenamiento estatal por nombre antes de declararlo ausente.
+> **Carga (2026-09-13):** tres corridas del kb-worker más una local: en
+> producción quedan **921 estatales, 200 municipales, 563 federales**
+> (≈1 684 ordenamientos vigentes), con 9–19 códigos y leyes de litigio por
+> estado en los 32. Lo que hizo falta: `descarga.ts` (PR #1047: reintento sin
+> verificar la cadena TLS sólo en `.gob.mx` — Hidalgo, Edomex, Veracruz, CDMX
+> e Irapuato no mandan la CA intermedia; PR #1048: reintentos ante fallos de
+> red y la causa real en el mensaje). **legislacion.edomex.gob.mx,
+> legisver.gob.mx y parte del OJN no contestan a IPs fuera de México**
+> (UND_ERR_CONNECT_TIMEOUT desde Railway): esos 22 se ingirieron corriendo el
+> worker desde una laptop en México (`KB_MODO=faltantes npx tsx
+> scripts/kb-catalogo-worker.ts` con la `DATABASE_URL` pública); el refresco
+> semanal desde Railway los seguirá saltando hasta tener un proxy en México.
+> No entran (32): 11 enlaces 404 (códigos electorales del OJN, NOM de
+> PLATIICA), 13 PDF escaneados, 3 leyes de Sonora tras un WAF, 1 .doc de Word
+> 97 (sólo el worker lo lee), 1 PDF corrupto.
 > **Expedientes completos (PR #1045, 2026-09-13).** «She might be working
 > full expediente: a lot of PDFs». Límites de expediente: 60 MB por archivo, 25
 > documentos y 3 000 000 de caracteres por conversación; escaneos de hasta 400
