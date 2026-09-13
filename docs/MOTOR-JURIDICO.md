@@ -196,6 +196,24 @@
 > pruebas, acuerdos, sentencia) y no confundir lo que dice una parte con lo
 > que resolvió el juez.
 >
+> **El asunto como fuente de verdad (PR #1051, 2026-09-13).** «Should parties
+> be in a database so data is available and not done from memory?» Sí:
+> `JuridicoAsunto` (título, materia, vía, autoridad, expediente, entidad,
+> cliente, objetivo/alcance, decisiones con el mensaje de donde salen) y
+> `JuridicoParte` (rol, física/moral, nombre, RFC, CURP, domicilio,
+> representante, contacto, `fuente` chat/documento/manual, `verificado`);
+> cada conversación cuelga de un asunto (se crea al primer registro).
+> Herramientas del abogado: `registrar_partes` (fusiona por RFC/CURP/nombre
+> normalizado; lo verificado a mano no se pisa), `actualizar_asunto` (datos
+> y decisiones) y `consultar_asunto`; el bloque «Asunto» va en cada turno y se
+> refresca dentro del mismo turno cuando el modelo registra algo. Al subir un
+> documento, `extraerDatosDeDocumento` (Haiku) propone partes, expediente y
+> autoridad como «sin verificar». El satélite tiene el panel «Asunto» para
+> confirmar, corregir o quitar partes y decisiones (lo editado a mano queda
+> verificado). Rutas `/api/juridico/asuntos/[id]` y `…/partes[/id]`. Sigue:
+> redacción por esquema y cláusula (job servidor), revisión antes de entregar,
+> edición por sección con versiones.
+>
 > **Turnos reanudables (PR #1042).** La primera prueba real de la abogada
 > (alegatos de cinco tipos para un juicio oral familiar en Chihuahua, 8
 > minutos) murió con «Load failed» en el iPhone. Dos causas, las dos

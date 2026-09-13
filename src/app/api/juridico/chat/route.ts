@@ -10,6 +10,7 @@ import { MAX_BODY_BYTES, sanearHistorial } from "@/lib/ai/historial";
 import { fuentesDesdeToolResult, verificarRespuesta, type FuenteVerificacion } from "@/lib/ai/verificacion";
 import { bloqueDocumentosParaPrompt, toolsDocumentos, type DocumentoCargado, type Resumenes, type Seccion } from "@/lib/juridico/documentos";
 import { ejecutarRedactar, toolRedactar } from "@/lib/juridico/redaccion";
+import { asuntoDeConversacion, bloqueAsuntoParaPrompt, ejecutarHerramientaAsunto, toolsAsunto, type Asunto } from "@/lib/juridico/asuntos";
 import { iniciarTurno, respuestaSse, turnoEnCurso, turnoReciente, type EventoTurno } from "@/lib/juridico/turnos";
 import { reportError } from "@/lib/observability";
 
@@ -33,7 +34,7 @@ import { reportError } from "@/lib/observability";
 // Railway corta el stream, GET ?conversacionId=&desde=N reproduce lo que falta.
 // El mensaje del usuario se guarda al arrancar; la respuesta al terminar (o lo
 // que alcanzó a escribir, con meta.error, si el turno falla).
-// Eventos SSE: turno | conversation | text | tool_start | tool_done | documento | replace | done | error
+// Eventos SSE: turno | conversation | text | tool_start | tool_done | documento | asunto | replace | done | error
 // ─────────────────────────────────────────────────────────────────────────────
 
 const anthropic = new Anthropic();
@@ -131,12 +132,16 @@ export async function POST(req: Request) {
   ).map((d) => ({ ...d, secciones: (d.secciones as unknown as Seccion[] | null) ?? [], resumenes: (d.resumenes as unknown as Resumenes | null) ?? null }));
   // Un expediente se lee por secciones: hacen falta más rondas de herramientas.
   const maxRondas = documentos.length > 0 ? MAX_TOOL_ROUNDS_CON_DOCUMENTOS : MAX_TOOL_ROUNDS;
+  // El asunto (partes, expediente, decisiones) viene de la base: bloque propio,
+  // sin caché porque cambia dentro del mismo turno cuando el modelo registra algo.
+  let asunto: Asunto | null = await asuntoDeConversacion(convId, userId);
   const system: Anthropic.TextBlockParam[] = [
     { type: "text", text: buildSystemPromptAbogado(), cache_control: { type: "ephemeral" } },
     ...(documentos.length > 0 ? [{ type: "text" as const, text: bloqueDocumentosParaPrompt(documentos), cache_control: { type: "ephemeral" as const } }] : []),
+    { type: "text", text: bloqueAsuntoParaPrompt(asunto) },
   ];
-  // Redactar siempre está; leer/buscar sólo cuando hay documentos.
-  const tools = [...toolsAbogado, toolRedactar, ...(documentos.length > 0 ? toolsDocumentos : [])];
+  // Redactar y el asunto siempre están; leer/buscar sólo cuando hay documentos.
+  const tools = [...toolsAbogado, toolRedactar, ...toolsAsunto, ...(documentos.length > 0 ? toolsDocumentos : [])];
 
   // El mensaje del usuario se guarda YA: si el turno muere, la conversación lo conserva.
   let mensajeUsuarioId: string | null = null;
@@ -261,6 +266,15 @@ export async function POST(req: Request) {
                 // La llamada se cortó por longitud: se le dice al modelo, en vez de ejecutar con {}.
                 emitir({ type: "tool_done", tool: block.name, ms: 0, resumen: "llamada cortada por longitud" });
                 return { block, result: JSON.stringify({ error: `La llamada a ${block.name} se cortó por longitud (max_tokens) y no se ejecutó. Vuelve a llamarla con un texto más corto o en dos documentos (p. ej. escrito y anexo).`, resumen: "cortada" }), ms: 0 };
+              }
+              if (block.name === "registrar_partes" || block.name === "actualizar_asunto" || block.name === "consultar_asunto") {
+                const r = await ejecutarHerramientaAsunto(block.name, block.input as Record<string, unknown>, { userId, conversacionId: convId!, mensajeId: mensajeUsuarioId });
+                if (r.asunto) {
+                  asunto = r.asunto;
+                  system[system.length - 1] = { type: "text", text: bloqueAsuntoParaPrompt(asunto) };
+                  if (block.name !== "consultar_asunto") emitir({ type: "asunto", asunto });
+                }
+                return { block, result: r.salida, ms: Date.now() - t0 };
               }
               if (block.name === "redactar_documento") {
                 // Guarda el borrador y avisa al cliente (chip con descarga) sin esperar al final del turno.
