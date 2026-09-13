@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { esErrorDeCadena, permiteCadenaRota } from "./descarga";
+import { descargar, esErrorDeCadena, permiteCadenaRota } from "./descarga";
 
 describe("descarga con cadena TLS rota", () => {
   it("sólo se tolera en sitios .gob.mx", () => {
@@ -14,4 +14,10 @@ describe("descarga con cadena TLS rota", () => {
     expect(esErrorDeCadena(Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNREFUSED", message: "connect ECONNREFUSED" } }))).toBe(false);
     expect(esErrorDeCadena(new Error("HTTP 404"))).toBe(false);
   });
+});
+
+describe("descargar", () => {
+  it("un fallo definitivo lleva la causa en el mensaje y no se queda en «fetch failed»", async () => {
+    await expect(descargar("https://no-existe.invalid/x.pdf", {})).rejects.toThrow(/Descarga falló \((ENOTFOUND|EAI_AGAIN|getaddrinfo)[^)]*\)/);
+  }, 30_000);
 });

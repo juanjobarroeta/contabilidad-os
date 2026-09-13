@@ -58,16 +58,38 @@ function bajarSinVerificar(url: string, headers: Record<string, string>, saltos 
   });
 }
 
-/** fetch normal; si falla por la cadena TLS y el host es .gob.mx, reintenta sin verificarla. */
+const REINTENTOS = 3;
+const TRANSITORIOS = /ECONNRESET|ETIMEDOUT|ECONNREFUSED|EAI_AGAIN|ENOTFOUND|UND_ERR_SOCKET|UND_ERR_CONNECT_TIMEOUT|UND_ERR_HEADERS_TIMEOUT|UND_ERR_BODY_TIMEOUT|EPIPE|socket hang up|other side closed/i;
+
+function causaDe(e: unknown): string {
+  const c = (e as { cause?: { code?: string; message?: string } })?.cause;
+  return c ? `${c.code ?? ""} ${c.message ?? ""}`.trim() : e instanceof Error ? e.message : String(e);
+}
+
+/**
+ * fetch normal con reintentos ante fallos de red transitorios; si falla por la
+ * cadena TLS y el host es .gob.mx, reintenta sin verificarla. Un fallo
+ * definitivo lleva la causa real en el mensaje («fetch failed» solo no dice nada).
+ */
 export async function descargar(url: string, headers: Record<string, string>): Promise<Descarga> {
-  try {
-    const res = await fetch(url, { headers, redirect: "follow" });
-    return { status: res.status, contentType: res.headers.get("content-type"), buffer: new Uint8Array(await res.arrayBuffer()), cadenaRota: false };
-  } catch (e) {
-    if (esErrorDeCadena(e) && permiteCadenaRota(url)) {
-      console.warn(`[fiscal-kb] ${new URL(url).hostname}: cadena TLS incompleta; se baja sin verificar (sitio .gob.mx).`);
-      return bajarSinVerificar(url, headers);
+  let ultimo: unknown;
+  for (let intento = 1; intento <= REINTENTOS; intento++) {
+    try {
+      const res = await fetch(url, { headers, redirect: "follow", signal: AbortSignal.timeout(120_000) });
+      return { status: res.status, contentType: res.headers.get("content-type"), buffer: new Uint8Array(await res.arrayBuffer()), cadenaRota: false };
+    } catch (e) {
+      ultimo = e;
+      if (esErrorDeCadena(e) && permiteCadenaRota(url)) {
+        console.warn(`[fiscal-kb] ${new URL(url).hostname}: cadena TLS incompleta; se baja sin verificar (sitio .gob.mx).`);
+        return bajarSinVerificar(url, headers);
+      }
+      const causa = causaDe(e);
+      if (intento < REINTENTOS && (TRANSITORIOS.test(causa) || /TimeoutError|aborted/i.test(String(e)))) {
+        await new Promise((r) => setTimeout(r, 2_000 * intento));
+        continue;
+      }
+      throw new Error(`Descarga falló (${causa.slice(0, 120) || "sin causa"}) — ${url}`, { cause: e });
     }
-    throw e;
   }
+  throw ultimo;
 }
