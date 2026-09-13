@@ -164,6 +164,22 @@
 > varios estados sin ley propia de responsabilidades (aplican la general).
 > El prompt del abogado ya no dice «Puebla y CDMX» y le exige buscar el
 > ordenamiento estatal por nombre antes de declararlo ausente.
+> **Expedientes completos (PR #PRNUM8, 2026-09-13).** «She might be working
+> full expediente: a lot of PDFs». Límites de expediente: 60 MB por archivo, 25
+> documentos y 3 000 000 de caracteres por conversación; escaneos de hasta 400
+> páginas (lotes de 4 en paralelo, 6 a la vez). Un documento de más de 40 000
+> caracteres se **resume por secciones al subirlo** (`resumirDocumento`: lotes
+> de ~14 000 caracteres a Haiku 4.5, 6 en paralelo, JSON `{n, resumen}` por
+> sección + resumen general; guardado en `JuridicoDocumento.resumenes`, costo
+> en `ai.juridico.resumen`). En el turno, si el texto no cabe en el prompt
+> (> 90 000 caracteres) van los resúmenes por sección (hasta 70 000
+> caracteres; pasado eso, sólo el general de cada documento) y el índice de
+> `leer_documento` los trae también, así el agente va directo a la sección que
+> importa. Con documentos, el turno tiene 24 rondas de herramientas (10 sin
+> ellos) y `leer_documento` da 20 000 caracteres por lectura. El prompt le
+> pide distinguir los documentos de un expediente (demanda, contestación,
+> pruebas, acuerdos, sentencia) y no confundir lo que dice una parte con lo
+> que resolvió el juez.
 >
 > **Turnos reanudables (PR #1042).** La primera prueba real de la abogada
 > (alegatos de cinco tipos para un juicio oral familiar en Chihuahua, 8

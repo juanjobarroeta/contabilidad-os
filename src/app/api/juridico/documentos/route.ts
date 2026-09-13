@@ -8,10 +8,14 @@ import {
   MAX_BYTES_DOCUMENTO,
   MAX_CARACTERES_POR_CONVERSACION,
   MAX_DOCUMENTOS_POR_CONVERSACION,
+  UMBRAL_RESUMEN,
   extraerTextoDocumento,
   indexarDocumento,
   limpiarTexto,
+  resumirDocumento,
+  type Resumenes,
 } from "@/lib/juridico/documentos";
+import { reportError } from "@/lib/observability";
 import { MAX_BYTES_IMAGEN, MAX_BYTES_PDF_VISION, MAX_IMAGENES_POR_DOCUMENTO, MAX_PAGINAS_PDF_VISION, esHeic, tipoImagen, transcribirConVision, type MediaImagen } from "@/lib/juridico/vision";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -25,7 +29,7 @@ import { MAX_BYTES_IMAGEN, MAX_BYTES_PDF_VISION, MAX_IMAGENES_POR_DOCUMENTO, MAX
 //   el orden en que llegan).
 // Se indexa por secciones y se guarda el texto — NO el archivo. Un contrato es
 // confidencial: vive en la conversación de su dueño y se borra con DELETE.
-// Respuesta: { conversacionId, nueva, documentos: [{ id, nombre, mime, bytes, paginas, caracteres, secciones, transcrito }] }
+// Respuesta: { conversacionId, nueva, documentos: [{ id, nombre, mime, bytes, paginas, caracteres, secciones, transcrito, resumido }] }
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const runtime = "nodejs";
@@ -174,6 +178,18 @@ export async function POST(req: Request) {
   const documentos = [];
   for (const p of preparados) {
     const secciones = indexarDocumento(p.texto);
+    // Un documento largo (un expediente, una sentencia de 80 páginas) no cabe
+    // en el prompt: se resume por secciones al subirlo, en paralelo, para que
+    // el agente sepa dónde está cada cosa antes de leer. Si el resumen falla,
+    // el documento entra igual (el índice y las herramientas bastan).
+    let resumenes: Resumenes | null = null;
+    if (p.texto.length > UMBRAL_RESUMEN) {
+      try {
+        resumenes = await resumirDocumento(anthropic, { id: "", nombre: p.nombre, texto: p.texto, secciones }, { cost: { companyId: null, userId } });
+      } catch (e) {
+        reportError(e, { ruta: "juridico/documentos", paso: "resumir", nombre: p.nombre, caracteres: p.texto.length });
+      }
+    }
     const doc = await prisma.juridicoDocumento.create({
       data: {
         conversacionId: convId,
@@ -186,10 +202,11 @@ export async function POST(req: Request) {
         caracteres: p.texto.length,
         texto: p.texto,
         secciones: secciones as unknown as Prisma.InputJsonValue,
+        resumenes: resumenes ? (resumenes as unknown as Prisma.InputJsonValue) : undefined,
       },
       select: { id: true, nombre: true, mime: true, bytes: true, paginas: true, caracteres: true, createdAt: true },
     });
-    documentos.push({ ...doc, secciones: secciones.length, transcrito: p.transcrito });
+    documentos.push({ ...doc, secciones: secciones.length, transcrito: p.transcrito, resumido: !!resumenes });
   }
   await prisma.juridicoConversacion.update({ where: { id: convId }, data: { updatedAt: new Date() } });
   return NextResponse.json({ conversacionId: convId, nueva, documentos, documento: documentos[0] }, { status: 201 });

@@ -8,7 +8,7 @@ import { buildSystemPromptAbogado } from "@/lib/ai/system-prompt-abogado";
 import { recordLlmCost } from "@/lib/costos/record";
 import { MAX_BODY_BYTES, sanearHistorial } from "@/lib/ai/historial";
 import { fuentesDesdeToolResult, verificarRespuesta, type FuenteVerificacion } from "@/lib/ai/verificacion";
-import { bloqueDocumentosParaPrompt, toolsDocumentos, type DocumentoCargado, type Seccion } from "@/lib/juridico/documentos";
+import { bloqueDocumentosParaPrompt, toolsDocumentos, type DocumentoCargado, type Resumenes, type Seccion } from "@/lib/juridico/documentos";
 import { ejecutarRedactar, toolRedactar } from "@/lib/juridico/redaccion";
 import { iniciarTurno, respuestaSse, turnoEnCurso, turnoReciente, type EventoTurno } from "@/lib/juridico/turnos";
 import { reportError } from "@/lib/observability";
@@ -45,6 +45,7 @@ export const maxDuration = 300;
 // Revisar un contrato pide muchas consultas (varios artículos, jurisprudencia);
 // si se agotan, hay una última vuelta SIN herramientas para que redacte.
 const MAX_TOOL_ROUNDS = 10;
+const MAX_TOOL_ROUNDS_CON_DOCUMENTOS = 24;
 // Un escrito entero cabe en una sola llamada a redactar_documento: con 6 144
 // tokens se cortaba a la mitad (y el turno moría con «user messages must have
 // non-empty content»).
@@ -125,9 +126,11 @@ export async function POST(req: Request) {
     await prisma.juridicoDocumento.findMany({
       where: { conversacionId: convId },
       orderBy: { createdAt: "asc" },
-      select: { id: true, nombre: true, paginas: true, caracteres: true, texto: true, secciones: true },
+      select: { id: true, nombre: true, paginas: true, caracteres: true, texto: true, secciones: true, resumenes: true },
     })
-  ).map((d) => ({ ...d, secciones: (d.secciones as unknown as Seccion[] | null) ?? [] }));
+  ).map((d) => ({ ...d, secciones: (d.secciones as unknown as Seccion[] | null) ?? [], resumenes: (d.resumenes as unknown as Resumenes | null) ?? null }));
+  // Un expediente se lee por secciones: hacen falta más rondas de herramientas.
+  const maxRondas = documentos.length > 0 ? MAX_TOOL_ROUNDS_CON_DOCUMENTOS : MAX_TOOL_ROUNDS;
   const system: Anthropic.TextBlockParam[] = [
     { type: "text", text: buildSystemPromptAbogado(), cache_control: { type: "ephemeral" } },
     ...(documentos.length > 0 ? [{ type: "text" as const, text: bloqueDocumentosParaPrompt(documentos), cache_control: { type: "ephemeral" as const } }] : []),
@@ -167,7 +170,7 @@ export async function POST(req: Request) {
         let model = CHAT_MODEL;
         let rondasAgotadas = false;
 
-        while (toolRounds < MAX_TOOL_ROUNDS) {
+        while (toolRounds < maxRondas) {
           const params: Anthropic.MessageCreateParamsStreaming = {
             model,
             max_tokens: MAX_TOKENS_SALIDA,
@@ -292,7 +295,7 @@ export async function POST(req: Request) {
           }
           currentMessages = [...currentMessages, { role: "assistant", content: toolUseBlocks }, { role: "user", content: toolResults }];
           toolRounds++;
-          rondasAgotadas = toolRounds >= MAX_TOOL_ROUNDS;
+          rondasAgotadas = toolRounds >= maxRondas;
         }
         if (rondasAgotadas) {
           // Se acabaron las rondas con herramientas pendientes: sin esto la
