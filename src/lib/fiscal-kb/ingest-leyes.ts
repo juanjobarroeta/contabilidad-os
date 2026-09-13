@@ -18,6 +18,7 @@
 import federal from "./catalogo/federal.json";
 import reglamentos from "./catalogo/reglamentos-federales.json";
 import ojn from "./catalogo/ojn.json";
+import { ESTADOS } from "./catalogo/ojn";
 import estatales from "./catalogo/estatales.json";
 import nom from "./catalogo/nom.json";
 import { LEYES_MANUALES } from "./catalogo/manuales";
@@ -71,6 +72,24 @@ interface EntradaNomJson { clave: string; titulo: string; url: string | null; fe
 /** Las NOM entran por default sólo las de construcción; KB_NOM_TODAS=1 las mete todas. */
 const NOM_TODAS = process.env.KB_NOM_TODAS === "1";
 
+// Nombres de los estados sin acentos, para quitarlos del título («del Estado de Chihuahua» ≡ «del Estado»).
+const NOMBRES_ESTADOS = new RegExp(`\\b(${ESTADOS.map((e) => e.nombre.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ de zaragoza| de ocampo| de ignacio de la llave/g, "")).sort((a, b) => b.length - a.length).join("|")})\\b`, "g");
+
+/** Entidad + municipio + título sin acentos, artículos ni «número 123»: identifica un ordenamiento estatal venga de donde venga. */
+export function firmaEstatal(e: { entidad: string; municipio: string | null; titulo: string }): string {
+  const t = e.titulo
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/\b(numero|no\.?|n°)\s*\d+\b/g, "")
+    .replace(/\b(de|del|la|el|los|las|para|y|en|libre|soberano|estado|ciudad|distrito federal|mexico|zaragoza|ocampo|ignacio|llave|xicohtencatl|bravo|juarez|arteaga|sur|norte)\b/g, " ")
+    .replace(NOMBRES_ESTADOS, " ")
+    .replace(/[^a-z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return `${e.entidad}|${e.municipio ?? ""}|${t}`;
+}
+
 function construirCatalogo(): Record<string, LeyDescriptor> {
   const out: Record<string, LeyDescriptor> = {};
   for (const e of ENTRADAS) {
@@ -85,7 +104,10 @@ function construirCatalogo(): Record<string, LeyDescriptor> {
   // a mano donde el OJN no llega (estatales.json manda si repite clave).
   const curadas = (estatales as { entradas: EntradaOjnJson[] }).entradas;
   const reemplazadas = new Set(curadas.flatMap((e) => e.reemplaza ?? []));
-  for (const e of [...(ojn as { entradas: EntradaOjnJson[] }).entradas, ...curadas]) {
+  // El mismo ordenamiento puede venir del OJN y del congreso del estado con
+  // claves distintas: gana el congreso (texto consolidado), por título normalizado.
+  const firmasCuradas = new Set(curadas.filter((e) => !e.excluida && e.url).map(firmaEstatal));
+  for (const e of [...(ojn as { entradas: EntradaOjnJson[] }).entradas.filter((o) => !firmasCuradas.has(firmaEstatal(o))), ...curadas]) {
     if (e.excluida || !e.url || reemplazadas.has(e.clave)) continue;
     out[e.clave] = {
       clave: e.clave,

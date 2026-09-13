@@ -1,7 +1,58 @@
 {
   "fuente": "https://www.ordenjuridico.gob.mx",
-  "generado": "2026-09-12",
+  "generado": "2026-09-13",
   "entradas": [
+    {
+      "clave": "AGU-C-CIVIL-AGUASCALIENTES",
+      "titulo": "Código Civil del Estado de Aguascalientes",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Aguascalientes/wo18757.doc",
+      "ambito": "ESTATAL",
+      "entidad": "AGU",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "18757",
+      "fechaPublicacion": "1947-12-07",
+      "ultimaReforma": "2024-09-23",
+      "vigenciaFallback": "2024-09-23",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "AGU-C-ELECTORAL-AGUASCALIENTES",
+      "titulo": "Código Electoral para el Estado de Aguascalientes",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Aguascalientes/wo101925.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "AGU",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "101925",
+      "fechaPublicacion": "2015-03-02",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2015-03-02",
+      "materias": [
+        "electoral"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "AGU-C-FISCAL",
+      "titulo": "Código Fiscal del Estado",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Aguascalientes/wo18760.doc",
+      "ambito": "ESTATAL",
+      "entidad": "AGU",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "18760",
+      "fechaPublicacion": "1981-12-31",
+      "ultimaReforma": "2015-12-31",
+      "vigenciaFallback": "2015-12-31",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
     {
       "clave": "AGU-C-ORDENAMIENTO-TERRITORIAL-DES",
       "titulo": "Código de Ordenamiento Territorial, Desarrollo Urbano y Vivienda para el Estado de Aguascalientes",
@@ -17,6 +68,59 @@
       "materias": [
         "vivienda",
         "urbano"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "AGU-C-PENAL-AGUASCALIENTES",
+      "titulo": "Código Penal para el Estado de Aguascalientes",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Aguascalientes/wo81652.doc",
+      "ambito": "ESTATAL",
+      "entidad": "AGU",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "81652",
+      "fechaPublicacion": "2013-05-20",
+      "ultimaReforma": "2024-09-23",
+      "vigenciaFallback": "2024-09-23",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "AGU-C-PROCEDIMIENTOS-CIVILES-AGUAS",
+      "titulo": "Código de Procedimientos Civiles del Estado de Aguascalientes",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Aguascalientes/wo18758.doc",
+      "ambito": "ESTATAL",
+      "entidad": "AGU",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "18758",
+      "fechaPublicacion": "1989-07-09",
+      "ultimaReforma": "2018-11-12",
+      "vigenciaFallback": "2018-11-12",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "AGU-C-PROCEDIMIENTOS-PENALES-AGUAS",
+      "titulo": "Código de Procedimientos Penales para el Estado de Aguascalientes",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Aguascalientes/wo86066.doc",
+      "ambito": "ESTATAL",
+      "entidad": "AGU",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "86066",
+      "fechaPublicacion": "2013-05-20",
+      "ultimaReforma": "2015-11-23",
+      "vigenciaFallback": "2015-11-23",
+      "materias": [
+        "penal",
+        "procesal"
       ],
       "excluida": null
     },
@@ -251,6 +355,111 @@
       "materias": [
         "construccion",
         "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "BCN-C-CIVIL-BAJA-CALIFORNIA",
+      "titulo": "Código Civil para el Estado de Baja California",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Baja%20California/wo19493.doc",
+      "ambito": "ESTATAL",
+      "entidad": "BCN",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "19493",
+      "fechaPublicacion": "1974-01-31",
+      "ultimaReforma": "2024-06-28",
+      "vigenciaFallback": "2024-06-28",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "BCN-C-FISCAL-BAJA-CALIFORNIA",
+      "titulo": "Código Fiscal del Estado de Baja California",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Baja%20California/wo18851.doc",
+      "ambito": "ESTATAL",
+      "entidad": "BCN",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "18851",
+      "fechaPublicacion": "1988-12-31",
+      "ultimaReforma": "2020-06-22",
+      "vigenciaFallback": "2020-06-22",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "BCN-C-PENAL-BAJA-CALIFORNIA",
+      "titulo": "Código Penal para el Estado de Baja California",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Baja%20California/wo80296.doc",
+      "ambito": "ESTATAL",
+      "entidad": "BCN",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "80296",
+      "fechaPublicacion": "1989-08-20",
+      "ultimaReforma": "2024-04-05",
+      "vigenciaFallback": "2024-04-05",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "BCN-C-PROCEDIMIENTOS-CIVILES-BAJA",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Baja California",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Baja%20California/wo19494.doc",
+      "ambito": "ESTATAL",
+      "entidad": "BCN",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "19494",
+      "fechaPublicacion": "1974-01-31",
+      "ultimaReforma": "2018-11-30",
+      "vigenciaFallback": "2018-11-30",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "BCN-C-PROCEDIMIENTOS-PENALES-BAJA",
+      "titulo": "Código de Procedimientos Penales para el Estado de Baja California",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Baja%20California/wo74164.doc",
+      "ambito": "ESTATAL",
+      "entidad": "BCN",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "74164",
+      "fechaPublicacion": "1989-08-20",
+      "ultimaReforma": "2016-01-10",
+      "vigenciaFallback": "2016-01-10",
+      "materias": [
+        "penal",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "BCN-C-PROCEDIMIENTOS-PENALES-BAJA-110624",
+      "titulo": "Código de Procedimientos Penales para el Estado de Baja California (Código vigente en Mexicali; en Ensenada entrará en vigor el 11 de agosto de 2014; y en Tijuana, Tecate y Playas de Rosarito entrará en vigor el 11 de agosto de 2015)",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Baja%20California/wo110624.doc",
+      "ambito": "ESTATAL",
+      "entidad": "BCN",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "110624",
+      "fechaPublicacion": "2007-10-19",
+      "ultimaReforma": "2016-01-10",
+      "vigenciaFallback": "2016-01-10",
+      "materias": [
+        "penal",
+        "procesal"
       ],
       "excluida": null
     },
@@ -738,6 +947,93 @@
       "excluida": null
     },
     {
+      "clave": "BCS-C-CIVIL-BAJA-CALIFORNIA-SUR",
+      "titulo": "Código Civil para el Estado Libre y Soberano de Baja California Sur",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Baja%20California%20Sur/wo20065.doc",
+      "ambito": "ESTATAL",
+      "entidad": "BCS",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "20065",
+      "fechaPublicacion": null,
+      "ultimaReforma": "2022-07-20",
+      "vigenciaFallback": "2022-07-20",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "BCS-C-FISCAL-MUNICIPIOS-BAJA-CALIF",
+      "titulo": "Código Fiscal para el Estado y Municipios de Baja California Sur",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Baja%20California%20Sur/wo20068.doc",
+      "ambito": "ESTATAL",
+      "entidad": "BCS",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "20068",
+      "fechaPublicacion": null,
+      "ultimaReforma": "2018-05-14",
+      "vigenciaFallback": "2018-05-14",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "BCS-C-PENAL-BAJA-CALIFORNIA-SUR",
+      "titulo": "Código Penal para el Estado de Baja California Sur",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Baja%20California%20Sur/wo20164.doc",
+      "ambito": "ESTATAL",
+      "entidad": "BCS",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "20164",
+      "fechaPublicacion": "1989-08-20",
+      "ultimaReforma": "2022-06-14",
+      "vigenciaFallback": "2022-06-14",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "BCS-C-PROCEDIMIENTOS-CIVILES-BAJA",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Baja California Sur",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Baja%20California%20Sur/wo20066.doc",
+      "ambito": "ESTATAL",
+      "entidad": "BCS",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "20066",
+      "fechaPublicacion": null,
+      "ultimaReforma": "2022-03-20",
+      "vigenciaFallback": "2022-03-20",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "BCS-C-PROCEDIMIENTOS-PENALES-BAJA",
+      "titulo": "Código de Procedimientos Penales para el Estado de Baja California Sur",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Baja%20California%20Sur/wo20067.doc",
+      "ambito": "ESTATAL",
+      "entidad": "BCS",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "20067",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "penal",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
       "clave": "BCS-L-CATASTRO-MUNICIPIOS-BAJA-CAL",
       "titulo": "Ley de Catastro para los Municipios del Estado de Baja California Sur",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Baja%20California%20Sur/wo20074.doc",
@@ -966,6 +1262,110 @@
       "materias": [
         "vivienda",
         "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CAM-C-CIVIL-CAMPECHE",
+      "titulo": "Código Civil del Estado de Campeche",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Campeche/wo20300.doc",
+      "ambito": "ESTATAL",
+      "entidad": "CAM",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "20300",
+      "fechaPublicacion": "1942-10-17",
+      "ultimaReforma": "2022-04-28",
+      "vigenciaFallback": "2022-04-28",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CAM-C-FISCAL-CAMPECHE",
+      "titulo": "Código Fiscal del Estado de Campeche",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Campeche/wo20435.doc",
+      "ambito": "ESTATAL",
+      "entidad": "CAM",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "20435",
+      "fechaPublicacion": "1992-07-20",
+      "ultimaReforma": "2015-09-14",
+      "vigenciaFallback": "2015-09-14",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CAM-C-FISCAL-CAMPECHE-90306",
+      "titulo": "Código Fiscal Municipal del Estado de Campeche",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Campeche/wo90306.doc",
+      "ambito": "ESTATAL",
+      "entidad": "CAM",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "90306",
+      "fechaPublicacion": "2013-12-24",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2013-12-24",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CAM-C-PENAL-CAMPECHE",
+      "titulo": "Código Penal del Estado de Campeche",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Campeche/wo20436.doc",
+      "ambito": "ESTATAL",
+      "entidad": "CAM",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "20436",
+      "fechaPublicacion": "2012-07-20",
+      "ultimaReforma": "2015-03-05",
+      "vigenciaFallback": "2015-03-05",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CAM-C-PROCEDIMIENTOS-CIVILES-CAMPE",
+      "titulo": "Código de Procedimientos Civiles del Estado de Campeche",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Campeche/wo20302.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "CAM",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "20302",
+      "fechaPublicacion": "1942-12-22",
+      "ultimaReforma": "2016-03-31",
+      "vigenciaFallback": "2016-03-31",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CAM-C-PROCEDIMIENTOS-PENALES-CAMPE",
+      "titulo": "Código de Procedimientos Penales del Estado de Campeche",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Campeche/wo20181.doc",
+      "ambito": "ESTATAL",
+      "entidad": "CAM",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "20181",
+      "fechaPublicacion": "1975-12-16",
+      "ultimaReforma": "2014-10-02",
+      "vigenciaFallback": "2014-10-02",
+      "materias": [
+        "penal",
+        "procesal"
       ],
       "excluida": null
     },
@@ -1272,6 +1672,163 @@
       "materias": [
         "administrativo",
         "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CHH-C-ADMINISTRATIVO-CHIHUAHUA",
+      "titulo": "Código Administrativo del Estado Chihuahua",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Chihuahua/wo22641.doc",
+      "ambito": "ESTATAL",
+      "entidad": "CHH",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "22641",
+      "fechaPublicacion": "1974-08-21",
+      "ultimaReforma": "2015-04-01",
+      "vigenciaFallback": "2015-04-01",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CHH-C-CHIHUAHUA",
+      "titulo": "Código Municipal para el Estado de Chihuahua",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Chihuahua/wo22646.doc",
+      "ambito": "ESTATAL",
+      "entidad": "CHH",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "22646",
+      "fechaPublicacion": "1995-11-18",
+      "ultimaReforma": "2015-10-24",
+      "vigenciaFallback": "2015-10-24",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CHH-C-CIVIL-CHIHUAHUA",
+      "titulo": "Código Civil del Estado de Chihuahua",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Chihuahua/wo22642.doc",
+      "ambito": "ESTATAL",
+      "entidad": "CHH",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "22642",
+      "fechaPublicacion": "1974-03-23",
+      "ultimaReforma": "2021-01-16",
+      "vigenciaFallback": "2021-01-16",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CHH-C-FISCAL-CHIHUAHUA",
+      "titulo": "Código Fiscal del Estado de Chihuahua",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Chihuahua/wo22645.doc",
+      "ambito": "ESTATAL",
+      "entidad": "CHH",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "22645",
+      "fechaPublicacion": "1970-12-30",
+      "ultimaReforma": "2015-04-29",
+      "vigenciaFallback": "2015-04-29",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CHH-C-PENAL-CHIHUAHUA",
+      "titulo": "Código Penal del Estado de Chihuahua",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Chihuahua/wo22648.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "CHH",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "22648",
+      "fechaPublicacion": "2006-12-27",
+      "ultimaReforma": "2015-05-30",
+      "vigenciaFallback": "2015-05-30",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CHH-C-PROCEDIMIENTOS-CIVILES",
+      "titulo": "Código de Procedimientos Civiles",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Chihuahua/wo60614.doc",
+      "ambito": "ESTATAL",
+      "entidad": "CHH",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "60614",
+      "fechaPublicacion": "2004-03-23",
+      "ultimaReforma": "2015-09-26",
+      "vigenciaFallback": "2015-09-26",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CHH-C-PROCEDIMIENTOS-CIVILES-CHIHU",
+      "titulo": "Código de Procedimientos Civiles del Estado de Chihuahua (ver transitorios)",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Chihuahua/wo97619.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "CHH",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "97619",
+      "fechaPublicacion": "2014-07-23",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2014-07-23",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CHH-C-PROCEDIMIENTOS-FAMILIARES-CH",
+      "titulo": "Código de Procedimientos Familiares del Estado de Chihuahua (ver transitorios)",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Chihuahua/wo97620.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "CHH",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "97620",
+      "fechaPublicacion": "2014-07-23",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2014-07-23",
+      "materias": [
+        "familiar",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CHH-C-PROCEDIMIENTOS-PENALES-CHIHU",
+      "titulo": "Código de Procedimientos Penales del Estado de Chihuahua",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Chihuahua/wo22376.doc",
+      "ambito": "ESTATAL",
+      "entidad": "CHH",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "22376",
+      "fechaPublicacion": "2006-08-09",
+      "ultimaReforma": "2014-05-14",
+      "vigenciaFallback": "2014-05-14",
+      "materias": [
+        "penal",
+        "procesal"
       ],
       "excluida": null
     },
@@ -1626,6 +2183,93 @@
       "materias": [
         "vivienda",
         "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CHP-C-CIVIL-CHIAPAS",
+      "titulo": "Código Civil del Estado de Chiapas",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Chiapas/wo20998.doc",
+      "ambito": "ESTATAL",
+      "entidad": "CHP",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "20998",
+      "fechaPublicacion": "1938-02-02",
+      "ultimaReforma": "2019-01-23",
+      "vigenciaFallback": "2019-01-23",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CHP-C-FISCAL",
+      "titulo": "Código Fiscal Municipal",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Chiapas/wo36719.doc",
+      "ambito": "ESTATAL",
+      "entidad": "CHP",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "36719",
+      "fechaPublicacion": "1998-07-08",
+      "ultimaReforma": "2010-05-26",
+      "vigenciaFallback": "2010-05-26",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CHP-C-PENAL-CHIAPAS",
+      "titulo": "Código Penal para el Estado de Chiapas",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Chiapas/wo20584.doc",
+      "ambito": "ESTATAL",
+      "entidad": "CHP",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "20584",
+      "fechaPublicacion": "2007-03-14",
+      "ultimaReforma": "2024-03-06",
+      "vigenciaFallback": "2024-03-06",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CHP-C-PROCEDIMIENTOS-CIVILES-CHIAP",
+      "titulo": "Código de Procedimientos Civiles del Estado de Chiapas",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Chiapas/wo20999.doc",
+      "ambito": "ESTATAL",
+      "entidad": "CHP",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "20999",
+      "fechaPublicacion": "1938-01-28",
+      "ultimaReforma": "2019-01-23",
+      "vigenciaFallback": "2019-01-23",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CHP-C-PROCEDIMIENTOS-PENALES-CHIAP",
+      "titulo": "Código de Procedimientos Penales del Estado de Chiapas",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Chiapas/wo83491.doc",
+      "ambito": "ESTATAL",
+      "entidad": "CHP",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "83491",
+      "fechaPublicacion": "2012-02-09",
+      "ultimaReforma": "2014-12-24",
+      "vigenciaFallback": "2014-12-24",
+      "materias": [
+        "penal",
+        "procesal"
       ],
       "excluida": null
     },
@@ -2013,6 +2657,40 @@
       "excluida": null
     },
     {
+      "clave": "CMX-C-CIVIL-DISTRITO-FEDERAL",
+      "titulo": "Código Civil para el Distrito Federal",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Ciudad%20de%20Mexico/wo29081.doc",
+      "ambito": "ESTATAL",
+      "entidad": "CMX",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "29081",
+      "fechaPublicacion": "1928-05-26",
+      "ultimaReforma": "2024-08-28",
+      "vigenciaFallback": "2024-08-28",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CMX-C-ELECTORAL-DISTRITO-FEDERAL",
+      "titulo": "Código Electoral del Distrito Federal",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Distrito%20Federal/wo27401.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "CMX",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "27401",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "electoral"
+      ],
+      "excluida": "Estatus: Abrogado"
+    },
+    {
       "clave": "CMX-C-ETICA-INSTITUTO-LOCAL-INFRAE",
       "titulo": "Código de Ética del Instituto Local de Infraestructura Física Educativa del Distrito Federal",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Distrito%20Federal/wo104158.doc",
@@ -2026,6 +2704,76 @@
       "vigenciaFallback": "2012-03-15",
       "materias": [
         "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CMX-C-FISCAL-DISTRITO-FEDERAL",
+      "titulo": "Código Fiscal del Distrito Federal",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Ciudad%20de%20Mexico/wo70126.doc",
+      "ambito": "ESTATAL",
+      "entidad": "CMX",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "70126",
+      "fechaPublicacion": "2009-12-29",
+      "ultimaReforma": "2021-12-30",
+      "vigenciaFallback": "2021-12-30",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CMX-C-PENAL-DISTRITO-FEDERAL",
+      "titulo": "Código Penal para el Distrito Federal",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Ciudad%20de%20Mexico/wo84865.doc",
+      "ambito": "ESTATAL",
+      "entidad": "CMX",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "84865",
+      "fechaPublicacion": "2002-07-16",
+      "ultimaReforma": "2024-10-04",
+      "vigenciaFallback": "2024-10-04",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CMX-C-PROCEDIMIENTOS-CIVILES-DISTR",
+      "titulo": "Código de Procedimientos Civiles para el Distrito Federal",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Ciudad%20de%20Mexico/wo29083.doc",
+      "ambito": "ESTATAL",
+      "entidad": "CMX",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "29083",
+      "fechaPublicacion": "1932-12-21",
+      "ultimaReforma": "2018-07-18",
+      "vigenciaFallback": "2018-07-18",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "CMX-C-PROCEDIMIENTOS-PENALES-DISTR",
+      "titulo": "Código de Procedimientos Penales para el Distrito Federal",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Distrito%20Federal/wo29084.doc",
+      "ambito": "ESTATAL",
+      "entidad": "CMX",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "29084",
+      "fechaPublicacion": "1931-08-29",
+      "ultimaReforma": "2014-08-22",
+      "vigenciaFallback": "2014-08-22",
+      "materias": [
+        "penal",
+        "procesal"
       ],
       "excluida": null
     },
@@ -2492,6 +3240,143 @@
       "excluida": null
     },
     {
+      "clave": "COA-C-CIVIL-COAHUILA-ZARAGOZA",
+      "titulo": "Código Civil para el Estado de Coahuila de Zaragoza",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Coahuila%20de%20Zaragoza/wo25448.doc",
+      "ambito": "ESTATAL",
+      "entidad": "COA",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "25448",
+      "fechaPublicacion": "1999-06-25",
+      "ultimaReforma": "2023-06-27",
+      "vigenciaFallback": "2023-06-27",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "COA-C-COAHUILA-ZARAGOZA",
+      "titulo": "Código Municipal para el Estado de Coahuila de Zaragoza",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Coahuila%20de%20Zaragoza/wo25473.doc",
+      "ambito": "ESTATAL",
+      "entidad": "COA",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "25473",
+      "fechaPublicacion": "1999-07-20",
+      "ultimaReforma": "2015-06-30",
+      "vigenciaFallback": "2015-06-30",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "COA-C-ELECTORAL-COAHUILA-ZARAGOZA",
+      "titulo": "Código Electoral del Estado de Coahuila de Zaragoza",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Coahuila/wo24835.doc",
+      "ambito": "ESTATAL",
+      "entidad": "COA",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "24835",
+      "fechaPublicacion": "2010-06-29",
+      "ultimaReforma": "2012-12-04",
+      "vigenciaFallback": "2012-12-04",
+      "materias": [
+        "electoral"
+      ],
+      "excluida": "Estatus: Abrogado"
+    },
+    {
+      "clave": "COA-C-FINANCIERO-MUNICIPIOS-COAHUI",
+      "titulo": "Código Financiero para los Municipios del Estado de Coahuila de Zaragoza",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Coahuila%20de%20Zaragoza/wo87528.doc",
+      "ambito": "ESTATAL",
+      "entidad": "COA",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "87528",
+      "fechaPublicacion": "2013-11-07",
+      "ultimaReforma": "2013-12-06",
+      "vigenciaFallback": "2013-12-06",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "COA-C-FISCAL-COAHUILA-ZARAGOZA",
+      "titulo": "Código Fiscal para el Estado de Coahuila de Zaragoza",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Coahuila%20de%20Zaragoza/wo25472.doc",
+      "ambito": "ESTATAL",
+      "entidad": "COA",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "25472",
+      "fechaPublicacion": "2004-01-02",
+      "ultimaReforma": "2022-12-21",
+      "vigenciaFallback": "2022-12-21",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "COA-C-PENAL-COAHUILA-ZARAGOZA",
+      "titulo": "Código Penal del Estado de Coahuila de Zaragoza",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Coahuila%20de%20Zaragoza/wo25474.doc",
+      "ambito": "ESTATAL",
+      "entidad": "COA",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "25474",
+      "fechaPublicacion": "1999-05-28",
+      "ultimaReforma": "2023-01-03",
+      "vigenciaFallback": "2023-01-03",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "COA-C-PROCEDIMIENTOS-FAMILIARES-CO",
+      "titulo": "Código de Procedimientos Familiares para el Estado de Coahuila de Zaragoza",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Coahuila%20de%20Zaragoza/wo109008.doc",
+      "ambito": "ESTATAL",
+      "entidad": "COA",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "109008",
+      "fechaPublicacion": "2015-12-15",
+      "ultimaReforma": "2019-10-18",
+      "vigenciaFallback": "2019-10-18",
+      "materias": [
+        "familiar",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "COA-C-PROCESAL-CIVIL-COAHUILA-ZARA",
+      "titulo": "Código Procesal Civil para el Estado de Coahuila de Zaragoza",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Coahuila%20de%20Zaragoza/wo25451.doc",
+      "ambito": "ESTATAL",
+      "entidad": "COA",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "25451",
+      "fechaPublicacion": "1999-06-29",
+      "ultimaReforma": "2019-10-18",
+      "vigenciaFallback": "2019-10-18",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
       "clave": "COA-L-ASENTAMIENTOS-HUMANOS-DESARR",
       "titulo": "Ley de Asentamientos Humanos y Desarrollo Urbano del Estado de Coahuila de Zaragoza",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Coahuila%20de%20Zaragoza/wo25480.doc",
@@ -2943,6 +3828,127 @@
       "excluida": null
     },
     {
+      "clave": "COL-C-CIVIL-COLIMA",
+      "titulo": "Código Civil para el Estado de Colima",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Colima/wo95645.doc",
+      "ambito": "ESTATAL",
+      "entidad": "COL",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "95645",
+      "fechaPublicacion": "1954-09-25",
+      "ultimaReforma": "2024-09-21",
+      "vigenciaFallback": "2024-09-21",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "COL-C-ELECTORAL-COLIMA",
+      "titulo": "Código Electoral del Estado de Colima",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Colima/wo95640.doc",
+      "ambito": "ESTATAL",
+      "entidad": "COL",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "95640",
+      "fechaPublicacion": "2011-08-30",
+      "ultimaReforma": "2023-12-09",
+      "vigenciaFallback": "2023-12-09",
+      "materias": [
+        "electoral"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "COL-C-FISCAL-COLIMA",
+      "titulo": "Código Fiscal del Estado de Colima",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Colima/wo95641.doc",
+      "ambito": "ESTATAL",
+      "entidad": "COL",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "95641",
+      "fechaPublicacion": "2003-10-04",
+      "ultimaReforma": "2018-09-28",
+      "vigenciaFallback": "2018-09-28",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "COL-C-FISCAL-COLIMA-95642",
+      "titulo": "Código Fiscal Municipal del Estado de Colima",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Colima/wo95642.doc",
+      "ambito": "ESTATAL",
+      "entidad": "COL",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "95642",
+      "fechaPublicacion": "2003-01-09",
+      "ultimaReforma": "2011-05-21",
+      "vigenciaFallback": "2011-05-21",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "COL-C-PENAL-COLIMA",
+      "titulo": "Código Penal para el Estado de Colima",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Colima/wo95643.doc",
+      "ambito": "ESTATAL",
+      "entidad": "COL",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "95643",
+      "fechaPublicacion": "2014-10-11",
+      "ultimaReforma": "2024-09-09",
+      "vigenciaFallback": "2024-09-09",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "COL-C-PROCEDIMIENTOS-CIVILES-COLIM",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Colima",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Colima/wo95638.doc",
+      "ambito": "ESTATAL",
+      "entidad": "COL",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "95638",
+      "fechaPublicacion": "1954-05-29",
+      "ultimaReforma": "2021-07-17",
+      "vigenciaFallback": "2021-07-17",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "COL-C-PROCEDIMIENTOS-PENALES-COLIM",
+      "titulo": "Código de Procedimientos Penales para el Estado de Colima",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Colima/wo95639.doc",
+      "ambito": "ESTATAL",
+      "entidad": "COL",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "95639",
+      "fechaPublicacion": "1997-09-02",
+      "ultimaReforma": "2015-10-01",
+      "vigenciaFallback": "2015-10-01",
+      "materias": [
+        "penal",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
       "clave": "COL-L-ASENTAMIENTOS-HUMANOS-COLIMA",
       "titulo": "Ley de Asentamientos Humanos del Estado de Colima",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Colima/wo95655.doc",
@@ -3264,6 +4270,23 @@
       "excluida": null
     },
     {
+      "clave": "DUR-C-CIVIL-DURANGO",
+      "titulo": "Código Civil del Estado de Durango",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Durango/wo24466.doc",
+      "ambito": "ESTATAL",
+      "entidad": "DUR",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "24466",
+      "fechaPublicacion": "1948-01-22",
+      "ultimaReforma": "2024-03-10",
+      "vigenciaFallback": "2024-03-10",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
       "clave": "DUR-C-CONDUCTA-ETICA-INSTITUCIONAL",
       "titulo": "Código de Conducta y Ética Institucional de la Secretaria de Recursos Naturales y Medio Ambiente del Estado de Durango",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Durango/wo87515.doc",
@@ -3278,6 +4301,109 @@
       "materias": [
         "ambiental",
         "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "DUR-C-FISCAL",
+      "titulo": "Código Fiscal Municipal",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Durango/wo24592.doc",
+      "ambito": "ESTATAL",
+      "entidad": "DUR",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "24592",
+      "fechaPublicacion": "1988-03-20",
+      "ultimaReforma": "2007-12-30",
+      "vigenciaFallback": "2007-12-30",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "DUR-C-FISCAL-DURANGO",
+      "titulo": "Código Fiscal del Estado de Durango",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Durango/wo24591.doc",
+      "ambito": "ESTATAL",
+      "entidad": "DUR",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "24591",
+      "fechaPublicacion": "1999-12-30",
+      "ultimaReforma": "2021-12-30",
+      "vigenciaFallback": "2021-12-30",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "DUR-C-JUSTICIA-MENORES-INFRACTORES",
+      "titulo": "Código de Justicia para Menores Infractores en el Estado de Durango",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Durango/wo87520.doc",
+      "ambito": "ESTATAL",
+      "entidad": "DUR",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "87520",
+      "fechaPublicacion": "2009-10-11",
+      "ultimaReforma": "2014-12-28",
+      "vigenciaFallback": "2014-12-28",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "DUR-C-PENAL-DURANGO",
+      "titulo": "Código Penal para el Estado Libre y Soberano de Durango",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Durango/wo24664.doc",
+      "ambito": "ESTATAL",
+      "entidad": "DUR",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "24664",
+      "fechaPublicacion": "2009-06-14",
+      "ultimaReforma": "2024-03-07",
+      "vigenciaFallback": "2024-03-07",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "DUR-C-PROCEDIMIENTOS-CIVILES-DURAN",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Durango",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Durango/wo24468.doc",
+      "ambito": "ESTATAL",
+      "entidad": "DUR",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "24468",
+      "fechaPublicacion": "1948-07-22",
+      "ultimaReforma": "2018-05-31",
+      "vigenciaFallback": "2018-05-31",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "DUR-C-PROCESAL-PENAL-DURANGO",
+      "titulo": "Código Procesal Penal del Estado de Durango",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Durango/wo44973.doc",
+      "ambito": "ESTATAL",
+      "entidad": "DUR",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "44973",
+      "fechaPublicacion": "2008-05-05",
+      "ultimaReforma": "2015-06-11",
+      "vigenciaFallback": "2015-06-11",
+      "materias": [
+        "penal"
       ],
       "excluida": null
     },
@@ -3833,6 +4959,109 @@
       "excluida": null
     },
     {
+      "clave": "GRO-C-CIVIL-GUERRERO-NUMERO-358",
+      "titulo": "Código Civil del Estado Libre y Soberano de Guerrero Número 358",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Guerrero/wo36112.doc",
+      "ambito": "ESTATAL",
+      "entidad": "GRO",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "36112",
+      "fechaPublicacion": "1993-03-02",
+      "ultimaReforma": "2019-09-26",
+      "vigenciaFallback": "2019-09-26",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "GRO-C-FISCAL-GUERRERO-NUMERO-429",
+      "titulo": "Código Fiscal del Estado de Guerrero, Número 429",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/GUERRERO/Codigos/GROCOD05.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "GRO",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "36531",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "GRO-C-FISCAL-NUMERO-152",
+      "titulo": "Código Fiscal Municipal Número 152",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/GUERRERO/Codigos/GROCOD06.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "GRO",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "36532",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "GRO-C-PENAL-GUERRERO",
+      "titulo": "Código Penal del Estado de Guerrero",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/GUERRERO/Codigos/GROCOD07.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "GRO",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "36533",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "GRO-C-PROCEDIMIENTOS-PENALES-GUERR",
+      "titulo": "Código de Procedimientos Penales para el Estado de Guerrero, Número 357",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/GUERRERO/Codigos/GROCOD03.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "GRO",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "36114",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "penal",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "GRO-C-PROCESAL-CIVIL-GUERRERO-NUME",
+      "titulo": "Código Procesal Civil del Estado Libre y Soberano de Guerrero Número 364",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/GUERRERO/Codigos/GROCOD08.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "GRO",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "36116",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
       "clave": "GRO-L-CATASTRO-GUERRERO-NUMERO-676",
       "titulo": "Ley de Catastro Municipal del Estado de Guerrero Número 676",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/GUERRERO/Leyes/GROLEY08.pdf",
@@ -3976,6 +5205,76 @@
       "excluida": null
     },
     {
+      "clave": "GUA-C-CIVIL-GUANAJUATO",
+      "titulo": "Código Civil para el Estado de Guanajuato",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Guanajuato/wo35829.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "GUA",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "35829",
+      "fechaPublicacion": "1967-05-14",
+      "ultimaReforma": "2017-05-26",
+      "vigenciaFallback": "2017-05-26",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "GUA-C-PENAL-GUANAJUATO",
+      "titulo": "Código Penal para el Estado de Guanajuato",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Guanajuato/wo45961.doc",
+      "ambito": "ESTATAL",
+      "entidad": "GUA",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "45961",
+      "fechaPublicacion": "2001-11-02",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2001-11-02",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "GUA-C-PROCEDIMIENTOS-CIVILES-GUANA",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Guanajuato",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Guanajuato/wo35832.doc",
+      "ambito": "ESTATAL",
+      "entidad": "GUA",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "35832",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "GUA-C-PROCEDIMIENTOS-PENALES-GUANA",
+      "titulo": "Código de Procedimientos Penales para el Estado de Guanajuato",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Guanajuato/wo35833.doc",
+      "ambito": "ESTATAL",
+      "entidad": "GUA",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "35833",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "penal",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
       "clave": "GUA-L-OBRA-PUBLICA-SERVICIOS-RELAC",
       "titulo": "Ley de Obra Pública y Servicios Relacionados con la Misma para el Estado y los Municipios de Guanajuato",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Guanajuato/wo35994.doc",
@@ -4042,6 +5341,162 @@
       "vigenciaFallback": "2026-09-12",
       "materias": [
         "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "HID-C-CIVIL-HIDALGO",
+      "titulo": "Código Civil para el Estado de Hidalgo",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Hidalgo/wo23547.doc",
+      "ambito": "ESTATAL",
+      "entidad": "HID",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "23547",
+      "fechaPublicacion": "1940-10-08",
+      "ultimaReforma": "2024-09-17",
+      "vigenciaFallback": "2024-09-17",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "HID-C-ELECTORAL-HIDALGO",
+      "titulo": "Código Electoral del Estado de Hidalgo",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Hidalgo/wo102079.doc",
+      "ambito": "ESTATAL",
+      "entidad": "HID",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "102079",
+      "fechaPublicacion": "2014-12-22",
+      "ultimaReforma": "2024-09-17",
+      "vigenciaFallback": "2024-09-17",
+      "materias": [
+        "electoral"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "HID-C-FISCAL-HIDALGO",
+      "titulo": "Código Fiscal del Estado de Hidalgo",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Hidalgo/wo23552.doc",
+      "ambito": "ESTATAL",
+      "entidad": "HID",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "23552",
+      "fechaPublicacion": "2000-12-30",
+      "ultimaReforma": "2012-12-20",
+      "vigenciaFallback": "2012-12-20",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "HID-C-FISCAL-HIDALGO-83537",
+      "titulo": "Código Fiscal Municipal para el Estado de Hidalgo",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Hidalgo/wo83537.doc",
+      "ambito": "ESTATAL",
+      "entidad": "HID",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "83537",
+      "fechaPublicacion": "2011-11-21",
+      "ultimaReforma": "2023-05-30",
+      "vigenciaFallback": "2023-05-30",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "HID-C-PENAL-HIDALGO",
+      "titulo": "Código Penal para el Estado de Hidalgo",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Hidalgo/wo23554.doc",
+      "ambito": "ESTATAL",
+      "entidad": "HID",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "23554",
+      "fechaPublicacion": "1990-06-09",
+      "ultimaReforma": "2024-09-17",
+      "vigenciaFallback": "2024-09-17",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "HID-C-PROCEDIMIENTOS-CIVILES-HIDAL",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Hidalgo",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Hidalgo/wo23549.doc",
+      "ambito": "ESTATAL",
+      "entidad": "HID",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "23549",
+      "fechaPublicacion": "1940-12-01",
+      "ultimaReforma": "2017-06-26",
+      "vigenciaFallback": "2017-06-26",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "HID-C-PROCEDIMIENTOS-FAMILIARES-HI",
+      "titulo": "Código de Procedimientos Familiares para el Estado de Hidalgo",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Hidalgo/wo86600.doc",
+      "ambito": "ESTATAL",
+      "entidad": "HID",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "86600",
+      "fechaPublicacion": "2007-04-09",
+      "ultimaReforma": "2017-07-10",
+      "vigenciaFallback": "2017-07-10",
+      "materias": [
+        "familiar",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "HID-C-PROCEDIMIENTOS-PENALES-HIDAL",
+      "titulo": "Código de Procedimientos Penales para el Estado de Hidalgo",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Hidalgo/wo23551.doc",
+      "ambito": "ESTATAL",
+      "entidad": "HID",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "23551",
+      "fechaPublicacion": "2011-06-09",
+      "ultimaReforma": "2015-05-18",
+      "vigenciaFallback": "2015-05-18",
+      "materias": [
+        "penal",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "HID-C-PROCESAL-PENAL-HIDALGO-VER-T",
+      "titulo": "Código Procesal Penal para el Estado de Hidalgo (Ver transitorios)",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Hidalgo/wo62482.doc",
+      "ambito": "ESTATAL",
+      "entidad": "HID",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "62482",
+      "fechaPublicacion": "2011-03-14",
+      "ultimaReforma": "2014-08-25",
+      "vigenciaFallback": "2014-08-25",
+      "materias": [
+        "penal"
       ],
       "excluida": null
     },
@@ -4841,6 +6296,127 @@
       "vigenciaFallback": "1954-05-08",
       "materias": [
         "urbano"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-C-CIVIL-JALISCO",
+      "titulo": "Código Civil del Estado de Jalisco",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/wo77043.doc",
+      "ambito": "ESTATAL",
+      "entidad": "JAL",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "77043",
+      "fechaPublicacion": "1995-02-25",
+      "ultimaReforma": "2024-06-25",
+      "vigenciaFallback": "2024-06-25",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-C-ELECTORAL-JALISCO",
+      "titulo": "Código Electoral del Estado de Jalisco",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/wo77049.doc",
+      "ambito": "ESTATAL",
+      "entidad": "JAL",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "77049",
+      "fechaPublicacion": "2008-08-05",
+      "ultimaReforma": "2023-07-06",
+      "vigenciaFallback": "2023-07-06",
+      "materias": [
+        "electoral"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-C-FISCAL-JALISCO",
+      "titulo": "Código Fiscal del Estado de Jalisco",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/wo77047.doc",
+      "ambito": "ESTATAL",
+      "entidad": "JAL",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "77047",
+      "fechaPublicacion": "1997-12-16",
+      "ultimaReforma": "2023-06-10",
+      "vigenciaFallback": "2023-06-10",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-C-PENAL-JALISCO",
+      "titulo": "Código Penal para el Estado Libre y Soberano de Jalisco",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/wo77048.doc",
+      "ambito": "ESTATAL",
+      "entidad": "JAL",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "77048",
+      "fechaPublicacion": "1982-09-02",
+      "ultimaReforma": "2024-06-25",
+      "vigenciaFallback": "2024-06-25",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-C-PROCEDIMIENTOS-CIVILES-JALIS",
+      "titulo": "Código de Procedimientos Civiles del Estado de Jalisco",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/wo77045.doc",
+      "ambito": "ESTATAL",
+      "entidad": "JAL",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "77045",
+      "fechaPublicacion": "1938-12-24",
+      "ultimaReforma": "2021-07-06",
+      "vigenciaFallback": "2021-07-06",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-C-PROCEDIMIENTOS-PENALES-JALIS",
+      "titulo": "Código de Procedimientos Penales para el Estado Libre y Soberano de Jalisco",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/wo77046.doc",
+      "ambito": "ESTATAL",
+      "entidad": "JAL",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "77046",
+      "fechaPublicacion": "1982-12-07",
+      "ultimaReforma": "2015-10-22",
+      "vigenciaFallback": "2015-10-22",
+      "materias": [
+        "penal",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-C-URBANO-JALISCO",
+      "titulo": "Código Urbano para el Estado de Jalisco",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Jalisco/wo54124.doc",
+      "ambito": "ESTATAL",
+      "entidad": "JAL",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "54124",
+      "fechaPublicacion": "2008-09-27",
+      "ultimaReforma": "2023-07-22",
+      "vigenciaFallback": "2023-07-22",
+      "materias": [
+        "administrativo"
       ],
       "excluida": null
     },
@@ -6510,6 +8086,40 @@
       "excluida": null
     },
     {
+      "clave": "MEX-C-ADMINISTRATIVO-MEXICO",
+      "titulo": "Código Administrativo del Estado de México",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Estado%20de%20Mexico/wo31349.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "MEX",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "31349",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "MEX-C-CIVIL-MEXICO",
+      "titulo": "Código Civil del Estado de México",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Estado%20de%20Mexico/wo31246.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "MEX",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "31246",
+      "fechaPublicacion": null,
+      "ultimaReforma": "2002-06-07",
+      "vigenciaFallback": "2002-06-07",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
       "clave": "MEX-C-CONDUCTA-SECRETARIA-MOVILIDA",
       "titulo": "Código De Conducta De La Secretaría De Movilidad Del Gobierno Del Estado De México",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Estado%20de%20Mexico/wo119373.pdf",
@@ -6528,6 +8138,40 @@
       "excluida": null
     },
     {
+      "clave": "MEX-C-ELECTORAL-MEXICO",
+      "titulo": "Código Electoral del Estado de México",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/ESTADO%20DE%20MEXICO/Codigos/MEXCOD06.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "MEX",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "36905",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "electoral"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "MEX-C-ELECTORAL-MEXICO-29384",
+      "titulo": "Código Electoral del Estado de México",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Estado%20de%20Mexico/wo29384.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "MEX",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "29384",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "electoral"
+      ],
+      "excluida": null
+    },
+    {
       "clave": "MEX-C-ETICA-PREVENCION-CONFLICTO-I",
       "titulo": "Código De Ética Y Prevención De Conflicto De Intereses De La Secretaría De Infraestructura Del Estado De México",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Estado%20de%20Mexico/wo119389.pdf",
@@ -6541,6 +8185,93 @@
       "vigenciaFallback": "2016-10-24",
       "materias": [
         "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "MEX-C-FINANCIERO-MEXICO-MUNICIPIOS",
+      "titulo": "Código Financiero del Estado de México y Municipios",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Estado%20de%20Mexico/wo31355.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "MEX",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "31355",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "MEX-C-PENAL-MEXICO",
+      "titulo": "Código Penal del Estado de México",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Estado%20de%20Mexico/wo29386.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "MEX",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "29386",
+      "fechaPublicacion": "2000-03-20",
+      "ultimaReforma": "2017-05-30",
+      "vigenciaFallback": "2017-05-30",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "MEX-C-PROCEDIMIENTOS-ADMINISTRATIV",
+      "titulo": "Código de Procedimientos Administrativos del Estado de México",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Estado%20de%20Mexico/wo31351.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "MEX",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "31351",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "MEX-C-PROCEDIMIENTOS-CIVILES-MEXIC",
+      "titulo": "Código de Procedimientos Civiles del Estado de México",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Estado%20de%20Mexico/wo31247.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "MEX",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "31247",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "MEX-C-PROCEDIMIENTOS-PENALES-MEXIC",
+      "titulo": "Código de Procedimientos Penales para el Estado de México",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Estado%20de%20Mexico/wo31249.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "MEX",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "31249",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "penal",
+        "procesal"
       ],
       "excluida": null
     },
@@ -6920,6 +8651,23 @@
       "excluida": null
     },
     {
+      "clave": "MIC-C-CIVIL-MICHOACAN-OCAMPO",
+      "titulo": "Código Civil para el Estado de Michoacán de Ocampo",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Michoacan/wo33208.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "MIC",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "33208",
+      "fechaPublicacion": "2008-02-11",
+      "ultimaReforma": "2016-12-29",
+      "vigenciaFallback": "2016-12-29",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
       "clave": "MIC-C-DESARROLLO-URBANO-MICHOACAN",
       "titulo": "Código de Desarrollo Urbano del Estado de Michoacán de Ocampo",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Michoacan/wo54341.pdf",
@@ -6933,6 +8681,145 @@
       "vigenciaFallback": "2007-12-26",
       "materias": [
         "urbano"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "MIC-C-ELECTORAL-MICHOACAN",
+      "titulo": "Código Electoral del Estado de Michoacán",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Michoacan/wo33331.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "MIC",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "33331",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "electoral"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "MIC-C-FAMILIAR-MICHOACAN-OCAMPO",
+      "titulo": "Código Familiar para el Estado de Michoacán de Ocampo",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Michoacan/wo107103.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "MIC",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "107103",
+      "fechaPublicacion": "2015-09-30",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2015-09-30",
+      "materias": [
+        "familiar"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "MIC-C-FISCAL-MICHOACAN-OCAMPO",
+      "titulo": "Código Fiscal del Estado de Michoacán de Ocampo",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Michoacan/wo33333.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "MIC",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "33333",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "MIC-C-FISCAL-MICHOACAN-OCAMPO-43886",
+      "titulo": "Código Fiscal Municipal del Estado de Michoacán de Ocampo",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Michoacan/wo43886.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "MIC",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "43886",
+      "fechaPublicacion": "2010-02-04",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2010-02-04",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "MIC-C-JUSTICIA-ADMINISTRATIVA-MICH",
+      "titulo": "Código de Justicia Administrativa del Estado de Michoacán de Ocampo",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Michoacan/wo33209.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "MIC",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "33209",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "procesal",
+        "judicial"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "MIC-C-PENAL-MICHOACAN",
+      "titulo": "Código Penal del Estado de Michoacán",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Michoacan/wo33335.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "MIC",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "33335",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "MIC-C-PROCEDIMIENTOS-CIVILES-MICHO",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Michoacán de Ocampo",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Michoacan/wo33210.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "MIC",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "33210",
+      "fechaPublicacion": "2008-09-06",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2008-09-06",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "MIC-C-PROCEDIMIENTOS-PENALES-MICHO",
+      "titulo": "Código de Procedimientos Penales del Estado de Michoacán",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Michoacan/wo33211.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "MIC",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "33211",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "penal",
+        "procesal"
       ],
       "excluida": null
     },
@@ -7185,6 +9072,93 @@
       "materias": [
         "administrativo",
         "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "NAY-C-CIVIL-NAYARIT",
+      "titulo": "Código Civil para el Estado de Nayarit",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Nayarit/wo24090.doc",
+      "ambito": "ESTATAL",
+      "entidad": "NAY",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "24090",
+      "fechaPublicacion": "1981-08-22",
+      "ultimaReforma": "2024-06-11",
+      "vigenciaFallback": "2024-06-11",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "NAY-C-FISCAL-NAYARIT",
+      "titulo": "Código Fiscal del Estado de Nayarit",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Nayarit/wo24093.doc",
+      "ambito": "ESTATAL",
+      "entidad": "NAY",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "24093",
+      "fechaPublicacion": "2011-01-22",
+      "ultimaReforma": "2016-11-08",
+      "vigenciaFallback": "2016-11-08",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "NAY-C-PENAL-NAYARIT",
+      "titulo": "Código Penal para el Estado de Nayarit",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Nayarit/wo24209.doc",
+      "ambito": "ESTATAL",
+      "entidad": "NAY",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "24209",
+      "fechaPublicacion": "2014-09-06",
+      "ultimaReforma": "2023-11-23",
+      "vigenciaFallback": "2023-11-23",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "NAY-C-PROCEDIMIENTOS-CIVILES-NAYAR",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Nayarit",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Nayarit/wo24091.doc",
+      "ambito": "ESTATAL",
+      "entidad": "NAY",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "24091",
+      "fechaPublicacion": "1992-11-21",
+      "ultimaReforma": "2022-06-13",
+      "vigenciaFallback": "2022-06-13",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "NAY-C-PROCEDIMIENTOS-PENALES-NAYAR",
+      "titulo": "Código de Procedimientos Penales para el Estado de Nayarit",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Nayarit/wo24092.doc",
+      "ambito": "ESTATAL",
+      "entidad": "NAY",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "24092",
+      "fechaPublicacion": "1969-11-29",
+      "ultimaReforma": "2015-10-10",
+      "vigenciaFallback": "2015-10-10",
+      "materias": [
+        "penal",
+        "procesal"
       ],
       "excluida": null
     },
@@ -7650,6 +9624,144 @@
       "excluida": null
     },
     {
+      "clave": "OAX-C-CIVIL-OAXACA",
+      "titulo": "Código Civil para el Estado de Oaxaca",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Oaxaca/wo85840.doc",
+      "ambito": "ESTATAL",
+      "entidad": "OAX",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "85840",
+      "fechaPublicacion": "1944-11-30",
+      "ultimaReforma": "2022-10-29",
+      "vigenciaFallback": "2022-10-29",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "OAX-C-FAMILIAR-OAXACA",
+      "titulo": "Código Familiar Para El Estado De Oaxaca",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Oaxaca/wo124757.doc",
+      "ambito": "ESTATAL",
+      "entidad": "OAX",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "124757",
+      "fechaPublicacion": "2021-12-04",
+      "ultimaReforma": "2023-04-01",
+      "vigenciaFallback": "2023-04-01",
+      "materias": [
+        "familiar"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "OAX-C-FISCAL-OAXACA",
+      "titulo": "Código Fiscal Municipal del Estado de Oaxaca",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Oaxaca/wo85782.docx",
+      "ambito": "ESTATAL",
+      "entidad": "OAX",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "85782",
+      "fechaPublicacion": "2015-05-09",
+      "ultimaReforma": "2016-12-31",
+      "vigenciaFallback": "2016-12-31",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "OAX-C-FISCAL-OAXACA-85783",
+      "titulo": "Código Fiscal para el Estado de Oaxaca",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Oaxaca/wo85783.doc",
+      "ambito": "ESTATAL",
+      "entidad": "OAX",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "85783",
+      "fechaPublicacion": "2012-12-22",
+      "ultimaReforma": "2021-12-18",
+      "vigenciaFallback": "2021-12-18",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "OAX-C-PENAL-OAXACA",
+      "titulo": "Código Penal para el Estado Libre y Soberano de Oaxaca",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Oaxaca/wo85784.doc",
+      "ambito": "ESTATAL",
+      "entidad": "OAX",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "85784",
+      "fechaPublicacion": "1980-08-09",
+      "ultimaReforma": "2023-03-25",
+      "vigenciaFallback": "2023-03-25",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "OAX-C-PROCEDIMIENTOS-CIVILES-OAXAC",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Oaxaca",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Oaxaca/wo85780.doc",
+      "ambito": "ESTATAL",
+      "entidad": "OAX",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "85780",
+      "fechaPublicacion": "1944-11-30",
+      "ultimaReforma": "2021-03-13",
+      "vigenciaFallback": "2021-03-13",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "OAX-C-PROCEDIMIENTOS-PENALES-OAXAC",
+      "titulo": "Código de Procedimientos Penales para el Estado Libre y Soberano de Oaxaca",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Oaxaca/wo85781.doc",
+      "ambito": "ESTATAL",
+      "entidad": "OAX",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "85781",
+      "fechaPublicacion": "1980-08-09",
+      "ultimaReforma": "2014-11-01",
+      "vigenciaFallback": "2014-11-01",
+      "materias": [
+        "penal",
+        "procesal"
+      ],
+      "excluida": "Estatus: Abrogado"
+    },
+    {
+      "clave": "OAX-C-PROCESAL-PENAL-OAXACA",
+      "titulo": "Código Procesal Penal para el Estado de Oaxaca",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Oaxaca/wo85785.doc",
+      "ambito": "ESTATAL",
+      "entidad": "OAX",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "85785",
+      "fechaPublicacion": "2006-09-09",
+      "ultimaReforma": "2015-08-31",
+      "vigenciaFallback": "2015-08-31",
+      "materias": [
+        "penal"
+      ],
+      "excluida": "Estatus: Abrogado"
+    },
+    {
       "clave": "OAX-L-AGUA-POTABLE-ALCANTARILLADO",
       "titulo": "Ley de Agua Potable y Alcantarillado para el Estado de Oaxaca",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Oaxaca/wo82631.doc",
@@ -7914,6 +10026,161 @@
       "vigenciaFallback": "2012-08-10",
       "materias": [
         "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "PUE-C-CIVIL-PUEBLA",
+      "titulo": "Código Civil para el Estado Libre y Soberano de Puebla",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Puebla/wo96573.doc",
+      "ambito": "ESTATAL",
+      "entidad": "PUE",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "96573",
+      "fechaPublicacion": "1985-04-30",
+      "ultimaReforma": "2023-07-27",
+      "vigenciaFallback": "2023-07-27",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "PUE-C-FISCAL-PRESUPUESTARIO-PUEBLA",
+      "titulo": "Código Fiscal Y Presupuestario Para El Municipio De Puebla",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Puebla/wo118913.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "PUE",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "118913",
+      "fechaPublicacion": "1999-12-17",
+      "ultimaReforma": "2013-12-30",
+      "vigenciaFallback": "2013-12-30",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "PUE-C-FISCAL-PUEBLA",
+      "titulo": "Código Fiscal del Estado de Puebla",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Puebla/wo96582.doc",
+      "ambito": "ESTATAL",
+      "entidad": "PUE",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "96582",
+      "fechaPublicacion": "1987-12-29",
+      "ultimaReforma": "2024-08-05",
+      "vigenciaFallback": "2024-08-05",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "PUE-C-FISCAL-PUEBLA-119184",
+      "titulo": "CODIGO FISCAL MUNICIPAL DEL ESTADO LIBRE Y SOBERANO DE PUEBLA",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Puebla/wo119184.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "PUE",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "119184",
+      "fechaPublicacion": "2001-12-05",
+      "ultimaReforma": "2006-12-29",
+      "vigenciaFallback": "2006-12-29",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "PUE-C-FISCAL-PUEBLA-96583",
+      "titulo": "Código Fiscal Municipal del Estado Libre y Soberano de Puebla",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Puebla/wo96583.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "PUE",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "96583",
+      "fechaPublicacion": "2001-12-05",
+      "ultimaReforma": "2006-12-29",
+      "vigenciaFallback": "2006-12-29",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "PUE-C-JUSTICIA-ADOLESCENTES-PUEBLA",
+      "titulo": "Código de Justicia para Adolescentes del Estado Libre y Soberano de Puebla",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Puebla/wo96578.doc",
+      "ambito": "ESTATAL",
+      "entidad": "PUE",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "96578",
+      "fechaPublicacion": "2006-09-11",
+      "ultimaReforma": "2011-06-17",
+      "vigenciaFallback": "2011-06-17",
+      "materias": [
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "PUE-C-PENAL-PUEBLA",
+      "titulo": "Código Penal del Estado Libre y Soberano de Puebla",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Puebla/wo96585.doc",
+      "ambito": "ESTATAL",
+      "entidad": "PUE",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "96585",
+      "fechaPublicacion": "1986-12-23",
+      "ultimaReforma": "2024-07-16",
+      "vigenciaFallback": "2024-07-16",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "PUE-C-PROCEDIMIENTOS-CIVILES-PUEBL",
+      "titulo": "Código de Procedimientos Civiles para el Estado Libre y Soberano de Puebla",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Puebla/wo96579.doc",
+      "ambito": "ESTATAL",
+      "entidad": "PUE",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "96579",
+      "fechaPublicacion": "2004-08-09",
+      "ultimaReforma": "2017-12-29",
+      "vigenciaFallback": "2017-12-29",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "PUE-C-PROCEDIMIENTOS-PENALES-PUEBL",
+      "titulo": "Código de Procedimientos Penales para el Estado Libre y Soberano de Puebla",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Puebla/wo96581.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "PUE",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "96581",
+      "fechaPublicacion": "2011-02-21",
+      "ultimaReforma": "2016-03-17",
+      "vigenciaFallback": "2016-03-17",
+      "materias": [
+        "penal",
+        "procesal"
       ],
       "excluida": null
     },
@@ -8219,6 +10486,127 @@
       "excluida": null
     },
     {
+      "clave": "QUE-C-CIVIL-QUERETARO",
+      "titulo": "Código Civil del Estado de Querétaro",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/QUERETARO/Codigos/QUERCOD01.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "QUE",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "31919",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "QUE-C-FISCAL-QUERETARO",
+      "titulo": "Código Fiscal del Estado de Querétaro",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/QUERETARO/Codigos/QUERCOD04.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "QUE",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "31922",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "QUE-C-PENAL-QUERETARO",
+      "titulo": "Código Penal para el Estado de Querétaro",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/QUERETARO/Codigos/QUERCOD05.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "QUE",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "31923",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "QUE-C-PROCEDIMIENTOS-CIVILES-QUERE",
+      "titulo": "Código de Procedimientos Civiles del Estado de Querétaro",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/QUERETARO/Codigos/QUERCOD02.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "QUE",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "31920",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "QUE-C-PROCEDIMIENTOS-PENALES-QUERE",
+      "titulo": "Código de Procedimientos Penales para el Estado de Querétaro",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/QUERETARO/Codigos/QUERCOD03.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "QUE",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "31921",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "penal",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "QUE-C-QUERETARO",
+      "titulo": "Código Municipal para el Estado de Querétaro",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/QUERETARO/Codigos/QUERCOD07.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "QUE",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "31748",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "QUE-C-URBANO",
+      "titulo": "Código Urbano",
+      "url": "http://www.ordenjuridico.gob.mx/Estatal/QUERETARO/Codigos/QUERCOD06.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "QUE",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "31747",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
       "clave": "QUE-L-CATASTRO-QUERETARO",
       "titulo": "Ley de Catastro para el Estado de Querétaro",
       "url": "http://www.ordenjuridico.gob.mx/Estatal/QUERETARO/Leyes/QUERLEY03.pdf",
@@ -8357,6 +10745,110 @@
       "materias": [
         "administrativo",
         "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "ROO-C-CIVIL-QUINTANA-ROO",
+      "titulo": "Código Civil para el Estado de Quintana Roo",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Quintana%20Roo/wo86967.doc",
+      "ambito": "ESTATAL",
+      "entidad": "ROO",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "86967",
+      "fechaPublicacion": "1980-10-08",
+      "ultimaReforma": "2024-07-10",
+      "vigenciaFallback": "2024-07-10",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "ROO-C-FISCAL",
+      "titulo": "Código Fiscal Municipal",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Quintana%20Roo/wo83797.doc",
+      "ambito": "ESTATAL",
+      "entidad": "ROO",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "83797",
+      "fechaPublicacion": "2013-01-15",
+      "ultimaReforma": "2014-12-09",
+      "vigenciaFallback": "2014-12-09",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "ROO-C-FISCAL-QUINTANA-ROO",
+      "titulo": "Código Fiscal del Estado de Quintana Roo",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Quintana%20Roo/wo83796.doc",
+      "ambito": "ESTATAL",
+      "entidad": "ROO",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "83796",
+      "fechaPublicacion": "1995-01-13",
+      "ultimaReforma": "2023-04-28",
+      "vigenciaFallback": "2023-04-28",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "ROO-C-JUSTICIA-ADMINISTRATIVA-QUIN",
+      "titulo": "Código De Justicia Administrativa Del Estado De Quintana Roo",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Quintana%20Roo/wo124632.doc",
+      "ambito": "ESTATAL",
+      "entidad": "ROO",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "124632",
+      "fechaPublicacion": "2017-12-27",
+      "ultimaReforma": "2022-06-08",
+      "vigenciaFallback": "2022-06-08",
+      "materias": [
+        "procesal",
+        "judicial"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "ROO-C-PENAL-QUINTANA-ROO",
+      "titulo": "Código Penal para el Estado Libre y Soberano de Quintana Roo",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Quintana%20Roo/wo83798.doc",
+      "ambito": "ESTATAL",
+      "entidad": "ROO",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "83798",
+      "fechaPublicacion": "1991-03-29",
+      "ultimaReforma": "2023-07-13",
+      "vigenciaFallback": "2023-07-13",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "ROO-C-PROCEDIMIENTOS-CIVILES-QUINT",
+      "titulo": "Código de Procedimientos Civiles para el Estado Libre y Soberano de Quintana Roo",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Quintana%20Roo/wo83794.doc",
+      "ambito": "ESTATAL",
+      "entidad": "ROO",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "83794",
+      "fechaPublicacion": "1981-01-08",
+      "ultimaReforma": "2019-06-14",
+      "vigenciaFallback": "2019-06-14",
+      "materias": [
+        "civil",
+        "procesal"
       ],
       "excluida": null
     },
@@ -9018,6 +11510,110 @@
       "excluida": null
     },
     {
+      "clave": "SIN-C-CIVIL-SINALOA",
+      "titulo": "Código Civil para el Estado de Sinaloa",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Sinaloa/wo78889.doc",
+      "ambito": "ESTATAL",
+      "entidad": "SIN",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "78889",
+      "fechaPublicacion": "1940-07-25",
+      "ultimaReforma": "2022-03-11",
+      "vigenciaFallback": "2022-03-11",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "SIN-C-FAMILIAR-SINALOA",
+      "titulo": "Código Familiar del Estado de Sinaloa",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Sinaloa/wo78890.doc",
+      "ambito": "ESTATAL",
+      "entidad": "SIN",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "78890",
+      "fechaPublicacion": "2013-02-06",
+      "ultimaReforma": "2023-08-11",
+      "vigenciaFallback": "2023-08-11",
+      "materias": [
+        "familiar"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "SIN-C-FISCAL-SINALOA",
+      "titulo": "Código Fiscal del Estado de Sinaloa",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Sinaloa/wo78891.doc",
+      "ambito": "ESTATAL",
+      "entidad": "SIN",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "78891",
+      "fechaPublicacion": "1994-12-28",
+      "ultimaReforma": "2019-12-23",
+      "vigenciaFallback": "2019-12-23",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "SIN-C-PENAL-SINALOA",
+      "titulo": "Código Penal para el Estado de Sinaloa",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Sinaloa/wo78892.doc",
+      "ambito": "ESTATAL",
+      "entidad": "SIN",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "78892",
+      "fechaPublicacion": "1992-10-28",
+      "ultimaReforma": "2024-08-19",
+      "vigenciaFallback": "2024-08-19",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "SIN-C-PROCEDIMIENTOS-CIVILES-SINAL",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Sinaloa",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Sinaloa/wo78893.doc",
+      "ambito": "ESTATAL",
+      "entidad": "SIN",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "78893",
+      "fechaPublicacion": "1940-10-22",
+      "ultimaReforma": "2016-12-28",
+      "vigenciaFallback": "2016-12-28",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "SIN-C-PROCEDIMIENTOS-FAMILIARES-SI",
+      "titulo": "Código de Procedimientos Familiares del Estado de Sinaloa",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Sinaloa/wo92404.doc",
+      "ambito": "ESTATAL",
+      "entidad": "SIN",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "92404",
+      "fechaPublicacion": "2013-11-27",
+      "ultimaReforma": "2019-07-22",
+      "vigenciaFallback": "2019-07-22",
+      "materias": [
+        "familiar",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
       "clave": "SIN-L-AGUA-POTABLE-ALCANTARILLADO",
       "titulo": "Ley de Agua Potable y Alcantarillado del Estado de Sinaloa",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Sinaloa/wo78901.doc",
@@ -9535,6 +12131,110 @@
       "excluida": null
     },
     {
+      "clave": "SLP-C-CIVIL-SAN-LUIS-POTOSI",
+      "titulo": "Código Civil para el Estado de San Luis Potosí",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/San%20Luis%20Potosi/wo97716.doc",
+      "ambito": "ESTATAL",
+      "entidad": "SLP",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "97716",
+      "fechaPublicacion": "1946-04-18",
+      "ultimaReforma": "2024-05-16",
+      "vigenciaFallback": "2024-05-16",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "SLP-C-FAMILIAR-SAN-LUIS-POTOSI",
+      "titulo": "Código Familiar para el Estado de San Luis Potosí",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/San%20Luis%20Potosi/wo97714.doc",
+      "ambito": "ESTATAL",
+      "entidad": "SLP",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "97714",
+      "fechaPublicacion": "2008-12-18",
+      "ultimaReforma": "2023-09-08",
+      "vigenciaFallback": "2023-09-08",
+      "materias": [
+        "familiar"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "SLP-C-FISCAL-SAN-LUIS-POTOSI",
+      "titulo": "Código Fiscal del Estado de San Luis Potosí",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/San%20Luis%20Potosi/wo97713.doc",
+      "ambito": "ESTATAL",
+      "entidad": "SLP",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "97713",
+      "fechaPublicacion": "1999-08-05",
+      "ultimaReforma": "2022-11-22",
+      "vigenciaFallback": "2022-11-22",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "SLP-C-PENAL-SAN-LUIS-POTOSI",
+      "titulo": "Código Penal del Estado de San Luis Potosí",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/San%20Luis%20Potosi/wo97712.doc",
+      "ambito": "ESTATAL",
+      "entidad": "SLP",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "97712",
+      "fechaPublicacion": "2014-09-29",
+      "ultimaReforma": "2024-09-04",
+      "vigenciaFallback": "2024-09-04",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "SLP-C-PROCEDIMIENTOS-CIVILES-SAN-L",
+      "titulo": "Código de Procedimientos Civiles para el Estado de San Luis Potosí",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/San%20Luis%20Potosi/wo97717.doc",
+      "ambito": "ESTATAL",
+      "entidad": "SLP",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "97717",
+      "fechaPublicacion": "1947-06-19",
+      "ultimaReforma": "2019-11-12",
+      "vigenciaFallback": "2019-11-12",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "SLP-C-PROCEDIMIENTOS-PENALES-SAN-L",
+      "titulo": "Código de Procedimientos Penales para el Estado de San Luis Potosí (ver reformas)",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/San%20Luis%20Potosi/wo97711.doc",
+      "ambito": "ESTATAL",
+      "entidad": "SLP",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "97711",
+      "fechaPublicacion": "2000-09-30",
+      "ultimaReforma": "2015-09-05",
+      "vigenciaFallback": "2015-09-05",
+      "materias": [
+        "penal",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
       "clave": "SLP-L-CERTEZA-PATRIMONIAL-VIVIENDA",
       "titulo": "Ley De Certeza Patrimonial Y Vivienda Social Del Estado De San Luis Potosí",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/San%20Luis%20Potosi/wo124795.doc",
@@ -9781,6 +12481,110 @@
       "excluida": null
     },
     {
+      "clave": "TAB-C-CIVIL-TABASCO",
+      "titulo": "Código Civil para el Estado de Tabasco",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Tabasco/wo26634.doc",
+      "ambito": "ESTATAL",
+      "entidad": "TAB",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "26634",
+      "fechaPublicacion": "1997-04-09",
+      "ultimaReforma": "2014-12-31",
+      "vigenciaFallback": "2014-12-31",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "TAB-C-FISCAL-TABASCO",
+      "titulo": "Código Fiscal del Estado de Tabasco",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Tabasco/wo26638.doc",
+      "ambito": "ESTATAL",
+      "entidad": "TAB",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "26638",
+      "fechaPublicacion": "1993-09-25",
+      "ultimaReforma": "2014-12-24",
+      "vigenciaFallback": "2014-12-24",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "TAB-C-PENAL-TABASCO",
+      "titulo": "Código Penal del Estado para el Estado de Tabasco",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Tabasco/wo26664.doc",
+      "ambito": "ESTATAL",
+      "entidad": "TAB",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "26664",
+      "fechaPublicacion": "1997-02-05",
+      "ultimaReforma": "2015-02-21",
+      "vigenciaFallback": "2015-02-21",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "TAB-C-PROCEDIMIENTOS-CIVILES-TABAS",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Tabasco",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Tabasco/wo98179.doc",
+      "ambito": "ESTATAL",
+      "entidad": "TAB",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "98179",
+      "fechaPublicacion": "1997-04-12",
+      "ultimaReforma": "2014-12-31",
+      "vigenciaFallback": "2014-12-31",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "TAB-C-PROCEDIMIENTOS-PENALES-TABAS",
+      "titulo": "Código de Procedimientos Penales para el Estado de Tabasco",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Tabasco/wo26637.doc",
+      "ambito": "ESTATAL",
+      "entidad": "TAB",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "26637",
+      "fechaPublicacion": "1997-02-22",
+      "ultimaReforma": "2014-08-05",
+      "vigenciaFallback": "2014-08-05",
+      "materias": [
+        "penal",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "TAB-C-PROCESAL-PENAL-ACUSATORIO-TA",
+      "titulo": "Código Procesal Penal Acusatorio para el Estado de Tabasco",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Tabasco/wo98181.doc",
+      "ambito": "ESTATAL",
+      "entidad": "TAB",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "98181",
+      "fechaPublicacion": "2012-08-29",
+      "ultimaReforma": "2014-08-05",
+      "vigenciaFallback": "2014-08-05",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
       "clave": "TAB-L-CATASTRO-TABASCO",
       "titulo": "Ley de Catastro del Estado de Tabasco",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Tabasco/wo26669.doc",
@@ -9976,6 +12780,127 @@
       "materias": [
         "construccion",
         "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "TAM-C-CIVIL-TAMAULIPAS",
+      "titulo": "Código Civil para el Estado de Tamaulipas",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Tamaulipas/wo26165.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "TAM",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "26165",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "TAM-C-ELECTORAL-TAMAULIPAS",
+      "titulo": "Código Electoral para el Estado de Tamaulipas",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Tamaulipas/wo46013.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "TAM",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "46013",
+      "fechaPublicacion": "2009-09-10",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2009-09-10",
+      "materias": [
+        "electoral"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "TAM-C-FISCAL-TAMAULIPAS",
+      "titulo": "Código Fiscal del Estado de Tamaulipas",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Tamaulipas/wo26168.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "TAM",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "26168",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "TAM-C-PENAL-TAMAULIPAS",
+      "titulo": "Código Penal para el Estado de Tamaulipas",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Tamaulipas/wo26180.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "TAM",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "26180",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "TAM-C-PROCEDIMIENTOS-CIVILES-TAMAU",
+      "titulo": "Código de Procedimientos Civiles del Estado de Tamaulipas",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Tamaulipas/wo26166.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "TAM",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "26166",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "TAM-C-PROCEDIMIENTOS-PENALES-TAMAU",
+      "titulo": "Código de Procedimientos Penales para el Estado de Tamaulipas",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Tamaulipas/wo26167.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "TAM",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "26167",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "penal",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "TAM-C-TAMAULIPAS",
+      "titulo": "Código Municipal para el Estado de Tamaulipas",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Tamaulipas/wo26179.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "TAM",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "26179",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "administrativo"
       ],
       "excluida": null
     },
@@ -10193,6 +13118,93 @@
       "excluida": null
     },
     {
+      "clave": "TLA-C-CIVIL-TLAXCALA",
+      "titulo": "Código Civil para el Estado Libre y Soberano de Tlaxcala",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Tlaxcala/wo25803.doc",
+      "ambito": "ESTATAL",
+      "entidad": "TLA",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "25803",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "TLA-C-FINANCIERO-TLAXCALA-SUS-MUNI",
+      "titulo": "Código Financiero para el Estado de Tlaxcala y sus Municipios",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Tlaxcala/wo25820.doc",
+      "ambito": "ESTATAL",
+      "entidad": "TLA",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "25820",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "TLA-C-PENAL-TLAXCALA",
+      "titulo": "Código Penal para el Estado Libre y Soberano de Tlaxcala",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Tlaxcala/wo25821.doc",
+      "ambito": "ESTATAL",
+      "entidad": "TLA",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "25821",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "TLA-C-PROCEDIMIENTOS-CIVILES",
+      "titulo": "Código de Procedimientos Civiles",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Tlaxcala/wo25804.doc",
+      "ambito": "ESTATAL",
+      "entidad": "TLA",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "25804",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "TLA-C-PROCEDIMIENTOS-PENALES-TLAXC",
+      "titulo": "Código de Procedimientos Penales para el Estado Libre y Soberano de Tlaxcala",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Tlaxcala/wo25805.doc",
+      "ambito": "ESTATAL",
+      "entidad": "TLA",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "25805",
+      "fechaPublicacion": null,
+      "ultimaReforma": null,
+      "vigenciaFallback": "2026-09-13",
+      "materias": [
+        "penal",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
       "clave": "TLA-L-CONSTRUCCION-TLAXCALA",
       "titulo": "Ley de Construcción para el Estado de Tlaxcala",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Tlaxcala/wo49511.doc",
@@ -10330,6 +13342,75 @@
       "materias": [
         "construccion",
         "seguridad_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "VER-C-CIVIL-VERACRUZ-IGNACIO-LLAVE",
+      "titulo": "Código Civil para el Estado de Veracruz de Ignacio de la Llave",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Veracruz/wo77127.doc",
+      "ambito": "ESTATAL",
+      "entidad": "VER",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "77127",
+      "fechaPublicacion": "1932-09-15",
+      "ultimaReforma": "2022-06-13",
+      "vigenciaFallback": "2022-06-13",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "VER-C-PENAL-VERACRUZ-IGNACIO-LLAVE",
+      "titulo": "Código Penal para el Estado Libre y Soberano de Veracruz de Ignacio de la Llave",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Veracruz/wo77137.doc",
+      "ambito": "ESTATAL",
+      "entidad": "VER",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "77137",
+      "fechaPublicacion": "2003-11-07",
+      "ultimaReforma": "2022-02-28",
+      "vigenciaFallback": "2022-02-28",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "VER-C-PROCEDIMIENTOS-ADMINISTRATIV",
+      "titulo": "Código De Procedimientos Administrativos Para El Estado De Veracruz De Ignacio De La Llave",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Veracruz/wo124715.doc",
+      "ambito": "ESTATAL",
+      "entidad": "VER",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "124715",
+      "fechaPublicacion": "2001-01-29",
+      "ultimaReforma": "2022-12-20",
+      "vigenciaFallback": "2022-12-20",
+      "materias": [
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "VER-C-PROCEDIMIENTOS-CIVILES-VERAC",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Veracruz",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Veracruz/wo77129.doc",
+      "ambito": "ESTATAL",
+      "entidad": "VER",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "77129",
+      "fechaPublicacion": "1932-10-13",
+      "ultimaReforma": "2020-07-03",
+      "vigenciaFallback": "2020-07-03",
+      "materias": [
+        "civil",
+        "procesal"
       ],
       "excluida": null
     },
@@ -10833,6 +13914,110 @@
       "excluida": null
     },
     {
+      "clave": "YUC-C-CIVIL-YUCATAN",
+      "titulo": "Código Civil del Estado de Yucatán",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Yucatan/wo98237.doc",
+      "ambito": "ESTATAL",
+      "entidad": "YUC",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "98237",
+      "fechaPublicacion": "1993-12-31",
+      "ultimaReforma": "2022-06-07",
+      "vigenciaFallback": "2022-06-07",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "YUC-C-FAMILIA-YUCATAN",
+      "titulo": "Código de Familia para el Estado de Yucatán",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Yucatan/wo98242.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "YUC",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "98242",
+      "fechaPublicacion": "2012-04-30",
+      "ultimaReforma": "2015-06-12",
+      "vigenciaFallback": "2015-06-12",
+      "materias": [
+        "familiar"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "YUC-C-FISCAL-YUCATAN",
+      "titulo": "Código Fiscal del Estado de Yucatán",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Yucatan/wo98236.doc",
+      "ambito": "ESTATAL",
+      "entidad": "YUC",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "98236",
+      "fechaPublicacion": "2010-12-22",
+      "ultimaReforma": "2014-12-26",
+      "vigenciaFallback": "2014-12-26",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "YUC-C-PENAL-YUCATAN",
+      "titulo": "Código Penal del Estado de Yucatán",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Yucatan/wo98235.doc",
+      "ambito": "ESTATAL",
+      "entidad": "YUC",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "98235",
+      "fechaPublicacion": "2000-03-30",
+      "ultimaReforma": "2014-06-28",
+      "vigenciaFallback": "2014-06-28",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "YUC-C-PROCEDIMIENTOS-CIVILES-YUCAT",
+      "titulo": "Código de Procedimientos Civiles del Estado de Yucatán",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Yucatan/wo98241.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "YUC",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "98241",
+      "fechaPublicacion": "1941-12-24",
+      "ultimaReforma": "2015-06-12",
+      "vigenciaFallback": "2015-06-12",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "YUC-C-PROCEDIMIENTOS-FAMILIARES-YU",
+      "titulo": "Código de Procedimientos Familiares del Estado de Yucatán",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Yucatan/wo98244.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "YUC",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "98244",
+      "fechaPublicacion": "2012-04-30",
+      "ultimaReforma": "2015-06-12",
+      "vigenciaFallback": "2015-06-12",
+      "materias": [
+        "familiar",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
       "clave": "YUC-L-ABASTECIMIENTO-AGUA-POTABLE",
       "titulo": "Ley sobre Abastecimiento de Agua Potable en el Medio Rural del Estado de Yucatán",
       "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Yucatan/wo98538.doc",
@@ -11189,6 +14374,178 @@
       "materias": [
         "vivienda",
         "construccion"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "ZAC-C-CIVIL-ZACATECAS",
+      "titulo": "Código Civil del Estado de Zacatecas",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Zacatecas/wo84044.doc",
+      "ambito": "ESTATAL",
+      "entidad": "ZAC",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "84044",
+      "fechaPublicacion": "1986-05-24",
+      "ultimaReforma": "2023-07-08",
+      "vigenciaFallback": "2023-07-08",
+      "materias": [
+        "civil"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "ZAC-C-FAMILIAR-ZACATECAS",
+      "titulo": "Código Familiar del Estado de Zacatecas",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Zacatecas/wo84048.doc",
+      "ambito": "ESTATAL",
+      "entidad": "ZAC",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "84048",
+      "fechaPublicacion": "1986-05-10",
+      "ultimaReforma": "2023-09-30",
+      "vigenciaFallback": "2023-09-30",
+      "materias": [
+        "familiar"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "ZAC-C-FISCAL-ZACATECAS",
+      "titulo": "Código Fiscal del Estado de Zacatecas",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Zacatecas/wo84049.doc",
+      "ambito": "ESTATAL",
+      "entidad": "ZAC",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "84049",
+      "fechaPublicacion": "1984-12-29",
+      "ultimaReforma": "2021-12-29",
+      "vigenciaFallback": "2021-12-29",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "ZAC-C-FISCAL-ZACATECAS-84050",
+      "titulo": "Código Fiscal Municipal para el Estado de Zacatecas",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Zacatecas/wo84050.doc",
+      "ambito": "ESTATAL",
+      "entidad": "ZAC",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "84050",
+      "fechaPublicacion": "1984-12-29",
+      "ultimaReforma": null,
+      "vigenciaFallback": "1984-12-29",
+      "materias": [
+        "fiscal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "ZAC-C-PENAL-ZACATECAS",
+      "titulo": "Código Penal para el Estado de Zacatecas",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Zacatecas/wo84051.doc",
+      "ambito": "ESTATAL",
+      "entidad": "ZAC",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "84051",
+      "fechaPublicacion": "1986-05-17",
+      "ultimaReforma": "2022-12-17",
+      "vigenciaFallback": "2022-12-17",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "ZAC-C-PROCEDIMIENTOS-CIVILES-ZACAT",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Zacatecas",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Zacatecas/wo84046.doc",
+      "ambito": "ESTATAL",
+      "entidad": "ZAC",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "84046",
+      "fechaPublicacion": "1966-03-02",
+      "ultimaReforma": "2018-02-21",
+      "vigenciaFallback": "2018-02-21",
+      "materias": [
+        "civil",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "ZAC-C-PROCEDIMIENTOS-PENALES-ZACAT",
+      "titulo": "Código de Procedimientos Penales del Estado para el Estado de Zacatecas",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Zacatecas/wo84047.doc",
+      "ambito": "ESTATAL",
+      "entidad": "ZAC",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "84047",
+      "fechaPublicacion": "1967-07-19",
+      "ultimaReforma": "2014-11-01",
+      "vigenciaFallback": "2014-11-01",
+      "materias": [
+        "penal",
+        "procesal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "ZAC-C-PROCESAL-PENAL-ZACATECAS",
+      "titulo": "Código Procesal Penal para el Estado de Zacatecas",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Zacatecas/wo84052.doc",
+      "ambito": "ESTATAL",
+      "entidad": "ZAC",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "84052",
+      "fechaPublicacion": "2007-09-15",
+      "ultimaReforma": "2014-11-01",
+      "vigenciaFallback": "2014-11-01",
+      "materias": [
+        "penal"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "ZAC-C-TERRITORIAL-URBANO-ZACATECAS",
+      "titulo": "Código Territorial Y Urbano Para El Estado De Zacatecas Y Sus Municipios",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Zacatecas/wo124643.doc",
+      "ambito": "ESTATAL",
+      "entidad": "ZAC",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "124643",
+      "fechaPublicacion": "2019-08-31",
+      "ultimaReforma": null,
+      "vigenciaFallback": "2019-08-31",
+      "materias": [
+        "administrativo"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "ZAC-C-URBANO-ZACATECAS",
+      "titulo": "Código Urbano para el Estado de Zacatecas",
+      "url": "http://www.ordenjuridico.gob.mx/Documentos/Estatal/Zacatecas/wo84053.doc",
+      "ambito": "ESTATAL",
+      "entidad": "ZAC",
+      "municipio": null,
+      "tipo": "Código",
+      "idArchivo": "84053",
+      "fechaPublicacion": "1996-09-11",
+      "ultimaReforma": "2014-12-03",
+      "vigenciaFallback": "2014-12-03",
+      "materias": [
+        "administrativo"
       ],
       "excluida": null
     },

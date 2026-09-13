@@ -179,6 +179,12 @@ export function parsearFicha(html: string): { url: string | null; estatus: strin
   return { url, estatus };
 }
 
+/** Los códigos estatales del litigio: civil, procesal, familiar, penal, fiscal, administrativo, justicia. */
+export const RE_CODIGO_LITIGIO = /^C[óo]digo (Civil|de Procedimientos Civiles|Procesal Civil|Familiar|de Familia|de Procedimientos Familiares|Procesal Familiar|Penal|de Procedimientos Penales|Procesal Penal|Fiscal|Financiero|Administrativo|de Procedimientos Administrativos|de Justicia|Municipal|Electoral|Urbano|Territorial|Hacendario)/i;
+export function esCodigoDeLitigio(o: Pick<OrdenamientoOjn, "titulo" | "tipo">): boolean {
+  return /^C[óo]digo/i.test(o.tipo) && RE_CODIGO_LITIGIO.test(o.titulo) && !/Nacional/i.test(o.titulo);
+}
+
 /** Lo que un constructor o un urbanista cita: por TIPO (ley, código, reglamento) y por título. */
 export const RE_CONSTRUCCION_URBANO =
   /Construcci|Edificaci|Desarrollo Urbano|Asentamientos Humanos|Ordenamiento Territorial|Fraccionamiento|Condominio|Obra[s]? P[úu]blica|Imagen Urbana|Zonificaci|Uso[s]? de[l]? Suelo|Protecci[óo]n Civil|Vivienda|Anuncios|Estacionamiento|Centro Hist[óo]rico|Agua Potable|Alcantarillado|Drenaje|Bomberos|Infraestructura|Movilidad|Catastr|Vialidad|Urbaniz|Medio Ambiente|Equilibrio Ecol/i;
@@ -218,7 +224,11 @@ export interface EntradaOjn {
 
 const TIPO_ABREV: Record<string, string> = { Ley: "L", Código: "C", Codigo: "C", Reglamento: "R", Constitución: "CONST" };
 
-export function entradaDesde(o: OrdenamientoOjn, ctx: { sat: string; municipio: string | null }, archivo: { url: string | null; estatus: string | null }): EntradaOjn {
+export function entradaDesde(o: OrdenamientoOjn, ctx: { sat: string; municipio: string | null }, archivo: { url: string | null; estatus: string | null }, opts: { forzarConstruccion?: boolean } = {}): EntradaOjn {
+  // El rastreo del OJN filtra por construcción/urbanismo: lo que pasa el filtro
+  // es de esa materia aunque el título no lo diga. El catálogo curado a mano
+  // trae códigos civiles, penales, etc.: ahí manda el clasificador.
+  const forzar = opts.forzarConstruccion ?? true;
   const t = TIPO_ABREV[o.tipo] ?? o.tipo.slice(0, 3).toUpperCase();
   const clave = [ctx.sat, ctx.municipio ? `M-${slug(ctx.municipio, 14)}` : null, t, slug(o.titulo, 28)].filter(Boolean).join("-");
   let excluida: string | null = null;
@@ -238,7 +248,7 @@ export function entradaDesde(o: OrdenamientoOjn, ctx: { sat: string; municipio: 
     fechaPublicacion: o.fechaPublicacion,
     ultimaReforma: o.ultimaReforma,
     vigenciaFallback: o.ultimaReforma ?? o.fechaPublicacion,
-    materias: materias.includes("construccion") || materias.includes("urbano") ? materias : [...materias, "construccion"],
+    materias: !forzar || materias.includes("construccion") || materias.includes("urbano") ? (materias.length ? materias : ["administrativo"]) : [...materias, "construccion"],
     excluida,
   };
 }
