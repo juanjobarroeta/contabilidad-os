@@ -16,6 +16,7 @@ import {
   type Resumenes,
 } from "@/lib/juridico/documentos";
 import { reportError } from "@/lib/observability";
+import { actualizarAsunto, asuntoDeConversacion, extraerDatosDeDocumento, registrarPartes } from "@/lib/juridico/asuntos";
 import { MAX_BYTES_IMAGEN, MAX_BYTES_PDF_VISION, MAX_IMAGENES_POR_DOCUMENTO, MAX_PAGINAS_PDF_VISION, esHeic, tipoImagen, transcribirConVision, type MediaImagen } from "@/lib/juridico/vision";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -207,7 +208,24 @@ export async function POST(req: Request) {
       select: { id: true, nombre: true, mime: true, bytes: true, paginas: true, caracteres: true, createdAt: true },
     });
     documentos.push({ ...doc, secciones: secciones.length, transcrito: p.transcrito, resumido: !!resumenes });
+    // Partes, expediente y autoridad que el documento declara → al asunto, sin
+    // verificar, para que el abogado los confirme en el panel. Si falla, el
+    // documento ya está guardado.
+    try {
+      const datos = await extraerDatosDeDocumento(anthropic, { id: doc.id, nombre: doc.nombre, texto: p.texto }, { cost: { companyId: null, userId } });
+      if (datos.partes.length || datos.expediente || datos.autoridad) {
+        const asunto = await asuntoDeConversacion(convId, userId, { crear: true });
+        if (asunto) {
+          if (datos.partes.length) await registrarPartes(asunto.id, userId, datos.partes);
+          const cambios = { expediente: !asunto.expediente ? datos.expediente ?? undefined : undefined, autoridad: !asunto.autoridad ? datos.autoridad ?? undefined : undefined, materia: !asunto.materia ? datos.materia ?? undefined : undefined, via: !asunto.via ? datos.via ?? undefined : undefined, entidad: !asunto.entidad ? datos.entidad ?? undefined : undefined };
+          if (Object.values(cambios).some(Boolean)) await actualizarAsunto(asunto.id, userId, cambios);
+        }
+      }
+    } catch (e) {
+      reportError(e, { ruta: "juridico/documentos", paso: "extraer-partes", nombre: doc.nombre });
+    }
   }
   await prisma.juridicoConversacion.update({ where: { id: convId }, data: { updatedAt: new Date() } });
-  return NextResponse.json({ conversacionId: convId, nueva, documentos, documento: documentos[0] }, { status: 201 });
+  const asunto = await asuntoDeConversacion(convId, userId);
+  return NextResponse.json({ conversacionId: convId, nueva, documentos, documento: documentos[0], asunto }, { status: 201 });
 }
