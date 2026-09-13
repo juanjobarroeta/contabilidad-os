@@ -196,7 +196,7 @@
 > pruebas, acuerdos, sentencia) y no confundir lo que dice una parte con lo
 > que resolvió el juez.
 >
-> **El asunto como fuente de verdad (PR #PRNUM9, 2026-09-13).** «Should parties
+> **El asunto como fuente de verdad (PR #1051, 2026-09-13).** «Should parties
 > be in a database so data is available and not done from memory?» Sí:
 > `JuridicoAsunto` (título, materia, vía, autoridad, expediente, entidad,
 > cliente, objetivo/alcance, decisiones con el mensaje de donde salen) y
