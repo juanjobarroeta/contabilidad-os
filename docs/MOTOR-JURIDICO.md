@@ -145,7 +145,7 @@
 > Compartir → Añadir a inicio en iPhone), cajón lateral y safe areas en
 > teléfono.
 >
-> **Códigos estatales de los 32 estados (PR #PRNUM7, 2026-09-13).** La abogada
+> **Códigos estatales de los 32 estados (PR #1044, 2026-09-13).** La abogada
 > preguntó por el juicio oral familiar de Chihuahua y el copiloto, con razón,
 > dijo que no tenía el Código de Procedimientos Familiares: sólo había
 > construcción. Ahora el catálogo curado (`estatales.src.json`, 440 entradas)
