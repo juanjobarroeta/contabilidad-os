@@ -26,9 +26,19 @@ import {
 
 let initialized = false;
 
+// Next empaqueta este archivo en CADA chunk del servidor (instrumentation,
+// cada ruta), así que `initialized` sólo es true en la copia que corrió
+// initObservability(). Las rutas veían false y reportError() se quedaba en
+// console.error: los errores del turno del abogado nunca llegaron a Sentry
+// (13-sep-2026). El cliente de Sentry sí es uno solo (@sentry/node es
+// external y vive en el carrier global): preguntarle a él es lo que vale.
+function activo(): boolean {
+  return initialized || Sentry.getClient() !== undefined;
+}
+
 export function initObservability(): void {
   const dsn = process.env.SENTRY_DSN;
-  if (!dsn || initialized) return;
+  if (!dsn || activo()) return;
   Sentry.init({
     dsn,
     environment: sentryEnvironment(),
@@ -51,7 +61,7 @@ export function initObservability(): void {
 }
 
 export function observabilityEnabled(): boolean {
-  return initialized;
+  return activo();
 }
 
 /**
@@ -67,7 +77,7 @@ export function reportError(
   options?: { level?: "fatal" | "error" | "warning" | "info"; fingerprint?: string[] }
 ): void {
   console.error("[reportError]", error, context ?? "");
-  if (!initialized) return;
+  if (!activo()) return;
   Sentry.withScope((scope) => {
     if (options?.level) scope.setLevel(options.level);
     if (options?.fingerprint) scope.setFingerprint(options.fingerprint);
@@ -111,7 +121,7 @@ export async function withJobReporting<T>(
  * lleva por delante los eventos que Sentry aún no ha subido.
  */
 export async function flushObservability(timeoutMs = 2000): Promise<void> {
-  if (!initialized) return;
+  if (!activo()) return;
   try {
     await Sentry.flush(timeoutMs);
   } catch {
