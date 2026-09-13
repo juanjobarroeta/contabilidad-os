@@ -26,6 +26,7 @@ import { esNomConstruccion } from "./catalogo/nom";
 import type { Ambito, Materia } from "./materias";
 import type { DocKind } from "./chunk";
 import { extraerTexto, formatoDe } from "./texto";
+import { descargar } from "./descarga";
 
 export interface LeyDescriptor {
   clave: string;
@@ -227,13 +228,13 @@ export async function fetchLey(clave: string): Promise<FetchedLey> {
   }
   // UA de navegador: varios portales estatales (buengobierno.sonora.gob.mx)
   // contestan 403 a cualquier User-Agent que no parezca uno.
-  const res = await fetch(descriptor.url, { headers: { "User-Agent": UA_NAVEGADOR, Accept: "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,*/*", "Accept-Language": "es-MX,es;q=0.9" } });
-  if (!res.ok) throw new Error(`Descarga falló (${res.status}) — ${descriptor.url}`);
-  const buffer = new Uint8Array(await res.arrayBuffer());
+  // Cadena TLS incompleta en varios congresos: descarga.ts reintenta sin verificar sólo en .gob.mx.
+  const res = await descargar(descriptor.url, { "User-Agent": UA_NAVEGADOR, Accept: "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,*/*", "Accept-Language": "es-MX,es;q=0.9" });
+  if (res.status < 200 || res.status >= 300) throw new Error(`Descarga falló (${res.status}) — ${descriptor.url}`);
+  const buffer = res.buffer;
   // PDF (Diputados, SAT, casi todo), .docx o .doc (Orden Jurídico Nacional): ver texto.ts.
-  // Sin NUL: algún PDF (NOM-024-SCT2-2010) trae el carácter 0 en el texto y
-  // Postgres rechaza la fila entera (22021).
-  const text = (await extraerTexto(buffer, formatoDe(descriptor.url, res.headers.get("content-type"), buffer), clave)).replace(/\u0000/g, "");
+  // Sin NUL: algún PDF (NOM-024-SCT2-2010) trae el carácter 0 en el texto y Postgres rechaza la fila (22021).
+  const text = (await extraerTexto(buffer, formatoDe(descriptor.url, res.contentType, buffer), clave)).replace(/\u0000/g, "");
   if (!text || text.length < TEXTO_MINIMO) {
     throw new Error(`PDF de ${clave} produjo texto sospechosamente corto (${text?.length ?? 0} chars)`);
   }
