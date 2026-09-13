@@ -140,7 +140,11 @@ export async function GET(req: Request) {
   const repIngresoParents = repParentUuids.length
     ? await prisma.invoice.findMany({
         where: { companyId, uuid: { in: repParentUuids }, tipo: "INGRESO", metodoPago: "PPD", status: "STAMPED" },
-        select: { id: true, uuid: true, serie: true, folio: true, total: true, totalImpuestos: true, taxes: true, ivaNoCausado: true, customer: { select: { razonSocial: true, rfc: true } } },
+        // contraparteNombre/Rfc: el respaldo de nombreContraparte cuando el
+        // CFDI no tiene Customer (público en general, extranjeros, PPD
+        // importadas del SAT). Sin ellos, todo renglón «cobrado (REP)» de una
+        // factura sin Customer salía como «—» aunque el nombre esté en el XML.
+        select: { id: true, uuid: true, serie: true, folio: true, total: true, totalImpuestos: true, taxes: true, ivaNoCausado: true, contraparteNombre: true, contraparteRfc: true, customer: { select: { razonSocial: true, rfc: true } } },
       }).then((parents) => parents.map((p) => ({ ...p, total: Number(p.total), totalImpuestos: p.totalImpuestos === null ? null : Number(p.totalImpuestos), taxes: p.taxes.map((t) => ({ ...t, importe: Number(t.importe) })) })))
     : [];
   const repIngresoByUuid = new Map(repIngresoParents.map((p) => [normalizarUuid(p.uuid!), p]));
