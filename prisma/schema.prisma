@@ -4167,6 +4167,8 @@ model JuridicoDocumento {
   caracteres     Int
   texto          String   @db.Text
   secciones      Json?
+  // Documentos largos: resumen general y por sección (documentos.ts → resumirDocumento).
+  resumenes      Json?
   createdAt      DateTime @default(now())
 
   conversacion JuridicoConversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)

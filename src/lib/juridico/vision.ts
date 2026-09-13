@@ -6,7 +6,8 @@
 // mismo índice de secciones que un PDF normal (documentos.ts).
 //
 // Límites del API: 5 MB por imagen (el satélite reduce las fotos del teléfono
-// antes de subirlas), PDF de hasta 100 páginas / 32 MB. La salida larga se
+// antes de subirlas) y 100 páginas por llamada — por eso un PDF largo se parte
+// en lotes de 4 páginas; el tope propio es 400 páginas / 100 MB por archivo. La salida larga se
 // pide por rondas («continúa») hasta que el modelo termina solo.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -16,9 +17,9 @@ import { recordLlmCost, type CostCtx } from "@/lib/costos/record";
 export type MediaImagen = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 
 export const MAX_BYTES_IMAGEN = 5 * 1024 * 1024;
-export const MAX_BYTES_PDF_VISION = 32 * 1024 * 1024;
-export const MAX_PAGINAS_PDF_VISION = 100;
-export const MAX_IMAGENES_POR_DOCUMENTO = 40;
+export const MAX_BYTES_PDF_VISION = 100 * 1024 * 1024;
+export const MAX_PAGINAS_PDF_VISION = 400;
+export const MAX_IMAGENES_POR_DOCUMENTO = 120;
 
 const MODELO = process.env.AI_OCR_MODEL ?? "claude-sonnet-5";
 const MODELO_RESPALDO = "claude-haiku-4-5-20251001";
@@ -42,7 +43,7 @@ export function esHeic(b: Uint8Array): boolean {
 }
 
 const PAGINAS_POR_LOTE = 4;
-const LOTES_EN_PARALELO = 4;
+const LOTES_EN_PARALELO = 6;
 
 const instruccion = (primeraPagina: number) => `Transcribe íntegro y en orden todo el texto legible de este documento (un contrato, un escrito, un acta, una demanda…).
 - Conserva la numeración de cláusulas, artículos, fracciones e incisos, los títulos y los saltos de párrafo.
