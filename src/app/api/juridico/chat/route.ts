@@ -14,6 +14,7 @@ import { asuntoDeConversacion, bloqueAsuntoParaPrompt, ejecutarHerramientaAsunto
 import { NOMBRES_REDACCION_ESTRUCTURADA, ejecutarRedaccionEstructurada, toolsRedaccionEstructurada } from "@/lib/juridico/redaccion-estructurada";
 import { iniciarTurno, respuestaSse, turnoEnCurso, turnoReciente, type EventoTurno } from "@/lib/juridico/turnos";
 import { reportError } from "@/lib/observability";
+import { mensajeDeErrorParaAbogado } from "@/lib/juridico/errores";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/juridico/chat — el copiloto JURÍDICO (perfil abogado), en streaming.
@@ -380,7 +381,7 @@ export async function POST(req: Request) {
       } catch (error) {
         // Se reporta (antes se tragaba) y se guarda lo que alcanzó a escribir.
         reportError(error, { ruta: "juridico/chat", conversacionId: convId!, userId, rondas: traza.rondas, chars: assistantText.length });
-        const mensaje = error instanceof Error ? error.message : "Error interno";
+        const mensaje = mensajeDeErrorParaAbogado(error);
         try {
           await persistirAsistente({ error: mensaje, cortado: true });
         } catch {
