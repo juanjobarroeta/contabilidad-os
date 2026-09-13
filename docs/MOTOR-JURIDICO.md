@@ -145,6 +145,26 @@
 > Compartir → Añadir a inicio en iPhone), cajón lateral y safe areas en
 > teléfono.
 >
+> **Códigos estatales de los 32 estados (PR #1044, 2026-09-13).** La abogada
+> preguntó por el juicio oral familiar de Chihuahua y el copiloto, con razón,
+> dijo que no tenía el Código de Procedimientos Familiares: sólo había
+> construcción. Ahora el catálogo curado (`estatales.src.json`, 440 entradas)
+> trae por entidad, desde el sitio del congreso local y verificado con `curl`:
+> constitución, códigos civil, de procedimientos civiles, familiar y de
+> procedimientos familiares (donde existen), penal, fiscal/financiero y
+> administrativo; leyes orgánicas del poder judicial y del tribunal de justicia
+> administrativa, de justicia alternativa/mediación, de justicia y procedimiento
+> administrativo, de hacienda, del notariado y de responsabilidades. 377
+> ordenamientos, 221 códigos estatales; el catálogo total pasa de 1 276 a
+> **1 715** (932 estatales, 211 municipales). El OJN se rastreó también en modo
+> `--codigos` (196) como respaldo, y `firmaEstatal()` deduplica por título
+> normalizado dando preferencia a la copia del congreso. Huecos anotados por los
+> agentes: Zacatecas servía 500 al verificar (URLs tomadas de la última captura
+> oficial; revisar), NLE sin Ley de Procedimiento Administrativo (en dictamen),
+> varios estados sin ley propia de responsabilidades (aplican la general).
+> El prompt del abogado ya no dice «Puebla y CDMX» y le exige buscar el
+> ordenamiento estatal por nombre antes de declararlo ausente.
+>
 > **Turnos reanudables (PR #1042).** La primera prueba real de la abogada
 > (alegatos de cinco tipos para un juicio oral familiar en Chihuahua, 8
 > minutos) murió con «Load failed» en el iPhone. Dos causas, las dos
