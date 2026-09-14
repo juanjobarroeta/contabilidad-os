@@ -194,6 +194,16 @@ export const STATUS_RUN_LABEL: Record<string, string> = {
   PAID: "Pagada",
 };
 
+/** Color del badge por TIPO de corrida (misma paleta que el badge de Facturas):
+ *  finiquito ámbar, aguinaldo/PTU/vacaciones jade, extraordinaria slate. */
+export const TIPO_RUN_COLOR: Record<string, string> = {
+  FINIQUITO: "bg-cos-amber-tint text-cos-amber-ink",
+  AGUINALDO: "bg-cos-jade-tint text-cos-jade-ink",
+  PTU: "bg-cos-jade-tint text-cos-jade-ink",
+  VACACIONES: "bg-cos-jade-tint text-cos-jade-ink",
+  EXTRAORDINARIA: "bg-cos-slate-tint text-cos-ink-soft",
+};
+
 export const STATUS_RUN_COLOR: Record<string, string> = {
   DRAFT: "bg-cos-slate-tint text-cos-ink-soft",
   CALCULATED: "bg-cos-brand-tint text-cos-brand-ink",
