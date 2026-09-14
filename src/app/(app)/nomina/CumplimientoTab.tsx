@@ -4,7 +4,8 @@
 // Pestaña Cumplimiento del hub de Nómina — obligaciones IMSS/INFONAVIT:
 //   - Exportes SUA (bimestre) e IDSE (movimientos afiliatorios pendientes),
 //     antes botones sueltos en el encabezado del workspace de corridas.
-//   - Cuotas IMSS (SIPARE): estimado del periodo en curso y registro del pago.
+//   - Opinión de cumplimiento IMSS (OCOFSS) vía SatGo, con el PDF como acuse.
+//   - Cuotas IMSS (SIPARE): estimado del periodo en curso y el cargo bancario.
 //   - Validación del cálculo («nómina en paralelo») contra lo timbrado.
 // La conciliación SUA (EMA/EBA) existe como API (/api/nomina/sua-reconciliation)
 // pero aún no tiene interfaz — se integrará aquí cuando la tenga.
@@ -16,6 +17,7 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card } from "@/components/ui";
 import ValidacionCalculo from "./ValidacionCalculo";
 import ImssPagosCard from "./ImssPagosCard";
+import OpinionImssCard from "./OpinionImssCard";
 
 export default function CumplimientoTab() {
   const { activeCompany } = useCompany();
@@ -35,6 +37,9 @@ export default function CumplimientoTab() {
         <h1 className="text-[24px] font-bold tracking-[-0.02em] text-cos-ink">Cumplimiento</h1>
         <p className="mt-0.5 text-[14px] text-cos-ink-soft">IMSS, INFONAVIT y la validación del cálculo de tu nómina.</p>
       </div>
+
+      {/* opinión de cumplimiento IMSS (vía SatGo, sólo RFC) */}
+      <OpinionImssCard companyId={activeCompany.id} />
 
       {/* cuotas IMSS (SIPARE) */}
       <ImssPagosCard companyId={activeCompany.id} />
