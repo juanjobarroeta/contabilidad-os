@@ -135,3 +135,98 @@ va al final, con confirmación explícita.
   leer las tres fuentes. Empezar leyendo; si se queda corto, se materializa.
 - Firma electrónica de recibos (CFDI de nómina ya es el comprobante legal;
   el acuse de recibido del empleado es otra cosa). Fuera de alcance.
+
+---
+
+## 8. Cumplimiento (IMSS): la opinión, el SIPARE y el SUA
+
+Lo que pidió el dueño: que Cumplimiento enseñe la **opinión IMSS** que ya
+sale de SatGo; que la **línea de captura del SIPARE** se encuentre desde la
+conciliación bancaria, no que se suba a mano; que el **pago** se lea del banco
+(ya tenemos la información); si se puede sacar el **SIPARE** por SatGo o por
+scraping; y que **Exportar SUA** deje de estar escondido.
+
+### 8.1 Opinión de cumplimiento IMSS — ya se puede, falta enseñarla
+
+- `GET /api/v2/consultar/imssoc` de SatGo la entrega **con sólo el RFC**
+  (sin e.firma, sin cuota del SAT). Verificado el 11-sep-2026 con BAOBAB:
+  200, PDF de 776 KB, en 86 s — el IMSS es lento; va como trabajo de fondo.
+- `ComplianceSnapshot` ya tiene el tipo `IMSS_OPINION`, `persist.ts` ya lo
+  guarda y `diff.ts` ya lo etiqueta. Lo que no existe: **un proveedor que la
+  traiga** (`fetchImssOpinion` de Syntage LANZA) y **una tarjeta que la pinte**.
+- Diseño: en Cumplimiento, arriba, la tarjeta **Opinión IMSS**: estado
+  (positiva / negativa / sin opinión) · fecha · «ver PDF» · «actualizar». Se
+  refresca con la cadencia de la opinión SAT (semanal). Al lado, la opinión
+  SAT 32-D con la misma forma — hoy ni la SAT se ve en Nómina.
+- Es la primera pieza del swap Syntage→SatGo que se cablea en producto: el
+  proveedor SatGo detrás de `ComplianceProvider` con `fetchImssOpinion`
+  implementado. Prerrequisito: la **API Key durable de prod** en el servicio
+  (hoy hay un JWT de preprod que vence el 17-sep).
+
+### 8.2 SIPARE: la línea de captura NO se puede «encontrar» en el banco — el pago sí
+
+Hay que separar dos cosas que hoy se confunden:
+
+1. **La línea de captura** es un dato que EMITE el IMSS (en el SIPARE, antes
+   de pagar). El banco NO la trae: el cargo en el estado de cuenta dice
+   «IMSS», «SIPARE», «TESOFE» o «pago referenciado» y a veces un folio, pero
+   la línea de captura como tal no viaja en la descripción. Encontrarla desde
+   la conciliación no es posible.
+2. **El pago** sí está en el banco, y ya se cruza: `conciliacion-impuestos.ts`
+   sugiere el movimiento que paga una `TaxDeclaration IMSS_MENSUAL` por monto
+   y ventana de días, y la mesa lo aplica con `taxDeclarationId`. Eso es lo
+   que hay que enseñar en Cumplimiento: **«Pagado el 17/08 · $70,312 · BBVA
+   ····4021»** con el movimiento enlazado, en vez de una casilla de subida.
+
+Por eso el diseño es: la tarjeta de cuotas IMSS del mes enseña **estimado ·
+pagado (del banco, con enlace a la mesa) · diferencia**, y la línea de
+captura queda como dato **opcional** que se captura o se trae del SIPARE
+(§8.3), nunca como requisito para registrar el pago.
+
+### 8.3 ¿Se puede traer el SIPARE (emisión, línea de captura, EMA/EBA)?
+
+**SatGo: no.** Su catálogo (swagger reversado, 7-sep) sólo tiene del IMSS la
+`imssoc` (opinión) y el REPSE. Nada de emisión mensual/bimestral, línea de
+captura, EMA/EBA ni SIPARE. Es un proveedor SAT-céntrico.
+
+**Portal del IMSS (IDSE / Escritorio Virtual / SIPARE): sí, con la e.firma
+que ya guardamos.** El patrón entra al IDSE con e.firma (o con usuario+
+contraseña del IDSE, que no guardamos). Desde ahí se descarga la **emisión
+mensual y bimestral (EMA/EBA)** —que es la base del cuadre que
+`sua-reconciliation` ya hace— y el SIPARE genera la **línea de captura**. Es
+la misma técnica que la CE del SAT (`abrirBuzonSat` con Playwright): un
+worker con navegador, e.firma, y el flujo mapeado. Diferencias honestas:
+
+- El IDSE tiene **captcha en el login por contraseña**; el login por e.firma
+  no (mismo patrón que el SAT). Hay que verificarlo en vivo.
+- Riesgo de cambio de portal igual que el SAT. El worker de CE ya vive con
+  eso.
+- Valor: EMA/EBA automáticas cierran el cuadre SUA sin que el contador
+  suba archivos; la línea de captura llega sola al mes.
+
+Recomendación: **hacer el piloto** con la misma receta del probe de CE — un
+script con Playwright y la e.firma de una empresa, medir si entra al IDSE y
+descarga la EMA. Una tarde. Si entra, es el worker `imss-worker` mensual.
+Si el login por e.firma pide captcha, se para ahí y se documenta.
+
+### 8.4 Exportar SUA e IDSE: a Resumen, y con contexto
+
+Hoy viven al fondo de Cumplimiento detrás de dos selectores. Diseño:
+
+- En **Resumen**, en la tarjeta **Pagos IMSS** (que ya existe), una barra de
+  acciones: **Exportar SUA** (bimestre en curso preseleccionado) · **Exportar
+  IDSE** (con el conteo de movimientos pendientes: «3 altas, 1 baja») ·
+  **Dispersión**. Un clic, el bimestre correcto por default, cambiarlo si
+  hace falta.
+- Cumplimiento conserva el bloque completo (con la elección de bimestre y
+  ejercicio) para el caso de re-exportar uno anterior.
+
+### 8.5 Orden de construcción (Cumplimiento)
+
+7. **Exportar SUA/IDSE en Resumen** (sólo cableado; un día).
+8. **Pago IMSS desde el banco en la tarjeta** (lectura del `taxDeclarationId`
+   que la mesa ya escribe; enlace a la mesa; línea de captura opcional).
+9. **Opinión IMSS vía SatGo**: proveedor SatGo + tarjeta. Depende de la API
+   Key de prod.
+10. **Piloto IDSE con e.firma** (EMA/EBA + línea de captura). Una tarde;
+    decide si hay worker.
