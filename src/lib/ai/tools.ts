@@ -6,12 +6,16 @@ const CLAVES_GET_ARTICULO = [...clavesPorMateria(MATERIAS_CONTADOR), "RMF"];
 
 import type Anthropic from "@anthropic-ai/sdk";
 import { toolsExpediente } from "@/lib/expediente/tools";
+import { toolsSolicitudes } from "@/lib/solicitudes/tools";
 
 export const tools: Anthropic.Tool[] = [
   // La memoria de la empresa (expediente): hechos duraderos y bitácora de
   // trabajo. Van primero porque son las que hacen que el copiloto deje de
   // responder como si acabara de conocer al cliente.
   ...toolsExpediente,
+  // Pedirle algo al cliente es un objeto, no un recordatorio: queda abierto
+  // hasta que llega y se enseña junto al movimiento que lo motivó.
+  ...toolsSolicitudes,
   {
     name: "query_invoices",
     description:

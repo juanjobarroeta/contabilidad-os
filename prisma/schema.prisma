@@ -450,6 +450,7 @@ model Company {
   cuentasContraparte CuentaContraparte[]
   decisionesMotor    DecisionMotor[]
   expedienteHechos   ExpedienteHecho[]
+  solicitudes        Solicitud[]
   expedienteNotas    ExpedienteNota[]
   saludSnapshots     SaludSnapshot[]
 }
@@ -9705,4 +9706,62 @@ model ExpedienteNota {
   @@index([companyId, createdAt])
   @@index([companyId, estado, tipo])
   @@index([companyId, tema, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SOLICITUDES AL CLIENTE — «necesito esto de ti», como objeto de primera clase.
+//
+// El sistema sabía detectar que le faltaba algo y no sabía PEDIRLO. El caso que
+// lo motivó: una empresa con depósitos de terminal cuyo estado de cuenta de la
+// terminal nunca se cargó. Sin él no se puede cuadrar el lote contra las ventas
+// ni contra las comisiones, y nadie se enteraba hasta que alguien auditaba el
+// mes a mano. El sistema tenía todas las piezas para saber que le faltaba —
+// reconoce la liquidación por la afiliación— y ningún lugar donde decirlo.
+//
+// Una solicitud no es una notificación: una notificación se lee y se va, una
+// solicitud QUEDA ABIERTA hasta que llega lo que se pidió. Por eso tiene estado
+// propio, se enseña en la mesa junto al movimiento que la provocó, y el motor
+// la cierra solo cuando el material llega.
+//
+// `dedupeKey` es lo que evita que la corrida diaria abra la misma solicitud
+// todos los días: el motor vuelve a detectar el mismo hueco cada mañana y sin
+// candado el cliente recibiría el mismo pedido veinte veces.
+// ─────────────────────────────────────────────────────────────────────────────
+model Solicitud {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// "estado_cuenta_terminal" | "voucher_terminal" | "estado_cuenta_banco" |
+  /// "comprobante" | "aclaracion" | "documento_fiscal" | "decision"
+  tipo String
+  /// Por qué se pide, en una frase que el cliente entienda sin contexto.
+  motivo String @db.Text
+  /// Qué la provocó: movimientos, facturas, hallazgos.
+  refs String[]
+  /// "YYYY-MM" cuando el pedido es de un mes concreto.
+  periodo String?
+
+  /// "motor" | "agente" | "usuario"
+  origen String @default("motor")
+  /// "abierta" | "recibida" | "cancelada"
+  estado String @default("abierta")
+
+  /// Dónde se avisó ya: evita repetir el pedido por tres canales el mismo día.
+  canalNotif String[]
+
+  recibidaAt DateTime?
+  /// Qué llegó: id del lote importado, del documento, o una nota de quien cerró.
+  recibidaRef String?
+
+  /// Huella del hueco detectado. El motor re-detecta lo mismo cada mañana; sin
+  /// esto abriría una solicitud nueva por corrida.
+  dedupeKey String
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, dedupeKey])
+  @@index([companyId, estado, createdAt])
+  @@index([companyId, tipo, periodo])
 }

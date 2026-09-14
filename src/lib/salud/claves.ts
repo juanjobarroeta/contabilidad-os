@@ -48,6 +48,7 @@ export const CLAVES_SALUD = [
   "bancos",
   "iva_flujo",
   "hallazgos",
+  "solicitudes",
 ] as const;
 
 export type ClaveSalud = (typeof CLAVES_SALUD)[number];
@@ -62,6 +63,7 @@ export const TITULO_SALUD: Record<ClaveSalud, string> = {
   bancos: "Bancos",
   iva_flujo: "IVA en flujo",
   hallazgos: "Hallazgos del auditor",
+  solicitudes: "Pendientes del cliente",
 };
 
 /**
@@ -76,6 +78,10 @@ export const ORDEN_SALUD: ClaveSalud[] = [
   "cumplimiento",
   "iva_flujo",
   "bancos",
+  // Lo que se le pidió al cliente va al final de la lista de atención pero NO
+  // es lo menos importante: es lo único que el despacho no puede resolver solo,
+  // y una solicitud vieja suele ser la causa de algo que sí está arriba.
+  "solicitudes",
   "hallazgos",
 ];
 

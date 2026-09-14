@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { fechaLocalMx } from "@/lib/notificaciones";
+import { pedirEstadosDeCuentaDeTerminal } from "@/lib/solicitudes/terminal";
 import { cargarHechosSalud } from "./hechos";
 import {
   diffSalud,
@@ -44,6 +45,15 @@ export interface ResultadoSaludEmpresa {
  */
 export async function evaluarSaludEmpresa(companyId: string, hoy: Date): Promise<ResultadoSaludEmpresa> {
   const dia = fechaLocalMx(hoy);
+
+  // Los motores que PIDEN corren ANTES de medir: si no, una solicitud abierta
+  // hoy no aparecería en la foto de hoy y el despacho se enteraría mañana de
+  // algo que el sistema ya sabía. Si falla, la salud se mide igual — quedarse
+  // sin foto por no haber podido pedir sería peor que la falta del pedido.
+  await pedirEstadosDeCuentaDeTerminal(companyId, hoy).catch((e) =>
+    console.error("[salud] solicitudes de terminal fallaron:", companyId, e instanceof Error ? e.message : e),
+  );
+
   const hechos = await cargarHechosSalud(companyId, hoy);
   const dimensiones = evaluarSalud(hechos, hoy);
 

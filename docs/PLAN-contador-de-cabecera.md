@@ -1,6 +1,6 @@
 # Contador de cabecera — plan de construcción por fases
 
-> Estado: **F0, F1 y F2 construidas; F3 en adelante, diseño.** Este documento fija el orden de construcción
+> Estado: **F0, F1, F2 y F4 construidas; F3, F5 y F6, diseño.** Este documento fija el orden de construcción
 > y el contrato entre fases. Cada fase es un PR que entrega valor por sí solo y
 > deja la base de la siguiente. Nada aquí exige Managed Agents ni un runtime
 > nuevo: todo corre en la app, con el loop de agente, el medidor de costos y
@@ -314,7 +314,33 @@ defendible. Sin F2 no lo es.
 Telegram (bot existente). El resto vive en el expediente y en el rail del
 cliente.
 
-### F4 — Solicitudes al cliente (lo que hay que pedir)
+### F4 — Solicitudes al cliente (lo que hay que pedir) — **construida**
+
+> **Lo que quedó.** El modelo `Solicitud` (migración `20260926_solicitudes`),
+> `src/lib/solicitudes/claves.ts` (sin Node: cada tipo con su *qué pedir* y su
+> *para qué*), `registro.ts` (abrir idempotente por `dedupeKey`, recibir,
+> cancelar), `terminal.ts` (el motor que pide), `tools.ts` + `ejecutar.ts` (las
+> herramientas `solicitar_al_cliente` y `consultar_solicitudes`),
+> `src/lib/bancos/terminal-faltantes.ts` PURO, las rutas `/api/solicitudes*`,
+> la ficha «Falta para poder cuadrar esto» en la mesa y la dimensión
+> `solicitudes` de F2, que quedaba pendiente.
+>
+> **El caso de la terminal, cerrado.** El motor agrupa las liquidaciones por
+> mes Y por afiliación —dos terminales son dos pedidos, y un aviso a nivel
+> empresa ocultaría la segunda—, excluye el mes en curso (el adquirente no lo
+> ha cerrado: pedir lo imposible enseña a ignorar los pedidos) y abre la
+> solicitud UNA VEZ. Corre dentro de la pasada diaria de salud, antes de medir,
+> para que el pedido aparezca en la foto del mismo día.
+>
+> **Lo que NO hace.** No hay parser de estados de cuenta de terminal: recibir la
+> solicitud registra qué llegó (`recibidaRef`), no lo procesa. Y el
+> `voucher_terminal` tiene su tipo y su ficha pero todavía no hay motor que lo
+> abra: eso entra cuando la captura en caja (#1050) se conecte con esto.
+>
+> **Una decisión que vale la pena recordar.** Una solicitud cancelada NO se
+> reabre. Cancelar es la decisión de una persona («ese mes no lleva terminal»)
+> y el motor no debe desautorizarla cada mañana.
+
 
 **Qué.** Un objeto de primera clase para «necesito algo de ti»:
 
@@ -396,9 +422,10 @@ F0 rastro ─┬─► F1 expediente ─┬─► F3 agente ─► F5 rail ─�
 F4 solicitudes: motor puro desde F2; el agente las usa desde F3.
 ```
 
-F0, F1 y F2 ya están. F1 dependía de F0 para tener evidencia que
-citar. F3 no arranca sin F1 y F2. F4 se puede adelantar como motor puro
-(terminal, estados de cuenta) en cuanto F2 exista.
+F0, F1, F2 y F4 ya están. F1 dependía de F0 para tener evidencia que
+citar; F4 se adelantó como motor puro (terminal) en cuanto F2 existió, y
+el agente las usará desde F3. Falta F3, que ya tiene todo lo que
+necesitaba, y encima de él F5 y F6.
 
 Cada fase es un PR con migración, tests de la parte pura y, cuando toca UI,
 la ficha o página correspondiente. Ninguna fase rompe lo que hoy corre: los
