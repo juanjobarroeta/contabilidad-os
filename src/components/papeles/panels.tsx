@@ -57,6 +57,8 @@ interface IvaRow {
   id: string; fecha: string; uuid: string | null; serie: string | null; folio: string | null;
   contraparte: string; rfc: string; subtotal: number; tasa: number | null; importe: number; metodoPago: string;
   sinPagoConciliado?: boolean;
+  /** PUE pagado en parte: fracción acreditada este periodo (Art. 5-I). */
+  fraccionPagada?: number;
   pagadaConciliada?: boolean;
   excluidoAcreditamiento?: boolean;
   /** Emisor en la lista 69-B DEFINITIVO — improcedente por ley, no por criterio. */
@@ -222,8 +224,8 @@ export function IvaPanel({ companyId, year, month }: { companyId: string; year: 
           <span>
             <b>{data.reconciliacion.cfdisPueSinPago} CFDI(s) PUE</b> con IVA acreditable de{" "}
             <b>{formatCurrency(data.reconciliacion.ivaPueSinPago)}</b> no aparecen pagados en el banco
-            (marcados ↓). El IVA sólo es acreditable si el gasto se pagó (Art. 5-I LIVA) — concilia el pago
-            en Bancos o exclúyelos del acreditamiento.
+            (marcados ↓) y <b>no se acreditaron</b> este mes (Art. 5-I LIVA). Concilia el pago en Bancos y
+            se acreditan en el mes en que se pagaron.
           </span>
         </div>
       )}
@@ -475,7 +477,7 @@ function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling, totalLab
         </thead>
         <tbody>
           {pag.fila.map((r) => (
-            <tr key={r.id} className={`border-t border-cos-line-soft ${r.excluidoAcreditamiento || r.sinComplementoPago || r.emisorEnLista69B ? "opacity-55" : ""}`}>
+            <tr key={r.id} className={`border-t border-cos-line-soft ${r.excluidoAcreditamiento || r.sinComplementoPago || r.sinPagoConciliado || r.emisorEnLista69B ? "opacity-55" : ""}`}>
               <td className="px-3 py-1.5 text-[12px] text-cos-ink-faint whitespace-nowrap">{formatDate(r.fecha)}</td>
               <td className="px-3 py-1.5 font-mono text-[12px]">{r.folio ? `${r.serie ?? ""}${r.folio}` : (r.uuid?.slice(0, 8) ?? "—")}</td>
               <td className="px-3 py-1.5 text-[12px]">
@@ -503,6 +505,10 @@ function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling, totalLab
                   <span className="ml-1.5 inline-flex items-center rounded-full bg-cos-brand-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-brand-ink" title="PPD con pago parcial — sólo se acredita el IVA del monto pagado en el periodo (prorrateado)">
                     parcial
                   </span>
+                ) : r.fraccionPagada != null ? (
+                  <span className="ml-1.5 inline-flex items-center rounded-full bg-cos-brand-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-brand-ink" title="PUE pagado en parte según la conciliación bancaria — se acredita el IVA de lo pagado en el periodo, prorrateado (Art. 5-I LIVA)">
+                    pagada {Math.round(r.fraccionPagada * 100)}%
+                  </span>
                 ) : r.sinPagoConciliado ? (
                   <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-cos-amber-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-amber-ink" title="PUE sin pago conciliado en banco — el IVA sólo es acreditable si se pagó (Art. 5-I LIVA)">
                     <AlertTriangle className="h-3 w-3" /> sin pago
@@ -525,7 +531,7 @@ function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling, totalLab
               </td>
               <td className="px-3 py-1.5 text-right"><Money value={r.subtotal} size={12} weight={500} /></td>
               <td className="px-3 py-1.5 text-right text-[12px] text-cos-ink-soft">{r.tasa != null ? (r.tasa * 100).toFixed(0) + "%" : "—"}</td>
-              <td className={`px-3 py-1.5 text-right ${r.excluidoAcreditamiento || r.sinComplementoPago || r.emisorEnLista69B ? "line-through" : ""}`}><Money value={r.importe} size={12} weight={500} /></td>
+              <td className={`px-3 py-1.5 text-right ${r.excluidoAcreditamiento || r.sinComplementoPago || r.sinPagoConciliado || r.emisorEnLista69B ? "line-through" : ""}`}><Money value={r.importe} size={12} weight={500} /></td>
               {acciones && (
                 <td className="px-3 py-1.5 text-right">
                   {!r.emisorEnLista69B && (r.excluidoAcreditamiento || r.metodoPago === "PUE") && (

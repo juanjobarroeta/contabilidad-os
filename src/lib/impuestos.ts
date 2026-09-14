@@ -11,6 +11,8 @@ import { perdidasDisponibles } from "./fiscal/perdidas";
 import { ivaTrasladadoDe, repIvaTrasladadoDe } from "./fiscal/iva-flujo";
 import { ivaAcreditableNetoDe, ivaRetenidoDe, isrRetenidoDe, repIsrRetenidoDe, repIvaRetenidoDe } from "./fiscal/iva-retenciones";
 import { ivaRetenidoAProveedoresEnPeriodo } from "./fiscal/iva-retenciones-db";
+import { aplicarFlujoPue, pagosPueDelPeriodo, puesAnterioresPagadosEnPeriodo, type ModoPue } from "./fiscal/iva-pue-flujo";
+import { reconciliacionActiva } from "./fiscal/conciliacion-pue";
 import { normalizarUuid, variantesUuid } from "./fiscal/uuid";
 
 /**
@@ -214,6 +216,15 @@ export interface TaxPosition {
     pagar: number;
     saldoAFavor: number;
     devengado: { trasladado: number; acreditable: number };
+    /** Cómo se acreditó el PUE (Art. 5-I): FLUJO por conciliación bancaria, o
+     *  SUPUESTO_PAGADO cuando la empresa no concilia. `sinPago` = PUE del mes
+     *  sin pago conciliado (no se acreditó); `anterioresPagadosEsteMes` = IVA
+     *  de PUE de meses previos que se pagaron en éste. */
+    pue: {
+      modo: "FLUJO" | "SUPUESTO_PAGADO";
+      sinPago: { iva: number; cfdis: number };
+      anterioresPagadosEsteMes: number;
+    };
   };
   isr: {
     /** Which régimen's method produced these figures. */
@@ -736,9 +747,42 @@ export async function computeTaxPosition(
 
   // Acreditable del mes NETO de lo retenido (Art. 5-IV LIVA): la parte retenida
   // sólo se acredita en el mes siguiente al de su entero.
-  const ivaAcreditablePUE = facturasEgresos
-    .filter((inv) => inv.metodoPago === "PUE" && !inv.ivaNoAcreditable)
-    .reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * ivaAcreditableNetoDe(inv), 0);
+  // PUE EN FLUJO (Art. 5-I LIVA, lib/fiscal/iva-pue-flujo): el IVA de un gasto
+  // PUE se acredita por lo PAGADO en el periodo según la conciliación bancaria
+  // —completo, prorrateado si es parcial, cero si no se pagó—, y un PUE de un
+  // mes anterior pagado en éste se acredita aquí. Antes el motor suponía todo
+  // PUE pagado al emitirse y el papel lo avisaba en un banner: dos cifras
+  // distintas para el mismo mes. Empresa sin conciliación: se conserva la
+  // suposición (modo SUPUESTO_PAGADO), y el resultado lo dice.
+  const modoPue: ModoPue = (await reconciliacionActiva(companyId)) ? "FLUJO" : "SUPUESTO_PAGADO";
+  const puesDelMes = facturasEgresos.filter((inv) => inv.metodoPago === "PUE" && !inv.ivaNoAcreditable);
+  const pagosPue = modoPue === "FLUJO" ? await pagosPueDelPeriodo(puesDelMes.map((i) => i.id), from, to) : new Map();
+  let ivaAcreditablePUE = 0;
+  let ivaPueSinPago = 0;
+  let cfdisPueSinPago = 0;
+  for (const inv of puesDelMes) {
+    const neto = ivaAcreditableNetoDe(inv);
+    const r = aplicarFlujoPue({ total: Number(inv.total), ivaNeto: neto }, pagosPue.get(inv.id) ?? null, modoPue);
+    ivaAcreditablePUE += signoTipoSat(inv.tipoSat) * r.acreditable;
+    if (r.estado === "SIN_PAGO") { ivaPueSinPago += neto; cfdisPueSinPago += 1; }
+  }
+  // PUE de meses anteriores pagados en este periodo (mismo principio que el
+  // PPD por REP: se acredita cuando se paga).
+  let ivaAcreditablePueAnteriores = 0;
+  if (modoPue === "FLUJO") {
+    const anteriores = await puesAnterioresPagadosEnPeriodo(companyId, from, to);
+    if (anteriores.size > 0) {
+      const padres = await prisma.invoice.findMany({
+        where: { id: { in: [...anteriores.keys()] }, ivaNoAcreditable: false, ...efosWhere },
+        include: invoiceInclude,
+      }).then((rows) => rows.map((inv) => ({ ...inv, subtotal: Number(inv.subtotal), totalImpuestos: Number(inv.totalImpuestos), taxes: inv.taxes.map((t) => ({ ...t, importe: Number(t.importe), base: t.base === null ? null : Number(t.base) })) })));
+      for (const inv of padres) {
+        const r = aplicarFlujoPue({ total: Number(inv.total), ivaNeto: ivaAcreditableNetoDe(inv) }, anteriores.get(inv.id) ?? null, modoPue);
+        ivaAcreditablePueAnteriores += signoTipoSat(inv.tipoSat) * r.acreditable;
+      }
+    }
+  }
+  ivaAcreditablePUE += ivaAcreditablePueAnteriores;
   // Lo retenido el MES ANTERIOR (enterado con aquella declaración) se acredita
   // en ésta. Se calcula con el mismo criterio de flujo para el periodo previo.
   const prevFrom = new Date(year, month - 2, 1);
@@ -1197,6 +1241,13 @@ export async function computeTaxPosition(
       devengado: {
         trasladado: round2(ivaTrasladadoDevengado),
         acreditable: round2(ivaAcreditableDevengado),
+      },
+      // Cómo se acreditó el PUE (Art. 5-I): en flujo por la conciliación, o
+      // supuesto pagado porque la empresa no concilia banco.
+      pue: {
+        modo: modoPue,
+        sinPago: { iva: round2(ivaPueSinPago), cfdis: cfdisPueSinPago },
+        anterioresPagadosEsteMes: round2(ivaAcreditablePueAnteriores),
       },
     },
     isr,
