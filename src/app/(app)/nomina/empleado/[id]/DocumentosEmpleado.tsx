@@ -104,7 +104,7 @@ export function DocumentosEmpleado({
     try {
       const res = await fetch("/api/empleados", {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: employeeId, companyId, [s.campo]: s.valor }),
+        body: JSON.stringify({ employeeId, companyId, [s.campo]: s.valor }),
       });
       if (res.ok) { setSugerencias((prev) => prev.filter((x) => x.campo !== s.campo)); onFichaChanged(); }
       else setError((await res.json().catch(() => ({})))?.error ?? "No se pudo aplicar");
