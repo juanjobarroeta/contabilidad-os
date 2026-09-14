@@ -34,6 +34,12 @@ export async function register() {
     const { initObservability } = await import("./lib/observability");
     initObservability();
 
+    // 3b) Turnos del copiloto jurídico que quedaron huérfanos en el contenedor
+    //     anterior (redespliegue, crash): se continúan desde su checkpoint.
+    //     Ver src/lib/juridico/turnos-reanudar.ts.
+    const { programarReanudacion } = await import("./lib/juridico/turnos-reanudar");
+    programarReanudacion();
+
     // 4) Pipeline de datos en-proceso: agenda los crons de backfill/sync SAT y
     //    Syntage dentro del servidor (Railway siempre encendido), para que el
     //    producto no dependa de GitHub Actions. Ver src/lib/cron-scheduler.ts.
