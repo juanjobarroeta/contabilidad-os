@@ -88,6 +88,10 @@ const JOBS: Job[] = [
   // las más atrasadas y les empuja su siguiente eslabón, por empresa. Cadencia
   // agresiva porque cuando nadie está cargando es un no-op de una consulta.
   { name: "onboarding-drive", everyMs: 10 * MIN, firstDelayMs: 4 * MIN, minMs: MIN_LOCAL },
+  // Salud de la IA: un token con Haiku cada 5 min. Cuando la cuenta se quedó
+  // sin crédito (13-sep-2026) nos enteramos por el reclamo de la abogada;
+  // ahora Sentry lo grita antes. Cuesta centavos al mes.
+  { name: "ia-salud", everyMs: 5 * MIN, firstDelayMs: 90_000, minMs: 2 * MIN },
   { name: "sat-sync", everyMs: 4 * HOUR, firstDelayMs: 5 * MIN, minMs: MIN_SAT,
     encadena: ["sat-rawxml-backfill"] },
   // El workflow de Actions de sat-sync encadenaba cancel-sync como segundo

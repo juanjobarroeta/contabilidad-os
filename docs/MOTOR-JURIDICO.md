@@ -293,6 +293,13 @@
 > que se repite al reanudar: la ronda interrumpida entera (sus herramientas
 > vuelven a correr; son upserts).
 >
+> **Aviso antes del reclamo (14-sep-2026).** `/api/cron/ia-salud` hace la
+> llamada más barata que existe (un token con Haiku) cada 5 min desde el
+> scheduler en-proceso; `clasificarFalloIa` (puro) decide si despierta a
+> alguien: saldo agotado y llave rechazada sí, con `fingerprint`
+> `["ia-salud", causa]` y nivel fatal en Sentry; saturación (429/529) y cortes
+> de red no, porque se resuelven solos y el siguiente tick reintenta.
+>
 > **Turnos reanudables (PR #1042).** La primera prueba real de la abogada
 > (alegatos de cinco tipos para un juicio oral familiar en Chihuahua, 8
 > minutos) murió con «Load failed» en el iPhone. Dos causas, las dos
