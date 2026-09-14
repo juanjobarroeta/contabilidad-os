@@ -88,6 +88,35 @@ export function extraerCitas(texto: string): string[] {
   return [...out];
 }
 
+/** Una cita tal como aparece en la respuesta, con su lugar exacto. */
+export interface CitaUbicada {
+  /** Normalizada, como la usa el resto del pipeline: «ART. 486 CPF». */
+  cita: string;
+  /** El texto literal que la respuesta escribió: «artículo 486 del CPF». */
+  textoEnRespuesta: string;
+  /** Offsets en el texto que se pasó (usar SIEMPRE el texto final entregado). */
+  inicio: number;
+  fin: number;
+}
+
+/**
+ * Lo mismo que extraerCitas pero conservando dónde quedó cada cita. Los
+ * offsets salen gratis del propio regex (m.index), así que marcar las citas en
+ * la respuesta no cuesta una pasada extra del modelo. Ordenadas por posición;
+ * una cita repetida aparece tantas veces como se escribió.
+ */
+export function citasConPosicion(texto: string): CitaUbicada[] {
+  const out: CitaUbicada[] = [];
+  const empuja = (m: RegExpMatchArray, cita: string) => {
+    if (typeof m.index !== "number") return;
+    out.push({ cita, textoEnRespuesta: m[0], inicio: m.index, fin: m.index + m[0].length });
+  };
+  for (const m of texto.matchAll(RE_ART)) empuja(m, normalizarCita(`Art. ${m[1]} ${m[2]}`));
+  for (const m of texto.matchAll(RE_REGLA)) empuja(m, normalizarCita(`Regla ${m[1]} ${m[2] ?? "RMF"}`));
+  for (const m of texto.matchAll(RE_TESIS)) empuja(m, `REG. ${m[1]}`);
+  return out.sort((a, b) => a.inicio - b.inicio);
+}
+
 /** Una regla se compara sin el sufijo de año (RMF vs RMF-2026). */
 export function claveCita(c: string): string {
   return normalizarCita(c).replace(/\bRMF-\d{4}\b/, "RMF");
