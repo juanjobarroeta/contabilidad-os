@@ -134,9 +134,12 @@ export async function POST(req: Request) {
   let convId = typeof convIdIn === "string" && convIdIn.trim() ? convIdIn.trim() : null;
   let caracteresPrevios = 0;
   let docsPrevios = 0;
+  // El documento vive en el CASO: sigue ahí aunque la conversación se archive.
+  let casoDeLaConversacion: string | null = null;
   if (convId) {
-    const conv = await prisma.juridicoConversacion.findUnique({ where: { id: convId }, select: { userId: true, archivedAt: true } });
+    const conv = await prisma.juridicoConversacion.findUnique({ where: { id: convId }, select: { userId: true, archivedAt: true, casoId: true } });
     if (!conv || conv.userId !== userId || conv.archivedAt) return NextResponse.json({ error: "Conversación no encontrada" }, { status: 404 });
+    casoDeLaConversacion = conv.casoId;
     const previos = await prisma.juridicoDocumento.aggregate({ where: { conversacionId: convId }, _count: { id: true }, _sum: { caracteres: true } });
     docsPrevios = previos._count.id;
     caracteresPrevios = previos._sum.caracteres ?? 0;
@@ -202,6 +205,7 @@ export async function POST(req: Request) {
     const doc = await prisma.juridicoDocumento.create({
       data: {
         conversacionId: convId,
+        casoId: casoDeLaConversacion,
         userId,
         nombre: p.nombre,
         mime: p.mime,

@@ -26,6 +26,7 @@ export type AccionBitacora =
   | "parte.eliminada"
   | "parte.ligada_a_cliente"
   | "cliente.creado"
+  | "cliente.ligado"
   | "cliente.editado"
   | "documento.creado"
   | "documento.version"
