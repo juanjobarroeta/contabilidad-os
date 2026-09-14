@@ -286,3 +286,15 @@ export function Field({ label, children }: { label: string; children: React.Reac
     </div>
   );
 }
+
+/** Texto de una sola línea con el resultado de «enviar recibos por correo».
+ *  Empieza con ✓ para que la barra de avisos lo pinte como éxito; los que no
+ *  salieron se nombran (sin correo = captura pendiente en el padrón). */
+export function resumenEnvio(d: { enviados: number; sinCorreo: string[]; importados: number; sinTimbrar: number; errores: { nombre: string; error: string }[] }): string {
+  const partes = [`✓ ${d.enviados} recibo${d.enviados === 1 ? "" : "s"} enviado${d.enviados === 1 ? "" : "s"}`];
+  if (d.sinCorreo.length) partes.push(`${d.sinCorreo.length} sin correo en el padrón: ${d.sinCorreo.slice(0, 4).join(", ")}${d.sinCorreo.length > 4 ? ` y ${d.sinCorreo.length - 4} más` : ""}`);
+  if (d.importados) partes.push(`${d.importados} importado${d.importados === 1 ? "" : "s"} del SAT (no se envían desde aquí)`);
+  if (d.sinTimbrar) partes.push(`${d.sinTimbrar} sin timbrar`);
+  if (d.errores.length) partes.push(`${d.errores.length} fallaron: ${d.errores.slice(0, 2).map((e) => `${e.nombre} (${e.error})`).join("; ")}`);
+  return partes.join(" · ");
+}

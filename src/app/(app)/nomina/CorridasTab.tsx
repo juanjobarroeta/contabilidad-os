@@ -18,13 +18,13 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   Plus, Loader2, X, AlertCircle, CheckCircle2, Play, Calendar, ClipboardList,
   ArrowLeftRight, ChevronDown, ChevronUp, Trash2, History, RefreshCw, Gift, Coins, Sparkles, Ban,
-  Download, FileArchive,
+  Download, FileArchive, Mail,
 } from "lucide-react";
 import { RepresentacionImpresa } from "@/components/facturas/RepresentacionImpresa";
 import {
   TIPO_RUN_LABEL, TIPO_RUN_COLOR, STATUS_RUN_LABEL, STATUS_RUN_COLOR,
   INCIDENCIA_LABEL,
-  percepExtra,
+  percepExtra, resumenEnvio,
   type Employee, type PayrollRun, type PayrollItemDetail,
   type RunPrefill, type Incidencia, type RunIncidencia,
 } from "./workspace-shared";
@@ -217,6 +217,23 @@ export default function CorridasTab() {
   // Recalcular toda la corrida con las incidencias vigentes del periodo (útil
   // tras capturas masivas). El motor rehace ISR/IMSS/INFONAVIT — nada a mano.
   const [recalcId, setRecalcId] = useState<string | null>(null);
+  // Recibos por correo: Facturapi manda PDF+XML a cada empleado con correo.
+  // El resultado se lee en la misma barra de avisos: enviados, sin correo
+  // (por nombre — es captura pendiente, no error), importados del SAT.
+  const [enviandoId, setEnviandoId] = useState<string | null>(null);
+  async function handleEnviarRecibos(run: PayrollRun) {
+    const n = run._count?.items ?? 0;
+    if (!confirm(`¿Enviar ${n} recibo${n === 1 ? "" : "s"} por correo a los empleados (periodo ${run.periodo})?`)) return;
+    setEnviandoId(run.id);
+    setError("");
+    try {
+      const res = await fetch(`/api/nomina/run/${run.id}/enviar-recibos`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error ?? "Error al enviar"); return; }
+      setError(resumenEnvio(data));
+    } catch { setError("Error al enviar"); }
+    finally { setEnviandoId(null); }
+  }
   async function handleRecalc(runId: string) {
     setRecalcId(runId);
     setError("");
@@ -489,6 +506,13 @@ export default function CorridasTab() {
                       className="flex items-center gap-1.5 border border-cos-line px-3 py-1.5 rounded-md text-xs hover:bg-cos-paper" title="Todos los recibos timbrados (PDF y XML) en un ZIP">
                       <FileArchive className="h-3.5 w-3.5" /> Recibos
                     </a>
+                  )}
+                  {(run.status === "STAMPED" || run.status === "PAID") && run.origen !== "SAT" && (
+                    <button onClick={() => handleEnviarRecibos(run)} disabled={enviandoId === run.id}
+                      className="flex items-center gap-1.5 border border-cos-line px-3 py-1.5 rounded-md text-xs hover:bg-cos-paper disabled:opacity-50"
+                      title="Enviar a cada empleado su recibo (PDF y XML) al correo del padrón">
+                      {enviandoId === run.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />} Correo
+                    </button>
                   )}
                   {(run.status === "STAMPED" || run.status === "CALCULATED") && run.origen !== "SAT" && (
                     <a href={`/api/nomina/dispersion?runId=${run.id}`}
