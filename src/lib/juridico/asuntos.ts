@@ -162,12 +162,31 @@ export async function asuntoDeConversacion(conversacionId: string, userId: strin
 }
 
 /** Registra o actualiza partes (fusionando por RFC/CURP/nombre). Devuelve el asunto actualizado. */
+/** `representante` viene como string o —pese al esquema— como objeto del modelo. A texto. */
+function representanteATexto(v: unknown): string | null {
+  if (v == null) return null;
+  if (typeof v === "string") return v.trim() ? v.trim().slice(0, 200) : null;
+  if (typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    const nombre = typeof o.nombre === "string" ? o.nombre.trim() : "";
+    const rol = typeof o.rol === "string" ? o.rol.trim() : "";
+    if (!nombre) return null;
+    return (rol && rol.toLowerCase() !== "representante legal" ? `${nombre} (${rol})` : nombre).slice(0, 200);
+  }
+  return null;
+}
+
 export async function registrarPartes(asuntoId: string, userId: string, nuevas: Partial<Parte>[]): Promise<{ asunto: Asunto; creadas: number; actualizadas: number }> {
   const asunto = await cargarAsunto(asuntoId, userId);
   if (!asunto) throw new Error("Asunto no encontrado");
   let creadas = 0;
   let actualizadas = 0;
   for (const n of nuevas) {
+    // El modelo a veces devuelve `representante` como objeto
+    // ({nombre, tipoPersona, rol}) aunque el esquema pide string; la columna
+    // es String y Prisma reventaba (CONTABILIDAD-OS-F). Se reduce a texto aquí,
+    // una vez, para create y update.
+    n.representante = representanteATexto(n.representante);
     if (!n.nombre || !n.nombre.trim()) continue;
     const existente = asunto.partes.find((p) => mismaParte(p, { nombre: n.nombre!, rfc: n.rfc, curp: n.curp }));
     if (existente) {
