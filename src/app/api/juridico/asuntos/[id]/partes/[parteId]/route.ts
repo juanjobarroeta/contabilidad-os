@@ -3,10 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { AuthzError, puedeUsarJuridico, requireUser } from "@/lib/authz";
 import { cargarAsunto, normalizarCurp, normalizarRfc } from "@/lib/juridico/asuntos";
 
-async function autorizar(req: Request, asuntoId: string) {
+async function autorizar(req: Request, casoId: string) {
   const u = await requireUser(req);
   if (!(await puedeUsarJuridico(u.id))) throw new AuthzError(403, "Tu cuenta no tiene acceso al copiloto jurídico");
-  const a = await prisma.juridicoAsunto.findFirst({ where: { id: asuntoId, userId: u.id }, select: { id: true } });
+  const a = await prisma.juridicoCaso.findFirst({ where: { id: casoId, userId: u.id }, select: { id: true } });
   if (!a) throw new AuthzError(404, "Asunto no encontrado");
   return u.id;
 }
@@ -33,7 +33,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     data.fuente = "manual";
     data.verificado = b.verificado === false ? false : true;
   }
-  const r = await prisma.juridicoParte.updateMany({ where: { id: parteId, asuntoId: id }, data });
+  const r = await prisma.juridicoParte.updateMany({ where: { id: parteId, casoId: id }, data });
   if (r.count === 0) return NextResponse.json({ error: "Parte no encontrada" }, { status: 404 });
   return NextResponse.json(await cargarAsunto(id, userId));
 }
@@ -47,7 +47,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   } catch (e) {
     return errorDe(e);
   }
-  const r = await prisma.juridicoParte.deleteMany({ where: { id: parteId, asuntoId: id } });
+  const r = await prisma.juridicoParte.deleteMany({ where: { id: parteId, casoId: id } });
   if (r.count === 0) return NextResponse.json({ error: "Parte no encontrada" }, { status: 404 });
   return NextResponse.json(await cargarAsunto(id, userId));
 }
