@@ -191,8 +191,14 @@ Las rutas `/api/juridico/asuntos*` de hoy siguen funcionando.
 
 - El mensaje del usuario se guarda al arrancar el turno; la respuesta al
   terminar. Un turno cortado deja `meta.error` en el mensaje del asistente.
-- Un turno a la vez por conversación (409 si ya hay otro, aunque corra en otro
-  contenedor).
+- Un turno a la vez por conversación: **409 con `codigo: "TURNO_EN_CURSO"`**,
+  aunque el turno corra en otro contenedor. La UI no debe enseñar ese 409 como
+  error: hay que **engancharse** al turno que corre
+  (`GET /api/juridico/chat?conversacionId=&desde=0`) y devolverle al usuario lo
+  que escribió. Lo mismo al ABRIR una conversación: si hay un turno vivo, el GET
+  lo reproduce desde el principio y se ve en vivo; si no hay ninguno, contesta
+  204. Sin eso, recargar la pestaña a media respuesta deja la pantalla en blanco
+  (pasó en producción el 14-sep-2026).
 - Eventos SSE vigentes: `turno`, `conversation`, `text`, `tool_start`,
   `tool_done`, `documento`, `documento_progreso`, `asunto`, `replace`, `done`,
   `error`. Agregar uno es cambio de contrato: se anuncia aquí.

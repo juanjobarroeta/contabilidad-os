@@ -86,10 +86,10 @@ export async function POST(req: Request) {
   }
 
   // Un turno a la vez por conversación: en este proceso o en otro que aún late.
-  if (turnoEnCurso(convId)) return NextResponse.json({ error: "Ya hay una respuesta en curso en esta conversación; espera a que termine o vuelve a abrirla." }, { status: 409 });
+  if (turnoEnCurso(convId)) return NextResponse.json({ error: "Ya hay una respuesta en curso en esta conversación; espera a que termine o vuelve a abrirla.", codigo: "TURNO_EN_CURSO" }, { status: 409 });
   const enOtroProceso = await almacenPrisma.ultimoDeConversacion(convId).catch(() => null);
   if (enOtroProceso?.estado === "en_curso" && Date.now() - enOtroProceso.latido.getTime() < LATIDO_VIVO_MS) {
-    return NextResponse.json({ error: "Ya hay una respuesta en curso en esta conversación; espera a que termine o vuelve a abrirla." }, { status: 409 });
+    return NextResponse.json({ error: "Ya hay una respuesta en curso en esta conversación; espera a que termine o vuelve a abrirla.", codigo: "TURNO_EN_CURSO" }, { status: 409 });
   }
 
   const contexto = await cargarContextoConversacion(convId, userId);
