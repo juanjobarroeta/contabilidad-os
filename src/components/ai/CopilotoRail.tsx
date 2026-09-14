@@ -1,100 +1,93 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// COPILOTO v2 — cartas-VERBO, no enunciados (feedback del owner con 97
-// hallazgos reales: «me estresa y no hay camino»).
+// COPILOTO v3 — TRABAJO, NO PROBLEMAS.
 //
-//   · Los hallazgos se AGRUPAN por causa raíz operativa (el destino que los
-//     resuelve): 4 obligaciones vencidas = UNA carta con contador. Máximo 4
-//     grupos; error > warn; los `info` colapsan a una línea.
-//   · El botón principal de cada carta ES la sugerencia: deep link al lugar
-//     donde se arregla (ctaParaHallazgo). La prosa pasa a segundo plano.
-//   · Posponer 7 días inline (PATCH existente, en lote) — la pila ENCOGE.
-//   · Con cartera de 2+ empresas: resumen agregado arriba, enlazando a la
-//     vista de Cartera.
+// El rail v2 agrupaba hallazgos en cartas-verbo, y aun así nadie lo abría: por
+// bien agrupada que esté, una lista de problemas sigue siendo una lista de
+// problemas. «13,778 posibles duplicados» no es información, es un número que
+// paraliza — y encima suele significar que el check está marcando un patrón
+// normal del negocio, no que haya 13,778 errores.
 //
-// Tri-estado del fetch como en toda la casa.
+// Tres bloques, y el orden es el argumento:
+//
+//   1. LO QUE HICE      — un asistente que no puede enseñar su trabajo no se
+//                         distingue de uno que no hizo nada.
+//   2. LO QUE NECESITO  — lo único que el despacho NO puede resolver solo. Va
+//                         antes que el diagnóstico porque es lo accionable.
+//   3. CÓMO VAMOS       — el estado, al final: es contexto, no tarea.
+//
+// Todo el criterio vive en `lib/rail/armar.ts`, que es puro y está probado.
+// Aquí sólo se pinta.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
-  ArrowRight, Briefcase, ChevronRight, ChevronLeft, Clock, MessageCircle, ShieldAlert,
-  Sparkles, TriangleAlert,
+  ArrowRight, Check, ChevronLeft, ChevronRight, Inbox, MessageCircle, Search, Sparkles,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Alert, RetryButton } from "@/components/ui/feedback";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { agruparParaRail, type HallazgoRail, type RailAgrupado } from "@/lib/hallazgos/agrupar";
+import { esperaEnTexto, type Rail } from "@/lib/rail/armar";
+import type { EstadoSalud } from "@/lib/salud/claves";
 import { cn } from "@/lib/utils";
 
-interface Cartera {
-  empresas: number;
-  total: number;
-  criticos: number;
+interface RailRespuesta extends Rail {
+  resumen: { titulo: string; cuerpo: string; fecha: string } | null;
+  informativos: number;
+}
+
+const PUNTO: Record<EstadoSalud, string> = {
+  bloquea: "bg-cos-red",
+  atencion: "bg-cos-amber",
+  ok: "bg-cos-jade",
+  sin_datos: "bg-cos-ink-faint",
+};
+
+const TITULO_BLOQUE = "px-1 text-[11px] font-semibold uppercase tracking-[.08em] text-cos-ink-faint";
+
+function cuandoPaso(iso: string | null): string {
+  if (!iso) return "Todavía no ha pasado por esta empresa.";
+  const dias = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  if (dias <= 0) return "Revisada hoy";
+  if (dias === 1) return "Revisada ayer";
+  return `Revisada hace ${dias} días`;
 }
 
 export function CopilotoRail() {
-  const router = useRouter();
-  const { activeCompany, companies } = useCompany();
+  const { activeCompany } = useCompany();
   const [colapsado, setColapsado] = useState(false);
-  const [rail, setRail] = useState<RailAgrupado | null>(null);
-  const [cartera, setCartera] = useState<Cartera | null>(null);
+  const [rail, setRail] = useState<RailRespuesta | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [posponiendo, setPosponiendo] = useState<string | null>(null);
 
   const companyId = activeCompany?.id;
-  const multi = companies.length > 1;
 
   const cargar = useCallback(async () => {
     if (!companyId) return;
     setLoading(true);
     setError(null);
     try {
-      const [res, resCartera] = await Promise.all([
-        fetch(`/api/hallazgos?companyId=${companyId}&estado=ABIERTO`),
-        multi ? fetch("/api/hallazgos/cartera") : Promise.resolve(null),
-      ]);
+      const res = await fetch(`/api/rail?companyId=${companyId}`);
       const j = await res.json().catch(() => null);
-      if (!res.ok || !Array.isArray(j?.hallazgos)) throw new Error(j?.error ?? `HTTP ${res.status}`);
-      setRail(agruparParaRail(j.hallazgos as HallazgoRail[]));
-      if (resCartera?.ok) setCartera((await resCartera.json()) as Cartera);
+      if (!res.ok) throw new Error(j?.error ?? `HTTP ${res.status}`);
+      setRail(j as RailRespuesta);
     } catch {
       setRail(null);
-      setError("No se pudieron cargar los hallazgos.");
+      setError("No se pudo cargar el copiloto.");
     } finally {
       setLoading(false);
     }
-  }, [companyId, multi]);
+  }, [companyId]);
 
   useEffect(() => {
     void cargar();
   }, [cargar]);
 
-  async function posponer(grupoHref: string, ids: string[]) {
-    setPosponiendo(grupoHref);
-    try {
-      await Promise.all(
-        ids.map((id) =>
-          fetch(`/api/hallazgos/${id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ posponer: "7d" }),
-          }),
-        ),
-      );
-      await cargar(); // la pila encoge de verdad
-    } finally {
-      setPosponiendo(null);
-    }
-  }
-
   if (!companyId) return null;
 
-  const abiertos = rail ? rail.grupos.reduce((t, g) => t + g.count, 0) + rail.restantes : 0;
-  const graves = rail?.grupos.filter((g) => g.severidad === "error").length ?? 0;
+  const pendientes = rail?.necesito.length ?? 0;
 
   if (colapsado) {
     return (
@@ -109,14 +102,11 @@ export function CopilotoRail() {
         </button>
         <div className="relative">
           <Sparkles className="h-5 w-5 text-cos-brand" />
-          {abiertos > 0 && (
-            <span
-              className={cn(
-                "absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white",
-                graves > 0 ? "bg-cos-red" : "bg-cos-amber",
-              )}
-            >
-              {abiertos}
+          {/* El globo cuenta lo que necesita de TI, no los problemas que hay.
+              Un número que el usuario no puede bajar sólo enseña a ignorarlo. */}
+          {pendientes > 0 && (
+            <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-cos-amber px-1 text-[10px] font-bold text-white">
+              {pendientes}
             </span>
           )}
         </div>
@@ -140,7 +130,7 @@ export function CopilotoRail() {
         </button>
       </div>
 
-      <div className="flex-1 space-y-2.5 overflow-y-auto px-3 py-3">
+      <div className="flex-1 space-y-4 overflow-y-auto px-3 py-3">
         {error && (
           <Alert tone="danger" action={<RetryButton onClick={cargar} />}>
             {error}
@@ -148,128 +138,147 @@ export function CopilotoRail() {
         )}
         {loading && !error && (
           <>
-            <Skeleton className="h-24 rounded-card" />
+            <Skeleton className="h-20 rounded-card" />
             <Skeleton className="h-24 rounded-card" />
           </>
         )}
 
-        {!loading && !error && cartera && cartera.total > 0 && (
-          <Link
-            href="/despacho"
-            className="block rounded-card border border-cos-brand/25 bg-cos-brand-tint px-3 py-2.5 transition-colors hover:border-cos-brand/50"
-          >
-            <p className="flex items-center gap-1.5 text-[12px] font-semibold text-cos-brand-ink">
-              <Briefcase className="h-3.5 w-3.5" /> Tu cartera
-            </p>
-            <p className="mt-0.5 text-[12.5px] text-cos-ink-soft">
-              {cartera.total} hallazgo{cartera.total === 1 ? "" : "s"} en {cartera.empresas} empresa
-              {cartera.empresas === 1 ? "" : "s"}
-              {cartera.criticos > 0 && (
-                <span className="font-semibold text-cos-red-ink"> · {cartera.criticos} críticos</span>
-              )}{" "}
-              — ver por empresa →
-            </p>
-          </Link>
-        )}
-
-        {!loading && !error && rail && rail.grupos.length === 0 && (
-          <div className="rounded-card border border-cos-jade-ink/20 bg-cos-jade-tint px-3 py-3 text-[12.5px] text-cos-jade-ink">
-            {activeCompany?.razonSocial}: sin pendientes urgentes del auditor.
-            {rail.informativos > 0 &&
-              ` ${rail.informativos} ${rail.informativos === 1 ? "aviso informativo" : "avisos informativos"} en Hallazgos.`}
-          </div>
-        )}
-
-        {!loading &&
-          !error &&
-          rail?.grupos.map((g) => (
-            // La carta ENTERA navega al destino del verbo (no sólo el botón):
-            // con 300px de rail, el botón solo era un blanco chico. El botón
-            // sigue siendo <Link> por semántica/teclado; Posponer corta la
-            // propagación.
-            <div
-              key={g.href + g.categoria}
-              onClick={() => router.push(g.href)}
-              className="cursor-pointer rounded-card border border-cos-line bg-cos-paper px-3 py-2.5 transition-colors hover:border-cos-brand/40"
-            >
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                    g.severidad === "error"
-                      ? "bg-cos-red-tint text-cos-red-ink"
-                      : "bg-cos-amber-tint text-cos-amber-ink",
-                  )}
-                >
-                  {g.severidad === "error" ? (
-                    <ShieldAlert className="h-3 w-3" />
-                  ) : (
-                    <TriangleAlert className="h-3 w-3" />
-                  )}
-                  {g.categoria}
-                </span>
-                {g.count > 1 && (
-                  <span className="rounded-full bg-cos-slate-tint px-1.5 text-[10.5px] font-bold tabular-nums text-cos-ink-soft">
-                    {g.count}
-                  </span>
-                )}
+        {!loading && !error && rail && (
+          <>
+            {/* ── 1. Lo que hice ──────────────────────────────────────────── */}
+            <section className="space-y-1.5">
+              <div className="flex items-baseline justify-between">
+                <p className={TITULO_BLOQUE}>Lo que hice</p>
+                <span className="text-[11px] text-cos-ink-faint">{cuandoPaso(rail.ultimaPasada)}</span>
               </div>
-              <p className="text-[13px] font-semibold leading-snug text-cos-ink">{g.titulo}</p>
-              {g.muestra && (
-                <p className="mt-0.5 line-clamp-1 text-[11.5px] text-cos-ink-faint">p. ej. {g.muestra}</p>
+              {rail.hice.length === 0 ? (
+                <p className="rounded-card border border-cos-line-soft bg-cos-paper px-3 py-2 text-[12.5px] text-cos-ink-faint">
+                  {rail.ultimaPasada
+                    ? "En la última revisión no hubo nada que resolver por mi cuenta."
+                    : "Todavía no he hecho una revisión de esta empresa."}
+                </p>
+              ) : (
+                <ul className="space-y-1">
+                  {rail.hice.map((h, i) => (
+                    <li
+                      key={i}
+                      className="flex items-start gap-1.5 rounded-card border border-cos-jade-ink/15 bg-cos-jade-tint px-2.5 py-1.5 text-[12.5px] text-cos-jade-ink"
+                    >
+                      <Check className="mt-0.5 h-3.5 w-3.5 flex-none" />
+                      <span>{h.texto}</span>
+                    </li>
+                  ))}
+                </ul>
               )}
-              <div className="mt-2 flex items-center gap-1.5">
+              {rail.resumen && (
                 <Link
-                  href={g.href}
-                  className="inline-flex flex-1 items-center justify-center gap-1 rounded-control bg-cos-brand px-2.5 py-1.5 text-[12px] font-semibold text-white hover:bg-cos-brand-deep"
+                  href="/expediente"
+                  className="block px-1 text-[11.5px] font-medium text-cos-brand-ink hover:underline"
                 >
-                  {g.verbo} <ArrowRight className="h-3 w-3" />
+                  Ver la revisión completa →
                 </Link>
-                <button
-                  type="button"
-                  title="Preguntar al copiloto sobre esto"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    // El chat abre con el hallazgo pre-cargado en el input
-                    // (mismo mecanismo que Avisos): el usuario edita o envía.
-                    window.dispatchEvent(
-                      new CustomEvent("cos:ask-ai", {
-                        detail: {
-                          seed: `Explícame este hallazgo y cómo lo resuelvo: ${g.titulo}${g.muestra ? ` (p. ej. ${g.muestra})` : ""}`,
-                        },
-                      }),
-                    );
-                  }}
-                  className="rounded-control border border-cos-line p-1.5 text-cos-ink-faint hover:bg-cos-paper hover:text-cos-ink"
-                >
-                  <MessageCircle className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  title="Posponer 7 días"
-                  disabled={posponiendo !== null}
-                  onClick={(e) => { e.stopPropagation(); posponer(g.href, g.ids); }}
-                  className="rounded-control border border-cos-line p-1.5 text-cos-ink-faint hover:bg-cos-paper hover:text-cos-ink disabled:opacity-50"
-                >
-                  <Clock className={cn("h-3.5 w-3.5", posponiendo === g.href && "animate-pulse")} />
-                </button>
-              </div>
-            </div>
-          ))}
+              )}
+            </section>
 
-        {!loading && !error && rail && (rail.restantes > 0 || rail.informativos > 0) && (
-          <Link
-            href="/hallazgos"
-            className="block rounded-card px-3 py-2 text-center text-[12px] font-medium text-cos-brand-ink hover:bg-cos-brand-tint"
-          >
-            {[
-              rail.restantes > 0 ? `${rail.restantes} más` : null,
-              rail.informativos > 0 ? `${rail.informativos} informativos` : null,
-            ]
-              .filter(Boolean)
-              .join(" · ")}{" "}
-            → Ver todos
-          </Link>
+            {/* ── 2. Lo que necesito de ti ────────────────────────────────── */}
+            <section className="space-y-1.5">
+              <p className={TITULO_BLOQUE}>Lo que necesito de ti</p>
+              {rail.necesito.length === 0 ? (
+                <p className="rounded-card border border-cos-line-soft bg-cos-paper px-3 py-2 text-[12.5px] text-cos-ink-faint">
+                  Nada por ahora. Cuando necesite algo tuyo, aparece aquí.
+                </p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {rail.necesito.map((p) => {
+                    const cuerpo = (
+                      <>
+                        <div className="flex items-start gap-1.5">
+                          <Inbox className="mt-0.5 h-3.5 w-3.5 flex-none text-cos-amber-ink" />
+                          <p className="text-[12.5px] font-semibold leading-snug text-cos-ink">{p.titulo}</p>
+                        </div>
+                        <p className="mt-0.5 line-clamp-2 pl-5 text-[11.5px] text-cos-ink-soft">{p.detalle}</p>
+                        {p.dias > 0 && (
+                          <p
+                            className={cn(
+                              "mt-0.5 pl-5 text-[11px]",
+                              p.dias >= 21 ? "font-semibold text-cos-red-ink" : "text-cos-ink-faint",
+                            )}
+                          >
+                            {esperaEnTexto(p.dias)}
+                          </p>
+                        )}
+                      </>
+                    );
+                    const clase =
+                      "block rounded-card border border-cos-amber-tint bg-cos-paper px-2.5 py-2 transition-colors hover:border-cos-brand/40";
+                    return (
+                      <li key={p.id}>
+                        {p.href ? (
+                          <Link href={p.href} className={clase}>
+                            {cuerpo}
+                            <span className="mt-1 inline-flex items-center gap-1 pl-5 text-[11.5px] font-semibold text-cos-brand-ink">
+                              Resolver <ArrowRight className="h-3 w-3" />
+                            </span>
+                          </Link>
+                        ) : (
+                          <div className={clase}>{cuerpo}</div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+
+            {/* ── Revisiones: lo que NO cabe como lista ───────────────────── */}
+            {rail.revisiones.length > 0 && (
+              <section className="space-y-1.5">
+                <p className={TITULO_BLOQUE}>Para revisar en bloque</p>
+                {rail.revisiones.map((r) => (
+                  <div key={r.href} className="rounded-card border border-cos-line bg-cos-paper px-2.5 py-2">
+                    <div className="flex items-start gap-1.5">
+                      <Search className="mt-0.5 h-3.5 w-3.5 flex-none text-cos-ink-faint" />
+                      <p className="text-[12.5px] font-semibold leading-snug text-cos-ink">{r.titulo}</p>
+                    </div>
+                    <p className="mt-0.5 pl-5 text-[11.5px] text-cos-ink-soft">{r.triage}</p>
+                    {r.muestra.length > 0 && (
+                      <p className="mt-0.5 line-clamp-1 pl-5 text-[11px] text-cos-ink-faint">
+                        p. ej. {r.muestra[0]}
+                      </p>
+                    )}
+                    <Link
+                      href={r.href}
+                      className="mt-1 inline-flex items-center gap-1 pl-5 text-[11.5px] font-semibold text-cos-brand-ink hover:underline"
+                    >
+                      Ver una muestra <ArrowRight className="h-3 w-3" />
+                    </Link>
+                  </div>
+                ))}
+              </section>
+            )}
+
+            {/* ── 3. Cómo vamos ──────────────────────────────────────────── */}
+            {rail.vamos.length > 0 && (
+              <section className="space-y-1">
+                <p className={TITULO_BLOQUE}>Cómo vamos</p>
+                <ul className="rounded-card border border-cos-line-soft bg-cos-paper">
+                  {rail.vamos.map((d) => (
+                    <li
+                      key={d.clave}
+                      className="flex items-center gap-2 border-b border-cos-line-soft px-2.5 py-1.5 last:border-b-0"
+                      title={d.detalle}
+                    >
+                      <span className={cn("h-1.5 w-1.5 flex-none rounded-full", PUNTO[d.estado])} />
+                      <span className="flex-1 truncate text-[12px] text-cos-ink-soft">{d.titulo}</span>
+                      {d.cambio && (
+                        <span className="text-[10.5px] font-medium text-cos-amber-ink">{d.cambio}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </>
         )}
       </div>
 

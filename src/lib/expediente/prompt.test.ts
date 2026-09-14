@@ -30,6 +30,7 @@ const nota = (extra: Partial<NotaExpediente> = {}): NotaExpediente => ({
   titulo: "Falta el estado de cuenta de la terminal",
   cuerpo: "Sin él no se pueden auditar las liquidaciones del centro de procedimientos.",
   refs: [],
+  datos: null,
   estado: "abierta",
   resueltaAt: null,
   resueltaPorNotaId: null,
