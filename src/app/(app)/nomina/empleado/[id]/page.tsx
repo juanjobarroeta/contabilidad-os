@@ -22,9 +22,11 @@ import { Alert, Card, Money, Loading, RetryButton } from "@/components/ui";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { AcumuladosEmpleado } from "@/lib/nomina/acumulados";
 import { TIPO_RUN_LABEL, STATUS_RUN_LABEL, PERIODICIDAD_LABEL } from "../../workspace-shared";
+import { DocumentosEmpleado } from "./DocumentosEmpleado";
 
 interface EmpleadoFicha {
   id: string;
+  companyId: string;
   nombre: string;
   apellidoPaterno: string;
   apellidoMaterno: string | null;
@@ -360,6 +362,13 @@ export default function ExpedienteEmpleadoPage() {
           </p>
         </>
       )}
+      {/* ── Documentos: contratos, CURP, NSS… con sugerencias del contrato ── */}
+      <DocumentosEmpleado
+        employeeId={data.empleado.id}
+        companyId={data.empleado.companyId}
+        ficha={{ salarioDiario: data.empleado.salarioDiario, salarioDiarioIntegrado: data.empleado.salarioDiarioIntegrado, puesto: data.empleado.puesto, fechaIngreso: data.empleado.fechaIngreso }}
+        onFichaChanged={() => load(anio, 1, false)}
+      />
     </div>
   );
 }
