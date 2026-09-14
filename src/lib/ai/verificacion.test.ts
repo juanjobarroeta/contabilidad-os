@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clasificarCitas, fraccionesMencionadas, fuentesDesdeToolResult, motivoRechazoCorreccion, parsearCita, parsearVeredicto, seleccionarTexto } from "./verificacion";
+import { clasificarCitas, fraccionesMencionadas, fuentesDesdeToolResult, motivoRechazoCorreccion, parsearCita, parsearVeredicto, seleccionarTexto, resolverCitaEstatal } from "./verificacion";
 
 describe("clasificarCitas", () => {
   it("una cita con fracción o con año de RMF cuenta como sostenida si la KB la devolvió", () => {
@@ -87,5 +87,23 @@ describe("motivoRechazoCorreccion", () => {
   it("rechaza citas nuevas y respuestas encogidas", () => {
     expect(motivoRechazoCorreccion(original, `${original} Además aplica el Art. 94 LISR.`)).toMatch(/citas nuevas: ART\. 94 LISR/);
     expect(motivoRechazoCorreccion(original, "Art. 27 LISR.")).toMatch(/encoge/);
+  });
+});
+
+describe("resolverCitaEstatal", () => {
+  const fuentes = [
+    { cita: "Art. 486 CHH-C-PROCEDIMIENTOS-FAMILIARES-CH", texto: "ARTÍCULO 486. La apelación solo procede en efecto devolutivo…" },
+    { cita: "Art. 485 CHH-C-PROCEDIMIENTOS-FAMILIARES-CH", texto: "ARTÍCULO 485. La apelación debe interponerse dentro de los seis días…" },
+    { cita: "Art. 63 COA-C-PROCEDIMIENTOS-FAMILIARES-CO", texto: "ARTÍCULO 63. …" },
+  ];
+  it("«Art. 486 CPF Chihuahua» se resuelve contra la fuente CHH-… del mismo artículo, no contra el Código Penal Federal", () => {
+    const respuesta = "- **Art. 486 CPF Chihuahua**: la apelación procede en efecto devolutivo.\n- **Art. 485 del CPF del Estado de Chihuahua**: seis días.";
+    expect(resolverCitaEstatal("ART. 486 CPF", respuesta, fuentes)?.cita).toBe("Art. 486 CHH-C-PROCEDIMIENTOS-FAMILIARES-CH");
+    expect(resolverCitaEstatal("ART. 485 CPF", respuesta, fuentes)?.cita).toBe("Art. 485 CHH-C-PROCEDIMIENTOS-FAMILIARES-CH");
+  });
+  it("sin estado junto a la cita, o con un estado del que no hay fuente, no resuelve", () => {
+    expect(resolverCitaEstatal("ART. 486 CPF", "Conforme al Art. 486 CPF, procede.", fuentes)).toBeNull();
+    expect(resolverCitaEstatal("ART. 486 CPF", "Art. 486 CPF Puebla", fuentes)).toBeNull();
+    expect(resolverCitaEstatal("ART. 63 CPF", "Art. 63 CPF Coahuila", fuentes)?.cita).toBe("Art. 63 COA-C-PROCEDIMIENTOS-FAMILIARES-CO");
   });
 });

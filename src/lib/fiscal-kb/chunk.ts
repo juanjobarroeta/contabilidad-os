@@ -71,7 +71,11 @@ const HEADING_RE = /^(TÍTULO|CAPÍTULO|SECCIÓN)\s+/;
  * "N de M" page markers).
  */
 export function cleanLawText(raw: string): string {
-  const lines = raw.split("\n");
+  // Congresos que exportan el Word con tabuladores («ARTÍCULO \t479. \tLos
+  // autos…», Chihuahua, Querétaro, Sonora…): el encabezado no casaba con
+  // ARTICLE_RE y 500 artículos quedaban pegados en un puñado de chunks.
+  // Un solo espacio dentro del renglón; los saltos de línea se respetan.
+  const lines = raw.replace(/\t/g, " ").replace(/ {2,}/g, " ").split("\n");
   const title = lines.find((l) => l.trim().length > 0)?.trim() ?? "";
   const noise = [
     /^CÁMARA DE DIPUTADOS DEL H\. CONGRESO DE LA UNIÓN$/,

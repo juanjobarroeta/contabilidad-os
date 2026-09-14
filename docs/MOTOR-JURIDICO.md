@@ -242,14 +242,14 @@
 > sin crédito y el borrador quedó íntegro en la BD. Desde entonces el turno
 > traduce ese error (y saturación / llave rechazada) a un mensaje en español
 > para el abogado (`src/lib/juridico/errores.ts`) en vez del JSON crudo.
-> **Y Sentry no se enteró (PR #1054):** `reportError` sí escribía en el
+> **Y Sentry no se enteró (PR #1055):** `reportError` sí escribía en el
 > log pero no mandaba nada, porque Next empaqueta `observability.ts` en cada
 > chunk del servidor y el `initialized` de la copia de la ruta era false;
 > ahora pregunta a `Sentry.getClient()` (el cliente sí es uno solo). Ningún
 > error de servidor del hub había llegado a Sentry hasta hoy; sólo los del
 > navegador.
 >
-> **«No pude verificar el texto exacto en la base» (PR #1055, 13-sep-2026).**
+> **«No pude verificar el texto exacto en la base» (PR #1075, 13-sep-2026).**
 > La abogada preguntó por la apelación en el juicio familiar de Chihuahua y
 > la respuesta marcó así los Arts. 485 y 486, aunque `get_articulo` los
 > había traído. Dos causas: (1) el verificador leía «Art. 486 CPF Chihuahua»
