@@ -30,6 +30,7 @@ import {
   tipoPorCodAgrup,
   convencionQueCuadra,
   type CatalogoCuentaParsed,
+  type BalanzaParseResult,
 } from "./ce-import";
 
 /**
@@ -63,7 +64,14 @@ export async function importarCatalogo(
   companyId: string,
   xml: string,
 ): Promise<ImportarCatalogoResult> {
-  const { cuentas } = parseCatalogoCuentas(xml);
+  return importarCuentasCatalogo(companyId, parseCatalogoCuentas(xml).cuentas);
+}
+
+/** Lo mismo, a partir de cuentas ya parseadas (XML, CSV o Excel: da igual de dónde vengan). */
+export async function importarCuentasCatalogo(
+  companyId: string,
+  cuentas: CatalogoCuentaParsed[],
+): Promise<ImportarCatalogoResult> {
   let creadas = 0;
   let actualizadas = 0;
   let omitidas = 0;
@@ -150,8 +158,16 @@ export async function importarBalanza(
   xml: string,
   opts: { usar?: "inicial" | "final"; fechaISO?: string } = {},
 ): Promise<ImportarBalanzaResult> {
+  return importarBalanzaParsed(companyId, parseBalanza(xml), opts);
+}
+
+/** Lo mismo, a partir de una balanza ya parseada (XML, CSV o Excel). */
+export async function importarBalanzaParsed(
+  companyId: string,
+  bal: BalanzaParseResult,
+  opts: { usar?: "inicial" | "final"; fechaISO?: string } = {},
+): Promise<ImportarBalanzaResult> {
   const usar = opts.usar ?? "final";
-  const bal = parseBalanza(xml);
 
   // Catálogo de la empresa para resolver naturaleza por código y filtrar a
   // cuentas existentes (las agregadas duplicarían saldos; sólo posteamos las

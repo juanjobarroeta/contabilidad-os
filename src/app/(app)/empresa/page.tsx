@@ -539,7 +539,7 @@ export default function EmpresaPage() {
   async function handleImportCe() {
     if (!activeCompany) return;
     if (!ceCatalogoFile && !ceBalanzaFile) {
-      setCeError("Sube el XML del catálogo de cuentas y/o de la balanza de comprobación.");
+      setCeError("Sube el catálogo de cuentas y/o la balanza de comprobación (XML del SAT, o CSV/Excel de tu sistema).");
       return;
     }
     setCeSaving(true);
@@ -571,6 +571,7 @@ export default function EmpresaPage() {
           );
         }
       }
+      if (Array.isArray(data.advertencias) && data.advertencias.length) partes.push(...data.advertencias);
       setCeSuccess(partes.join(" "));
       setCeCatalogoFile(null);
       setCeBalanzaFile(null);
@@ -1558,29 +1559,30 @@ export default function EmpresaPage() {
 
           <div className="px-5 py-4 space-y-3">
             <p className="text-xs text-cos-ink-soft">
-              Sube el XML del <strong>Catálogo de Cuentas</strong> y de la última <strong>Balanza de Comprobación</strong>
-              {" "}presentada al SAT. El catálogo crea el plan de cuentas de la empresa y la balanza genera los
-              {" "}<strong>saldos iniciales</strong> (asiento de apertura). Es lo que hace que tu balanza y balance
-              {" "}sean reales: los CFDIs por sí solos sólo dan el estado de resultados. Puedes descargar estos XML
-              {" "}del portal del SAT (Contabilidad Electrónica) o exportarlos de tu sistema contable anterior.
+              Sube el <strong>Catálogo de Cuentas</strong> y la última <strong>Balanza de Comprobación</strong>. El
+              {" "}catálogo crea el plan de cuentas de la empresa y la balanza genera los <strong>saldos iniciales</strong>
+              {" "}(asiento de apertura). Es lo que hace que tu balanza y balance sean reales: los CFDIs por sí solos
+              {" "}sólo dan el estado de resultados. Sirve el <strong>XML del SAT</strong> (Anexo 24) o la exportación de
+              {" "}tu sistema en <strong>CSV o Excel</strong> (CONTPAQi, Aspel COI, o una hoja con columnas código, nombre,
+              {" "}naturaleza, nivel y código agrupador SAT).
             </p>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium mb-1.5">Catálogo de Cuentas <code className="bg-cos-slate-tint px-1 rounded">.xml</code></label>
+                <label className="block text-xs font-medium mb-1.5">Catálogo de Cuentas <code className="bg-cos-slate-tint px-1 rounded">.xml · .csv · .xlsx</code></label>
                 <label className="flex items-center gap-2 w-full px-3 py-2.5 border border-cos-line border-dashed rounded-md text-xs cursor-pointer hover:bg-cos-paper transition-colors">
                   <Upload className="h-3.5 w-3.5 text-cos-ink-soft shrink-0" />
                   <span className="text-cos-ink-soft truncate">{ceCatalogoFile ? ceCatalogoFile.name : "Seleccionar catálogo"}</span>
-                  <input type="file" accept=".xml,text/xml,application/xml" className="hidden"
+                  <input type="file" accept=".xml,.csv,.xlsx,.xls,text/xml,application/xml,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden"
                     onChange={(e) => setCeCatalogoFile(e.target.files?.[0] ?? null)} />
                 </label>
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1.5">Balanza de Comprobación <code className="bg-cos-slate-tint px-1 rounded">.xml</code></label>
+                <label className="block text-xs font-medium mb-1.5">Balanza de Comprobación <code className="bg-cos-slate-tint px-1 rounded">.xml · .csv · .xlsx</code></label>
                 <label className="flex items-center gap-2 w-full px-3 py-2.5 border border-cos-line border-dashed rounded-md text-xs cursor-pointer hover:bg-cos-paper transition-colors">
                   <Upload className="h-3.5 w-3.5 text-cos-ink-soft shrink-0" />
                   <span className="text-cos-ink-soft truncate">{ceBalanzaFile ? ceBalanzaFile.name : "Seleccionar balanza"}</span>
-                  <input type="file" accept=".xml,text/xml,application/xml" className="hidden"
+                  <input type="file" accept=".xml,.csv,.xlsx,.xls,text/xml,application/xml,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden"
                     onChange={(e) => setCeBalanzaFile(e.target.files?.[0] ?? null)} />
                 </label>
               </div>
