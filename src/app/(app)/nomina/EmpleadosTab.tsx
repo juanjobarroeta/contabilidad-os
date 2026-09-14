@@ -14,9 +14,10 @@ import Link from "next/link";
 import { Alert, EmptyState, Money, RetryButton } from "@/components/ui";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { formatDate } from "@/lib/utils";
+import { descargarUrl } from "@/lib/descargar";
 import {
   Plus, Users2, Loader2, X, AlertCircle, CheckCircle2, Receipt,
-  UserX, Wand2, Search, Pencil, ChevronRight,
+  UserX, Wand2, Search, Pencil, ChevronRight, Download,
 } from "lucide-react";
 import { RosterImport } from "./RosterImport";
 import { PERIODICIDAD_LABEL, type Employee } from "./workspace-shared";
@@ -87,6 +88,11 @@ export default function EmpleadosTab() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {/* El padrón completo en Excel — todas las columnas, no las siete de la tabla. */}
+          <button onClick={() => descargarUrl(`/api/empleados/export?companyId=${activeCompany.id}`, "empleados.xlsx")}
+            className="flex items-center gap-2 border border-cos-line px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-paper" title="Descargar el padrón completo en Excel">
+            <Download className="h-4 w-4" /> Excel
+          </button>
           <button onClick={() => setShowImport(true)} className="flex items-center gap-2 border border-cos-line px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-paper" title="Reconstruir el equipo desde tus recibos de nómina">
             <Wand2 className="h-4 w-4" /> Importar desde recibos
           </button>
@@ -148,13 +154,17 @@ export default function EmpleadosTab() {
           Sin resultados para «{q}».
         </div>
       ) : (
-        <div className="bg-cos-card border border-cos-line rounded-xl overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
+        {/* LA TABLA NO SE CORTA: alto acotado con scroll propio (vertical y
+            horizontal), encabezado pegajoso y anchos mínimos por columna. Antes
+            era overflow-x-auto a secas: en 1024 px el nombre y el puesto se
+            comían las columnas y la acción quedaba fuera de vista. */}
+        <div className="bg-cos-card border border-cos-line rounded-xl max-h-[72vh] overflow-auto">
+          <table className="w-full min-w-[960px] text-sm">
+            <thead className="sticky top-0 z-10">
               <tr className="border-b border-cos-line bg-cos-slate-tint">
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Empleado</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft min-w-[220px]">Empleado</th>
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">NSS</th>
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Puesto</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft min-w-[160px]">Puesto</th>
                 <th className="text-right px-4 py-2.5 text-xs font-medium text-cos-ink-soft" title="Salario diario / Salario diario integrado (SBC)">Salario / SBC</th>
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Periodicidad</th>
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Estado</th>
@@ -167,15 +177,15 @@ export default function EmpleadosTab() {
                 <tr key={e.id} className="border-b border-cos-line last:border-0 hover:bg-cos-slate-tint/50">
                   <td className="px-4 py-3">
                     <Link href={`/nomina/empleado/${e.id}`} className="group block text-left" title="Ver expediente del empleado">
-                      <p className="font-medium group-hover:text-cos-brand-ink transition-colors inline-flex items-center gap-1">
-                        {e.nombre} {e.apellidoPaterno} {e.apellidoMaterno ?? ""}
+                      <p className="font-medium group-hover:text-cos-brand-ink transition-colors inline-flex max-w-[260px] items-center gap-1" title={`${e.nombre} ${e.apellidoPaterno} ${e.apellidoMaterno ?? ""}`.trim()}>
+                        <span className="truncate">{e.nombre} {e.apellidoPaterno} {e.apellidoMaterno ?? ""}</span>
                         <ChevronRight className="h-3.5 w-3.5 text-cos-ink-faint opacity-0 group-hover:opacity-100 transition-opacity" />
                       </p>
                       <p className="text-xs text-cos-ink-soft font-mono">{e.rfc}</p>
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-xs font-mono">{e.nss || "—"}</td>
-                  <td className="px-4 py-3 text-xs">{e.puesto ?? "—"}{e.departamento && <p className="text-cos-ink-soft">{e.departamento}</p>}</td>
+                  <td className="px-4 py-3 text-xs"><p className="max-w-[200px] truncate" title={e.puesto ?? undefined}>{e.puesto ?? "—"}</p>{e.departamento && <p className="max-w-[200px] truncate text-cos-ink-soft" title={e.departamento}>{e.departamento}</p>}</td>
                   <td className="px-4 py-3 text-right font-mono text-xs">
                     <Money value={e.salarioDiario} />
                     {e.salarioDiarioIntegrado != null && (
