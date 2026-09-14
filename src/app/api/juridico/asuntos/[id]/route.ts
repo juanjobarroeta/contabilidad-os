@@ -40,7 +40,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (!a) return NextResponse.json({ error: "Asunto no encontrado" }, { status: 404 });
       const { prisma } = await import("@/lib/prisma");
       const decisiones = a.decisiones.filter((_, i) => i !== body.quitarDecision);
-      await prisma.juridicoAsunto.update({ where: { id }, data: { decisiones: decisiones as unknown as import("@prisma/client").Prisma.InputJsonValue } });
+      await prisma.juridicoCaso.update({ where: { id }, data: { decisiones: decisiones as unknown as import("@prisma/client").Prisma.InputJsonValue } });
       return NextResponse.json(await cargarAsunto(id, userId));
     }
     const a = await actualizarAsunto(id, userId, { titulo: str("titulo"), materia: str("materia"), via: str("via"), autoridad: str("autoridad"), expediente: str("expediente"), entidad: str("entidad"), cliente: str("cliente"), objetivo: str("objetivo"), decision: str("decision") });

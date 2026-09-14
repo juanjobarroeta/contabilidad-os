@@ -16,6 +16,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { apuntar } from "./bitacora";
 import { recordLlmCost, type CostCtx } from "@/lib/costos/record";
 
 export interface Parte {
@@ -130,9 +131,9 @@ const selectAsunto = {
   objetivo: true,
   decisiones: true,
   partes: { orderBy: { createdAt: "asc" as const }, select: { id: true, rol: true, tipoPersona: true, nombre: true, rfc: true, curp: true, domicilio: true, representante: true, email: true, telefono: true, notas: true, fuente: true, documentoId: true, verificado: true } },
-} satisfies Prisma.JuridicoAsuntoSelect;
+} satisfies Prisma.JuridicoCasoSelect;
 
-type AsuntoRow = Prisma.JuridicoAsuntoGetPayload<{ select: typeof selectAsunto }>;
+type AsuntoRow = Prisma.JuridicoCasoGetPayload<{ select: typeof selectAsunto }>;
 
 function aAsunto(r: AsuntoRow): Asunto {
   return {
@@ -143,41 +144,67 @@ function aAsunto(r: AsuntoRow): Asunto {
 }
 
 export async function cargarAsunto(id: string, userId: string): Promise<Asunto | null> {
-  const r = await prisma.juridicoAsunto.findFirst({ where: { id, userId }, select: selectAsunto });
+  const r = await prisma.juridicoCaso.findFirst({ where: { id, userId }, select: selectAsunto });
   return r ? aAsunto(r) : null;
 }
 
 /** El asunto de una conversación; se crea al primer uso con el título de la conversación. */
 export async function asuntoDeConversacion(conversacionId: string, userId: string, opts: { crear?: boolean } = {}): Promise<Asunto | null> {
-  const conv = await prisma.juridicoConversacion.findFirst({ where: { id: conversacionId, userId }, select: { asuntoId: true, titulo: true } });
+  const conv = await prisma.juridicoConversacion.findFirst({ where: { id: conversacionId, userId }, select: { casoId: true, titulo: true } });
   if (!conv) return null;
-  if (conv.asuntoId) {
-    const a = await cargarAsunto(conv.asuntoId, userId);
+  if (conv.casoId) {
+    const a = await cargarAsunto(conv.casoId, userId);
     if (a) return a;
   }
   if (!opts.crear) return null;
-  const creado = await prisma.juridicoAsunto.create({ data: { userId, titulo: conv.titulo.slice(0, 120) || "Asunto" }, select: selectAsunto });
-  await prisma.juridicoConversacion.update({ where: { id: conversacionId }, data: { asuntoId: creado.id } });
+  // Las herramientas de una ronda corren EN PARALELO: registrar_partes y
+  // actualizar_asunto llegaban aquí a la vez, ninguna veía el caso de la otra
+  // y la conversación terminaba con dos casos —las tareas en uno y los datos
+  // en el otro— (visto en producción el 14-sep-2026). Gana quien logre pasar
+  // la conversación de `casoId: null` al suyo; el perdedor borra el que creó
+  // y usa el del ganador.
+  const creado = await prisma.juridicoCaso.create({ data: { userId, titulo: conv.titulo.slice(0, 120) || "Asunto", responsableUserId: userId }, select: selectAsunto });
+  const gane = await prisma.juridicoConversacion.updateMany({ where: { id: conversacionId, casoId: null }, data: { casoId: creado.id } });
+  if (gane.count === 0) {
+    await prisma.juridicoCaso.delete({ where: { id: creado.id } }).catch(() => {});
+    const actual = await prisma.juridicoConversacion.findUnique({ where: { id: conversacionId }, select: { casoId: true } });
+    return actual?.casoId ? await cargarAsunto(actual.casoId, userId) : null;
+  }
+  // El documento pertenece al CASO, no sólo a la conversación: así sigue vivo
+  // aunque la conversación se archive.
+  await prisma.juridicoDocumento.updateMany({ where: { conversacionId }, data: { casoId: creado.id } });
+  await apuntar({ casoId: creado.id, actor: { userId, tipo: "copiloto" }, accion: "caso.creado", entidad: "caso", entidadId: creado.id, resumen: `abrió el caso desde la conversación «${conv.titulo}»` });
   return aAsunto(creado);
 }
 
 /** Registra o actualiza partes (fusionando por RFC/CURP/nombre). Devuelve el asunto actualizado. */
 /** `representante` viene como string o —pese al esquema— como objeto del modelo. A texto. */
-function representanteATexto(v: unknown): string | null {
-  if (v == null) return null;
+/**
+ * Un campo de texto de una parte o un cliente, venga como venga del modelo:
+ * objeto → «nombre (rol)», arreglo → «a; b», número → texto, vacío → null.
+ * Haiku devolvió `representante: {nombre, tipoPersona, rol}` y Prisma tumbó el
+ * registro entero (CONTABILIDAD-OS-F, 14-sep-2026). Puro.
+ */
+export function textoPlano(v: unknown): string | null {
+  if (v === null || v === undefined) return null;
   if (typeof v === "string") return v.trim() ? v.trim().slice(0, 200) : null;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  if (Array.isArray(v)) return v.map(textoPlano).filter(Boolean).join("; ").slice(0, 200) || null;
   if (typeof v === "object") {
     const o = v as Record<string, unknown>;
-    const nombre = typeof o.nombre === "string" ? o.nombre.trim() : "";
-    const rol = typeof o.rol === "string" ? o.rol.trim() : "";
+    const nombre = typeof o.nombre === "string" ? o.nombre.trim() : typeof o.name === "string" ? o.name.trim() : "";
+    const rol = typeof o.rol === "string" ? o.rol.trim() : typeof o.cargo === "string" ? o.cargo.trim() : "";
     if (!nombre) return null;
     return (rol && rol.toLowerCase() !== "representante legal" ? `${nombre} (${rol})` : nombre).slice(0, 200);
   }
   return null;
 }
 
-export async function registrarPartes(asuntoId: string, userId: string, nuevas: Partial<Parte>[]): Promise<{ asunto: Asunto; creadas: number; actualizadas: number }> {
-  const asunto = await cargarAsunto(asuntoId, userId);
+/** @deprecated usa textoPlano. */
+const representanteATexto = textoPlano;
+
+export async function registrarPartes(casoId: string, userId: string, nuevas: Partial<Parte>[]): Promise<{ asunto: Asunto; creadas: number; actualizadas: number }> {
+  const asunto = await cargarAsunto(casoId, userId);
   if (!asunto) throw new Error("Asunto no encontrado");
   let creadas = 0;
   let actualizadas = 0;
@@ -198,7 +225,7 @@ export async function registrarPartes(asuntoId: string, userId: string, nuevas: 
       if (asunto.partes.length >= MAX_PARTES) break;
       const creada = await prisma.juridicoParte.create({
         data: {
-          asuntoId,
+          casoId,
           rol: (n.rol ?? "parte").slice(0, 60),
           tipoPersona: n.tipoPersona === "moral" ? "moral" : "fisica",
           nombre: n.nombre.trim().slice(0, 200),
@@ -218,18 +245,18 @@ export async function registrarPartes(asuntoId: string, userId: string, nuevas: 
       creadas++;
     }
   }
-  await prisma.juridicoAsunto.update({ where: { id: asuntoId }, data: { updatedAt: new Date() } });
-  return { asunto: (await cargarAsunto(asuntoId, userId))!, creadas, actualizadas };
+  await prisma.juridicoCaso.update({ where: { id: casoId }, data: { updatedAt: new Date() } });
+  return { asunto: (await cargarAsunto(casoId, userId))!, creadas, actualizadas };
 }
 
 export async function actualizarAsunto(
-  asuntoId: string,
+  casoId: string,
   userId: string,
   cambios: Partial<Pick<Asunto, "titulo" | "materia" | "via" | "autoridad" | "expediente" | "entidad" | "cliente" | "objetivo">> & { decision?: string; mensajeId?: string | null }
 ): Promise<Asunto> {
-  const actual = await cargarAsunto(asuntoId, userId);
+  const actual = await cargarAsunto(casoId, userId);
   if (!actual) throw new Error("Asunto no encontrado");
-  const data: Prisma.JuridicoAsuntoUpdateInput = {};
+  const data: Prisma.JuridicoCasoUpdateInput = {};
   for (const k of ["titulo", "materia", "via", "autoridad", "expediente", "entidad", "cliente", "objetivo"] as const) {
     const v = cambios[k];
     if (typeof v === "string" && v.trim()) data[k] = v.trim().slice(0, k === "objetivo" ? 4000 : 200);
@@ -238,7 +265,7 @@ export async function actualizarAsunto(
     const decisiones = [...actual.decisiones, { texto: cambios.decision.trim().slice(0, 600), mensajeId: cambios.mensajeId ?? null, fecha: new Date().toISOString().slice(0, 10) }].slice(-MAX_DECISIONES);
     data.decisiones = decisiones as unknown as Prisma.InputJsonValue;
   }
-  const r = await prisma.juridicoAsunto.update({ where: { id: asuntoId }, data, select: selectAsunto });
+  const r = await prisma.juridicoCaso.update({ where: { id: casoId }, data, select: selectAsunto });
   return aAsunto(r);
 }
 

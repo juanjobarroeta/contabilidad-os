@@ -57,7 +57,8 @@ model User {
   whatsappLinkCodes   WhatsappLinkCode[]
   chatConversations   ChatConversation[]
   juridicoConversaciones JuridicoConversacion[]
-  juridicoAsuntos        JuridicoAsunto[]
+  juridicoCasos          JuridicoCaso[]
+  juridicoClientes       JuridicoCliente[]
   // Refresh tokens de la API de satélites (flujo access corto + refresh rotatorio).
   apiRefreshTokens    ApiRefreshToken[]
   passwordResetTokens PasswordResetToken[]
@@ -4154,50 +4155,68 @@ model FiscalDocument {
 model JuridicoConversacion {
   id         String    @id @default(cuid())
   userId     String
-  asuntoId   String?
+  casoId     String?   @map("asuntoId")
   titulo     String    @default("Nueva conversación")
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
   archivedAt DateTime?
 
   user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  asunto     JuridicoAsunto?     @relation(fields: [asuntoId], references: [id], onDelete: SetNull)
+  caso       JuridicoCaso?       @relation(fields: [casoId], references: [id], onDelete: SetNull)
   mensajes   JuridicoMensaje[]
   documentos JuridicoDocumento[]
 
   @@index([userId, updatedAt])
-  @@index([asuntoId])
+  @@index([casoId])
 }
 
 // El ASUNTO es la fuente de verdad de un caso: partes, expediente, autoridad,
 // objetivo y las decisiones tomadas en el chat. Lo que el copiloto redacta sale
 // de aquí, no de su memoria de la conversación (src/lib/juridico/asuntos.ts).
-model JuridicoAsunto {
-  id         String   @id @default(cuid())
-  userId     String
-  titulo     String
-  materia    String? // civil | familiar | mercantil | penal | laboral | administrativo | fiscal | amparo | otro
-  via        String? // juicio oral civil, ordinario familiar, ejecutivo mercantil, amparo indirecto…
-  autoridad  String? // juzgado / tribunal / sala
-  expediente String?
-  entidad    String? // clave SAT de la entidad (PUE, CHH…)
-  cliente    String? // rol del cliente en el asunto: actor | demandado | mutuante | …
-  objetivo   String?  @db.Text
+model JuridicoCaso {
+  id                String    @id @default(cuid())
+  userId            String
+  titulo            String
+  materia           String? // civil | familiar | mercantil | penal | laboral | administrativo | fiscal | amparo | otro
+  via               String? // juicio oral civil, ordinario familiar, ejecutivo mercantil, amparo indirecto…
+  autoridad         String? // juzgado / tribunal / sala
+  expediente        String?
+  entidad           String? // clave SAT de la entidad (PUE, CHH…)
+  cliente           String? // rol del cliente en el caso: actor | demandado | mutuante | …
+  // El cliente del DIRECTORIO (JuridicoCliente). `cliente` de arriba es su
+  // papel en este caso; esto es quién es.
+  clienteId         String?
+  objetivo          String?   @db.Text
+  estado            String    @default("abierto") // abierto | en_tramite | cerrado
+  responsableUserId String?
   // [{ texto, mensajeId?, fecha }]: instrucciones y decisiones del abogado, con el mensaje de donde salen.
-  decisiones Json?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  decisiones        Json?
+  cerradoAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   user           User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clienteRef     JuridicoCliente?       @relation(fields: [clienteId], references: [id], onDelete: SetNull)
   conversaciones JuridicoConversacion[]
   partes         JuridicoParte[]
+  documentos     JuridicoDocumento[]
+  tareas         JuridicoTarea[]
+  bitacora       JuridicoBitacora[]
 
   @@index([userId, updatedAt])
+  @@index([userId, estado])
+  @@index([clienteId])
+  // La tabla se sigue llamando JuridicoAsunto: renombrarla obligaría a parar el
+  // producto durante el rollover (el contenedor viejo consulta el nombre viejo).
+  @@map("JuridicoAsunto")
 }
 
 model JuridicoParte {
   id           String   @id @default(cuid())
-  asuntoId     String
+  casoId       String   @map("asuntoId")
+  // Quién es, en el directorio del despacho. Null = parte suelta (aún no se
+  // decide si merece ficha propia; el copiloto las crea así desde un documento).
+  clienteId    String?
   rol          String // actor | demandado | cliente | contraparte | mutuante | mutuario | arrendador | … (libre)
   tipoPersona  String   @default("fisica") // fisica | moral
   nombre       String
@@ -4214,9 +4233,11 @@ model JuridicoParte {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  asunto JuridicoAsunto @relation(fields: [asuntoId], references: [id], onDelete: Cascade)
+  caso    JuridicoCaso     @relation(fields: [casoId], references: [id], onDelete: Cascade)
+  clienteRef JuridicoCliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
 
-  @@index([asuntoId])
+  @@index([casoId])
+  @@index([clienteId])
 }
 
 // Un contrato, demanda o escrito que el abogado sube a la conversación para
@@ -4225,6 +4246,9 @@ model JuridicoParte {
 model JuridicoDocumento {
   id             String   @id @default(cuid())
   conversacionId String
+  // El caso al que pertenece. Se hereda de la conversación al subir o redactar;
+  // un documento puede vivir en el caso aunque su conversación se archive.
+  casoId         String?
   userId         String
   nombre         String
   mime           String
@@ -4245,8 +4269,12 @@ model JuridicoDocumento {
   versiones      Json?
   createdAt      DateTime @default(now())
 
+  caso             JuridicoCaso?              @relation(fields: [casoId], references: [id], onDelete: SetNull)
+  historialVersiones JuridicoDocumentoVersion[]
+
   conversacion JuridicoConversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
 
+  @@index([casoId, createdAt])
   @@index([conversacionId])
 }
 
@@ -4269,6 +4297,113 @@ model JuridicoTurno {
 
   @@index([conversacionId, createdAt])
   @@index([estado, latido])
+}
+
+// El DIRECTORIO del despacho: una persona (física o moral) se captura una vez
+// y se reutiliza entre casos. JuridicoParte pasa a ser el PAPEL que alguien
+// juega en un caso; esto es quién es.
+model JuridicoCliente {
+  id                String   @id @default(cuid())
+  userId            String
+  tipoPersona       String   @default("fisica") // fisica | moral
+  nombre            String
+  // Sin acentos, sin forma societaria y en minúsculas: con esto se deduplica
+  // y se busca (misma normalización que asuntos.ts usa para fusionar partes).
+  nombreNormalizado String
+  rfc               String?
+  curp              String?
+  domicilio         String?
+  representante     String?
+  email             String?
+  telefono          String?
+  notas             String?  @db.Text
+  // true = un humano confirmó los datos (no salieron sólo de un documento).
+  verificado        Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  casos  JuridicoCaso[]
+  partes JuridicoParte[]
+
+  @@index([userId, nombreNormalizado])
+  @@index([userId, rfc])
+  @@index([userId, updatedAt])
+}
+
+// Pendientes del caso: quién lo hace, para cuándo y en qué va. El copiloto
+// propone (origen = copiloto) al leer un acuerdo o cerrar un esquema; el
+// abogado asigna y cierra.
+model JuridicoTarea {
+  id              String    @id @default(cuid())
+  casoId          String
+  creadaPorUserId String
+  asignadoUserId  String?
+  titulo          String
+  detalle         String?   @db.Text
+  estado          String    @default("por_hacer") // por_hacer | en_curso | en_revision | hecha | cancelada
+  prioridad       String    @default("normal") // baja | normal | alta
+  vence           DateTime?
+  // De dónde nace: un documento, un plazo, una propuesta del copiloto.
+  documentoId     String?
+  origen          String    @default("manual") // manual | copiloto | acuerdo
+  hechaAt         DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  caso JuridicoCaso @relation(fields: [casoId], references: [id], onDelete: Cascade)
+
+  @@index([casoId, estado])
+  @@index([asignadoUserId, estado, vence])
+  @@index([casoId, vence])
+}
+
+// Cada versión de un documento con SU AUTOR. Antes vivían en
+// JuridicoDocumento.versiones (JSON, sin autor ni motivo): eso no sirve de
+// evidencia si un cliente discute qué se acordó.
+model JuridicoDocumentoVersion {
+  id                 String   @id @default(cuid())
+  documentoId        String
+  n                  Int // 1, 2, 3… en orden
+  texto              String   @db.Text
+  plan               Json?
+  autorUserId        String?
+  autorTipo          String   @default("abogado") // abogado | cliente | copiloto
+  // Quién fue cuando no hay cuenta (el cliente que revisa por enlace).
+  autorNombre        String?
+  motivo             String?
+  // [{ n, titulo }]: qué secciones cambiaron respecto de la versión anterior.
+  seccionesCambiadas Json?
+  createdAt          DateTime @default(now())
+
+  documento JuridicoDocumento @relation(fields: [documentoId], references: [id], onDelete: Cascade)
+
+  @@unique([documentoId, n])
+  @@index([documentoId, createdAt])
+}
+
+// Bitácora del caso: sólo se agrega, nunca se edita ni se borra. Es la
+// trazabilidad que pide un despacho y la evidencia de qué se hizo y cuándo.
+model JuridicoBitacora {
+  id          String   @id @default(cuid())
+  casoId      String
+  actorUserId String?
+  actorTipo   String   @default("abogado") // abogado | cliente | copiloto | sistema
+  actorNombre String?
+  // caso.creado | caso.actualizado | parte.registrada | parte.editada |
+  // documento.creado | documento.version | tarea.creada | tarea.movida |
+  // cliente.ligado | acceso.compartido | comentario.cliente
+  accion      String
+  entidad     String? // caso | parte | documento | tarea | cliente | acceso
+  entidadId   String?
+  resumen     String   @db.Text
+  datos       Json?
+  createdAt   DateTime @default(now())
+
+  caso JuridicoCaso @relation(fields: [casoId], references: [id], onDelete: Cascade)
+
+  @@index([casoId, createdAt])
+  @@index([casoId, entidad, entidadId])
 }
 
 model JuridicoMensaje {
