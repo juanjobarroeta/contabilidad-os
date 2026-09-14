@@ -22,7 +22,7 @@ export interface MovimientoNomina {
   /** Qué pasó, en una línea. */
   titulo: string;
   detalle: string | null;
-  tipo: "CORRIDA" | "FINIQUITO" | "ALTA" | "BAJA" | "TIMBRADO" | "DISPERSION" | "CANCELACION" | "INCIDENCIA" | "EXPEDIENTE";
+  tipo: "CORRIDA" | "FINIQUITO" | "ALTA" | "BAJA" | "TIMBRADO" | "DISPERSION" | "CANCELACION" | "INCIDENCIA" | "EXPEDIENTE" | "CORREO";
   /** A dónde lleva el clic. */
   href: string;
   actor: string | null;
@@ -36,6 +36,7 @@ const ACCION_TIPO: Record<string, MovimientoNomina["tipo"]> = {
   "nomina.incidencia.eliminar": "INCIDENCIA",
   "nomina.expediente.subir": "EXPEDIENTE",
   "nomina.expediente.eliminar": "EXPEDIENTE",
+  "nomina.enviar-recibos": "CORREO",
 };
 const ACCION_TITULO: Record<string, string> = {
   "nomina.timbrar": "Recibos timbrados",
@@ -45,6 +46,7 @@ const ACCION_TITULO: Record<string, string> = {
   "nomina.incidencia.eliminar": "Incidencia eliminada",
   "nomina.expediente.subir": "Documento subido al expediente",
   "nomina.expediente.eliminar": "Documento eliminado del expediente",
+  "nomina.enviar-recibos": "Recibos enviados por correo",
 };
 
 const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
