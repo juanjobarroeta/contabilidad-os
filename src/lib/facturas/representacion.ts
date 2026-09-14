@@ -9,6 +9,7 @@
 // (cfdi:/nomina12:/pago20:) y a atributos faltantes.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { decodificarEntidadesXml } from "../sat-fiel";
 import { cuentasPredialesDeConcepto } from "./predial";
 
 const num = (v: string | null | undefined): number | null =>
@@ -40,8 +41,11 @@ function allTags(xml: string, tag: string): Array<{ attrs: string; body: string 
   return out;
 }
 
-const A = (attrs: string | null, name: string): string | null =>
-  attrs ? new RegExp(`\\b${name}="([^"]*)"`).exec(attrs)?.[1] ?? null : null;
+const A = (attrs: string | null, name: string): string | null => {
+  const v = attrs ? new RegExp(`\\b${name}="([^"]*)"`).exec(attrs)?.[1] : undefined;
+  // Las entidades del XML («AT&amp;T») no se imprimen tal cual en la representación.
+  return v == null ? null : decodificarEntidadesXml(v);
+};
 
 export interface RepTraslado {
   impuesto: string; // ISR | IVA | IEPS

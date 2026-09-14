@@ -189,9 +189,30 @@ const TIPO_32: Record<string, "I" | "E" | "T"> = {
  */
 const CLAVE_PROD_SERV_SIN_CATALOGO = "01010101";
 
+/**
+ * Un atributo XML llega con sus entidades escapadas: «AT&amp;T», «&quot;ALL
+ * KOPIER&quot;». Leídas con regex, sin un parser que las resuelva, se
+ * guardaban tal cual y el padrón tenía 99 razones sociales con «&amp;» que
+ * no empataban con el catálogo de cuentas de la empresa. Se decodifican aquí,
+ * una vez, para todo atributo que salga del CFDI.
+ */
+export function decodificarEntidadesXml(s: string): string {
+  return s
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
 /** Parse key fields from a CFDI XML string */
 export function parseCfdiXml(xml: string) {
-  const attr = (name: string) => new RegExp(`\\b${name}="([^"]+)"`).exec(xml)?.[1] ?? null;
+  const attr = (name: string) => {
+    const v = new RegExp(`\\b${name}="([^"]+)"`).exec(xml)?.[1];
+    return v == null ? null : decodificarEntidadesXml(v);
+  };
   /** Primer nombre que exista, para atributos que cambiaron de caja entre 3.2 y 3.3. */
   const attrAny = (...names: string[]) => {
     for (const n of names) {
@@ -205,7 +226,7 @@ export function parseCfdiXml(xml: string) {
     if (!tagMatch) return null;
     for (const n of names) {
       const v = new RegExp(`\\b${n}="([^"]+)"`).exec(tagMatch[0])?.[1];
-      if (v != null) return v;
+      if (v != null) return decodificarEntidadesXml(v);
     }
     return null;
   };

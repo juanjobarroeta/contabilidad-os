@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseCfdiXml } from "./sat-fiel";
+import { decodificarEntidadesXml, parseCfdiXml } from "./sat-fiel";
 
 // CFDI 4.0 de nómina (tipo "N") de ASIMILADOS A SALARIOS: el emisor (un tercero)
 // le paga a JUAN JOSE BARROETA bajo régimen 09 (asimilados honorarios) y le
@@ -263,5 +263,20 @@ describe("parseCfdiXml — CFDI 3.2", () => {
     expect(r.items[0].claveProdServ).toBe("78101800");
     expect(r.taxes[0].tasa).toBeCloseTo(0.16, 6);
     expect(r.taxes[0].base).toBe(1000);
+  });
+});
+
+describe("parseCfdiXml — entidades XML en los atributos", () => {
+  it("«AT&amp;T» y «&quot;ALL KOPIER&quot;» llegan decodificados al nombre; el RFC no cambia", () => {
+    const xml = `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" Version="4.0" Fecha="2026-08-15T12:00:00" TipoDeComprobante="I" SubTotal="100.00" Total="116.00"><cfdi:Emisor Rfc="ATT120101AAA" Nombre="AT&amp;T COMERCIALIZACION MOVIL" RegimenFiscal="601"/><cfdi:Receptor Rfc="AKD010101BBB" Nombre="&quot;ALL KOPIER DVA&quot;" UsoCFDI="G03"/></cfdi:Comprobante>`;
+    const r = parseCfdiXml(xml);
+    expect(r.nombreEmisor).toBe("AT&T COMERCIALIZACION MOVIL");
+    expect(r.nombreReceptor).toBe('"ALL KOPIER DVA"');
+    expect(r.rfcEmisor).toBe("ATT120101AAA");
+  });
+
+  it("decodificarEntidadesXml: numéricas, tipográficas y &amp; al final para no decodificar dos veces", () => {
+    expect(decodificarEntidadesXml("R&amp;C &#209;U &#x41; &lt;x&gt; &apos;a&apos;")).toBe("R&C ÑU A <x> 'a'");
+    expect(decodificarEntidadesXml("&amp;lt;")).toBe("&lt;");
   });
 });

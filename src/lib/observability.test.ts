@@ -31,9 +31,11 @@ describe("reportError con el cliente inicializado desde otro chunk", () => {
     expect(observabilityEnabled()).toBe(true);
     reportError(new Error("turno muerto"), { ruta: "juridico/chat", conversacionId: "c1" });
     await Sentry.flush(1000);
-    expect(enviados).toHaveLength(1);
-    const texto = JSON.stringify(enviados[0]);
-    expect(texto).toContain("turno muerto");
-    expect(texto).toContain('"ruta":"juridico/chat"');
+    // Con la suite completa el cliente global también manda otros sobres
+    // (sesión, reportes del cliente); lo que se afirma es que la excepción
+    // salió UNA vez con sus tags, no que fuera el único sobre.
+    const conError = enviados.map((e) => JSON.stringify(e)).filter((t) => t.includes("turno muerto"));
+    expect(conError).toHaveLength(1);
+    expect(conError[0]).toContain('"ruta":"juridico/chat"');
   });
 });
