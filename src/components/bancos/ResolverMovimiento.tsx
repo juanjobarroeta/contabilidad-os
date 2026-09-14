@@ -35,6 +35,7 @@ import {
 import { VisorCep } from "./VisorCep";
 import { FichaAplicaciones, FichaMovimiento } from "./FichasAplicaciones";
 import { FichaHistoria } from "./FichaHistoria";
+import { cn } from "@/lib/utils";
 import type { ResumenMovimiento } from "@/lib/bancos/aplicaciones";
 
 /** Categorías sin factura: un toque las ignora CON su tag, que es lo que
@@ -81,6 +82,14 @@ function diaISO(fecha: string, dias: number): string {
 
 /** Lo que el servidor devuelve al conciliar el cobro de una PPD: hay que
  *  timbrar el complemento de pago. */
+/** El par de un pago rebotado: propuesto por el servidor o ya vinculado. */
+export interface EstadoDevolucion {
+  estado: "sugerida" | "vinculada";
+  /** Si este movimiento es el rebote o el pago que rebotó. */
+  rol: "rebote" | "pago";
+  par: { id: string; fecha: string; monto: number; descripcion: string };
+}
+
 export interface RepSugerido {
   txId: string;
   invoiceId: string;
@@ -125,6 +134,8 @@ export function ResolverMovimiento({
   // Categoría SUGERIDA por el servidor, con su evidencia. Vivía sólo en la
   // mesa; al compartir el panel la gana también la lista de Movimientos.
   const [sugerencia, setSugerencia] = useState<SugerenciaMovimiento | null>(null);
+  // Devolución (pago rebotado): propuesta del servidor, o el par ya vinculado.
+  const [devolucion, setDevolucion] = useState<EstadoDevolucion | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [multiOcupado, setMultiOcupado] = useState(false);
   const [seleccion, setSeleccion] = useState<SeleccionFactura[]>([]);
@@ -176,6 +187,7 @@ export function ResolverMovimiento({
         setSugerencia(data.sugerencia ?? null);
         setCruce(data.cruce ?? null);
         setResumen(data.resumen ?? null);
+        setDevolucion(data.devolucion ?? null);
       })
       .catch(() => {})
       .finally(() => { if (vivo) setCargando(false); });
@@ -260,6 +272,34 @@ export function ResolverMovimiento({
     // el complemento vence el quinto día natural del mes siguiente).
     if (data?.repSugerido) onRepSugerido?.({ txId: tx.id, ...data.repSugerido });
     await terminar();
+  }
+
+  /**
+   * Vincular el rebote con su pago, o deshacer el vínculo. Ignorar los dos
+   * esconde el rebote y deja tres mentiras: la factura pagada, el IVA
+   * acreditado sin flujo y los KPIs contando un gasto que volvió. Vincular
+   * deshace la conciliación del original y neta el par en el libro.
+   */
+  async function resolverDevolucion(accion: "vincular-devolucion" | "desvincular-devolucion") {
+    if (!devolucion) return;
+    setOcupado(true);
+    try {
+      const res = await fetch(`/api/bancos/transactions/${tx.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          accion === "vincular-devolucion" ? { action: accion, origenId: devolucion.par.id } : { action: accion },
+        ),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { onToast(data?.error ?? "No se pudo resolver la devolución"); return; }
+      if (accion === "vincular-devolucion") {
+        onToast("Devolución vinculada: el pago vuelve a no-pagado y el par se neta");
+        await terminar();
+      } else {
+        onToast("Vínculo deshecho: los dos movimientos vuelven a estar sin resolver");
+        await onCambio();
+      }
+    } finally { setOcupado(false); }
   }
 
   async function conciliarImpuesto(taxDeclarationId: string, etiqueta: string) {
@@ -404,6 +444,51 @@ export function ResolverMovimiento({
       {resumen && <FichaMovimiento r={resumen} onVerCep={() => setCepAbierto(true)} clabe={tx.contraparteClabe} descripcion={tx.descripcion} />}
       {resumen && <FichaAplicaciones r={resumen} onVerFactura={onVerFactura} />}
       <FichaHistoria txId={tx.id} />
+
+      {/* DEVOLUCIÓN (pago rebotado). Antes sólo se podía resolver en el tab
+          Movimientos, y el triage es de la mesa: aquí el rebote se vincula con
+          su pago en un clic. Ignorar los dos deja la factura pagada, el IVA
+          acreditado sin flujo y el par contando en los KPIs. */}
+      {devolucion && (
+        <div
+          className={cn(
+            "rounded-control border px-3 py-2.5",
+            devolucion.estado === "vinculada"
+              ? "border-cos-jade-ink/25 bg-cos-jade-tint/50"
+              : "border-cos-amber-ink/25 bg-cos-amber-tint/50",
+          )}
+        >
+          <p className={cn("flex items-center gap-1.5 text-[12.5px] font-semibold", devolucion.estado === "vinculada" ? "text-cos-jade-ink" : "text-cos-amber-ink")}>
+            <ArrowLeftRight className="h-3.5 w-3.5 shrink-0" />
+            {devolucion.estado === "vinculada"
+              ? devolucion.rol === "rebote"
+                ? "Devolución de este pago"
+                : "Este pago se devolvió"
+              : "¿Es la devolución de este pago?"}
+          </p>
+          <p className="mt-1 text-[13px] text-cos-ink">
+            {devolucion.par.fecha} · {fmt(Math.abs(devolucion.par.monto))}
+            <span className="ml-1.5 text-cos-ink-faint">{devolucion.par.descripcion.slice(0, 60)}</span>
+          </p>
+          <p className="mt-1 text-[11.5px] text-cos-ink-faint">
+            {devolucion.estado === "vinculada"
+              ? "Los dos se netean: no son ingreso ni gasto, y el pago no cuenta como pagado."
+              : "Vincularlos deshace la conciliación del pago —la factura vuelve a no-pagada— y neta el par en el libro."}
+          </p>
+          <button
+            onClick={() => resolverDevolucion(devolucion.estado === "vinculada" ? "desvincular-devolucion" : "vincular-devolucion")}
+            disabled={ocupado}
+            className={cn(
+              "mt-2 rounded-control px-3 py-1.5 text-[13px] font-semibold disabled:opacity-50",
+              devolucion.estado === "vinculada"
+                ? "border border-cos-line bg-cos-card text-cos-ink hover:bg-cos-paper"
+                : "bg-cos-brand text-white hover:bg-cos-brand-deep",
+            )}
+          >
+            {ocupado ? "Guardando…" : devolucion.estado === "vinculada" ? "Desvincular" : "Vincular como devolución"}
+          </button>
+        </div>
+      )}
 
       {!resumen && cruzado && (
         <div className="rounded-control border border-cos-jade-ink/25 bg-cos-jade-tint/50 px-3 py-2.5">
