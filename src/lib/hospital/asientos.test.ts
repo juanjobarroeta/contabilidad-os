@@ -43,9 +43,9 @@ const movimiento = (over: Partial<Parameters<typeof planSalidaFarmacia>[0]> = {}
 });
 
 describe("salida de farmacia", () => {
-  it("plan: COSTO_FARMACIA / INVENTARIO_FARMACIA al costo del lote × cantidad", () => {
+  it("plan: COSTO_FARMACIA_* / INVENTARIO_FARMACIA al costo del lote × cantidad", () => {
     const plan = planSalidaFarmacia(movimiento())!;
-    expect(plan).toMatchObject({ monto: 255, cargo: "COSTO_FARMACIA", abono: "INVENTARIO_FARMACIA", referencia: "mov1", referenciaTipo: TIPO_ASIENTO.FARMACIA_SALIDA });
+    expect(plan).toMatchObject({ monto: 255, cargo: "COSTO_FARMACIA_0", abono: "INVENTARIO_FARMACIA", referencia: "mov1", referenciaTipo: TIPO_ASIENTO.FARMACIA_SALIDA });
     expect(plan.descripcion).toContain("Cefalotina");
   });
 
@@ -54,6 +54,18 @@ describe("salida de farmacia", () => {
     expect(planSalidaFarmacia(movimiento({ costoUnitario: null }))).toBeNull();
     expect(planSalidaFarmacia(movimiento({ tipo: "MERMA" }))).toBeNull();
     expect(planSalidaFarmacia(movimiento({ tipo: "SALIDA_VENTA" }))).toBeNull();
+  });
+
+  // El costo va del lado de la tasa con que se facturó: si el ingreso fue
+  // INGRESO_FARMACIA_16, el costo no puede ir a la farmacia externa.
+  it("la tasa del cargo elige el costo: suministro hospitalario al 16 %, venta directa al 0 %", () => {
+    const con = (cargo: Parameters<typeof planSalidaFarmacia>[0]["cargo"]) => planSalidaFarmacia(movimiento({ cargo }))!.cargo;
+    expect(con({ ivaContexto: "SUMINISTRO_HOSPITALARIO", ivaTasa: 0.16 })).toBe("COSTO_FARMACIA_16");
+    // El contexto manda sobre la tasa capturada (criterio 9/IVA/N).
+    expect(con({ ivaContexto: "SUMINISTRO_HOSPITALARIO", ivaTasa: 0 })).toBe("COSTO_FARMACIA_16");
+    expect(con({ ivaContexto: "VENTA_DIRECTA", ivaTasa: 0 })).toBe("COSTO_FARMACIA_0");
+    expect(con({ ivaContexto: null, ivaTasa: 0.16 })).toBe("COSTO_FARMACIA_16");
+    expect(con(null)).toBe("COSTO_FARMACIA_0");
   });
 
   it("asienta una vez, marca asientoAt y no repite", async () => {

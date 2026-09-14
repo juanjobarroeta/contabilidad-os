@@ -71,8 +71,13 @@ export interface CoberturaCodigo {
    * contraparte o por ejercicio, varias candidatas son la forma normal del
    * catálogo —un auxiliar por proveedor— y pedir que se elija una manda el
    * saldo de todos a la elegida. Ésas salen como `por_dimension`.
+   *
+   * `por_modulo` no sale de aquí: lo pone quien sabe qué módulos tiene la
+   * empresa. Un hospital con la contabilidad del módulo encendida parte sus
+   * 401.01 por servicio y decide por CLAVE, no por código; preguntar aquí
+   * «¿cuál de tus 28 cuentas de ingresos?» no tiene respuesta.
    */
-  estado: "unica" | "override" | "ambigua" | "sin_candidata" | "por_dimension";
+  estado: "unica" | "override" | "ambigua" | "sin_candidata" | "por_dimension" | "por_modulo";
   /** Candidatas de detalle (sin las acumulativas). */
   candidatas: number;
   /** Cuentas con subcuentas que comparten el agrupador y quedaron fuera. */

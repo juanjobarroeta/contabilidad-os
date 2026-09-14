@@ -34,6 +34,8 @@ import type { AccountType, HospCargoCategoria, HospIvaContexto, Prisma, PrismaCl
 import { SAT_STARTER_CATALOG, type CatalogAccount } from "../contabilidad/catalog";
 import { EXTRA_ACCOUNTS_FOR_CLASSIFICATION } from "../contabilidad/classify-egreso";
 import { CODIGO_AGRUPADOR_OFICIAL } from "../contabilidad/codigo-agrupador";
+import { padreDeCadaCuenta, padresDelCatalogo } from "../contabilidad/jerarquia-catalogo";
+import { sugerirCuenta, type CuentaCandidata, type Sugerencia } from "./sugerir-mapa";
 import { naturalezaPorTipo } from "../contabilidad/coe-saldos";
 import { HospitalError } from "./errores";
 
@@ -51,7 +53,8 @@ export const CLAVES_MOTOR = [
   "HONORARIOS_POR_CUENTA_DE_TERCEROS",
   "RETENCION_ISR_HONORARIOS",
   "RETENCION_IVA_HONORARIOS",
-  "COSTO_FARMACIA",
+  "COSTO_FARMACIA_16",
+  "COSTO_FARMACIA_0",
   "INVENTARIO_FARMACIA",
   "ANTICIPOS_PACIENTES",
   "CAJA",
@@ -89,7 +92,8 @@ export const MAPA_DEFAULT: Record<ClaveMotor, DefinicionClave> = {
   HONORARIOS_POR_CUENTA_DE_TERCEROS: { clave: "HONORARIOS_POR_CUENTA_DE_TERCEROS", descripcion: "Honorarios médicos cobrados por cuenta de terceros (pasivo con el médico)", cuentaSAT: "205.06", tipo: "PASIVO" },
   RETENCION_ISR_HONORARIOS: { clave: "RETENCION_ISR_HONORARIOS", descripcion: "ISR retenido a médicos personas físicas (10 %)", cuentaSAT: "216.04", tipo: "PASIVO" },
   RETENCION_IVA_HONORARIOS: { clave: "RETENCION_IVA_HONORARIOS", descripcion: "IVA retenido a médicos personas físicas (dos terceras partes)", cuentaSAT: "216.10", tipo: "PASIVO" },
-  COSTO_FARMACIA: { clave: "COSTO_FARMACIA", descripcion: "Costo de farmacia y material aplicado al paciente", cuentaSAT: "501.01", tipo: "COSTO" },
+  COSTO_FARMACIA_16: { clave: "COSTO_FARMACIA_16", descripcion: "Costo de farmacia suministrada en hospitalización (gravada al 16 %)", cuentaSAT: "501.01", tipo: "COSTO" },
+  COSTO_FARMACIA_0: { clave: "COSTO_FARMACIA_0", descripcion: "Costo de farmacia en venta directa (tasa 0 %)", cuentaSAT: "501.01", tipo: "COSTO" },
   INVENTARIO_FARMACIA: { clave: "INVENTARIO_FARMACIA", descripcion: "Inventario de farmacia", cuentaSAT: "115.01", tipo: "ACTIVO" },
   ANTICIPOS_PACIENTES: { clave: "ANTICIPOS_PACIENTES", descripcion: "Depósitos y anticipos de pacientes", cuentaSAT: "206.01", tipo: "PASIVO" },
   CAJA: { clave: "CAJA", descripcion: "Caja (depósitos en efectivo)", cuentaSAT: "101.01", tipo: "ACTIVO" },
@@ -152,6 +156,23 @@ export function claveDeCargo(c: { categoria: HospCargoCategoria; ivaContexto?: H
     default:
       return "INGRESO_OTROS";
   }
+}
+
+/**
+ * La clave de COSTO de una salida de farmacia. Va pegada a la del ingreso: si
+ * el medicamento se facturó al 16 % (suministro en hospitalización) su costo
+ * es el del almacén interno; si se vendió al 0 % en la farmacia externa, el de
+ * la externa. Es la misma regla del ingreso —el contexto de IVA manda sobre la
+ * tasa capturada (criterio 9/IVA/N)— para que ingreso y costo NUNCA caigan en
+ * lados distintos de la tasa: el margen por servicio sale mal en cuanto se
+ * separan, y la balanza cuadra igual.
+ *
+ * Una salida sin cargo ligado (cortesía, ajuste) sigue el mismo default que el
+ * ingreso: sin contexto ni tasa, 0 %.
+ */
+export function claveDeCostoFarmacia(cargo?: { ivaContexto?: HospIvaContexto | null; ivaTasa?: number | null } | null): ClaveMotor {
+  const ingreso = claveDeCargo({ categoria: "FARMACIA", ivaContexto: cargo?.ivaContexto, ivaTasa: cargo?.ivaTasa });
+  return ingreso === "INGRESO_FARMACIA_16" ? "COSTO_FARMACIA_16" : "COSTO_FARMACIA_0";
 }
 
 // ─── Configuración (HospConfig.cuentasContables) ─────────────────────────────
@@ -243,6 +264,29 @@ const seleccionCuenta = { id: true, cuentaSAT: true, subcuenta: true, nombre: tr
  * única, o la cuenta activa con ese código (subcuenta primero). Igual que
  * seed-catalog.resolveAccount, pero con el cliente de la transacción.
  */
+/** El catálogo propio con su jerarquía: qué cuentas son de detalle y de quién cuelgan. */
+async function jerarquiaDelCatalogo(db: Db, companyId: string) {
+  const cuentas = await db.chartAccount.findMany({
+    where: { companyId, isActive: true },
+    select: { id: true, cuentaSAT: true, subcuenta: true, nombre: true, nivel: true, padreCodigo: true, codAgrup: true },
+  });
+  const filas = cuentas.map((c) => ({ codigo: codigoDeCuenta(c), nivel: c.nivel, padreCodigo: c.padreCodigo }));
+  return {
+    cuentas,
+    acumulativas: padresDelCatalogo(filas),
+    padreDe: padreDeCadaCuenta(filas),
+    nombrePorCodigo: new Map(cuentas.map((c) => [codigoDeCuenta(c), c.nombre])),
+  };
+}
+
+/** De varias candidatas, las de DETALLE: una cuenta con subcuentas no recibe pólizas. */
+async function soloHojas<T extends { cuentaSAT: string; subcuenta: string | null }>(db: Db, companyId: string, candidatas: T[]): Promise<T[]> {
+  const { acumulativas } = await jerarquiaDelCatalogo(db, companyId);
+  const hojas = candidatas.filter((c) => !acumulativas.has(codigoDeCuenta(c)));
+  // Un catálogo sin detalle (todas acumulativas) no descarta nada.
+  return hojas.length > 0 ? hojas : candidatas;
+}
+
 export async function localizarCuenta(db: Db, companyId: string, codigo: string): Promise<CuentaResuelta | null> {
   const override = await db.postingCuentaOverride.findUnique({
     where: { companyId_codigoMotor: { companyId, codigoMotor: codigo } },
@@ -250,8 +294,16 @@ export async function localizarCuenta(db: Db, companyId: string, codigo: string)
   });
   if (override) return override.cuenta.isActive ? override.cuenta : null;
 
-  const propias = await db.chartAccount.findMany({ where: { companyId, isActive: true, codAgrup: codigo }, select: seleccionCuenta, take: 2 });
+  const propias = await db.chartAccount.findMany({ where: { companyId, isActive: true, codAgrup: codigo }, select: seleccionCuenta });
   if (propias.length === 1) return propias[0];
+  // Varias: las acumulativas no cuentan. «205.06» con la cuenta de mayor y su
+  // única subcuenta son dos filas, y sin esto el código se iba al stub del SAT
+  // aunque el plan propio lo resolviera sin ambigüedad. Igual que el hub
+  // (resolver-plan-propio.soloHojas); ver jerarquia-catalogo.ts.
+  if (propias.length > 1) {
+    const hojas = await soloHojas(db, companyId, propias);
+    if (hojas.length === 1) return hojas[0];
+  }
 
   return db.chartAccount.findFirst({
     where: { companyId, isActive: true, OR: [{ subcuenta: codigo }, { cuentaSAT: codigo, subcuenta: null }] },
@@ -344,9 +396,38 @@ export interface RenglonMapa {
   origen: OrigenCuenta;
   /** La cuenta del catálogo que hoy recibiría el asiento; null = se creará al asentar. */
   cuenta: { id: string; codigo: string; nombre: string } | null;
+  /**
+   * Las cuentas de DETALLE del plan propio que declaran ese agrupador. Con una
+   * sola, la clave ya resuelve sola y esto va vacío; con 28 —un hospital parte
+   * sus ingresos por servicio— es de aquí de donde sale la decisión, y de aquí
+   * no de las 2 340 cuentas del catálogo.
+   */
+  candidatas: Array<{ id: string; codigo: string; nombre: string }>;
+  /** Cuál de las candidatas le toca, cuando el nombre lo puede decir. Ver sugerir-mapa.ts. */
+  sugerencia: Sugerencia | null;
 }
 
 export const codigoDeCuenta = (c: { cuentaSAT: string; subcuenta: string | null }) => c.subcuenta ?? c.cuentaSAT;
+
+/**
+ * Las cuentas de detalle de cada agrupador, agrupadas por codAgrup, con el
+ * nombre de su padre: en el plan de un hospital el servicio está ahí
+ * («Farmacia 16%» cuelga de «Farmacia Hospitalaria» o de «Farmacia Externa»,
+ * y eso es todo lo que las distingue).
+ */
+async function candidatasPorAgrupador(db: Db, companyId: string): Promise<Map<string, CuentaCandidata[]>> {
+  const { cuentas, acumulativas, padreDe, nombrePorCodigo } = await jerarquiaDelCatalogo(db, companyId);
+  const out = new Map<string, CuentaCandidata[]>();
+  for (const c of cuentas) {
+    const codigo = codigoDeCuenta(c);
+    if (!c.codAgrup || acumulativas.has(codigo)) continue;
+    const lista = out.get(c.codAgrup) ?? [];
+    const padre = padreDe.get(codigo);
+    lista.push({ id: c.id, codigo, nombre: c.nombre, padre: padre ? (nombrePorCodigo.get(padre) ?? null) : null });
+    out.set(c.codAgrup, lista);
+  }
+  return out;
+}
 
 export async function mapaCuentas(db: Db, companyId: string): Promise<{ activa: boolean; claves: RenglonMapa[] }> {
   const config = await cargarConfigContable(db, companyId);
@@ -355,6 +436,7 @@ export async function mapaCuentas(db: Db, companyId: string): Promise<{ activa: 
     include: { cuenta: { select: { ...seleccionCuenta, isActive: true } } },
   });
   const porClave = new Map(overrides.filter((o) => o.cuenta.isActive).map((o) => [o.codigoMotor.slice(PREFIJO_OVERRIDE_HOSPITAL.length), o.cuenta]));
+  const porAgrupador = await candidatasPorAgrupador(db, companyId);
 
   const claves: RenglonMapa[] = [];
   for (const clave of CLAVES_MOTOR) {
@@ -363,14 +445,21 @@ export async function mapaCuentas(db: Db, companyId: string): Promise<{ activa: 
     const override = porClave.get(clave);
     // Sin crear: null = la cuenta se creará del catálogo al primer asiento.
     const cuenta: CuentaResuelta | null = override ?? (await resolverPorCodigos(db, companyId, codigosDe(clave, config.cuentas), false));
+    const agrupador = cfg?.cuentaSAT ?? def.cuentaSAT;
+    const candidatas = porAgrupador.get(agrupador) ?? [];
+    // Con una sola candidata la inversión ya resuelve y no hay nada que
+    // proponer; decidido (override o subcuenta configurada) tampoco se toca.
+    const decidida = !!override || !!cfg?.subcuenta;
     claves.push({
       clave,
       descripcion: def.descripcion,
       tipo: def.tipo,
-      cuentaSAT: cfg?.cuentaSAT ?? def.cuentaSAT,
+      cuentaSAT: agrupador,
       subcuenta: cfg?.subcuenta ?? (override ? codigoDeCuenta(override) : null),
       origen: override ? "OVERRIDE" : cfg ? "CONFIG" : "DEFAULT",
       cuenta: cuenta ? { id: cuenta.id, codigo: codigoDeCuenta(cuenta), nombre: cuenta.nombre } : null,
+      candidatas: candidatas.length > 1 ? candidatas.map((c) => ({ id: c.id, codigo: c.codigo, nombre: c.nombre })) : [],
+      sugerencia: decidida || candidatas.length < 2 ? null : sugerirCuenta(clave, candidatas, agrupador),
     });
   }
   return { activa: config.activa, claves };

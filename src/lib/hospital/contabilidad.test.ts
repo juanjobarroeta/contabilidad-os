@@ -142,6 +142,23 @@ describe("resolverCuenta() / localizarCuenta()", () => {
   });
 });
 
+const propia = (over: { id: string; cuentaSAT: string; nombre: string; nivel?: number; codAgrup?: string | null }) => ({
+  id: over.id, companyId: "c1", cuentaSAT: over.cuentaSAT, subcuenta: null, nombre: over.nombre,
+  tipo: "ACTIVO" as const, nivel: over.nivel ?? 3, naturaleza: null, codAgrup: over.codAgrup ?? null, isActive: true, createdAt: new Date(),
+});
+
+describe("plan propio: la acumulativa no compite con sus hijas", () => {
+  it("mayor y subcuenta con el mismo agrupador → gana la de detalle, no el stub del SAT", async () => {
+    const db = new DbFalsa();
+    // Como lo trae un CT real: «205006000 Otros acreedores diversos» y su única
+    // hija. Contadas como dos candidatas, el código se iba al stub 205.06.
+    db.cuentas.push(propia({ id: "mayor", cuentaSAT: "205006000", nombre: "Otros acreedores diversos", nivel: 2, codAgrup: "205.06" }));
+    db.cuentas.push(propia({ id: "hoja", cuentaSAT: "205006001", nombre: "Otros acreedores diversos", nivel: 3, codAgrup: "205.06" }));
+    expect((await localizarCuenta(comoDb(db), "c1", "205.06"))?.id).toBe("hoja");
+    expect((await resolverCuenta(comoDb(db), "c1", "HONORARIOS_POR_CUENTA_DE_TERCEROS")).id).toBe("hoja");
+  });
+});
+
 describe("mapaCuentas()", () => {
   it("origen DEFAULT / CONFIG / OVERRIDE y la cuenta que hoy recibiría el asiento (sin crear)", async () => {
     const db = new DbFalsa().sembrar(["401.01", "101.01"]);
@@ -160,5 +177,35 @@ describe("mapaCuentas()", () => {
     // Mirar no crea nada.
     expect(db.cuentaPorCodigo("205.06")).toBeNull();
     expect(db.cuentaPorCodigo("401.03")).toBeNull();
+  });
+
+  it("varias candidatas del plan propio: las enseña y propone la del servicio de la clave", async () => {
+    const db = new DbFalsa();
+    db.cuentas.push(propia({ id: "acum", cuentaSAT: "115001000", nombre: "Almacenes", nivel: 2, codAgrup: "115.01" }));
+    db.cuentas.push(propia({ id: "externa", cuentaSAT: "115001003", nombre: "Almacen Farmacia Externa", codAgrup: "115.01" }));
+    db.cuentas.push(propia({ id: "interna", cuentaSAT: "115001006", nombre: "Almacen Farmacia Intrahospitalaria", codAgrup: "115.01" }));
+    db.cuentas.push(propia({ id: "quirofano", cuentaSAT: "115001007", nombre: "Almacen Quirofano", codAgrup: "115.01" }));
+
+    const inv = (await mapaCuentas(comoDb(db), "c1")).claves.find((r) => r.clave === "INVENTARIO_FARMACIA")!;
+    // La acumulativa no es candidata: no recibe pólizas.
+    expect(inv.candidatas.map((c) => c.id).sort()).toEqual(["externa", "interna", "quirofano"]);
+    expect(inv.sugerencia).toMatchObject({ confianza: "EXACTA", cuenta: { id: "interna" } });
+    // Sin decidir, el asiento seguiría cayendo en el stub del SAT: por eso se propone.
+    expect(inv.cuenta).toBeNull();
+    expect(inv.origen).toBe("DEFAULT");
+  });
+
+  it("decidida (override) ya no se propone", async () => {
+    const db = new DbFalsa();
+    db.cuentas.push(propia({ id: "externa", cuentaSAT: "115001003", nombre: "Almacen Farmacia Externa", codAgrup: "115.01" }));
+    db.cuentas.push(propia({ id: "interna", cuentaSAT: "115001006", nombre: "Almacen Farmacia Intrahospitalaria", codAgrup: "115.01" }));
+    db.overrides.push({ id: "o1", companyId: "c1", codigoMotor: codigoMotorDe("INVENTARIO_FARMACIA"), chartAccountId: "externa" });
+
+    const inv = (await mapaCuentas(comoDb(db), "c1")).claves.find((r) => r.clave === "INVENTARIO_FARMACIA")!;
+    expect(inv.origen).toBe("OVERRIDE");
+    expect(inv.cuenta?.id).toBe("externa");
+    expect(inv.sugerencia).toBeNull();
+    // Las candidatas se siguen enseñando: cambiar de opinión es un clic.
+    expect(inv.candidatas).toHaveLength(2);
   });
 });
