@@ -154,10 +154,7 @@ export default function EmpleadosTab() {
           Sin resultados para «{q}».
         </div>
       ) : (
-        {/* LA TABLA NO SE CORTA: alto acotado con scroll propio (vertical y
-            horizontal), encabezado pegajoso y anchos mínimos por columna. Antes
-            era overflow-x-auto a secas: en 1024 px el nombre y el puesto se
-            comían las columnas y la acción quedaba fuera de vista. */}
+        // La tabla no se corta: alto acotado con scroll propio, encabezado pegajoso, anchos mínimos por columna.
         <div className="bg-cos-card border border-cos-line rounded-xl max-h-[72vh] overflow-auto">
           <table className="w-full min-w-[960px] text-sm">
             <thead className="sticky top-0 z-10">
