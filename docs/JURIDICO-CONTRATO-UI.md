@@ -99,31 +99,59 @@ Sí, bastante, y de hoy:
 - `/api/auth/change-password` entró al matcher de CORS (PR #1085).
 - `/api/cron/ia-salud` (PR #1089) no es superficie de app.
 
-## 4. Casos, clientes y bitácora (Fase 1)
+## 4. Casos, clientes, tareas y bitácora (Fase 1) — ESQUEMA YA ESCRITO
 
-Está planeado y todavía no escrito, así que la sesión de rediseño llega a tiempo
-de opinar. El esquema que el hub va a proponer, en una frase cada uno:
+Migración `20260924_juridico_casos`. Lo que la app puede dar por cierto:
 
-- **`JuridicoCaso`** es el contenedor: título, materia, vía, autoridad,
-  expediente, entidad, estado (`abierto` | `en_tramite` | `cerrado`), objetivo,
-  responsable. Cuelgan de él conversaciones, documentos, partes, tareas y plazos.
-  `JuridicoAsunto` de hoy se convierte en un caso con una conversación; nada se
-  pierde.
-- **`JuridicoCliente`** es el directorio del despacho: persona física o moral con
-  RFC, CURP, domicilios, representantes y contactos, reutilizable entre casos.
-  `JuridicoParte` pasa a ser el papel que un cliente (o un tercero) juega en un
-  caso, no una captura suelta.
-- **`JuridicoTarea`**: caso, título, responsable, vencimiento, prioridad, estado,
-  y opcionalmente el documento o plazo del que nace.
-- **Versiones con autor**: hoy `JuridicoDocumento.versiones` es un arreglo JSON
-  sin autor. Pasa a tabla propia con `autorUserId`, `autorTipo`
-  (`abogado` | `cliente` | `copiloto`), `motivo` y el diff por sección.
-- **`JuridicoBitacora`**: append-only por caso — quién, cuándo, qué cambió
-  (partes, tareas, documentos, accesos, comentarios del cliente). Es lo que
-  alimenta W-09, y también la evidencia si un cliente discute qué se acordó.
+**`JuridicoCaso`** es el contenedor. Ojo: la TABLA se sigue llamando
+`JuridicoAsunto` (`@@map`) y la columna `JuridicoConversacion.casoId` sigue
+siendo `asuntoId` en SQL. Renombrarlas obligaría a parar el producto durante el
+rollover, porque el contenedor viejo consulta los nombres viejos mientras el
+nuevo arranca. En Prisma y en la API todo se llama **caso**.
+Campos nuevos: `estado` (`abierto` | `en_tramite` | `cerrado`),
+`responsableUserId`, `clienteId` (ficha del directorio) y `cerradoAt`. Lo demás
+—materia, vía, autoridad, expediente, entidad, objetivo, decisiones, partes— no
+cambia.
 
-Antes de escribir la migración, el hub publica aquí los modelos exactos. Si las
-pantallas W-06 y W-09 necesitan un campo que no esté, es el momento de pedirlo.
+**`JuridicoCliente`** es el directorio del despacho: `tipoPersona`, `nombre`,
+`nombreNormalizado` (sin acentos ni forma societaria, para deduplicar y buscar),
+`rfc`, `curp`, `domicilio`, `representante`, `email`, `telefono`, `notas`,
+`verificado`. `JuridicoParte` gana `clienteId`: la parte es el PAPEL que alguien
+juega en un caso; el cliente es quién es. `candidatos()` propone fusiones por
+RFC, CURP o nombre normalizado y **nunca** fusiona solo.
+
+**`JuridicoTarea`**: `casoId`, `titulo`, `detalle`, `estado` (`por_hacer` |
+`en_curso` | `en_revision` | `hecha` | `cancelada`), `prioridad`
+(`baja` | `normal` | `alta`), `vence`, `asignadoUserId`, `creadaPorUserId`,
+`documentoId`, `origen` (`manual` | `copiloto` | `acuerdo`), `hechaAt`.
+Helpers puros para la UI en `src/lib/juridico/tareas.ts`: `urgencia()` devuelve
+`vencida | hoy | proxima | lejana | sin_fecha | cerrada` con los días, y
+`ordenarTareas()` pone primero lo que urge y al final lo cerrado. Una tarea
+cerrada sólo se reabre a `por_hacer` o `en_curso` (`transicionValida`).
+
+**`JuridicoDocumentoVersion`**: `n` consecutivo, `texto`, `plan`,
+`autorUserId`, `autorTipo` (`abogado` | `cliente` | `copiloto`), `autorNombre`
+(para el cliente que revisa por enlace y no tiene cuenta), `motivo` y
+`seccionesCambiadas` (`[{ n, titulo, cambio: "agregada"|"editada"|"eliminada" }]`,
+calculado por número de sección). Es lo que alimenta **W-06 Comparar versiones**.
+El JSON viejo `JuridicoDocumento.versiones` sigue ahí para no romper nada, pero
+ya no se escribe: lo nuevo va a la tabla.
+
+**`JuridicoBitacora`**: append-only por caso. `actorUserId`, `actorTipo`
+(`abogado` | `cliente` | `copiloto` | `sistema`), `actorNombre`, `accion`
+(`caso.creado`, `parte.registrada`, `documento.version`, `tarea.movida`,
+`comentario.cliente`…), `entidad`, `entidadId`, `resumen` (frase ya redactada,
+en español) y `datos`. Alimenta **W-09 Bitácora**; `frase()` arma el renglón.
+Apuntar nunca tumba la operación que lo generó: si la escritura falla se
+reporta y la acción sigue.
+
+**`JuridicoDocumento.casoId`**: se hereda de la conversación (la migración ya
+rellenó lo existente), para que un documento siga vivo en el caso aunque su
+conversación se archive.
+
+Falta (siguiente PR): las rutas `/api/juridico/casos*`, `/clientes*` y
+`/casos/[id]/tareas*`, y que el copiloto proponga tareas. Las rutas
+`/api/juridico/asuntos*` de hoy siguen funcionando.
 
 ## 5. Reglas que no cambian
 
