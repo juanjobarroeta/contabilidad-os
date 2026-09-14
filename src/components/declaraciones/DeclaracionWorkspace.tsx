@@ -15,7 +15,7 @@ import {
 import Link from "next/link";
 import { IvaPanel, IsrPanel, RetencionesPanel } from "@/components/papeles/panels";
 import { FaltantesUploader } from "@/components/declaraciones/FaltantesUploader";
-import { ChecklistDelMes } from "@/components/declaraciones/ChecklistDelMes";
+import { ListoParaPresentar } from "@/components/declaraciones/ListoParaPresentar";
 import { periodoMensualPorDefecto } from "@/lib/fiscal/periodo-operativo";
 
 // ── Types (mirror /api/impuestos/cierre and /api/papeles/iva) ──────────────────
@@ -102,9 +102,12 @@ function montoLabel(l: FederalLinea) {
 }
 
 type Tab = "resumen" | "papeles" | "revision" | "presentar";
+// Papeles primero y por default: es donde se trabaja. Resumen es el RESULTADO
+// que se lee después. El checklist dejó de ser una tarjeta en Resumen y es una
+// línea arriba de las pestañas (ListoParaPresentar).
 const TABS: { id: Tab; label: string }[] = [
-  { id: "resumen", label: "Resumen" },
   { id: "papeles", label: "Papeles de trabajo" },
+  { id: "resumen", label: "Resumen" },
   { id: "revision", label: "Revisión" },
   { id: "presentar", label: "Presentar" },
 ];
@@ -114,7 +117,7 @@ export function DeclaracionWorkspace() {
   const defaultPeriod = periodoMensualPorDefecto();
   const [month, setMonth] = useState(defaultPeriod.month);
   const [year, setYear] = useState(defaultPeriod.year);
-  const [tab, setTab] = useState<Tab>("resumen");
+  const [tab, setTab] = useState<Tab>("papeles");
   // Roving focus for the tablist (APG keyboard pattern: ←/→/Home/End).
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
@@ -328,7 +331,8 @@ export function DeclaracionWorkspace() {
       />
 
       {/* Tabs */}
-      <div role="tablist" aria-label="Secciones de la declaración" className="mt-5 flex gap-1 border-b border-cos-line">
+      {activeCompany && <ListoParaPresentar companyId={activeCompany.id} month={month} year={year} />}
+      <div role="tablist" aria-label="Secciones de la declaración" className="mt-3 flex gap-1 border-b border-cos-line">
         {TABS.map((t, i) => (
           <button
             key={t.id}
@@ -496,8 +500,6 @@ function Resumen({ data, year, companyId, month }: { data: CierreData; year: num
         <EstadoBadge estado={f.estado} />
       </div>
 
-      {/* Checklist accionable del periodo: qué falta para poder declarar. */}
-      <ChecklistDelMes companyId={companyId} month={month} year={year} />
 
       <Card className="rounded-card border-cos-line p-5 shadow-card">
         <span className="block text-[12.5px] font-medium uppercase tracking-[0.02em] text-cos-ink-faint">Declaración federal</span>
