@@ -148,13 +148,28 @@ export async function GET(req: Request) {
       }).then((parents) => parents.map((p) => ({ ...p, total: Number(p.total), totalImpuestos: p.totalImpuestos === null ? null : Number(p.totalImpuestos), taxes: p.taxes.map((t) => ({ ...t, importe: Number(t.importe) })) })))
     : [];
   const repIngresoByUuid = new Map(repIngresoParents.map((p) => [normalizarUuid(p.uuid!), p]));
+  // Padres EGRESO (de cualquier mes) de los REP PAGADOS este periodo: su IVA
+  // se acredita al PAGARSE (Art. 5-I LIVA), no en la fecha del CFDI — igual
+  // que el motor (computeTaxPosition carga los padres por UUID sin acotar por
+  // mes). Este papel sólo recorría los egresos FECHADOS en el mes, así que un
+  // REP de agosto que paga un gasto PPD de julio no aparecía y el acreditable
+  // salía corto: el copiloto (motor) decía $6k a pagar y el papel $117k.
+  const repEgresoParents = repParentUuids.length
+    ? await prisma.invoice.findMany({
+        where: { companyId, uuid: { in: repParentUuids }, tipo: "EGRESO", metodoPago: "PPD", status: "STAMPED" },
+        select: { id: true, uuid: true, serie: true, folio: true, fecha: true, subtotal: true, total: true, totalImpuestos: true, taxes: true, ivaNoAcreditable: true, contraparteNombre: true, contraparteRfc: true, customer: { select: { razonSocial: true, rfc: true } } },
+      }).then((parents) => parents.map((p) => ({ ...p, subtotal: Number(p.subtotal), total: Number(p.total), totalImpuestos: p.totalImpuestos === null ? null : Number(p.totalImpuestos), taxes: p.taxes.map((t) => ({ ...t, tasa: Number(t.tasa), base: t.base === null ? null : Number(t.base), importe: Number(t.importe) })) })))
+    : [];
+  const repEgresoByUuid = new Map(repEgresoParents.map((p) => [normalizarUuid(p.uuid!), p]));
 
   type InvoiceRelation = (typeof ingresos)[number];
 
   // Extract the IVA components per invoice. When InvoiceTax rows exist we
   // trust them (they match the XML exactly). Otherwise we fall back to
   // totalImpuestos stored at the header.
-  function extractIva(inv: InvoiceRelation) {
+  // Sólo lee impuestos: acepta tanto la factura del mes como el padre PPD
+  // (que trae menos columnas).
+  function extractIva(inv: { taxes: InvoiceRelation["taxes"]; totalImpuestos: number | null }) {
     const ivaRows = inv.taxes.filter((t) => t.tipo === "IVA");
     if (ivaRows.length > 0) {
       const trasladadoRows = ivaRows.filter((t) => !t.retencion);
@@ -400,6 +415,61 @@ export async function GET(req: Request) {
         metodoPago: inv.metodoPago,
         sinComplementoPago: esPPD && retenidoMes <= 0.005,
         pagoParcial: esPPD && retenidoMes > 0.005 && retenidoMes + 0.005 < r,
+        revisar: revision.revisar || undefined,
+        motivoRevisar: revision.revisar ? revision.motivo : undefined,
+      });
+    }
+  }
+
+  // PPD EGRESO de meses anteriores PAGADOS este periodo (vía REP). Los del
+  // propio mes ya entraron en el bucle de arriba (repLinksPorParent por UUID);
+  // aquí sólo los que NO están fechados en el mes. Mismo prorrateo que el motor.
+  const egresosDelMes = new Set(egresos.map((e) => normalizarUuid(e.uuid ?? "")));
+  for (const [parentUuid, links] of repLinksPorParent) {
+    if (egresosDelMes.has(parentUuid)) continue;
+    const parent = repEgresoByUuid.get(parentUuid);
+    if (!parent) continue; // será un ingreso PPD (se armó arriba) o desconocido
+    const { trasladado: t, retenido: r } = extractIva(parent);
+    if (t <= 0.005) continue;
+    const parentLike = { taxes: parent.taxes, totalImpuestos: parent.totalImpuestos, total: parent.total };
+    const acreditadoPPD = links.reduce((s, l) => s + repIvaAcreditableDe(l, parentLike), 0);
+    if (acreditadoPPD <= 0.005) continue;
+    const retenidoPPD = links.reduce((s, l) => s + repIvaRetenidoDe(l, parentLike), 0);
+    const ultimoPago = links.map((l) => l.fechaPago).filter(Boolean).sort().pop() ?? null;
+    acreditable.push({
+      id: `${parent.id}-rep`,
+      fecha: (ultimoPago ?? from).toISOString().slice(0, 10),
+      uuid: parent.uuid,
+      serie: parent.serie,
+      folio: parent.folio,
+      contraparte: nombreContraparte(parent),
+      rfc: rfcContraparte(parent),
+      subtotal: parent.subtotal,
+      tasa: parent.subtotal > 0 ? +(t / parent.subtotal).toFixed(4) : null,
+      importe: Math.max(0, acreditadoPPD - retenidoPPD),
+      metodoPago: "PPD",
+      esComplemento: true,
+      excluidoAcreditamiento: parent.ivaNoAcreditable,
+      emisorEnLista69B: bloqueado69B(rfcContraparte(parent)),
+      pagoParcial: acreditadoPPD + 0.5 < t,
+      ivaRetenidoDiferido: retenidoPPD > 0.005 ? retenidoPPD : undefined,
+    });
+    if (r > 0.005 && retenidoPPD > 0.005) {
+      const revision = revisarRetencionIva({ subtotal: parent.subtotal, trasladado: t, retenido: r });
+      retenidoAProveedores.push({
+        id: `${parent.id}-rep`,
+        fecha: (ultimoPago ?? from).toISOString().slice(0, 10),
+        uuid: parent.uuid,
+        serie: parent.serie,
+        folio: parent.folio,
+        contraparte: nombreContraparte(parent),
+        rfc: rfcContraparte(parent),
+        subtotal: parent.subtotal,
+        tasa: parent.subtotal > 0 ? +(r / parent.subtotal).toFixed(4) : null,
+        importe: retenidoPPD,
+        metodoPago: "PPD",
+        sinComplementoPago: false,
+        pagoParcial: retenidoPPD + 0.005 < r,
         revisar: revision.revisar || undefined,
         motivoRevisar: revision.revisar ? revision.motivo : undefined,
       });
