@@ -49,11 +49,17 @@ Son cinco estados, no tres, porque tres mentirían:
 `observada` es el caso que la UI no debe pintar como `corregida`: es el único en
 que el texto entregado tiene un problema conocido y sin arreglar.
 
-**Límite, dicho por delante.** Sólo se marcan las citas con **forma** de cita:
-«artículo 486 del CPF», «regla 2.7.1.32 RMF», «reg. 2021760». Una cita en prosa
-—«el Código de Procedimientos Familiares de Chihuahua»— no genera marca y no
-aparece en `citas[]`. Pasa: el copiloto escribe así cuando el ordenamiento no
-tiene siglas conocidas. La UI no debe asumir que `citas[]` cubre todo lo que el
+**Citas en prosa: ya cubiertas.** «El artículo 486 del Código de Procedimientos
+Familiares del Estado de Chihuahua» se reconoce por el TÍTULO contra el catálogo
+cargado (2 361 ordenamientos), se resuelve a su clave y entra tanto a `citas[]`
+como al verificador. Antes sólo se reconocía la forma corta con siglas
+(«Art. 27 LISR»), que es como escribe el copiloto contable pero casi nunca el
+jurídico: esas afirmaciones no se verificaban ni se marcaban.
+
+**Lo que sigue sin marcarse:** una referencia sin número de artículo («conforme
+al Código Civil de Puebla») y un ordenamiento que el copiloto invente —ése no
+casa con el catálogo, y el verificador lo seguirá marcando como no verificable,
+que es lo correcto—. La UI no debe asumir que `citas[]` cubre todo lo que el
 texto afirma.
 
 **`fundamentos[]` no cambia y sigue sin ser «las fuentes de esta respuesta».** Es

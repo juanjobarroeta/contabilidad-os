@@ -39,6 +39,7 @@ import { meteredCreate } from "@/lib/costos/anthropic";
 import type { CostCtx } from "@/lib/costos/record";
 import { getArticulo } from "@/lib/fiscal-kb/search";
 import { citasConPosicion, claveCita, extraerCitas } from "@/lib/ai/eval/medidas";
+import { citasEnProsa, type EntradaIndice } from "@/lib/ai/citas-prosa";
 import { ESTADOS } from "@/lib/fiscal-kb/catalogo/ojn";
 
 export const VERIFICACION_MODEL = process.env.AI_VERIFICACION_MODEL ?? "claude-haiku-4-5-20251001";
@@ -117,7 +118,9 @@ export function clasificarCitas(citasEnTexto: string[], citasKB: string[]): { so
 
 /** «ART. 27 LISR» → { clave: "LISR", articulo: "27" }; «REGLA 2.7.1.32 RMF» → { clave: "RMF", articulo: "2.7.1.32" }. Puro. */
 export function parsearCita(cita: string): { clave: string; articulo: string } | null {
-  const m = cita.trim().match(/^(?:ART\.?|ARTÍCULO)\s+([0-9][0-9A-Za-z-]*(?:\s+BIS)?)\s+([A-Z]+)$/i);
+  // La clave puede ser federal («LISR») o estatal con guiones
+  // («CHH-C-PROCEDIMIENTOS-FAMILIARES-CH»), que es lo que produce citas-prosa.
+  const m = cita.trim().match(/^(?:ART\.?|ARTÍCULO)\s+([0-9][0-9A-Za-z-]*(?:\s+BIS)?)\s+([A-Z][A-Z0-9-]*)$/i);
   if (m) {
     return { clave: m[2].toUpperCase(), articulo: m[1].replace(/\s+bis$/i, " Bis").replace(/^(\d+-)([a-z]+)/i, (_, d, l) => d + l.toUpperCase()) };
   }
@@ -240,11 +243,15 @@ Responde ÚNICAMENTE el JSON.`;
 
 export async function verificarRespuesta(
   client: Anthropic,
-  input: { pregunta: string; respuesta: string; fuentes: FuenteVerificacion[]; cost?: CostCtx; fechaVigencia?: Date }
+  input: { pregunta: string; respuesta: string; fuentes: FuenteVerificacion[]; cost?: CostCtx; fechaVigencia?: Date; indiceOrdenamientos?: EntradaIndice[] }
 ): Promise<ResultadoVerificacion> {
   const t0 = Date.now();
   const original: ResultadoVerificacion = { texto: input.respuesta, verificada: false, corregida: false, problemas: [], citasNoVerificables: [], resueltas: [], ms: 0 };
-  const citas = extraerCitas(input.respuesta);
+  // Las de forma corta («Art. 27 LISR») y las escritas en prosa («el artículo
+  // 486 del Código de Procedimientos Familiares del Estado de Chihuahua»), que
+  // es como el jurídico nombra casi todo.
+  const enProsa = input.indiceOrdenamientos ? citasEnProsa(input.respuesta, input.indiceOrdenamientos).map((c) => c.cita) : [];
+  const citas = [...new Set([...extraerCitas(input.respuesta), ...enProsa])];
   if (citas.length === 0) return original;
 
   try {
@@ -388,6 +395,8 @@ export function construirCitas(args: {
   texto: string;
   /** Lo que devolvieron las herramientas del turno (respaldo cuando no hubo verificación). */
   fuentes: { cita: string; texto?: string }[];
+  /** Con él se marcan también las citas escritas en prosa. */
+  indiceOrdenamientos?: EntradaIndice[];
   resueltas?: { cita: string; fundamento: FundamentoCita | null }[];
   problemas?: ProblemaVerificacion[];
   citasNoVerificables?: string[];
@@ -415,7 +424,14 @@ export function construirCitas(args: {
   // resuelve igual que en el pase, por siglas + estado.
   const conTexto: FuenteVerificacion[] = args.fuentes.filter((f) => !f.cita.startsWith(PREFIJO_VALORES)).map((f) => ({ cita: f.cita, texto: f.texto ?? "" }));
 
-  return citasConPosicion(args.texto).map((u, i) => {
+  const enProsa = args.indiceOrdenamientos ? citasEnProsa(args.texto, args.indiceOrdenamientos).map((c) => ({ cita: c.cita, textoEnRespuesta: c.textoEnRespuesta, inicio: c.inicio, fin: c.fin })) : [];
+  const ubicadas = [...citasConPosicion(args.texto), ...enProsa]
+    .sort((a, b) => a.inicio - b.inicio)
+    // Una misma cita puede salir por las dos vías (corta y en prosa): se queda
+    // la primera y se descarta la que se le encime.
+    .filter((c, i, todas) => !todas.slice(0, i).some((p) => c.inicio < p.fin && c.fin > p.inicio));
+
+  return ubicadas.map((u, i) => {
     const k = claveCita(u.cita);
     let fundamento = porClave.get(k) ?? null;
     if (!fundamento && !porClave.has(k)) {

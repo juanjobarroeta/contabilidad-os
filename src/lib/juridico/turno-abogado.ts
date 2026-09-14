@@ -22,6 +22,7 @@ import { NOMBRES_REDACCION_ESTRUCTURADA, ejecutarRedaccionEstructurada, toolsRed
 import { NOMBRES_TAREAS, ejecutarHerramientaTareas, toolsTareas } from "@/lib/juridico/tareas-tool";
 import { reportError } from "@/lib/observability";
 import { mensajeDeErrorParaAbogado } from "@/lib/juridico/errores";
+import { indiceOrdenamientos } from "@/lib/juridico/indice-ordenamientos";
 import type { CheckpointTurno, EventoTurno } from "@/lib/juridico/turnos";
 
 const anthropic = new Anthropic();
@@ -349,6 +350,7 @@ export async function correrTurnoAbogado(args: TurnoAbogadoArgs, emitir: (e: Eve
         respuesta: assistantText,
         fuentes: fuentesTurno,
         cost: { companyId: null, userId, subtipo: "ai.juridico.verificacion" },
+        indiceOrdenamientos: indiceOrdenamientos(),
       });
       traza.verificacion = { verificada: v.verificada, corregida: v.corregida, problemas: v.problemas.length, citasNoVerificables: v.citasNoVerificables, ms: v.ms };
       if (v.corregida) {
@@ -356,10 +358,10 @@ export async function correrTurnoAbogado(args: TurnoAbogadoArgs, emitir: (e: Eve
         emitir({ type: "replace", text: assistantText });
       }
       // Sobre el texto ENTREGADO, para que los offsets sirvan tal cual.
-      traza.citas = construirCitas({ texto: assistantText, fuentes: fuentesTurno, resueltas: v.resueltas, problemas: v.problemas, citasNoVerificables: v.citasNoVerificables, verificada: v.verificada, corregida: v.corregida });
+      traza.citas = construirCitas({ texto: assistantText, fuentes: fuentesTurno, indiceOrdenamientos: indiceOrdenamientos(), resueltas: v.resueltas, problemas: v.problemas, citasNoVerificables: v.citasNoVerificables, verificada: v.verificada, corregida: v.corregida });
     } else if (assistantText.trim()) {
       // Sin pase de verificación se marcan igual, con estado «sin_verificar».
-      traza.citas = construirCitas({ texto: assistantText, fuentes: fuentesTurno, verificada: false, corregida: false });
+      traza.citas = construirCitas({ texto: assistantText, fuentes: fuentesTurno, indiceOrdenamientos: indiceOrdenamientos(), verificada: false, corregida: false });
     }
 
     let assistantMessageId: string | null = null;
