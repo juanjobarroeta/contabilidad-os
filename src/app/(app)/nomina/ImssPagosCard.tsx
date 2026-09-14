@@ -20,6 +20,8 @@ interface DeclRow {
   monto: number | null;
   lineaCaptura: string | null;
   fechaPresentacion: string | null;
+  /** El cargo bancario aplicado en la mesa: la prueba de pago viene del banco. */
+  pagoBanco?: { id: string; fecha: string; monto: number; banco: string; cuenta: string } | null;
 }
 
 interface BloquePago {
@@ -284,9 +286,24 @@ function BloqueRegistro({
 
       {bloque.pagada && decl ? (
         <p className="mt-1.5 text-[12.5px] text-cos-ink-soft">
-          Pagado {formatCurrency(decl.monto ?? 0)}
-          {decl.fechaPresentacion ? ` el ${fmtFecha(decl.fechaPresentacion.slice(0, 10))}` : ""}
-          {decl.lineaCaptura ? ` · línea de captura ${decl.lineaCaptura}` : ""}.
+          {/* La prueba del pago es el BANCO (lo que la mesa aplicó), no la casilla.
+              La línea de captura es un dato opcional, no un requisito. */}
+          {decl.pagoBanco ? (
+            <>
+              Pagado {formatCurrency(decl.pagoBanco.monto)} el {fmtFecha(decl.pagoBanco.fecha.slice(0, 10))} · {decl.pagoBanco.banco} ····{decl.pagoBanco.cuenta}
+              {" · "}
+              <a href={`/bancos?year=${decl.pagoBanco.fecha.slice(0, 4)}&month=${Number(decl.pagoBanco.fecha.slice(5, 7))}&tx=${decl.pagoBanco.id}`} className="font-medium text-cos-brand-ink underline underline-offset-2">ver en la mesa</a>
+              {decl.lineaCaptura ? ` · línea de captura ${decl.lineaCaptura}` : ""}.
+            </>
+          ) : (
+            <>
+              Registrado {formatCurrency(decl.monto ?? 0)}
+              {decl.fechaPresentacion ? ` el ${fmtFecha(decl.fechaPresentacion.slice(0, 10))}` : ""}
+              {decl.lineaCaptura ? ` · línea de captura ${decl.lineaCaptura}` : ""}
+              {" · "}<span className="text-cos-amber-ink">sin cargo bancario aplicado</span> — concilia el pago en{" "}
+              <a href="/bancos" className="font-medium text-cos-brand-ink underline underline-offset-2">Bancos</a>.
+            </>
+          )}
         </p>
       ) : estimadoPendiente && !mostrarForm ? (
         <button
