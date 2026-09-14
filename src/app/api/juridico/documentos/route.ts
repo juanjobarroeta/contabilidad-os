@@ -147,6 +147,12 @@ export async function POST(req: Request) {
   const otros: { file: File; buffer: Uint8Array }[] = [];
   for (const file of archivos) {
     const buffer = new Uint8Array(await file.arrayBuffer());
+    // Safari en Mac reporta size > 0 para un archivo de iCloud Drive que no está
+    // descargado (o de una carpeta sincronizada) y luego lee 0 bytes; el modelo
+    // contestaba «PDF cannot be empty» y el usuario veía un error genérico.
+    if (buffer.byteLength === 0) {
+      return NextResponse.json({ error: `${file.name}: el archivo llegó vacío (0 bytes). Si está en iCloud Drive, Google Drive o OneDrive, ábrelo o descárgalo primero y vuelve a subirlo.` }, { status: 415 });
+    }
     const media = tipoImagen(buffer);
     if (media) fotos.push({ file, buffer, media });
     else otros.push({ file, buffer });
@@ -161,8 +167,10 @@ export async function POST(req: Request) {
     preparados = await Promise.all([...(fotos.length > 0 ? [prepararFotos(fotos, { userId })] : []), ...otros.map((o) => prepararArchivo(o.file, o.buffer, { userId }))]);
   } catch (e) {
     if (e instanceof ErrorSubida) return NextResponse.json({ error: e.message }, { status: e.status });
-    console.error("[juridico/documentos]", e);
-    return NextResponse.json({ error: "No se pudo leer el archivo; si es una foto o un escaneo, inténtalo de nuevo en un momento." }, { status: 500 });
+    reportError(e, { ruta: "juridico/documentos", userId, archivos: archivos.map((f) => `${f.name} (${f.size} B)`).join(", ").slice(0, 200) });
+    const razon = e instanceof Anthropic.APIError ? ((e.error as { error?: { message?: string } } | undefined)?.error?.message ?? e.message).slice(0, 160) : "";
+    const detalle = razon ? ` El modelo rechazó el archivo: ${razon}.` : "";
+    return NextResponse.json({ error: `No se pudo leer el archivo; si es una foto o un escaneo, inténtalo de nuevo en un momento.${detalle}` }, { status: 500 });
   }
   const caracteresNuevos = preparados.reduce((a, p) => a + p.texto.length, 0);
   if (caracteresPrevios + caracteresNuevos > MAX_CARACTERES_POR_CONVERSACION) {

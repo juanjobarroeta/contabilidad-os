@@ -249,6 +249,32 @@
 > error de servidor del hub había llegado a Sentry hasta hoy; sólo los del
 > navegador.
 >
+> **«No pude verificar el texto exacto en la base» (PR #1055, 13-sep-2026).**
+> La abogada preguntó por la apelación en el juicio familiar de Chihuahua y
+> la respuesta marcó así los Arts. 485 y 486, aunque `get_articulo` los
+> había traído. Dos causas: (1) el verificador leía «Art. 486 CPF Chihuahua»
+> como Art. 486 del Código PENAL Federal (la alternancia de claves atrapa
+> «CPF» y el estado se ignoraba) → `resolverCitaEstatal` casa la cita con la
+> fuente estatal ya recuperada (clave «CHH-…», mismo artículo) cuando el
+> nombre del estado sigue a las siglas; (2) el PDF del congreso de Chihuahua
+> trae tabuladores dentro del encabezado («ARTÍCULO \t479.») y `ARTICLE_RE`
+> exige un espacio: 544 artículos quedaron en 135 chunks con 18 etiquetas
+> (por eso el 480 «no existía» y el 479 sólo salía por búsqueda semántica).
+> `cleanLawText` normaliza tabuladores y dobles espacios; 25 leyes cargadas
+> tenían el mismo defecto (Chihuahua, Querétaro, Sonora, Michoacán, BC, CDMX)
+> y se reingirieron con `scripts/kb-reingestar.ts <claves>` (fuerza la
+> reingesta aunque el texto no cambie).
+>
+> **Escaneos que «no se podían leer» (PR #1062, 14-sep-2026).** Juan subió un
+> PDF y recibió el error genérico; el log decía `PDF cannot be empty` de
+> Anthropic. Causa: pdf.js TRANSFIERE el ArrayBuffer a su worker, así que
+> tras extraer el texto el `Uint8Array` de la subida queda *detached* (0
+> bytes); cuando el PDF es un escaneo (< 200 chars) ese mismo buffer iba a
+> visión vacío. Todo escaneo en PDF fallaba desde el PR #1037; las fotos no
+> (no pasan por pdf.js). `parsePdfBuffer` ahora le da una copia a pdf.js
+> (test que comprueba que el buffer sigue intacto), la ruta rechaza 0 bytes
+> con mensaje claro, reporta a Sentry y muestra la razón del modelo.
+>
 > **Turnos reanudables (PR #1042).** La primera prueba real de la abogada
 > (alegatos de cinco tipos para un juicio oral familiar en Chihuahua, 8
 > minutos) murió con «Load failed» en el iPhone. Dos causas, las dos

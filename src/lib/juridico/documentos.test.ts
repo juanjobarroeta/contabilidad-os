@@ -1,5 +1,6 @@
+import { PDFDocument } from "pdf-lib";
 import { describe, expect, it } from "vitest";
-import { agruparParaResumir, bloqueDocumentosParaPrompt, buscarEnDocumento, compactarSecciones, ejecutarHerramientaDocumento, indexarDocumento, leerDocumento, limpiarTexto, type DocumentoCargado } from "./documentos";
+import { agruparParaResumir, bloqueDocumentosParaPrompt, buscarEnDocumento, compactarSecciones, ejecutarHerramientaDocumento, extraerTextoDocumento, indexarDocumento, leerDocumento, limpiarTexto, type DocumentoCargado } from "./documentos";
 
 const CONTRATO = `CONTRATO DE PRESTACIÓN DE SERVICIOS que celebran por una parte ACME, S.A. DE C.V. (el «Cliente») y por la otra Juan Pérez (el «Prestador»).
 
@@ -146,5 +147,19 @@ describe("documentos largos: lotes para resumir y resúmenes en el prompt", () =
     const idx = JSON.parse(ejecutarHerramientaDocumento("leer_documento", {}, [grande])) as { resumen_general: string; secciones: { resumen?: string }[] };
     expect(idx.resumen_general).toMatch(/divorcio/);
     expect(idx.secciones[0].resumen).toBe("resumen 1");
+  });
+});
+
+describe("extraerTextoDocumento — escaneos", () => {
+  it("un PDF sin capa de texto devuelve texto vacío y deja el buffer intacto para mandarlo a visión", async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+    const buffer = await doc.save();
+    const antes = buffer.byteLength;
+    const r = await extraerTextoDocumento(buffer, "escaneo.pdf", "application/pdf");
+    expect(r.formato).toBe("pdf");
+    expect(limpiarTexto(r.texto).length).toBeLessThan(200); // lo que la ruta usa para decidir «escaneo»
+    expect(buffer.byteLength).toBe(antes);
+    expect((buffer.buffer as ArrayBuffer & { detached?: boolean }).detached).not.toBe(true);
   });
 });

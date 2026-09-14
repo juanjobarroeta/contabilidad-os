@@ -12,7 +12,11 @@ export async function parsePdfBuffer(buffer: Uint8Array, label = "documento"): P
   const { PDFParse } = require("pdf-parse") as {
     PDFParse: new (opts: { data: Uint8Array }) => { getText(): Promise<{ text: string }> };
   };
-  const { text } = await new PDFParse({ data: buffer }).getText();
+  // pdf.js TRANSFIERE el ArrayBuffer a su worker: después de getText() el
+  // Uint8Array del llamador queda detached (0 bytes). El copiloto jurídico
+  // manda ese mismo buffer a visión cuando el PDF es un escaneo, y Anthropic
+  // contestaba «PDF cannot be empty». Se le da una copia.
+  const { text } = await new PDFParse({ data: new Uint8Array(buffer) }).getText();
   if (!text || text.length < 2_000) {
     throw new Error(`PDF de ${label} produjo texto sospechosamente corto (${text?.length ?? 0} chars) — ¿es escaneado/imagen?`);
   }
