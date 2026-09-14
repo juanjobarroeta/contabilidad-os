@@ -73,6 +73,12 @@ interface HubData {
   };
 }
 
+/** GET /api/nomina/movimientos — lo que pasó, en orden. */
+interface Movimientos {
+  movimientos: { id: string; fecha: string; titulo: string; detalle: string | null; tipo: string; href: string; actor: string | null }[];
+  especiales: { tipo: string; corridas: number; neto: number }[];
+  ejercicio: number;
+}
 interface PayrollRun {
   id: string;
   periodo: string;
@@ -88,6 +94,11 @@ interface PayrollRun {
   _count?: { items: number };
 }
 
+const MOV_COLOR: Record<string, string> = {
+  CORRIDA: "bg-cos-brand", TIMBRADO: "bg-cos-jade", DISPERSION: "bg-cos-jade",
+  FINIQUITO: "bg-cos-amber", BAJA: "bg-cos-amber", CANCELACION: "bg-cos-red",
+  ALTA: "bg-cos-brand", INCIDENCIA: "bg-cos-ink-faint", EXPEDIENTE: "bg-cos-ink-faint",
+};
 const MONTHS = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 
 export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "empleados" | "cumplimiento") => void }) {
@@ -95,6 +106,7 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [runs, setRuns] = useState<PayrollRun[]>([]);
   const [hub, setHub] = useState<HubData | null>(null);
+  const [movs, setMovs] = useState<Movimientos | null>(null);
   const [loading, setLoading] = useState(true);
   // Error de carga. Si CUALQUIERA de los tres fetches falla, el resumen entero
   // sería mentira (hero de $0.00, equipo vacío) — mejor error + reintentar.
@@ -116,12 +128,16 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
     setLoading(true);
     setLoadError(false);
     try {
-      const [empRes, runRes, hubRes] = await Promise.all([
+      const [empRes, runRes, hubRes, movRes] = await Promise.all([
         fetch(`/api/empleados?companyId=${activeCompany.id}&withUltimoRecibo=1`),
         fetch(`/api/nomina/run?companyId=${activeCompany.id}`),
         fetch(`/api/nomina/hub?companyId=${activeCompany.id}`),
+        // Los movimientos son la portada; si fallan, la portada se queda sin
+        // ellos pero el resto del resumen sigue (no es excluyente como los tres).
+        fetch(`/api/nomina/movimientos?companyId=${activeCompany.id}`).catch(() => null),
       ]);
       if (!empRes.ok || !runRes.ok || !hubRes.ok) throw new Error("hub fetch failed");
+      setMovs(movRes && movRes.ok ? await movRes.json() : null);
       const empData = await empRes.json();
       setEmployees(Array.isArray(empData) ? empData : empData.employees ?? []);
       const runData = await runRes.json();
@@ -252,8 +268,45 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
             </div>
           )}
 
-          {/* nómina en paralelo: recalculamos el histórico timbrado con nuestras tablas */}
-          {runsSat.length > 0 && <ValidacionCalculo companyId={activeCompany.id} />}
+          {/* ÚLTIMOS MOVIMIENTOS — la portada: lo que pasó, en orden. Antes el
+              hub abría en la validación del cálculo, que es un diagnóstico y
+              va al final. */}
+          {movs && movs.movimientos.length > 0 && (
+            <Card className="rounded-card border-cos-line p-5 shadow-card">
+              <div className="mb-2.5 flex items-center justify-between">
+                <span className="rounded-full bg-cos-brand-tint px-2.5 py-1 text-[13px] font-semibold text-cos-brand-ink">Últimos movimientos</span>
+                <button onClick={() => onTab("corridas")} className="text-[12.5px] font-semibold text-cos-brand-ink hover:underline">Ver corridas</button>
+              </div>
+              <ol className="divide-y divide-cos-line-soft">
+                {movs.movimientos.slice(0, 8).map((m) => (
+                  <li key={m.id}>
+                    <Link href={m.href} className="flex items-center gap-3 py-2 hover:bg-cos-paper">
+                      <span className={`h-2 w-2 flex-none rounded-full ${MOV_COLOR[m.tipo] ?? "bg-cos-ink-faint"}`} aria-hidden />
+                      <span className="w-[64px] flex-none font-mono text-[11.5px] text-cos-ink-faint">{formatDate(m.fecha)}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13px] font-medium text-cos-ink">{m.titulo}</span>
+                        {m.detalle && <span className="block truncate text-[11.5px] text-cos-ink-faint">{m.detalle}{m.actor ? ` · ${m.actor}` : ""}</span>}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ol>
+            </Card>
+          )}
+          {/* FINIQUITOS Y CORRIDAS ESPECIALES del ejercicio: la respuesta a
+              «¿cuántos finiquitos llevamos?». Cada chip filtra Corridas. */}
+          {movs && movs.especiales.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[12.5px] text-cos-ink-faint">Especiales {movs.ejercicio}:</span>
+              {movs.especiales.map((e) => (
+                <Link key={e.tipo} href={`/nomina?tab=corridas&tipo=${e.tipo}`}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12.5px] font-semibold ${e.tipo === "FINIQUITO" ? "bg-cos-amber-tint text-cos-amber-ink" : "bg-cos-jade-tint text-cos-jade-ink"}`}>
+                  {TIPO_RUN_LABEL[e.tipo] ?? e.tipo} <span className="font-mono">{e.corridas}</span>
+                  <span className="font-mono font-normal opacity-80">{formatCurrency(e.neto)}</span>
+                </Link>
+              ))}
+            </div>
+          )}
 
           {/* alerta: salarios bajo el mínimo */}
           {bajoMinimo.length > 0 && (
@@ -443,8 +496,11 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
             </Card>
           </div>
 
-          {/* cuotas IMSS (SIPARE): estimado del periodo con vencimiento en curso + registro del pago */}
+          {/* cuotas IMSS (SIPARE): estimado del periodo con vencimiento en curso + registro del pago + exportes SUA/IDSE */}
           <ImssPagosCard companyId={activeCompany.id} />
+          {/* nómina en paralelo: recalculamos el histórico timbrado con nuestras
+              tablas. Es un DIAGNÓSTICO: va al final, no de portada. */}
+          {runsSat.length > 0 && <ValidacionCalculo companyId={activeCompany.id} />}
 
           {/* recordatorio enteramiento */}
           <div className="flex items-start gap-3 rounded-card border border-cos-line bg-cos-card px-5 py-4 text-[13.5px] leading-relaxed text-cos-ink-soft">

@@ -10,7 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useCallback, useEffect, useState } from "react";
-import { BadgeCheck, CalendarDays, Loader2, ShieldCheck } from "lucide-react";
+import { BadgeCheck, CalendarDays, Download, Loader2, Shield, ShieldCheck } from "lucide-react";
 import { Card } from "@/components/ui";
 import { formatCurrency } from "@/lib/utils";
 
@@ -95,6 +95,21 @@ export default function ImssPagosCard({ companyId }: { companyId: string }) {
       <div className="mb-2.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
         <span className="rounded-full bg-cos-brand-tint px-2.5 py-1 text-[13px] font-semibold text-cos-brand-ink">
           Cuotas IMSS (SIPARE)
+        </span>
+        {/* EXPORTES a la mano. Vivían al fondo de Cumplimiento detrás de dos
+            selectores; el bimestre en curso ya se sabe. Re-exportar otro sigue
+            en Cumplimiento. */}
+        <span className="ml-auto flex flex-wrap items-center gap-1.5">
+          <a href={`/api/nomina/sua-export?companyId=${companyId}&bimestre=${Math.ceil(month / 2)}&year=${year}`}
+            className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1 text-[12px] font-semibold text-cos-ink hover:border-cos-brand hover:text-cos-brand-ink"
+            title={`Archivo SUA del bimestre ${Math.ceil(month / 2)} de ${year}`}>
+            <Download className="h-3.5 w-3.5" /> SUA B{Math.ceil(month / 2)}
+          </a>
+          <a href={`/api/nomina/imss-movimientos?companyId=${companyId}&format=idse&status=PENDING`}
+            className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1 text-[12px] font-semibold text-cos-ink hover:border-cos-brand hover:text-cos-brand-ink"
+            title="Archivo IDSE con los movimientos afiliatorios pendientes (altas, bajas, modificaciones)">
+            <Shield className="h-3.5 w-3.5" /> IDSE
+          </a>
         </span>
         {todoPagado ? (
           <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-cos-jade-ink">
