@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
 import { toCsv, type CsvRow } from "@/lib/csv";
 import { calcularActosDelPeriodo } from "@/lib/fiscal/iva";
-import { reconciliacionActiva, pagosConciliadosPorInvoice, pagadaCompleta } from "@/lib/fiscal/conciliacion-pue";
+import { reconciliacionActiva } from "@/lib/fiscal/conciliacion-pue";
+import { aplicarFlujoPue, pagosPueDelPeriodo, puesAnterioresPagadosEnPeriodo, type ModoPue } from "@/lib/fiscal/iva-pue-flujo";
 import { repIvaAcreditableDe } from "@/lib/impuestos";
 import { repIvaRetenidoDe, revisarRetencionIva } from "@/lib/fiscal/iva-retenciones";
 import { ivaRetenidoAProveedoresEnPeriodo } from "@/lib/fiscal/iva-retenciones-db";
@@ -140,17 +141,36 @@ export async function GET(req: Request) {
   const repIngresoParents = repParentUuids.length
     ? await prisma.invoice.findMany({
         where: { companyId, uuid: { in: repParentUuids }, tipo: "INGRESO", metodoPago: "PPD", status: "STAMPED" },
-        select: { id: true, uuid: true, serie: true, folio: true, total: true, totalImpuestos: true, taxes: true, ivaNoCausado: true, customer: { select: { razonSocial: true, rfc: true } } },
+        // contraparteNombre/Rfc: el respaldo de nombreContraparte cuando el
+        // CFDI no tiene Customer (público en general, extranjeros, PPD
+        // importadas del SAT). Sin ellos, todo renglón «cobrado (REP)» de una
+        // factura sin Customer salía como «—» aunque el nombre esté en el XML.
+        select: { id: true, uuid: true, serie: true, folio: true, total: true, totalImpuestos: true, taxes: true, ivaNoCausado: true, contraparteNombre: true, contraparteRfc: true, customer: { select: { razonSocial: true, rfc: true } } },
       }).then((parents) => parents.map((p) => ({ ...p, total: Number(p.total), totalImpuestos: p.totalImpuestos === null ? null : Number(p.totalImpuestos), taxes: p.taxes.map((t) => ({ ...t, importe: Number(t.importe) })) })))
     : [];
   const repIngresoByUuid = new Map(repIngresoParents.map((p) => [normalizarUuid(p.uuid!), p]));
+  // Padres EGRESO (de cualquier mes) de los REP PAGADOS este periodo: su IVA
+  // se acredita al PAGARSE (Art. 5-I LIVA), no en la fecha del CFDI — igual
+  // que el motor (computeTaxPosition carga los padres por UUID sin acotar por
+  // mes). Este papel sólo recorría los egresos FECHADOS en el mes, así que un
+  // REP de agosto que paga un gasto PPD de julio no aparecía y el acreditable
+  // salía corto: el copiloto (motor) decía $6k a pagar y el papel $117k.
+  const repEgresoParents = repParentUuids.length
+    ? await prisma.invoice.findMany({
+        where: { companyId, uuid: { in: repParentUuids }, tipo: "EGRESO", metodoPago: "PPD", status: "STAMPED" },
+        select: { id: true, uuid: true, serie: true, folio: true, fecha: true, subtotal: true, total: true, totalImpuestos: true, taxes: true, ivaNoAcreditable: true, contraparteNombre: true, contraparteRfc: true, customer: { select: { razonSocial: true, rfc: true } } },
+      }).then((parents) => parents.map((p) => ({ ...p, subtotal: Number(p.subtotal), total: Number(p.total), totalImpuestos: p.totalImpuestos === null ? null : Number(p.totalImpuestos), taxes: p.taxes.map((t) => ({ ...t, tasa: Number(t.tasa), base: t.base === null ? null : Number(t.base), importe: Number(t.importe) })) })))
+    : [];
+  const repEgresoByUuid = new Map(repEgresoParents.map((p) => [normalizarUuid(p.uuid!), p]));
 
   type InvoiceRelation = (typeof ingresos)[number];
 
   // Extract the IVA components per invoice. When InvoiceTax rows exist we
   // trust them (they match the XML exactly). Otherwise we fall back to
   // totalImpuestos stored at the header.
-  function extractIva(inv: InvoiceRelation) {
+  // Sólo lee impuestos: acepta tanto la factura del mes como el padre PPD
+  // (que trae menos columnas).
+  function extractIva(inv: { taxes: InvoiceRelation["taxes"]; totalImpuestos: number | null }) {
     const ivaRows = inv.taxes.filter((t) => t.tipo === "IVA");
     if (ivaRows.length > 0) {
       const trasladadoRows = ivaRows.filter((t) => !t.retencion);
@@ -184,6 +204,8 @@ export async function GET(req: Request) {
     sinPagoConciliado?: boolean;
     /** PUE acreditable con pago conciliado en banco (lo opuesto a sinPagoConciliado). */
     pagadaConciliada?: boolean;
+    /** PUE pagado en parte: fracción acreditada este periodo (Art. 5-I, prorrateo). */
+    fraccionPagada?: number;
     /** El contador excluyó este CFDI del acreditamiento de IVA. */
     excluidoAcreditamiento?: boolean;
     /**
@@ -402,6 +424,122 @@ export async function GET(req: Request) {
     }
   }
 
+  // PPD EGRESO de meses anteriores PAGADOS este periodo (vía REP). Los del
+  // propio mes ya entraron en el bucle de arriba (repLinksPorParent por UUID);
+  // aquí sólo los que NO están fechados en el mes. Mismo prorrateo que el motor.
+  const egresosDelMes = new Set(egresos.map((e) => normalizarUuid(e.uuid ?? "")));
+  for (const [parentUuid, links] of repLinksPorParent) {
+    if (egresosDelMes.has(parentUuid)) continue;
+    const parent = repEgresoByUuid.get(parentUuid);
+    if (!parent) continue; // será un ingreso PPD (se armó arriba) o desconocido
+    const { trasladado: t, retenido: r } = extractIva(parent);
+    if (t <= 0.005) continue;
+    const parentLike = { taxes: parent.taxes, totalImpuestos: parent.totalImpuestos, total: parent.total };
+    const acreditadoPPD = links.reduce((s, l) => s + repIvaAcreditableDe(l, parentLike), 0);
+    if (acreditadoPPD <= 0.005) continue;
+    const retenidoPPD = links.reduce((s, l) => s + repIvaRetenidoDe(l, parentLike), 0);
+    const ultimoPago = links.map((l) => l.fechaPago).filter(Boolean).sort().pop() ?? null;
+    acreditable.push({
+      id: `${parent.id}-rep`,
+      fecha: (ultimoPago ?? from).toISOString().slice(0, 10),
+      uuid: parent.uuid,
+      serie: parent.serie,
+      folio: parent.folio,
+      contraparte: nombreContraparte(parent),
+      rfc: rfcContraparte(parent),
+      subtotal: parent.subtotal,
+      tasa: parent.subtotal > 0 ? +(t / parent.subtotal).toFixed(4) : null,
+      importe: Math.max(0, acreditadoPPD - retenidoPPD),
+      metodoPago: "PPD",
+      esComplemento: true,
+      excluidoAcreditamiento: parent.ivaNoAcreditable,
+      emisorEnLista69B: bloqueado69B(rfcContraparte(parent)),
+      pagoParcial: acreditadoPPD + 0.5 < t,
+      ivaRetenidoDiferido: retenidoPPD > 0.005 ? retenidoPPD : undefined,
+    });
+    if (r > 0.005 && retenidoPPD > 0.005) {
+      const revision = revisarRetencionIva({ subtotal: parent.subtotal, trasladado: t, retenido: r });
+      retenidoAProveedores.push({
+        id: `${parent.id}-rep`,
+        fecha: (ultimoPago ?? from).toISOString().slice(0, 10),
+        uuid: parent.uuid,
+        serie: parent.serie,
+        folio: parent.folio,
+        contraparte: nombreContraparte(parent),
+        rfc: rfcContraparte(parent),
+        subtotal: parent.subtotal,
+        tasa: parent.subtotal > 0 ? +(r / parent.subtotal).toFixed(4) : null,
+        importe: retenidoPPD,
+        metodoPago: "PPD",
+        sinComplementoPago: false,
+        pagoParcial: retenidoPPD + 0.005 < r,
+        revisar: revision.revisar || undefined,
+        motivoRevisar: revision.revisar ? revision.motivo : undefined,
+      });
+    }
+  }
+
+  // PUE EN FLUJO (Art. 5-I LIVA) — la MISMA regla que el motor
+  // (lib/fiscal/iva-pue-flujo): completo, prorrateado o cero según lo pagado
+  // en el periodo por la conciliación bancaria. Antes el papel sólo AVISABA
+  // y seguía sumando el IVA de PUE sin pago; el motor suponía todo pagado.
+  // Empresa sin conciliación: se conserva la suposición (modo SUPUESTO_PAGADO).
+  const reconActiva = await reconciliacionActiva(companyId);
+  const modoPue: ModoPue = reconActiva ? "FLUJO" : "SUPUESTO_PAGADO";
+  let ivaPueSinPago = 0;
+  let cfdisPueSinPago = 0;
+  if (modoPue === "FLUJO") {
+    const totalById = new Map(egresos.map((e) => [e.id, e.total]));
+    const pueRows = acreditable.filter((r) => r.metodoPago === "PUE" && !r.esComplemento && !r.excluidoAcreditamiento && !r.emisorEnLista69B);
+    const pagos = await pagosPueDelPeriodo(pueRows.map((r) => r.id), from, to);
+    for (const r of pueRows) {
+      const res = aplicarFlujoPue({ total: totalById.get(r.id) ?? 0, ivaNeto: r.importe }, pagos.get(r.id) ?? null, modoPue);
+      if (res.estado === "SIN_PAGO") {
+        r.sinPagoConciliado = true;
+        ivaPueSinPago += r.importe;
+        cfdisPueSinPago += 1;
+        r.importe = 0;
+      } else if (res.estado === "PARCIAL") {
+        r.fraccionPagada = res.fraccion;
+        r.importe = res.acreditable;
+      } else {
+        r.pagadaConciliada = true;
+      }
+    }
+    // PUE de meses anteriores pagados en éste: se acreditan aquí (como el PPD por REP).
+    const anteriores = await puesAnterioresPagadosEnPeriodo(companyId, from, to);
+    if (anteriores.size > 0) {
+      const padres = await prisma.invoice.findMany({
+        where: { id: { in: [...anteriores.keys()] } },
+        include: { customer: { select: { razonSocial: true, rfc: true } }, taxes: true },
+      }).then((rows) => rows.map(numInvoice));
+      for (const inv of padres) {
+        if (inv.ivaNoAcreditable || bloqueado69B(rfcContraparte(inv))) continue;
+        const { trasladado: t, retenido: rr } = extractIva(inv);
+        if (t <= 0.005) continue;
+        const res = aplicarFlujoPue({ total: inv.total, ivaNeto: Math.max(0, t - rr) }, anteriores.get(inv.id) ?? null, modoPue);
+        if (res.acreditable <= 0.005) continue;
+        acreditable.push({
+          id: `${inv.id}-pago`,
+          fecha: from.toISOString().slice(0, 10),
+          uuid: inv.uuid,
+          serie: inv.serie,
+          folio: inv.folio,
+          contraparte: nombreContraparte(inv),
+          rfc: rfcContraparte(inv),
+          subtotal: inv.subtotal,
+          tasa: inv.subtotal > 0 ? +(t / inv.subtotal).toFixed(4) : null,
+          importe: res.acreditable,
+          metodoPago: "PUE",
+          pagadaConciliada: res.estado === "PAGADA" || undefined,
+          fraccionPagada: res.estado === "PARCIAL" ? res.fraccion : undefined,
+          ivaRetenidoDiferido: rr > 0.005 ? rr : undefined,
+        });
+      }
+    }
+  }
+
+
   // IVA retenido a proveedores el MES ANTERIOR (y enterado con aquella
   // declaración): acreditable en ésta (Art. 5-IV LIVA). Mismo criterio de flujo
   // que el motor mensual.
@@ -461,30 +599,6 @@ export async function GET(req: Request) {
   // Lo que realmente sale hacia el SAT por IVA este mes: el IVA propio más las
   // retenciones a enterar (Art. 1-A). El saldo a favor NO compensa retenciones.
   const totalAPagarSat = +(ivaPagar + totalRetenidoProv).toFixed(2);
-
-  // PUE acreditado sin pago conciliado (cash-basis, Art. 5-I LIVA). El motor
-  // asume el PUE pagado al emitirse; sólo si la empresa concilia banco podemos
-  // marcar los que no aparecen pagados. Si no concilia, no marcamos nada.
-  const reconActiva = await reconciliacionActiva(companyId);
-  let ivaPueSinPago = 0;
-  let cfdisPueSinPago = 0;
-  if (reconActiva) {
-    const totalById = new Map(egresos.map((e) => [e.id, e.total]));
-    const pueRows = acreditable.filter((r) => r.metodoPago === "PUE" && !r.excluidoAcreditamiento && !r.emisorEnLista69B);
-    const matched = await pagosConciliadosPorInvoice(pueRows.map((r) => r.id));
-    for (const r of pueRows) {
-      if (!pagadaCompleta(totalById.get(r.id) ?? 0, matched.get(r.id) ?? 0)) {
-        r.sinPagoConciliado = true;
-        ivaPueSinPago += r.importe;
-        cfdisPueSinPago += 1;
-      } else {
-        // Pago conciliado completo en banco → marca verde "pagada" (lo opuesto
-        // a "sin pago"), para que el contador vea de un vistazo qué PUE ya está
-        // respaldado por un movimiento bancario.
-        r.pagadaConciliada = true;
-      }
-    }
-  }
 
   // Cobros bancarios del PERIODO sin CFDI que los respalde. El IVA se causa al
   // cobro (Art. 1-B LIVA) exista o no la factura, así que un depósito sin

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bloqueDocumentosParaPrompt, buscarEnDocumento, compactarSecciones, ejecutarHerramientaDocumento, indexarDocumento, leerDocumento, limpiarTexto, type DocumentoCargado } from "./documentos";
+import { agruparParaResumir, bloqueDocumentosParaPrompt, buscarEnDocumento, compactarSecciones, ejecutarHerramientaDocumento, indexarDocumento, leerDocumento, limpiarTexto, type DocumentoCargado } from "./documentos";
 
 const CONTRATO = `CONTRATO DE PRESTACIÓN DE SERVICIOS que celebran por una parte ACME, S.A. DE C.V. (el «Cliente») y por la otra Juan Pérez (el «Prestador»).
 
@@ -117,5 +117,34 @@ describe("ejecutarHerramientaDocumento y prompt", () => {
     expect(b).toMatch(/Texto completo de «contrato.pdf»/);
     const grande = { ...d, caracteres: 500_000 };
     expect(bloqueDocumentosParaPrompt([grande])).not.toMatch(/Texto completo/);
+  });
+});
+
+describe("documentos largos: lotes para resumir y resúmenes en el prompt", () => {
+  // Encabezado corto (≤ 160 chars) para que cada artículo sea una sección; el cuerpo va en otra línea.
+  const ley = Array.from({ length: 300 }, (_, i) => `Artículo ${i + 1}. Texto del artículo ${i + 1}.\n${"Contenido normativo del artículo. ".repeat(10)}`).join("\n\n");
+  const t = limpiarTexto(ley);
+  const secciones = indexarDocumento(t);
+  it("agruparParaResumir arma lotes contiguos de ~14 000 caracteres que cubren todas las secciones", () => {
+    const lotes = agruparParaResumir({ secciones });
+    expect(lotes.flat().map((s) => s.n)).toEqual(secciones.map((s) => s.n));
+    for (const l of lotes.slice(0, -1)) {
+      const chars = l.reduce((a, s) => a + s.hasta - s.desde, 0);
+      expect(chars).toBeLessThanOrEqual(14_000);
+      expect(chars).toBeGreaterThan(7_000);
+    }
+  });
+  it("con texto que no cabe, el prompt lleva el resumen general y el de cada sección; el índice se limita a 80 cuando no hay resúmenes", () => {
+    const grande: DocumentoCargado = { id: "d9", nombre: "sentencia.pdf", paginas: 120, caracteres: 400_000, texto: t, secciones, resumenes: { general: "Sentencia definitiva de divorcio.", secciones: secciones.map((s) => ({ n: s.n, resumen: `resumen ${s.n}` })), modelo: "x" } };
+    const b = bloqueDocumentosParaPrompt([grande]);
+    expect(b).toMatch(/Resumen: Sentencia definitiva de divorcio\./);
+    expect(b).toMatch(new RegExp(`${secciones.length}\\. .* — resumen ${secciones.length}`));
+    expect(b).not.toMatch(/Texto completo/);
+    const sinResumen = bloqueDocumentosParaPrompt([{ ...grande, resumenes: null }]);
+    expect(sinResumen).toMatch(/secciones más/);
+    // El índice de leer_documento trae el resumen por sección.
+    const idx = JSON.parse(ejecutarHerramientaDocumento("leer_documento", {}, [grande])) as { resumen_general: string; secciones: { resumen?: string }[] };
+    expect(idx.resumen_general).toMatch(/divorcio/);
+    expect(idx.secciones[0].resumen).toBe("resumen 1");
   });
 });

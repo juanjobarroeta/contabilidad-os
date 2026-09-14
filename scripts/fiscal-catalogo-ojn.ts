@@ -16,6 +16,7 @@ import {
   MUNICIPIOS_PRINCIPALES,
   OJN_BASE,
   entradaDesde,
+  esCodigoDeLitigio,
   esNormativoDeConstruccion,
   parsearFicha,
   parsearListado,
@@ -61,6 +62,9 @@ async function main() {
   const estadosSel = arg("--estados")?.split(",").map(Number);
   const todosMunicipios = arg("--municipios") === "todos";
   const sinFiltro = args.includes("--sin-filtro");
+  // --codigos: los códigos estatales que un litigante usa (civil, procedimientos,
+  // familiar, penal, fiscal, administrativo, justicia…), sólo nivel estatal.
+  const soloCodigos = args.includes("--codigos");
   const estados = ESTADOS.filter((e) => !estadosSel || estadosSel.includes(e.id));
 
   // Reanudable: lo ya resuelto (por idArchivo) no vuelve a pedir su ficha.
@@ -70,7 +74,7 @@ async function main() {
   const fichas = new Map(previo.filter((e) => e.url).map((e) => [e.idArchivo, { url: e.url, estatus: null as string | null }]));
   const entradas = new Map<string, EntradaOjn>(previo.map((e) => [e.idArchivo, e]));
 
-  const filtro = (o: OrdenamientoOjn) => (sinFiltro ? /^(Ley|C[óo]digo|Reglamento)/i.test(o.tipo) : esNormativoDeConstruccion(o));
+  const filtro = (o: OrdenamientoOjn) => (soloCodigos ? esCodigoDeLitigio(o) : sinFiltro ? /^(Ley|C[óo]digo|Reglamento)/i.test(o.tipo) : esNormativoDeConstruccion(o));
   const resolver = async (o: OrdenamientoOjn, ctx: { sat: string; municipio: string | null }, ambito: "ESTATAL" | "MUNICIPAL") => {
     let archivo = fichas.get(o.idArchivo);
     if (!archivo) {
@@ -78,7 +82,7 @@ async function main() {
       fichas.set(o.idArchivo, archivo);
       await pausa(250);
     }
-    const e = entradaDesde(o, ctx, archivo);
+    const e = entradaDesde(o, ctx, archivo, { forzarConstruccion: !soloCodigos && !sinFiltro });
     // Misma clave para dos ordenamientos distintos: se distingue por idArchivo.
     for (const otra of entradas.values()) if (otra.clave === e.clave && otra.idArchivo !== e.idArchivo) e.clave = `${e.clave}-${e.idArchivo}`;
     // Sin fecha de publicación ni reforma (el OJN pone 00-00-0000): la ingesta
@@ -102,7 +106,7 @@ async function main() {
       await pausa(300);
     }
     // Municipal: capital + principales (o todos).
-    const sel = parsearSelectores(await html(`${OJN_BASE}/estatal.php?liberado=no&edo=${edo.id}`));
+    const sel = soloCodigos ? { tipos: {}, municipios: [] } : parsearSelectores(await html(`${OJN_BASE}/estatal.php?liberado=no&edo=${edo.id}`));
     const tipoIds = TIPOS_NORMATIVOS.map((t) => sel.tipos[t]).filter(Boolean);
     const quiero = new Set([edo.capital, ...(MUNICIPIOS_PRINCIPALES[edo.sat] ?? [])].map((m) => m.toLowerCase()));
     const municipios = sel.municipios.filter((m) => todosMunicipios || quiero.has(m.nombre.toLowerCase()));

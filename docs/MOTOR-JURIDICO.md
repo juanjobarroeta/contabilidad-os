@@ -134,8 +134,141 @@
 > tipo de documento antes de escribir, [___] para lo que no se sabe, y
 > presentarlo como borrador para revisión del abogado. Acceso: el operador o
 > `User.accesoJuridico` (PR #1039, `scripts/crear-usuario-juridico.ts`).
-> Pendiente: plantillas del abogado, PDF de salida, reanudar un turno cortado
-> por un redespliegue del hub.
+> **Contestar demandas** (PR #1041): el prompt del abogado trae el flujo
+> completo — leer la demanda entera, recuperar la vía y sus plazos (CNPCF /
+> local / CCOM / LFT / CFF), contestar hecho por hecho, proponer excepciones
+> procesales y de fondo con fundamento, criterio, prueba y fuerza (y cuáles
+> NO oponer), entregar la estrategia en el chat y el escrito de contestación
+> completo con `redactar_documento` (tipo `contestacion`). **PWA** (satélite):
+> manifest, iconos, service worker sin caché de datos (sólo página «sin
+> conexión»), botón «Instalar app» (prompt nativo en Android/Chrome; pasos
+> Compartir → Añadir a inicio en iPhone), cajón lateral y safe areas en
+> teléfono.
+>
+> **Códigos estatales de los 32 estados (PR #1044, 2026-09-13).** La abogada
+> preguntó por el juicio oral familiar de Chihuahua y el copiloto, con razón,
+> dijo que no tenía el Código de Procedimientos Familiares: sólo había
+> construcción. Ahora el catálogo curado (`estatales.src.json`, 440 entradas)
+> trae por entidad, desde el sitio del congreso local y verificado con `curl`:
+> constitución, códigos civil, de procedimientos civiles, familiar y de
+> procedimientos familiares (donde existen), penal, fiscal/financiero y
+> administrativo; leyes orgánicas del poder judicial y del tribunal de justicia
+> administrativa, de justicia alternativa/mediación, de justicia y procedimiento
+> administrativo, de hacienda, del notariado y de responsabilidades. 377
+> ordenamientos, 221 códigos estatales; el catálogo total pasa de 1 276 a
+> **1 715** (932 estatales, 211 municipales). El OJN se rastreó también en modo
+> `--codigos` (196) como respaldo, y `firmaEstatal()` deduplica por título
+> normalizado dando preferencia a la copia del congreso. Huecos anotados por los
+> agentes: Zacatecas servía 500 al verificar (URLs tomadas de la última captura
+> oficial; revisar), NLE sin Ley de Procedimiento Administrativo (en dictamen),
+> varios estados sin ley propia de responsabilidades (aplican la general).
+> El prompt del abogado ya no dice «Puebla y CDMX» y le exige buscar el
+> ordenamiento estatal por nombre antes de declararlo ausente.
+> **Carga (2026-09-13):** tres corridas del kb-worker más una local: en
+> producción quedan **921 estatales, 200 municipales, 563 federales**
+> (≈1 684 ordenamientos vigentes), con 9–19 códigos y leyes de litigio por
+> estado en los 32. Lo que hizo falta: `descarga.ts` (PR #1047: reintento sin
+> verificar la cadena TLS sólo en `.gob.mx` — Hidalgo, Edomex, Veracruz, CDMX
+> e Irapuato no mandan la CA intermedia; PR #1048: reintentos ante fallos de
+> red y la causa real en el mensaje). **legislacion.edomex.gob.mx,
+> legisver.gob.mx y parte del OJN no contestan a IPs fuera de México**
+> (UND_ERR_CONNECT_TIMEOUT desde Railway): esos 22 se ingirieron corriendo el
+> worker desde una laptop en México (`KB_MODO=faltantes npx tsx
+> scripts/kb-catalogo-worker.ts` con la `DATABASE_URL` pública); el refresco
+> semanal desde Railway los seguirá saltando hasta tener un proxy en México.
+> No entran (32): 11 enlaces 404 (códigos electorales del OJN, NOM de
+> PLATIICA), 13 PDF escaneados, 3 leyes de Sonora tras un WAF, 1 .doc de Word
+> 97 (sólo el worker lo lee), 1 PDF corrupto.
+> **Expedientes completos (PR #1045, 2026-09-13).** «She might be working
+> full expediente: a lot of PDFs». Límites de expediente: 60 MB por archivo, 25
+> documentos y 3 000 000 de caracteres por conversación; escaneos de hasta 400
+> páginas (lotes de 4 en paralelo, 6 a la vez). Un documento de más de 40 000
+> caracteres se **resume por secciones al subirlo** (`resumirDocumento`: lotes
+> de ~14 000 caracteres a Haiku 4.5, 6 en paralelo, JSON `{n, resumen}` por
+> sección + resumen general; guardado en `JuridicoDocumento.resumenes`, costo
+> en `ai.juridico.resumen`). En el turno, si el texto no cabe en el prompt
+> (> 90 000 caracteres) van los resúmenes por sección (hasta 70 000
+> caracteres; pasado eso, sólo el general de cada documento) y el índice de
+> `leer_documento` los trae también, así el agente va directo a la sección que
+> importa. Con documentos, el turno tiene 24 rondas de herramientas (10 sin
+> ellos) y `leer_documento` da 20 000 caracteres por lectura. El prompt le
+> pide distinguir los documentos de un expediente (demanda, contestación,
+> pruebas, acuerdos, sentencia) y no confundir lo que dice una parte con lo
+> que resolvió el juez.
+>
+> **El asunto como fuente de verdad (PR #1051, 2026-09-13).** «Should parties
+> be in a database so data is available and not done from memory?» Sí:
+> `JuridicoAsunto` (título, materia, vía, autoridad, expediente, entidad,
+> cliente, objetivo/alcance, decisiones con el mensaje de donde salen) y
+> `JuridicoParte` (rol, física/moral, nombre, RFC, CURP, domicilio,
+> representante, contacto, `fuente` chat/documento/manual, `verificado`);
+> cada conversación cuelga de un asunto (se crea al primer registro).
+> Herramientas del abogado: `registrar_partes` (fusiona por RFC/CURP/nombre
+> normalizado; lo verificado a mano no se pisa), `actualizar_asunto` (datos
+> y decisiones) y `consultar_asunto`; el bloque «Asunto» va en cada turno y se
+> refresca dentro del mismo turno cuando el modelo registra algo. Al subir un
+> documento, `extraerDatosDeDocumento` (Haiku) propone partes, expediente y
+> autoridad como «sin verificar». El satélite tiene el panel «Asunto» para
+> confirmar, corregir o quitar partes y decisiones (lo editado a mano queda
+> verificado). Rutas `/api/juridico/asuntos/[id]` y `…/partes[/id]`. Sigue:
+> redacción por esquema y cláusula (job servidor), revisión antes de entregar,
+> edición por sección con versiones.
+>
+> **Redacción por esquema (PR #1052, 2026-09-13).** «I'm worried he will get
+> lost writing big documents.» Para documentos de fondo el copiloto ya no
+> escribe de un tirón: `planear_documento` guarda el ESQUEMA (secciones con
+> propósito, datos del asunto y normas) como borrador en estado «esquema»
+> para que el abogado lo corrija antes de la prosa; `redactar_por_secciones`
+> escribe cada sección en su propia llamada (olas de 3) con el asunto de la
+> BD, las secciones anteriores y las normas que la base devuelve para esa
+> sección, guarda parcialmente por ola, y cierra con una pasada de coherencia
+> (términos, referencias cruzadas, numeración) que aplica correcciones
+> puntuales; `revisar_documento` es la relectura obligatoria antes de
+> entregar (partes contra la BD, alcance y decisiones, contenido obligatorio,
+> [___], citas no verificables como observación alta) y deja el borrador en
+> «revisado» sólo sin observaciones altas; `editar_seccion` cambia una
+> sección con el resto como contexto y guarda la versión anterior
+> (`JuridicoDocumento.plan/estado/revision/versiones`, migración `20260922`).
+> El satélite muestra «Redactando 7 de 24: …», el estado del chip y las
+> observaciones de la relectura en la vista previa. Lo corto sigue en
+> `redactar_documento` de una vez. Pendiente: plantillas del abogado, PDF
+> de salida, comparar versiones en la UI.
+> **Probado en producción (13-sep-2026, contrato de arrendamiento comercial
+> en Puebla):** partes + esquema de 17 apartados en 90 s; 19 secciones en
+> 515 s (60k caracteres, 2 correcciones de coherencia), relectura con 13
+> observaciones (con altas, como debe ser en un primer borrador),
+> `editar_seccion` sobre la sección 14, Word de 28 KB. El guardado parcial
+> sirvió: la respuesta final murió porque la cuenta de Anthropic se quedó
+> sin crédito y el borrador quedó íntegro en la BD. Desde entonces el turno
+> traduce ese error (y saturación / llave rechazada) a un mensaje en español
+> para el abogado (`src/lib/juridico/errores.ts`) en vez del JSON crudo.
+> **Y Sentry no se enteró (PR #1054):** `reportError` sí escribía en el
+> log pero no mandaba nada, porque Next empaqueta `observability.ts` en cada
+> chunk del servidor y el `initialized` de la copia de la ruta era false;
+> ahora pregunta a `Sentry.getClient()` (el cliente sí es uno solo). Ningún
+> error de servidor del hub había llegado a Sentry hasta hoy; sólo los del
+> navegador.
+>
+> **Turnos reanudables (PR #1042).** La primera prueba real de la abogada
+> (alegatos de cinco tipos para un juicio oral familiar en Chihuahua, 8
+> minutos) murió con «Load failed» en el iPhone. Dos causas, las dos
+> corregidas: (1) `max_tokens` 6 144 cortaba a la mitad la llamada a
+> `redactar_documento` con el escrito entero y la ronda siguiente moría con
+> «user messages must have non-empty content» — ahora 16 000 tokens, el bloque
+> abierto se cierra al terminar el stream, una llamada cortada se le dice al
+> modelo en vez de ejecutarse con `{}`, y una ronda sin llamadas no manda un
+> turno vacío; (2) el turno vivía en la conexión HTTP — ahora corre como tarea
+> del proceso (`src/lib/juridico/turnos.ts`): guarda cada evento, el mensaje
+> del usuario se persiste al arrancar y la respuesta (o lo que alcanzó, con
+> `meta.error`) al terminar; la respuesta HTTP es una vista y
+> `GET /api/juridico/chat?conversacionId=&desde=N` reengancha desde el último
+> evento visto. El satélite reintenta con backoff hasta 15 min y, si el hub ya
+> no tiene el turno en memoria (se redesplegó), recarga la conversación. Los
+> errores del turno se reportan a Sentry (antes se tragaban).
+> `RAILWAY_DEPLOYMENT_DRAINING_SECONDS=300` en el hub: un redespliegue deja
+> terminar los turnos en curso. Límites de Railway: 15 min por petición, 5 min
+> sin datos (los pings cada 10 s lo cubren). Pendiente: plantillas del abogado,
+> PDF de salida, cambio de contraseña en el satélite.
 >
 > **Carga inicial (2026-09-12, kb-worker):** dos corridas — la primera 731
 > ingeridos / 179 fallidos por el catálogo (PR #1029: «00-00-0000» y

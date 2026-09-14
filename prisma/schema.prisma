@@ -57,6 +57,7 @@ model User {
   whatsappLinkCodes   WhatsappLinkCode[]
   chatConversations   ChatConversation[]
   juridicoConversaciones JuridicoConversacion[]
+  juridicoAsuntos        JuridicoAsunto[]
   // Refresh tokens de la API de satélites (flujo access corto + refresh rotatorio).
   apiRefreshTokens    ApiRefreshToken[]
   passwordResetTokens PasswordResetToken[]
@@ -971,6 +972,12 @@ model Invoice {
   regimenNomina     String?
   tipoNomina        String? // "O" ordinaria | "E" extraordinaria
   isrRetenidoNomina Decimal? @db.Decimal(18, 6)
+  // Qué corrida ES el recibo, derivado del complemento (derivarTipoCorrida):
+  // ORDINARIA | EXTRAORDINARIA | FINIQUITO | AGUINALDO | PTU. TipoNomina del
+  // SAT sólo dice O/E — un finiquito viaja como "O" — así que sin esto la
+  // pantalla llamaba «Nómina» a todo y un finiquito de $18k parecía quincena.
+  // Null = no es nómina o se importó antes de derivarlo (lo rellena el backfill).
+  tipoCorrida       String?
 
   // SAT stamping data (from PAC/Facturapi)
   status         InvoiceStatus @default(DRAFT)
@@ -4140,16 +4147,69 @@ model FiscalDocument {
 model JuridicoConversacion {
   id         String    @id @default(cuid())
   userId     String
+  asuntoId   String?
   titulo     String    @default("Nueva conversación")
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
   archivedAt DateTime?
 
   user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  asunto     JuridicoAsunto?     @relation(fields: [asuntoId], references: [id], onDelete: SetNull)
   mensajes   JuridicoMensaje[]
   documentos JuridicoDocumento[]
 
   @@index([userId, updatedAt])
+  @@index([asuntoId])
+}
+
+// El ASUNTO es la fuente de verdad de un caso: partes, expediente, autoridad,
+// objetivo y las decisiones tomadas en el chat. Lo que el copiloto redacta sale
+// de aquí, no de su memoria de la conversación (src/lib/juridico/asuntos.ts).
+model JuridicoAsunto {
+  id         String   @id @default(cuid())
+  userId     String
+  titulo     String
+  materia    String? // civil | familiar | mercantil | penal | laboral | administrativo | fiscal | amparo | otro
+  via        String? // juicio oral civil, ordinario familiar, ejecutivo mercantil, amparo indirecto…
+  autoridad  String? // juzgado / tribunal / sala
+  expediente String?
+  entidad    String? // clave SAT de la entidad (PUE, CHH…)
+  cliente    String? // rol del cliente en el asunto: actor | demandado | mutuante | …
+  objetivo   String?  @db.Text
+  // [{ texto, mensajeId?, fecha }]: instrucciones y decisiones del abogado, con el mensaje de donde salen.
+  decisiones Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user           User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversaciones JuridicoConversacion[]
+  partes         JuridicoParte[]
+
+  @@index([userId, updatedAt])
+}
+
+model JuridicoParte {
+  id           String   @id @default(cuid())
+  asuntoId     String
+  rol          String // actor | demandado | cliente | contraparte | mutuante | mutuario | arrendador | … (libre)
+  tipoPersona  String   @default("fisica") // fisica | moral
+  nombre       String
+  rfc          String?
+  curp         String?
+  domicilio    String?
+  representante String?
+  email        String?
+  telefono     String?
+  notas        String?  @db.Text
+  fuente       String   @default("chat") // chat | documento | manual
+  documentoId  String?
+  verificado   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  asunto JuridicoAsunto @relation(fields: [asuntoId], references: [id], onDelete: Cascade)
+
+  @@index([asuntoId])
 }
 
 // Un contrato, demanda o escrito que el abogado sube a la conversación para
@@ -4167,6 +4227,15 @@ model JuridicoDocumento {
   caracteres     Int
   texto          String   @db.Text
   secciones      Json?
+  // Documentos largos: resumen general y por sección (documentos.ts → resumirDocumento).
+  resumenes      Json?
+  // Borradores redactados por esquema (redaccion-estructurada.ts): el plan
+  // (secciones con propósito, datos y normas), el estado del borrador, la
+  // última revisión (observaciones por sección) y las versiones anteriores.
+  plan           Json?
+  estado         String   @default("final") // final | esquema | redactando | borrador | revisado
+  revision       Json?
+  versiones      Json?
   createdAt      DateTime @default(now())
 
   conversacion JuridicoConversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)

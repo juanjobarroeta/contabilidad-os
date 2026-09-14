@@ -2,6 +2,1127 @@
   "nota": "Ordenamientos estatales y municipales de construcción/urbanismo que el Orden Jurídico Nacional NO tiene (o tiene desactualizados), con URL oficial verificada a mano (curl 200 + PDF/Word real). Se compila con `npx tsx scripts/fiscal-catalogo-estatales.ts` → estatales.json.",
   "entradas": [
     {
+      "entidad": "AGU",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado de Aguascalientes",
+      "url": "https://congresoags.gob.mx/agenda_legislativa/leyes/descargarPdf/2492",
+      "ultimaReforma": "2026-07-03",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "AGU",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil del Estado de Aguascalientes",
+      "url": "https://congresoags.gob.mx/agenda_legislativa/leyes/descargarPdf/474",
+      "ultimaReforma": "2026-06-29",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "AGU",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal del Estado de Aguascalientes",
+      "url": "https://congresoags.gob.mx/agenda_legislativa/leyes/descargarPdf/404",
+      "ultimaReforma": "2025-12-26",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "AGU",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal para el Estado de Aguascalientes",
+      "url": "https://congresoags.gob.mx/agenda_legislativa/leyes/descargarPdf/2481",
+      "ultimaReforma": "2026-07-13",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "AGU",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles del Estado de Aguascalientes",
+      "url": "https://congresoags.gob.mx/agenda_legislativa/leyes/descargarPdf/162",
+      "ultimaReforma": "2018-11-12",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "AGU",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Aguascalientes",
+      "url": "https://congresoags.gob.mx/agenda_legislativa/leyes/descargarPdf/420",
+      "ultimaReforma": "2026-03-23",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "AGU",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Tribunal de Justicia Administrativa del Estado de Aguascalientes",
+      "url": "https://congresoags.gob.mx/agenda_legislativa/leyes/descargarPdf/2523",
+      "ultimaReforma": "2023-12-01",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "AGU",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Hacienda del Estado de Aguascalientes",
+      "url": "https://congresoags.gob.mx/agenda_legislativa/leyes/descargarPdf/198",
+      "ultimaReforma": "2025-05-26",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "AGU",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Mediación y Conciliación del Estado de Aguascalientes",
+      "url": "https://congresoags.gob.mx/agenda_legislativa/leyes/descargarPdf/233",
+      "ultimaReforma": "2021-05-10",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "AGU",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Responsabilidades Administrativas del Estado de Aguascalientes",
+      "url": "https://congresoags.gob.mx/agenda_legislativa/leyes/descargarPdf/421",
+      "ultimaReforma": "2026-06-29",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "AGU",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado para el Estado de Aguascalientes",
+      "url": "https://congresoags.gob.mx/agenda_legislativa/leyes/descargarPdf/2508",
+      "ultimaReforma": "2021-07-01",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "AGU",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Procedimiento Administrativo del Estado de Aguascalientes",
+      "url": "https://congresoags.gob.mx/agenda_legislativa/leyes/descargarPdf/271",
+      "ultimaReforma": "2019-12-30",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "AGU",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Procedimiento Contencioso Administrativo para el Estado de Aguascalientes",
+      "url": "https://congresoags.gob.mx/agenda_legislativa/leyes/descargarPdf/272",
+      "ultimaReforma": "2026-06-23",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "BCN",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado Libre y Soberano de Baja California",
+      "url": "https://www.congresobc.gob.mx/Documentos/ProcesoParlamentario/Leyes/TOMO_I/20200214_CONSTBC.PDF",
+      "ultimaReforma": "2020-02-14",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "BCN",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil para el Estado de Baja California",
+      "url": "https://www.congresobc.gob.mx/Documentos/ProcesoParlamentario/Leyes/TOMO_III/20230421_CODCIVIL-2.PDF",
+      "ultimaReforma": "2023-04-21",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "BCN",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal del Estado de Baja California",
+      "url": "https://www.congresobc.gob.mx/Documentos/ProcesoParlamentario/Leyes/TOMO_II/20240315_CODFISC.PDF",
+      "ultimaReforma": "2024-03-15",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "BCN",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal para el Estado de Baja California",
+      "url": "https://www.congresobc.gob.mx/Documentos/ProcesoParlamentario/Leyes/TOMO_V/24052019_Codpenal_2.pdf",
+      "ultimaReforma": "2019-05-24",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "BCN",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Baja California",
+      "url": "https://www.congresobc.gob.mx/Documentos/ProcesoParlamentario/Leyes/TOMO_IV/30112018_CODIPROCI.PDF",
+      "ultimaReforma": "2018-11-30",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "BCN",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Baja California",
+      "url": "https://www.congresobc.gob.mx/Documentos/ProcesoParlamentario/Leyes/TOMO_I/20260831_LEYPODERJUDICIAL.PDF",
+      "ultimaReforma": "2026-08-31",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "BCN",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Hacienda del Estado de Baja California",
+      "url": "https://www.congresobc.gob.mx/Documentos/ProcesoParlamentario/Leyes/TOMO_II/20260618_LEYHACES.PDF",
+      "ultimaReforma": "2026-06-18",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "BCN",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Justicia Alternativa para el Estado de Baja California",
+      "url": "https://www.congresobc.gob.mx/Documentos/ProcesoParlamentario/Leyes/TOMO_V/20260213_LEYJUSTICIAALTERNATIVA-2.PDF",
+      "ultimaReforma": "2026-02-13",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "BCN",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Responsabilidades Administrativas del Estado de Baja California",
+      "url": "https://www.congresobc.gob.mx/Documentos/ProcesoParlamentario/Leyes/TOMO_I/20260831_LEYRESPADMTRA.PDF",
+      "ultimaReforma": "2026-08-31",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "BCN",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado para el Estado de Baja California",
+      "url": "https://www.congresobc.gob.mx/Documentos/ProcesoParlamentario/Leyes/TOMO_IV/20260904_LEYNOTARIADO.PDF",
+      "ultimaReforma": "2026-09-04",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "BCN",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Procedimiento para los Actos de la Administración Pública del Estado de Baja California",
+      "url": "https://www.congresobc.gob.mx/Documentos/ProcesoParlamentario/Leyes/TOMO_I/LEYACTOSADMON.PDF",
+      "ultimaReforma": null,
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "BCN",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Tribunal Estatal de Justicia Administrativa de Baja California",
+      "url": "https://www.congresobc.gob.mx/Documentos/ProcesoParlamentario/Leyes/TOMO_V/20260831_LEYTRIBJUSTADMTVA.PDF",
+      "ultimaReforma": "2026-08-31",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "BCS",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado Libre y Soberano de Baja California Sur",
+      "url": "https://www.cbcs.gob.mx/LEYES-BCS/CPoliticaBCS-.doc",
+      "ultimaReforma": "2026-09-08",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "BCS",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil para el Estado Libre y Soberano de Baja California Sur",
+      "url": "https://www.cbcs.gob.mx/LEYES-BCS/CCivilBCS-.doc",
+      "ultimaReforma": "2026-05-31",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "BCS",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal del Estado y Municipios de Baja California Sur",
+      "url": "https://www.cbcs.gob.mx/LEYES-BCS/CFiscalBCS.doc",
+      "ultimaReforma": "2024-12-20",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "BCS",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal para el Estado Libre y Soberano de Baja California Sur",
+      "url": "https://www.cbcs.gob.mx/LEYES-BCS/CPenalBCS-.doc",
+      "ultimaReforma": "2026-06-30",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "BCS",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Baja California Sur",
+      "url": "https://www.cbcs.gob.mx/LEYES-BCS/CProcedimientosCivilesBCS.doc",
+      "ultimaReforma": "2025-04-30",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "BCS",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Baja California Sur",
+      "url": "https://www.cbcs.gob.mx/LEYES-BCS/LOrgPoderJudicialBCS-.doc",
+      "ultimaReforma": "2025-11-21",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "BCS",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Tribunal de Justicia Administrativa del Estado de Baja California Sur",
+      "url": "https://www.cbcs.gob.mx/LEYES-BCS/LOrgTribunalJusticiaAdminBCS-.doc",
+      "ultimaReforma": "2025-11-21",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "BCS",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Hacienda del Estado de Baja California Sur",
+      "url": "https://www.cbcs.gob.mx/LEYES-BCS/LHaciendaBCS.doc",
+      "ultimaReforma": "2025-12-31",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "BCS",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Mecanismos Alternativos de Solución de Controversias del Estado de Baja California Sur",
+      "url": "https://www.cbcs.gob.mx/LEYES-BCS/LMecanismosAlternativosBCS-.doc",
+      "ultimaReforma": "2022-02-18",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "BCS",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Procedimiento Administrativo para el Estado y los Municipios de Baja California Sur",
+      "url": "https://www.cbcs.gob.mx/LEYES-BCS/LProcedimientoAdmin-.doc",
+      "ultimaReforma": null,
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "BCS",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Procedimiento Contencioso Administrativo para el Estado de Baja California Sur",
+      "url": "https://www.cbcs.gob.mx/LEYES-BCS/LProcedimientoContenciosoAdmin-.doc",
+      "ultimaReforma": null,
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "BCS",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Responsabilidades Administrativas del Estado y Municipios de Baja California Sur",
+      "url": "https://www.cbcs.gob.mx/LEYES-BCS/LResponsabilidadesAdminEdoMunBCS.doc",
+      "ultimaReforma": "2026-05-10",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "BCS",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado del Estado de Baja California Sur",
+      "url": "https://www.cbcs.gob.mx/LEYES-BCS/LNotariadoBCS.doc",
+      "ultimaReforma": "2016-10-31",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CAM",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado de Campeche",
+      "url": "https://legislacion.congresocam.gob.mx/index.php/leyes-focalizadas/anticorrupcion/175-constitucion-politica-del-estado-de-camp/file",
+      "ultimaReforma": "2026-02-04",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CAM",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil del Estado de Campeche",
+      "url": "https://legislacion.congresocam.gob.mx/index.php/etiquetas-x-materia/1-codigo-civil-del-estado-de-campeche/file",
+      "ultimaReforma": "2025-12-04",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CAM",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal del Estado de Campeche",
+      "url": "https://legislacion.congresocam.gob.mx/index.php/etiquetas-x-materia/4-codigo-fiscal-del-estado/file",
+      "ultimaReforma": "2025-12-29",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CAM",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal del Estado de Campeche",
+      "url": "https://legislacion.congresocam.gob.mx/index.php/leyes-focalizadas/anticorrupcion/6-codigo-penal-del-estado-de-campeche/file",
+      "ultimaReforma": "2026-04-10",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CAM",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles del Estado de Campeche",
+      "url": "https://legislacion.congresocam.gob.mx/index.php/etiquetas-x-materia/2-codigo-de-procedimientos-civiles-del-estado-de-campeche/file",
+      "ultimaReforma": "2014-12-05",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CAM",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Contenciosos Administrativos del Estado de Campeche",
+      "url": "https://legislacion.congresocam.gob.mx/index.php/leyes-focalizadas/anticorrupcion/3-codigo-de-procedimientos-contenciosos-administrativos-del-estado-de-campeche/file",
+      "ultimaReforma": "2017-08-28",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CAM",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Campeche",
+      "url": "https://legislacion.congresocam.gob.mx/index.php/leyes-focalizadas/anticorrupcion/333-ley-organica-del-poder-judicial-del-estado-campeche/file",
+      "ultimaReforma": "2024-10-09",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CAM",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Tribunal de Justicia Administrativa del Estado de Campeche",
+      "url": "https://legislacion.congresocam.gob.mx/index.php/leyes-focalizadas/anticorrupcion/107-ley-organica-del-tribunal-de-justicia-administrativa/file",
+      "ultimaReforma": "2021-04-09",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CAM",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Reglamentaria del Capítulo XVII de la Constitución Política del Estado de Campeche",
+      "url": "https://legislacion.congresocam.gob.mx/index.php/etiquetas-x-materia/150-ley-reglamentaria-del-capitulo-xvii-de-la-constitucion/file",
+      "ultimaReforma": "2017-06-27",
+      "verificado": "2026-09-12",
+      "materias": [
+        "servidores_publicos",
+        "administrativo"
+      ],
+      "nota": "Régimen de responsabilidades de los servidores públicos de Campeche."
+    },
+    {
+      "entidad": "CAM",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Hacienda del Estado de Campeche",
+      "url": "https://legislacion.congresocam.gob.mx/index.php/etiquetas-x-materia/428-ley-de-hacienda-del-estado-de-campeche/file",
+      "ultimaReforma": "2025-12-29",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CAM",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Procedimiento Administrativo para el Estado y los Municipios de Campeche",
+      "url": "https://legislacion.congresocam.gob.mx/index.php/etiquetas-x-materia/67-ley-de-procedimiento-administrativo-para-el-estado-y-los-municipios-de-campeche/file",
+      "ultimaReforma": "2008-03-05",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CAM",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado para el Estado de Campeche",
+      "url": "https://legislacion.congresocam.gob.mx/index.php/etiquetas-x-materia/91-ley-del-notariado-para-el-estado-de-campeche/file",
+      "ultimaReforma": "2009-06-09",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CHH",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado de Chihuahua",
+      "url": "https://www.congresochihuahua.gob.mx/biblioteca/constitucion/archivosConstitucion/actual.pdf",
+      "ultimaReforma": null,
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CHH",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil del Estado de Chihuahua",
+      "url": "https://www.congresochihuahua2.gob.mx/biblioteca/codigos/archivosCodigos/13.pdf",
+      "ultimaReforma": null,
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CHH",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal del Estado de Chihuahua",
+      "url": "https://www.congresochihuahua2.gob.mx/biblioteca/codigos/archivosCodigos/65.pdf",
+      "ultimaReforma": null,
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CHH",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal del Estado de Chihuahua",
+      "url": "https://www.congresochihuahua2.gob.mx/biblioteca/codigos/archivosCodigos/64.pdf",
+      "ultimaReforma": null,
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CHH",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles del Estado de Chihuahua",
+      "url": "https://www.congresochihuahua2.gob.mx/biblioteca/codigos/archivosCodigos/62.pdf",
+      "ultimaReforma": null,
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CHH",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Familiares del Estado de Chihuahua",
+      "url": "https://www.congresochihuahua2.gob.mx/biblioteca/codigos/archivosCodigos/63.pdf",
+      "ultimaReforma": null,
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CHH",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Chihuahua",
+      "url": "https://www.congresochihuahua2.gob.mx/biblioteca/leyes/archivosLeyes/1563.pdf",
+      "ultimaReforma": "2025-02-20",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CHH",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Hacienda del Estado de Chihuahua",
+      "url": "https://www.congresochihuahua2.gob.mx/biblioteca/leyes/archivosLeyes/1442.pdf",
+      "ultimaReforma": null,
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CHH",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Justicia Administrativa del Estado de Chihuahua",
+      "url": "https://www.congresochihuahua2.gob.mx/biblioteca/leyes/archivosLeyes/1513.pdf",
+      "ultimaReforma": null,
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CHH",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Justicia Alternativa del Estado de Chihuahua",
+      "url": "https://www.congresochihuahua2.gob.mx/biblioteca/leyes/archivosLeyes/1164.pdf",
+      "ultimaReforma": "2018-09-12",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CHH",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Notariado del Estado de Chihuahua",
+      "url": "https://www.congresochihuahua2.gob.mx/biblioteca/leyes/archivosLeyes/1523.pdf",
+      "ultimaReforma": null,
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CHH",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Procedimiento Administrativo del Estado de Chihuahua",
+      "url": "https://www.congresochihuahua2.gob.mx/biblioteca/leyes/archivosLeyes/1535.pdf",
+      "ultimaReforma": null,
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CHP",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado Libre y Soberano de Chiapas",
+      "url": "https://www.congresochiapas.gob.mx/new/Info-Parlamentaria/LEY_0002.pdf",
+      "ultimaReforma": "2026-09-09",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CHP",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil para el Estado de Chiapas",
+      "url": "https://www.congresochiapas.gob.mx/new/Info-Parlamentaria/LEY_0003.pdf",
+      "ultimaReforma": "2026-07-28",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CHP",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal del Estado de Chiapas",
+      "url": "https://www.congresochiapas.gob.mx/new/Info-Parlamentaria/LEY_0007.pdf",
+      "ultimaReforma": "2025-12-10",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CHP",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal para el Estado de Chiapas",
+      "url": "https://www.congresochiapas.gob.mx/new/Info-Parlamentaria/LEY_0012.pdf",
+      "ultimaReforma": "2026-04-29",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CHP",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Organización del Poder Judicial del Estado de Chiapas",
+      "url": "https://www.congresochiapas.gob.mx/new/Info-Parlamentaria/LEY_0008.pdf",
+      "ultimaReforma": "2026-07-28",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CHP",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Chiapas",
+      "url": "https://www.congresochiapas.gob.mx/new/Info-Parlamentaria/LEY_0009.pdf",
+      "ultimaReforma": "2019-01-23",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CHP",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Tribunal de Justicia Administrativa del Estado de Chiapas",
+      "url": "https://www.congresochiapas.gob.mx/new/Info-Parlamentaria/LEY_0132.pdf",
+      "ultimaReforma": "2025-05-28",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CHP",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Mecanismos Alternativos de Solución de Controversias para el Estado de Chiapas",
+      "url": "https://www.congresochiapas.gob.mx/new/Info-Parlamentaria/LEY_0043.pdf",
+      "ultimaReforma": "2025-05-06",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CHP",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Procedimientos Administrativos para el Estado de Chiapas",
+      "url": "https://www.congresochiapas.gob.mx/new/Info-Parlamentaria/LEY_0048.pdf",
+      "ultimaReforma": "2020-08-19",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CHP",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Responsabilidades Administrativas para el Estado de Chiapas",
+      "url": "https://www.congresochiapas.gob.mx/new/Info-Parlamentaria/LEY_0131.pdf",
+      "ultimaReforma": "2026-02-04",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CHP",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado para el Estado de Chiapas",
+      "url": "https://www.congresochiapas.gob.mx/new/Info-Parlamentaria/ley%20del%20notariado%20para%20el%20estado%20de%20chiapas.pdf",
+      "ultimaReforma": "2012-10-03",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CMX",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política de la Ciudad de México",
+      "url": "https://data.consejeria.cdmx.gob.mx/images/leyes/estatutos/CONSTITUCION_POLITICA_DE_LA_CDMX_14.6.pdf",
+      "ultimaReforma": "2026-07-23",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CMX",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil para el Distrito Federal",
+      "url": "https://data.consejeria.cdmx.gob.mx/images/leyes/2025/CODIGOS_2025/CODIGO_CIVIL_PARA_EL_DF_15.3.pdf",
+      "ultimaReforma": "2025-12-24",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CMX",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal para el Distrito Federal",
+      "url": "https://data.consejeria.cdmx.gob.mx/images/leyes/2025/2026/50226/CODIGO_PENAL_PARA_EL_DF_12.7.pdf",
+      "ultimaReforma": "2026-07-23",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CMX",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles para el Distrito Federal",
+      "url": "https://data.consejeria.cdmx.gob.mx/images/leyes/codigos/Codigo_Procedimientos_Civiles_DF_2.2.pdf",
+      "ultimaReforma": "2018-07-18",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CMX",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial de la Ciudad de México",
+      "url": "https://data.consejeria.cdmx.gob.mx/images/leyes/2025/2026/LEY_ORGANICA_DEL_PODER_JUDICIAL_DE_LA_CDMX_3.3.pdf",
+      "ultimaReforma": "2026-07-13",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CMX",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Justicia Administrativa de la Ciudad de México",
+      "url": "https://data.consejeria.cdmx.gob.mx/images/leyes/leyes/LEY_%20DE_JUSTICIA_ADMINISTRATIVA_DE_LA_CDMX_3.1.pdf",
+      "ultimaReforma": "2019-12-23",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CMX",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Justicia Alternativa del Tribunal Superior de Justicia para la Ciudad de México",
+      "url": "https://data.consejeria.cdmx.gob.mx/images/leyes/leyes/LEY_DE_JUSTICIA_ALTERNATIVA_DEL_TRIBUNAL_SUPERIOR_DE_JUSTICIA_PARA_EL_DF_2.2.pdf",
+      "ultimaReforma": "2026-07-13",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CMX",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Procedimiento Administrativo de la Ciudad de México",
+      "url": "https://data.consejeria.cdmx.gob.mx/images/leyes/leyes/LEY_DE_PROCEDIMIENTO_ADMINISTRATIVO_DE_LA_CDMX_1.1.pdf",
+      "ultimaReforma": "2019-06-12",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CMX",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Responsabilidades Administrativas de la Ciudad de México",
+      "url": "https://data.consejeria.cdmx.gob.mx/images/leyes/2025/2026/210126/LEY_DE_RESPONSABILIDADES_ADMINISTRATIVAS_DE_LA_CDMX_3.1.pdf",
+      "ultimaReforma": "2025-12-24",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CMX",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado para la Ciudad de México",
+      "url": "https://data.consejeria.cdmx.gob.mx/images/leyes/2025/2026/50226/LEY_DEL_NOTARIADO_PARA_LA_CIUDAD_DE_MEXICO_1.4.pdf",
+      "ultimaReforma": "2025-12-24",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "COA",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado de Coahuila de Zaragoza",
+      "url": "https://www.congresocoahuila.gob.mx/transparencia/03/Leyes_Coahuila/coa01.pdf",
+      "ultimaReforma": "2025-10-28",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "COA",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil para el Estado de Coahuila de Zaragoza",
+      "url": "https://www.congresocoahuila.gob.mx/transparencia/03/Leyes_Coahuila/coa02.pdf",
+      "ultimaReforma": "2023-06-27",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "COA",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal para el Estado de Coahuila de Zaragoza",
+      "url": "https://www.congresocoahuila.gob.mx/transparencia/03/Leyes_Coahuila/coa06.pdf",
+      "ultimaReforma": "2023-12-26",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "COA",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal de Coahuila de Zaragoza",
+      "url": "https://www.congresocoahuila.gob.mx/transparencia/03/Leyes_Coahuila/coa08_Nuevo_Codigo.pdf",
+      "ultimaReforma": "2026-05-19",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "COA",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Procesal Civil para el Estado de Coahuila de Zaragoza",
+      "url": "https://www.congresocoahuila.gob.mx/transparencia/03/Leyes_Coahuila/coa03.pdf",
+      "ultimaReforma": "2019-10-18",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "COA",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Familiares para el Estado de Coahuila de Zaragoza",
+      "url": "https://www.congresocoahuila.gob.mx/transparencia/03/Leyes_Coahuila/coa234.pdf",
+      "ultimaReforma": "2019-10-18",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "COA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Coahuila de Zaragoza",
+      "url": "https://www.congresocoahuila.gob.mx/transparencia/03/Leyes_Coahuila/coa61.pdf",
+      "ultimaReforma": null,
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "COA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Tribunal de Justicia Administrativa de Coahuila de Zaragoza",
+      "url": "https://www.congresocoahuila.gob.mx/transparencia/03/Leyes_Coahuila/coa253.pdf",
+      "ultimaReforma": "2022-09-06",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "COA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Hacienda para el Estado de Coahuila de Zaragoza",
+      "url": "https://www.congresocoahuila.gob.mx/transparencia/03/Leyes_Coahuila/coa25.pdf",
+      "ultimaReforma": "2025-12-30",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "COA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Medios Alternos de Solución de Controversias para el Estado de Coahuila de Zaragoza",
+      "url": "https://www.congresocoahuila.gob.mx/transparencia/03/Leyes_Coahuila/coa133.pdf",
+      "ultimaReforma": "2018-11-27",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "COA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Procedimiento Administrativo para el Estado de Coahuila de Zaragoza",
+      "url": "https://www.congresocoahuila.gob.mx/transparencia/03/Leyes_Coahuila/coa150.pdf",
+      "ultimaReforma": "2017-11-21",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "COA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado del Estado de Coahuila",
+      "url": "https://www.congresocoahuila.gob.mx/transparencia/03/Leyes_Coahuila/coa44.pdf",
+      "ultimaReforma": "2017-12-29",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "COA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Procedimiento Contencioso Administrativo para el Estado de Coahuila de Zaragoza",
+      "url": "https://www.congresocoahuila.gob.mx/transparencia/03/Leyes_Coahuila/coa254.pdf",
+      "ultimaReforma": "2020-01-10",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "COA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley para la Familia de Coahuila de Zaragoza",
+      "url": "https://www.congresocoahuila.gob.mx/transparencia/03/Leyes_Coahuila/coa233.pdf",
+      "ultimaReforma": "2024-01-30",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "COL",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado Libre y Soberano de Colima",
+      "url": "https://congresocol.gob.mx/web/Sistema/uploads/LegislacionEstatal/Constitucion/Constitucion_31agosto2026.pdf",
+      "ultimaReforma": "2026-08-31",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "COL",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil para el Estado de Colima",
+      "url": "https://congresocol.gob.mx/web/Sistema/uploads/LegislacionEstatal/Codigos/codigo_civil_17mayo2025.pdf",
+      "ultimaReforma": "2025-05-17",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "COL",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal del Estado de Colima",
+      "url": "https://congresocol.gob.mx/web/Sistema/uploads/LegislacionEstatal/Codigos/codigo_fiscal_estatal_12JULIO2025_.pdf",
+      "ultimaReforma": "2025-07-12",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "COL",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal para el Estado de Colima",
+      "url": "https://congresocol.gob.mx/web/Sistema/uploads/LegislacionEstatal/Codigos/codigo_penal_29agosto2026.pdf",
+      "ultimaReforma": "2026-08-29",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "COL",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Colima",
+      "url": "https://congresocol.gob.mx/web/Sistema/uploads/LegislacionEstatal/Codigos/codigo_procedimiento_civiles_17JUL2021.pdf",
+      "ultimaReforma": "2021-07-17",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "COL",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Colima",
+      "url": "https://congresocol.gob.mx/web/Sistema/uploads/LegislacionEstatal/LeyesEstatales/LEY_ORGANICA_PODER_JUDICIAL_18abril2026_.pdf",
+      "ultimaReforma": "2026-04-18",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "COL",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Hacienda del Estado de Colima",
+      "url": "https://congresocol.gob.mx/web/Sistema/uploads/LegislacionEstatal/LeyesEstatales/Ley_de_hacienda_30junio2026_.pdf",
+      "ultimaReforma": "2026-06-30",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "COL",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Justicia Administrativa del Estado de Colima",
+      "url": "https://congresocol.gob.mx/web/Sistema/uploads/LegislacionEstatal/LeyesEstatales/Ley_JA_27_septiembre_2025.pdf",
+      "ultimaReforma": "2025-09-27",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "COL",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Justicia Alternativa del Estado de Colima",
+      "url": "https://congresocol.gob.mx/web/Sistema/uploads/LegislacionEstatal/LeyesEstatales/Justicia_Alternativa22nov2016.pdf",
+      "ultimaReforma": "2016-11-22",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "COL",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Procedimiento Administrativo del Estado de Colima y sus Municipios",
+      "url": "https://congresocol.gob.mx/web/Sistema/uploads/LegislacionEstatal/LeyesEstatales/Procedimiento_Administrativo_27septiembre2025_.pdf",
+      "ultimaReforma": "2025-09-27",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "COL",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado del Estado de Colima",
+      "url": "https://congresocol.gob.mx/web/Sistema/uploads/LegislacionEstatal/LeyesEstatales/notariado_03_enero_2026.pdf",
+      "ultimaReforma": "2026-01-03",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "DUR",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado Libre y Soberano de Durango",
+      "url": "https://congresodurango.gob.mx/Archivos/legislacion/CONSTITUCION%20POLITICA%20DEL%20ESTADO%20%28NUEVA%29.pdf",
+      "ultimaReforma": "2026-05-31",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "DUR",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil del Estado de Durango",
+      "url": "https://congresodurango.gob.mx/Archivos/legislacion/CODIGO%20CIVIL.pdf",
+      "ultimaReforma": "2026-06-07",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "DUR",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal del Estado de Durango",
+      "url": "https://congresodurango.gob.mx/Archivos/legislacion/CODIGO%20FISCAL.pdf",
+      "ultimaReforma": "2025-12-14",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "DUR",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal del Estado Libre y Soberano de Durango",
+      "url": "https://congresodurango.gob.mx/Archivos/legislacion/CODIGO%20PENAL%20%28NUEVO%29.pdf",
+      "ultimaReforma": "2026-06-07",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "DUR",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Durango",
+      "url": "https://congresodurango.gob.mx/Archivos/legislacion/CODIGO%20DE%20PROC.%20CIVILES.pdf",
+      "ultimaReforma": "2018-05-31",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "DUR",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Durango",
+      "url": "https://congresodurango.gob.mx/Archivos/legislacion/LEY%20ORGANICA%20DEL%20PODER%20JUDICIAL%20%28NUEVA%29.pdf",
+      "ultimaReforma": "2026-05-10",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "DUR",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Tribunal de Justicia Administrativa del Estado de Durango",
+      "url": "https://congresodurango.gob.mx/Archivos/legislacion/LEY%20ORGANICA%20DEL%20TRIBUNAL%20DE%20JUSTICIA%20ADMINISTRATIVA.pdf",
+      "ultimaReforma": "2023-11-02",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "DUR",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Hacienda del Estado de Durango",
+      "url": "https://congresodurango.gob.mx/Archivos/legislacion/LEY%20DE%20HACIENDA%20DEL%20ESTADO%20DE%20DURANGO.pdf",
+      "ultimaReforma": "2025-12-14",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "DUR",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Justicia Administrativa del Estado de Durango",
+      "url": "https://congresodurango.gob.mx/Archivos/legislacion/LEY%20DE%20JUSTICIA%20ADMINISTRATIVA.pdf",
+      "ultimaReforma": "2022-05-26",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "DUR",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Justicia Alternativa del Estado de Durango",
+      "url": "https://congresodurango.gob.mx/Archivos/legislacion/LEY%20DE%20JUSTICIA%20ALTERNATIVA.pdf",
+      "ultimaReforma": "2022-05-19",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "DUR",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado para el Estado de Durango",
+      "url": "https://congresodurango.gob.mx/Archivos/legislacion/LEY%20DEL%20NOTARIADO.pdf",
+      "ultimaReforma": "2026-04-26",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "GRO",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado Libre y Soberano de Guerrero",
+      "url": "https://congresogro.gob.mx/legislacion/CONSTITUCION-GUERRERO-15-06-2022.pdf",
+      "ultimaReforma": "2026-04-21",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "GRO",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil del Estado Libre y Soberano de Guerrero Número 358",
+      "url": "https://congresogro.gob.mx/legislacion/codigos/ARCHI/CODIGO-CIVIL-DEL-ESTADO-LIBRE-Y-SOBERANO-DE-GUERRERO-358.pdf",
+      "ultimaReforma": "2026-04-07",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "GRO",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal del Estado de Guerrero Número 420",
+      "url": "https://congresogro.gob.mx/legislacion/codigos/ARCHI/codigo-fiscal-del-estado-de-guerrero-numero-420.pdf",
+      "ultimaReforma": "2025-12-23",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "GRO",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal para el Estado Libre y Soberano de Guerrero Número 499",
+      "url": "https://congresogro.gob.mx/legislacion/codigos/ARCHI/codigo-penal-no-499.pdf",
+      "ultimaReforma": "2026-05-22",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "GRO",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Procesal Civil del Estado Libre y Soberano de Guerrero Número 364",
+      "url": "https://congresogro.gob.mx/legislacion/codigos/ARCHI/codigo-de-procedimientos-civiles-del-estado-de-guerrero-numero-364.pdf",
+      "ultimaReforma": "2022-12-30",
+      "verificado": "2026-09-12"
+    },
+    {
       "entidad": "GRO",
       "municipio": null,
       "tipo": "Ley",
@@ -13,6 +1134,24 @@
         "GRO-L-PROPIEDAD-CONDOMINIO-GUERRER"
       ],
       "nota": "La Ley 240 (P.O. 27-may-2025) abroga la Ley 557 de 2002, que el OJN sigue listando como vigente."
+    },
+    {
+      "entidad": "GRO",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Número 419 de Hacienda del Estado de Guerrero",
+      "url": "https://congresogro.gob.mx/legislacion/ordinarias/ARCHI/ley-de-hacienda-del-estado-de-guerrero-419.pdf",
+      "ultimaReforma": "2025-12-23",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "GRO",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Número 465 de Responsabilidades Administrativas para el Estado de Guerrero",
+      "url": "https://congresogro.gob.mx/legislacion/ordinarias/ARCHI/LEY-DE-RESPONSABILIDADES-ADMINISTRATIVAS-PARA-EL-ESTADO-DE-GUERRERO-465.pdf",
+      "ultimaReforma": "2025-04-29",
+      "verificado": "2026-09-12"
     },
     {
       "entidad": "GRO",
@@ -31,6 +1170,33 @@
       "url": "https://congresogro.gob.mx/legislacion/ordinarias/ARCHI/ley-no-861-gestion-integral-riesgos-proteccion-civil-estado-2024-10-15.pdf",
       "ultimaReforma": "2024-09-13",
       "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "GRO",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Número 971 del Notariado del Estado de Guerrero",
+      "url": "https://congresogro.gob.mx/legislacion/ordinarias/ARCHI/LEY-DEL-NOTARIADO-DEL-ESTADO-DE-GUERRERO-971-2021-03-10.pdf",
+      "ultimaReforma": "2011-08-19",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "GRO",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado Libre y Soberano de Guerrero Número 129",
+      "url": "https://congresogro.gob.mx/legislacion/organicas/ARCHI/LEY-ORGANICA-DEL-PODER-JUDICIAL-DEL-ESTADO-LIBRE-Y-SOBERANO-DE-GUERRERO-NUMERO-129.pdf",
+      "ultimaReforma": "2022-04-29",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "GRO",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Tribunal de Justicia Administrativa del Estado de Guerrero Número 467",
+      "url": "https://congresogro.gob.mx/legislacion/organicas/ARCHI/LEY-ORGANICA-DEL-TRIBUNAL-DE-JUSTICIA-ADMINISTRATIVA-DEL-ESTADO-DE-GUERRERO-467-2021-03-10.pdf",
+      "ultimaReforma": "2017-07-18",
+      "verificado": "2026-09-12"
     },
     {
       "entidad": "GRO",
@@ -62,11 +1228,106 @@
     {
       "entidad": "GUA",
       "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política para el Estado de Guanajuato",
+      "url": "https://congreso-gto.s3.amazonaws.com/uploads/reforma/pdf/3731/CPELYSG_REF_04Agosto2026.pdf",
+      "ultimaReforma": "2026-08-04",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "GUA",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil para el Estado de Guanajuato",
+      "url": "https://congreso-gto.s3.amazonaws.com/uploads/reforma/pdf/3689/CCG_REF_18Diciembre2025_DL113.pdf",
+      "ultimaReforma": "2025-12-18",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "GUA",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal para el Estado de Guanajuato",
+      "url": "https://congreso-gto.s3.amazonaws.com/uploads/reforma/pdf/3693/CFEG_REF_31Diciembre2025.pdf",
+      "ultimaReforma": "2025-12-31",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "GUA",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal del Estado de Guanajuato",
+      "url": "https://congreso-gto.s3.amazonaws.com/uploads/reforma/pdf/3712/CPEG_REF_14Mayo2026.pdf",
+      "ultimaReforma": "2026-05-14",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "GUA",
+      "municipio": null,
       "tipo": "Código",
       "titulo": "Código Territorial para el Estado y los Municipios de Guanajuato",
       "url": "https://congreso-gto.s3.amazonaws.com/uploads/reforma/pdf/3717/d408088a-d425-49ce-bd8e-c9c455e4df2a.pdf",
       "ultimaReforma": "2026-05-27",
-      "verificado": "2026-09-11"
+      "verificado": "2026-09-11",
+      "materias": [
+        "urbano",
+        "construccion",
+        "administrativo"
+      ]
+    },
+    {
+      "entidad": "GUA",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimiento y Justicia Administrativa para el Estado y los Municipios de Guanajuato",
+      "url": "https://congreso-gto.s3.amazonaws.com/uploads/reforma/pdf/3660/CPJAEG_FDE_05Nov2025.pdf",
+      "ultimaReforma": "2025-11-05",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "GUA",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Guanajuato",
+      "url": "https://congreso-gto.s3.amazonaws.com/uploads/reforma/pdf/3725/234f8d23-df69-4ee6-86cb-147d4c065ae7.pdf",
+      "ultimaReforma": "2026-07-03",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "GUA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Guanajuato",
+      "url": "https://congreso-gto.s3.amazonaws.com/uploads/reforma/pdf/3614/LOPJEG_REF_28Abril2025.pdf",
+      "ultimaReforma": "2025-04-28",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "GUA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Tribunal de Justicia Administrativa del Estado de Guanajuato",
+      "url": "https://congreso-gto.s3.amazonaws.com/uploads/reforma/pdf/3530/LOTJA_REF_13Dic2023.pdf",
+      "ultimaReforma": "2023-12-13",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "GUA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Hacienda para el Estado de Guanajuato",
+      "url": "https://congreso-gto.s3.amazonaws.com/uploads/reforma/pdf/3692/1feee0f1-7daa-4327-80b0-3f5371efe42a.pdf",
+      "ultimaReforma": "2025-12-31",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "GUA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Justicia Alternativa del Estado de Guanajuato",
+      "url": "https://congreso-gto.s3.amazonaws.com/uploads/reforma/pdf/3067/20201230.pdf",
+      "ultimaReforma": "2020-12-30",
+      "verificado": "2026-09-12"
     },
     {
       "entidad": "GUA",
@@ -97,6 +1358,24 @@
     },
     {
       "entidad": "GUA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Responsabilidades Administrativas para el Estado de Guanajuato",
+      "url": "https://congreso-gto.s3.amazonaws.com/uploads/reforma/pdf/3723/d893a226-1e24-4e3c-9891-5c0d84e907d6.pdf",
+      "ultimaReforma": "2026-06-29",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "GUA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado para el Estado de Guanajuato",
+      "url": "https://congreso-gto.s3.amazonaws.com/uploads/reforma/pdf/3532/LNEG_REF_30Diciembre2022.pdf",
+      "ultimaReforma": "2023-12-13",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "GUA",
       "municipio": "Celaya",
       "tipo": "Reglamento",
       "titulo": "Reglamento de Ordenamiento Territorial para el Municipio de Celaya, Guanajuato",
@@ -120,7 +1399,11 @@
       "titulo": "Reglamento del Código Territorial para el Municipio de Irapuato, Guanajuato",
       "url": "https://www.irapuato.gob.mx/uploads/files/remure/DGDU/reglamento_codigo/reglamento_codigo_territorial.pdf",
       "ultimaReforma": "2023-12-06",
-      "verificado": "2026-09-11"
+      "verificado": "2026-09-11",
+      "materias": [
+        "urbano",
+        "construccion"
+      ]
     },
     {
       "entidad": "GUA",
@@ -132,13 +1415,342 @@
       "verificado": "2026-09-11"
     },
     {
+      "entidad": "HID",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado de Hidalgo",
+      "url": "https://www.congreso-hidalgo.gob.mx/biblioteca_legislativa/leyes_cintillo/Constitucion%20Politica%20del%20Estado%20de%20Hidalgo.pdf",
+      "ultimaReforma": "2026-07-08",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "HID",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil para el Estado de Hidalgo",
+      "url": "https://www.congreso-hidalgo.gob.mx/biblioteca_legislativa/leyes_cintillo/Codigo%20Civil.pdf",
+      "ultimaReforma": "2025-08-22",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "HID",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal del Estado de Hidalgo",
+      "url": "https://www.congreso-hidalgo.gob.mx/biblioteca_legislativa/leyes_cintillo/Codigo%20Fiscal%20del%20Estado%20de%20Hidalgo.pdf",
+      "ultimaReforma": "2025-12-31",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "HID",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal para el Estado de Hidalgo",
+      "url": "https://www.congreso-hidalgo.gob.mx/biblioteca_legislativa/leyes_cintillo/Codigo%20Penal%20para%20el%20Estado%20de%20Hidalgo.pdf",
+      "ultimaReforma": "2026-08-06",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "HID",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Hidalgo",
+      "url": "https://www.congreso-hidalgo.gob.mx/biblioteca_legislativa/leyes_cintillo/Codigo%20de%20Procedimientos%20Civiles.pdf",
+      "ultimaReforma": "2017-06-26",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "HID",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Familiares para el Estado de Hidalgo",
+      "url": "https://www.congreso-hidalgo.gob.mx/biblioteca_legislativa/leyes_cintillo/Codigo%20de%20Procedimientos%20Familiares%20para%20el%20Estado%20de%20Hidalgo.pdf",
+      "ultimaReforma": "2017-07-10",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "HID",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Estatal del Procedimiento Administrativo para el Estado de Hidalgo",
+      "url": "https://www.congreso-hidalgo.gob.mx/biblioteca_legislativa/leyes_cintillo/Ley%20Estatal%20del%20Procedimiento%20Administrativo.pdf",
+      "ultimaReforma": "2022-10-21",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "HID",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Hidalgo",
+      "url": "https://www.congreso-hidalgo.gob.mx/biblioteca_legislativa/leyes_cintillo/Ley%20Organica%20del%20Poder%20Judicial%20del%20Estado%20de%20Hidalgo.pdf",
+      "ultimaReforma": "2026-07-08",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "HID",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Hacienda del Estado de Hidalgo",
+      "url": "https://www.congreso-hidalgo.gob.mx/biblioteca_legislativa/leyes_cintillo/Ley%20de%20Hacienda%20del%20Estado%20de%20Hidalgo.pdf",
+      "ultimaReforma": "2025-12-31",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "HID",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Mecanismos Alternativos de Solución de Controversias para el Estado de Hidalgo",
+      "url": "https://www.congreso-hidalgo.gob.mx/biblioteca_legislativa/leyes_cintillo/Ley%20de%20Mecanismos%20Alternativos%20de%20Solucion%20de%20Controversias%20para%20el%20Estado%20de%20Hidalgo.pdf",
+      "ultimaReforma": "2024-09-17",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "HID",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Responsabilidades Administrativas del Estado de Hidalgo",
+      "url": "https://www.congreso-hidalgo.gob.mx/biblioteca_legislativa/leyes_cintillo/Ley%20de%20Responsabilidades%20Administrativas%20del%20Estado%20de%20Hidalgo.pdf",
+      "ultimaReforma": "2026-07-08",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "HID",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado para el Estado de Hidalgo",
+      "url": "https://www.congreso-hidalgo.gob.mx/biblioteca_legislativa/leyes_cintillo/Ley%20del%20Notariado%20para%20el%20Estado%20de%20Hidalgo.pdf",
+      "ultimaReforma": "2024-08-20",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "HID",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Tribunal de Justicia Administrativa del Estado de Hidalgo",
+      "url": "https://www.congreso-hidalgo.gob.mx/biblioteca_legislativa/leyes_cintillo/Ley%20del%20Tribunal%20de%20Justicia%20Administrativa%20del%20Estado%20de%20Hgo.pdf",
+      "ultimaReforma": "2021-09-13",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "HID",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley para la Familia del Estado de Hidalgo",
+      "url": "https://www.congreso-hidalgo.gob.mx/biblioteca_legislativa/leyes_cintillo/Ley%20para%20la%20Familia%20del%20Estado%20de%20Hidalgo.pdf",
+      "ultimaReforma": "2026-08-28",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "JAL",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado de Jalisco",
+      "url": "https://congresoweb.congresojal.gob.mx/bibliotecavirtual/legislacion/Constituci%C3%B3n/Documentos_PDF-Constituci%C3%B3n/Constituci%C3%B3n%20Pol%C3%ADtica%20del%20Estado%20de%20Jalisco-110926.pdf",
+      "ultimaReforma": "2026-08-27",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "JAL",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil del Estado de Jalisco",
+      "url": "https://congresoweb.congresojal.gob.mx/bibliotecavirtual/legislacion/C%C3%B3digos/Documentos_PDF-C%C3%B3digos/C%C3%B3digo%20Civil%20del%20Estado%20de%20Jalisco-240626.pdf",
+      "ultimaReforma": "2026-06-18",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "JAL",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal del Estado de Jalisco",
+      "url": "https://congresoweb.congresojal.gob.mx/bibliotecavirtual/legislacion/C%C3%B3digos/Documentos_PDF-C%C3%B3digos/C%C3%B3digo%20Fiscal%20del%20Estado%20de%20Jalisco-220726.pdf",
+      "ultimaReforma": "2026-05-14",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "JAL",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal para el Estado Libre y Soberano de Jalisco",
+      "url": "https://congresoweb.congresojal.gob.mx/bibliotecavirtual/legislacion/C%C3%B3digos/Documentos_PDF-C%C3%B3digos/C%C3%B3digo%20Penal%20para%20el%20Estado%20Libre%20y%20Soberano%20de%20Jalisco%20-310826.pdf",
+      "ultimaReforma": "2026-08-27",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "JAL",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles del Estado de Jalisco",
+      "url": "https://congresoweb.congresojal.gob.mx/bibliotecavirtual/legislacion/C%C3%B3digos/Documentos_PDF-C%C3%B3digos/C%C3%B3digo%20de%20Procedimientos%20Civiles%20del%20Estado%20de%20Jalisco-250424.pdf",
+      "ultimaReforma": "2021-07-06",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "JAL",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Jalisco",
+      "url": "https://congresoweb.congresojal.gob.mx/bibliotecavirtual/legislacion/Leyes/Documentos_PDF-Leyes/Ley%20Org%C3%A1nica%20del%20Poder%20Judicial%20del%20Estado%20de%20Jalisco.pdf",
+      "ultimaReforma": "2020-12-03",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "JAL",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Hacienda del Estado de Jalisco",
+      "url": "https://congresoweb.congresojal.gob.mx/bibliotecavirtual/legislacion/Leyes/Documentos_PDF-Leyes/Ley%20de%20Hacienda%20del%20Estado%20de%20Jalisco%20-160424.pdf",
+      "ultimaReforma": "2024-02-24",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "JAL",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Justicia Administrativa del Estado de Jalisco",
+      "url": "https://congresoweb.congresojal.gob.mx/bibliotecavirtual/legislacion/Leyes/Documentos_PDF-Leyes/Ley%20de%20Justicia%20Administrativa%20del%20Estado%20de%20Jalisco-310826.pdf",
+      "ultimaReforma": "2026-08-20",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "JAL",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Justicia Alternativa del Estado de Jalisco",
+      "url": "https://congresoweb.congresojal.gob.mx/bibliotecavirtual/legislacion/Leyes/Documentos_PDF-Leyes/Ley%20de%20Justicia%20Alternativa%20del%20Estado%20de%20Jalisco-111125.pdf",
+      "ultimaReforma": "2023-07-22",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "JAL",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Responsabilidades Políticas y Administrativas del Estado de Jalisco",
+      "url": "https://congresoweb.congresojal.gob.mx/bibliotecavirtual/legislacion/Leyes/Documentos_PDF-Leyes/Ley%20de%20Responsabilidades%20Pol%C3%ADticas%20y%20Administrativas%20del%20Estado%20de%20Jalisco-170323.pdf",
+      "ultimaReforma": "2023-03-14",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "JAL",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado del Estado de Jalisco",
+      "url": "https://congresoweb.congresojal.gob.mx/bibliotecavirtual/legislacion/Leyes/Documentos_PDF-Leyes/Ley%20del%20Notariado%20del%20Estado%20de%20Jalisco-120826.pdf",
+      "ultimaReforma": "2026-07-28",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "JAL",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Procedimiento Administrativo del Estado de Jalisco",
+      "url": "https://congresoweb.congresojal.gob.mx/bibliotecavirtual/legislacion/Leyes/Documentos_PDF-Leyes/Ley%20del%20Procedimiento%20Administrativo%20del%20Estado%20de%20Jalisco-040626.pdf",
+      "ultimaReforma": "2026-06-02",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MEX",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado Libre y Soberano de México",
+      "url": "https://legislacion.edomex.gob.mx/sites/legislacion.edomex.gob.mx/files/files/pdf/ley/vig/leyvig001.pdf",
+      "ultimaReforma": "2026-06-03",
+      "verificado": "2026-09-12"
+    },
+    {
       "entidad": "MEX",
       "municipio": null,
       "tipo": "Código",
       "titulo": "Código Administrativo del Estado de México",
       "url": "https://legislacion.edomex.gob.mx/sites/legislacion.edomex.gob.mx/files/files/pdf/cod/vig/codvig008.pdf",
       "ultimaReforma": "2026-09-02",
-      "verificado": "2026-09-11"
+      "verificado": "2026-09-11",
+      "materias": [
+        "administrativo",
+        "urbano",
+        "construccion"
+      ]
+    },
+    {
+      "entidad": "MEX",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil del Estado de México",
+      "url": "https://legislacion.edomex.gob.mx/sites/legislacion.edomex.gob.mx/files/files/pdf/cod/vig/codvig001.pdf",
+      "ultimaReforma": "2026-06-16",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MEX",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Financiero del Estado de México y Municipios",
+      "url": "https://legislacion.edomex.gob.mx/sites/legislacion.edomex.gob.mx/files/files/pdf/cod/vig/codvig007.pdf",
+      "ultimaReforma": "2025-12-19",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MEX",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal del Estado de México",
+      "url": "https://legislacion.edomex.gob.mx/sites/legislacion.edomex.gob.mx/files/files/pdf/cod/vig/codvig006.pdf",
+      "ultimaReforma": "2026-06-16",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MEX",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Administrativos del Estado de México",
+      "url": "https://legislacion.edomex.gob.mx/sites/legislacion.edomex.gob.mx/files/files/pdf/cod/vig/codvig002.pdf",
+      "ultimaReforma": "2026-04-28",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MEX",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles del Estado de México",
+      "url": "https://legislacion.edomex.gob.mx/sites/legislacion.edomex.gob.mx/files/files/pdf/cod/vig/codvig003.pdf",
+      "ultimaReforma": "2021-05-14",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MEX",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de México",
+      "url": "https://legislacion.edomex.gob.mx/sites/legislacion.edomex.gob.mx/files/files/pdf/ley/vig/leyvig020.pdf",
+      "ultimaReforma": "2026-04-10",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MEX",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Mediación, Conciliación y Promoción de la Paz Social para el Estado de México",
+      "url": "https://legislacion.edomex.gob.mx/sites/legislacion.edomex.gob.mx/files/files/pdf/ley/vig/leyvig173.pdf",
+      "ultimaReforma": "2024-04-05",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MEX",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Responsabilidades Administrativas del Estado de México y Municipios",
+      "url": "https://legislacion.edomex.gob.mx/sites/legislacion.edomex.gob.mx/files/files/pdf/ley/vig/leyvig241.pdf",
+      "ultimaReforma": "2026-05-20",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MEX",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado del Estado de México",
+      "url": "https://legislacion.edomex.gob.mx/sites/legislacion.edomex.gob.mx/files/files/pdf/ley/vig/leyvig019.pdf",
+      "ultimaReforma": "2025-04-03",
+      "verificado": "2026-09-12"
     },
     {
       "entidad": "MEX",
@@ -147,7 +1759,11 @@
       "titulo": "Reglamento del Libro Quinto del Código Administrativo del Estado de México",
       "url": "https://legislacion.edomex.gob.mx/sites/legislacion.edomex.gob.mx/files/files/pdf/rgl/vig/rglvig107.pdf",
       "ultimaReforma": "2021-07-07",
-      "verificado": "2026-09-11"
+      "verificado": "2026-09-11",
+      "materias": [
+        "urbano",
+        "construccion"
+      ]
     },
     {
       "entidad": "MEX",
@@ -174,7 +1790,183 @@
       "titulo": "Código Reglamentario Municipal de Toluca",
       "url": "https://www2.toluca.gob.mx/wp-content/uploads/2025/09/27-Gaceta-01-de-septiembre-de-2025-codigo.pdf",
       "ultimaReforma": "2025-09-01",
-      "verificado": "2026-09-11"
+      "verificado": "2026-09-11",
+      "materias": [
+        "administrativo",
+        "construccion",
+        "urbano"
+      ]
+    },
+    {
+      "entidad": "MIC",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado Libre y Soberano de Michoacán de Ocampo",
+      "url": "https://congresomich.site/wp-content/uploads/2026/04/20251202_CONSTITUCION-POLITI_122754923.pdf",
+      "ultimaReforma": "2025-12-02",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MIC",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil para el Estado de Michoacán de Ocampo",
+      "url": "https://congresomich.site/wp-content/uploads/2026/02/CODIGO-CIVIL.pdf",
+      "ultimaReforma": "2023-11-30",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MIC",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Familiar para el Estado de Michoacán de Ocampo",
+      "url": "https://congresomich.site/wp-content/uploads/2026/02/CODIGO-FAMILIAR.pdf",
+      "ultimaReforma": "2025-04-04",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MIC",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal del Estado de Michoacán de Ocampo",
+      "url": "https://congresomich.site/wp-content/uploads/2026/04/CODIGO-FISCAL-DEL-ESTADO-DE-MICHOACAN-DE-OCAMPO.pdf",
+      "ultimaReforma": "2024-12-16",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MIC",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal para el Estado de Michoacán de Ocampo",
+      "url": "http://congresomich.gob.mx/file/C%C3%93DIGO-PENAL-REF-30-DE-MARZO-DE-2023.pdf",
+      "ultimaReforma": "2023-03-30",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MIC",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Justicia Administrativa del Estado de Michoacán de Ocampo",
+      "url": "https://congresomich.site/wp-content/uploads/2026/04/CODIGO-DE-JUSTICIA-ADMINISTRATIVA-DEL-ESTADO-DE-MICHOACAN-DE-OCAMPO.pdf",
+      "ultimaReforma": "2025-02-14",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MIC",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Michoacán de Ocampo",
+      "url": "https://congresomich.site/wp-content/uploads/2026/02/1-2571_1665599475_COMPILADO-2022SEP26-DEC-177-COD-PROC-CIVILES.pdf",
+      "ultimaReforma": "2022-09-26",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MIC",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Michoacán de Ocampo",
+      "url": "https://congresomich.site/wp-content/uploads/2026/07/LEY-ORGANICA-DEL-PODER-JUDICIAL-REF-9-DE-OCTUBRE-DE-2025.pdf",
+      "ultimaReforma": "2025-10-09",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MIC",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Hacienda del Estado de Michoacán de Ocampo",
+      "url": "https://congresomich.site/wp-content/uploads/2026/07/LEY-DE-HACIENDA-DEL-ESTADO-DE-MICHOACAN-23-DE-MARZO-DE-2026.pdf",
+      "ultimaReforma": "2026-03-23",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MIC",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Justicia Alternativa y Restaurativa del Estado de Michoacán de Ocampo",
+      "url": "http://congresomich.gob.mx/file/LEY-DE-JUSTICIA-ALTERNATIVA-Y-RESTAURATIVA-REF-30-DE-JUNIO-DE-2020.pdf",
+      "ultimaReforma": "2020-06-30",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MIC",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Responsabilidades Administrativas para el Estado de Michoacán de Ocampo",
+      "url": "https://congresomich.site/wp-content/uploads/2026/07/LEY-DE-RESPONSABILIDADES-ADMINISTRATIVAS-REF-26-DE-JUNIO-DE-2025.pdf",
+      "ultimaReforma": "2025-06-26",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MIC",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado del Estado de Michoacán",
+      "url": "http://congresomich.gob.mx/file/LEY-DEL-NOTARIADO-REF-28-DE-MARZO-DE-2022.pdf",
+      "ultimaReforma": "2022-03-28",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MOR",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado Libre y Soberano de Morelos",
+      "url": "https://marcojuridico.morelos.gob.mx/documentos/3/download",
+      "ultimaReforma": "2026-01-27",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MOR",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil para el Estado Libre y Soberano de Morelos",
+      "url": "https://marcojuridico.morelos.gob.mx/documentos/1778/download",
+      "ultimaReforma": "2026-05-19",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MOR",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Familiar para el Estado Libre y Soberano de Morelos",
+      "url": "https://marcojuridico.morelos.gob.mx/documentos/1782/download",
+      "ultimaReforma": "2026-07-22",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MOR",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal para el Estado de Morelos",
+      "url": "https://marcojuridico.morelos.gob.mx/documentos/1773/download",
+      "ultimaReforma": "2026-03-02",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MOR",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal para el Estado de Morelos",
+      "url": "https://marcojuridico.morelos.gob.mx/documentos/1815/download",
+      "ultimaReforma": "2026-09-02",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MOR",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Procesal Civil para el Estado Libre y Soberano de Morelos",
+      "url": "https://marcojuridico.morelos.gob.mx/documentos/1776/download",
+      "ultimaReforma": "2024-11-05",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MOR",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Procesal Familiar para el Estado Libre y Soberano de Morelos",
+      "url": "https://marcojuridico.morelos.gob.mx/documentos/1774/download",
+      "ultimaReforma": "2024-11-05",
+      "verificado": "2026-09-12"
     },
     {
       "entidad": "MOR",
@@ -184,6 +1976,42 @@
       "url": "https://marcojuridico.morelos.gob.mx/documentos/2829/download",
       "ultimaReforma": "2024-10-30",
       "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "MOR",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley General de Hacienda del Estado de Morelos",
+      "url": "https://marcojuridico.morelos.gob.mx/documentos/2823/download",
+      "ultimaReforma": "2026-02-03",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MOR",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Morelos",
+      "url": "https://marcojuridico.morelos.gob.mx/documentos/2741/download",
+      "ultimaReforma": "2024-10-29",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MOR",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Justicia Administrativa del Estado de Morelos",
+      "url": "https://marcojuridico.morelos.gob.mx/documentos/2824/download",
+      "ultimaReforma": "2026-05-19",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MOR",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Justicia Alternativa en Materia Penal para el Estado de Morelos",
+      "url": "https://marcojuridico.morelos.gob.mx/documentos/2787/download",
+      "ultimaReforma": "2024-10-30",
+      "verificado": "2026-09-12"
     },
     {
       "entidad": "MOR",
@@ -202,6 +2030,33 @@
       "url": "https://marcojuridico.morelos.gob.mx/documentos/2795/download",
       "ultimaReforma": "2026-05-19",
       "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "MOR",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Procedimiento Administrativo para el Estado de Morelos",
+      "url": "https://marcojuridico.morelos.gob.mx/documentos/2734/download",
+      "ultimaReforma": "2024-10-30",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MOR",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Responsabilidades Administrativas para el Estado de Morelos",
+      "url": "https://marcojuridico.morelos.gob.mx/documentos/2825/download",
+      "ultimaReforma": "2024-10-30",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "MOR",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado del Estado de Morelos",
+      "url": "https://marcojuridico.morelos.gob.mx/documentos/2819/download",
+      "ultimaReforma": "2024-10-30",
+      "verificado": "2026-09-12"
     },
     {
       "entidad": "MOR",
@@ -258,6 +2113,168 @@
       "verificado": "2026-09-11"
     },
     {
+      "entidad": "NAY",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado Libre y Soberano de Nayarit",
+      "url": "https://congresonayarit.gob.mx/wp-content/uploads/QUE_HACEMOS/LEGISLACION_ESTATAL/constitucion/Constitucion_Politica_del_Estado_Libre_y_Soberano_de_Nayarit.pdf",
+      "ultimaReforma": "2026-07-09",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "NAY",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil para el Estado de Nayarit",
+      "url": "https://congresonayarit.gob.mx/wp-content/uploads/QUE_HACEMOS/LEGISLACION_ESTATAL/codigos/codigo_civil_estado_de_nayarit.pdf",
+      "ultimaReforma": "2025-12-17",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "NAY",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal del Estado de Nayarit",
+      "url": "https://congresonayarit.gob.mx/wp-content/uploads/QUE_HACEMOS/LEGISLACION_ESTATAL/codigos/codigo_fiscal_estado_nayarit.pdf",
+      "ultimaReforma": null,
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "NAY",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal para el Estado de Nayarit",
+      "url": "https://congresonayarit.gob.mx/wp-content/uploads/QUE_HACEMOS/LEGISLACION_ESTATAL/codigos/codigo_penal_nuevo.pdf",
+      "ultimaReforma": "2026-03-06",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "NAY",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Nayarit",
+      "url": "https://congresonayarit.gob.mx/wp-content/uploads/QUE_HACEMOS/LEGISLACION_ESTATAL/codigos/codigo_procedimientos_civiles_estado_nayarit.pdf",
+      "ultimaReforma": "2022-06-13",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "NAY",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Nayarit",
+      "url": "https://congresonayarit.gob.mx/wp-content/uploads/QUE_HACEMOS/LEGISLACION_ESTATAL/leyes_organicas/poder_judicial_del_estado_de_nayarit_ley_organica_del.pdf",
+      "ultimaReforma": "2025-10-30",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "NAY",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Tribunal de Justicia Administrativa de Nayarit",
+      "url": "https://congresonayarit.gob.mx/wp-content/uploads/QUE_HACEMOS/LEGISLACION_ESTATAL/leyes_organicas/tribunal_de_justicia_administrativa_de_nayarit_ley_organica_del.pdf",
+      "ultimaReforma": "2026-03-06",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "NAY",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Hacienda del Estado de Nayarit",
+      "url": "https://congresonayarit.gob.mx/wp-content/uploads/QUE_HACEMOS/LEGISLACION_ESTATAL/leyes/hacienda_del_estado_de_nayarit_ley_de.pdf",
+      "ultimaReforma": "2025-12-26",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "NAY",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Justicia Alternativa para el Estado de Nayarit",
+      "url": "https://congresonayarit.gob.mx/wp-content/uploads/QUE_HACEMOS/LEGISLACION_ESTATAL/leyes/justicia_alternativa_para_el_estado_de_nayarit_ley_de.pdf",
+      "ultimaReforma": "2016-12-23",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "NAY",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Justicia y Procedimientos Administrativos del Estado de Nayarit",
+      "url": "https://congresonayarit.gob.mx/wp-content/uploads/QUE_HACEMOS/LEGISLACION_ESTATAL/leyes/justicia_procedimientos_administrativos_estado_nayarit_ley_de.pdf",
+      "ultimaReforma": "2023-05-26",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "NAY",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Responsabilidades Administrativas del Estado de Nayarit",
+      "url": "https://congresonayarit.gob.mx/wp-content/uploads/QUE_HACEMOS/LEGISLACION_ESTATAL/leyes/responsabilidades_administrativas_del_estado_de_nayarit_ley_de.pdf",
+      "ultimaReforma": "2026-03-06",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "NAY",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado para el Estado de Nayarit",
+      "url": "https://congresonayarit.gob.mx/wp-content/uploads/QUE_HACEMOS/LEGISLACION_ESTATAL/leyes/notariado_para_el_estado_de_nayarit_ley_del.pdf",
+      "ultimaReforma": "2023-05-04",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "NLE",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado Libre y Soberano de Nuevo León",
+      "url": "https://www.hcnl.gob.mx/trabajo_legislativo/leyes/pdf/CONSTITUCION%20POLITICA%20DEL%20ESTADO%20LIBRE%20Y%20SOBERANO%20DE%20NUEVO%20LEON.pdf",
+      "ultimaReforma": "2026-07-06",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "NLE",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil para el Estado de Nuevo León",
+      "url": "https://www.hcnl.gob.mx/trabajo_legislativo/leyes/pdf/CODIGO%20CIVIL%20PARA%20EL%20ESTADO%20DE%20NUEVO%20LEON%20.pdf",
+      "ultimaReforma": "2026-06-26",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "NLE",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal del Estado de Nuevo León",
+      "url": "https://www.hcnl.gob.mx/trabajo_legislativo/leyes/pdf/CODIGO%20FISCAL%20DEL%20ESTADO%20DE%20NUEVO%20LEON.pdf",
+      "ultimaReforma": "2023-01-13",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "NLE",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal para el Estado de Nuevo León",
+      "url": "https://www.hcnl.gob.mx/trabajo_legislativo/leyes/pdf/CODIGO%20PENAL%20PARA%20EL%20ESTADO%20DE%20%20NUEVO%20LEON.pdf",
+      "ultimaReforma": "2026-06-15",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "NLE",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles del Estado de Nuevo León",
+      "url": "https://www.hcnl.gob.mx/trabajo_legislativo/leyes/pdf/CODIGO%20DE%20PROCEDIMIENTOS%20CIVILES%20DEL%20ESTADO%20DE%20NUEVO%20LEON.pdf",
+      "ultimaReforma": "2022-06-10",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "NLE",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Nuevo León",
+      "url": "https://www.hcnl.gob.mx/trabajo_legislativo/leyes/pdf/LEY%20ORGANICA%20DEL%20PODER%20JUDICIAL%20DEL%20ESTADO%20DE%20NUEVO%20LEON.pdf",
+      "ultimaReforma": "2022-05-20",
+      "verificado": "2026-09-12"
+    },
+    {
       "entidad": "NLE",
       "municipio": null,
       "tipo": "Ley",
@@ -265,6 +2282,33 @@
       "url": "https://www.hcnl.gob.mx/trabajo_legislativo/leyes/pdf/LEY%20DE%20ASENTAMIENTOS%20HUMANOS%20ORDENAMIENTO%20TERRITORIAL%20Y%20DESARROLLO%20URBANO%20PARA%20EL%20ESTADO%20DE%20NUEVO%20LEON.pdf",
       "ultimaReforma": "2026-03-09",
       "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "NLE",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Hacienda del Estado de Nuevo León",
+      "url": "https://www.hcnl.gob.mx/trabajo_legislativo/leyes/pdf/LEY%20DE%20HACIENDA%20DEL%20ESTADO%20DE%20NUEVO%20LEON.pdf",
+      "ultimaReforma": "2023-01-25",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "NLE",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Justicia Administrativa para el Estado y Municipios de Nuevo León",
+      "url": "https://www.hcnl.gob.mx/trabajo_legislativo/leyes/pdf/LEY%20DE%20JUSTICIA%20ADMINISTRATIVA%20PARA%20EL%20ESTADO%20Y%20MUNICIPIOS.pdf",
+      "ultimaReforma": "2026-04-15",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "NLE",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Mecanismos Alternativos para la Solución de Controversias para el Estado de Nuevo León",
+      "url": "https://www.hcnl.gob.mx/trabajo_legislativo/leyes/pdf/LEY%20DE%20MECANISMOS%20ALTERNATIVOS%20PARA%20LA%20SOLUCION%20DE%20CONTROVERSIAS%20PARA%20EL%20ESTADO%20DE%20NUEVO%20LEON.pdf",
+      "ultimaReforma": "2020-12-30",
+      "verificado": "2026-09-12"
     },
     {
       "entidad": "NLE",
@@ -292,6 +2336,24 @@
       "url": "https://www.hcnl.gob.mx/trabajo_legislativo/leyes/pdf/LEY%20DE%20PROTECCION%20CIVIL%20PARA%20EL%20ESTADO%20DE%20NUEVO%20LEON.pdf",
       "ultimaReforma": "2026-06-15",
       "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "NLE",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Responsabilidades Administrativas del Estado de Nuevo León",
+      "url": "https://www.hcnl.gob.mx/trabajo_legislativo/leyes/pdf/LEY%20DE%20RESPONSABILIDADES%20ADMINISTRATIVAS%20DEL%20ESTADO%20DE%20NUEVO%20LEON.pdf",
+      "ultimaReforma": "2023-01-27",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "NLE",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado del Estado de Nuevo León",
+      "url": "https://www.hcnl.gob.mx/trabajo_legislativo/leyes/pdf/LEY%20DEL%20NOTARIADO%20DEL%20ESTADO%20DE%20NUEVO%20LEON.pdf",
+      "ultimaReforma": "2025-01-17",
+      "verificado": "2026-09-12"
     },
     {
       "entidad": "NLE",
@@ -330,6 +2392,186 @@
       "verificado": "2026-09-11"
     },
     {
+      "entidad": "OAX",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado Libre y Soberano de Oaxaca",
+      "url": "https://www.congresooaxaca.gob.mx/docs66.congresooaxaca.gob.mx/legislacion_estatal/Constitucion_Politica_del_Estado_Libre_y_Soberano_de_Oaxaca_(Dto_ref_896_aprob_LXVI_legis_9_dic_2025_PO_2_XI_secc_10_ene_2026).pdf",
+      "ultimaReforma": "2026-01-10",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "OAX",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil para el Estado de Oaxaca",
+      "url": "https://www.congresooaxaca.gob.mx/docs66.congresooaxaca.gob.mx/legislacion_estatal/Codigo_Civil_del_Estado_de_Oaxaca_(Ref_dto_874_aprob_LXVI_Legis_2_dic_2025_PO_50_16a_secc_13_dic_2025).pdf",
+      "ultimaReforma": "2025-12-13",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "OAX",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Familiar para el Estado de Oaxaca",
+      "url": "https://www.congresooaxaca.gob.mx/docs66.congresooaxaca.gob.mx/legislacion_estatal/Codigo_Familiar_para_el_Estado_de_Oaxaca_(ref_dto_953_aprob_LXVI_Legis_23_dic_2025_PO_2_XIII_seccion_10_enero_2026).pdf",
+      "ultimaReforma": "2026-01-10",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "OAX",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal para el Estado de Oaxaca",
+      "url": "https://www.congresooaxaca.gob.mx/docs66.congresooaxaca.gob.mx/legislacion_estatal/Codigo_Fiscal_para_el_Estado_de_Oaxaca_(Dto_ref_887_aprob_LXVI_Legis_8_dic_2025_PO_Extra_10_dic_2025).pdf",
+      "ultimaReforma": "2025-12-10",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "OAX",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal para el Estado Libre y Soberano de Oaxaca",
+      "url": "https://www.congresooaxaca.gob.mx/docs66.congresooaxaca.gob.mx/legislacion_estatal/Codigo_Penal_para_el_Edo_de_Oax_(_Ref_dto_1494_aprob_LXVI_Legis_31_mar_2026_PO_21_12a_secc_23_may_2026).pdf",
+      "ultimaReforma": "2026-05-23",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "OAX",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Oaxaca",
+      "url": "https://www.congresooaxaca.gob.mx/docs66.congresooaxaca.gob.mx/legislacion_estatal/Codigo_de_Procedimientos_Civiles_para_el_Edo_Oax_(Ref_Dto_2125_aprob_LXIV_Legis_20_ene_2021_PO_11_8a_secc_13_mzo_2021).pdf",
+      "ultimaReforma": "2021-03-13",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "OAX",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Oaxaca",
+      "url": "https://www.congresooaxaca.gob.mx/docs66.congresooaxaca.gob.mx/legislacion_estatal/Ley_Organica_del_Poder_Judicial_del_Estado_de_Oaxaca_(Ref_dto_1074_aprob_LXV_Legis_22_mzo_2023_PO_13_26a_secc_1_abr_2023).pdf",
+      "ultimaReforma": "2023-04-01",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "OAX",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Mediación para el Estado de Oaxaca",
+      "url": "https://www.congresooaxaca.gob.mx/docs66.congresooaxaca.gob.mx/legislacion_estatal/Ley_de_Mediacion_para_el_Estado_de_Oaxaca_(Dto_ref_2422_aprob_LXIV_Legis_17_mzo_2021_PO_num_23_4a_secc_5_jun_2021).pdf",
+      "ultimaReforma": "2021-06-05",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "OAX",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Procedimientos y Justicia Administrativa para el Estado de Oaxaca",
+      "url": "https://www.congresooaxaca.gob.mx/docs66.congresooaxaca.gob.mx/legislacion_estatal/Ley_de_Procedimientos_y_Justicia_Administrativa_para_el_Estado_de_Oaxaca_(Ref_dto_732_aprobado_LXVI_Legis_5_agosto_2025_PO_36_11a_secc_6_sep_2025).pdf",
+      "ultimaReforma": "2025-09-06",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "OAX",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Responsabilidades Administrativas del Estado y Municipios de Oaxaca",
+      "url": "https://www.congresooaxaca.gob.mx/docs66.congresooaxaca.gob.mx/legislacion_estatal/Ley_de_Responsabilidades_Administrativas_del_Estado_y_Municipios_de_Oaxaca_(Dto_ref_954_aprob_LXVI_Legis_23_diciembre_2025_PO_2_13a_secc_10_ene_2026).pdf",
+      "ultimaReforma": "2026-01-10",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "OAX",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado para el Estado de Oaxaca",
+      "url": "https://www.congresooaxaca.gob.mx/docs66.congresooaxaca.gob.mx/legislacion_estatal/Ley%2Bdel%2BNotariado%2Bpara%2Bel%2BEstado%2Bde%2BOaxaca%2B(Dto%2BRef%2B1682%2Baprob%2BLXIV%2BLegis%2B9%2Bsep%2B2020%2BPO%2B41%2B5a%2Bsecc%2B10%2Boct%2B2020).pdf",
+      "ultimaReforma": "2020-10-10",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "PUE",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado Libre y Soberano de Puebla",
+      "url": "https://ojp.puebla.gob.mx/media/k2/attachments/Constitucion_Politica_del_Estado_Libre_y_Soberano_de_Puebla_TEV_06032026.pdf",
+      "ultimaReforma": "2026-03-06",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "PUE",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil para el Estado Libre y Soberano de Puebla",
+      "url": "https://ojp.puebla.gob.mx/media/k2/attachments/Codigo_Civil_para_el_Estado_Libre_y_Soberano_de_Puebla_T4_17102025.pdf",
+      "ultimaReforma": "2025-10-17",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "PUE",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal del Estado Libre y Soberano de Puebla",
+      "url": "https://ojp.puebla.gob.mx/media/k2/attachments/Codigo_Penal_del_Estado_Libre_y_Soberano_de_Puebla_T6_28042026.pdf",
+      "ultimaReforma": "2026-06-16",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "PUE",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles para el Estado Libre y Soberano de Puebla",
+      "url": "https://ojp.puebla.gob.mx/media/k2/attachments/Codigo_de_Procedimientos_Civiles-_para_el_Estado_Libre_y_Soberano_de_Puebla_29122017.pdf",
+      "ultimaReforma": "2017-12-29",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "PUE",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Puebla",
+      "url": "https://ojp.puebla.gob.mx/media/k2/attachments/Ley_Organica_del_Poder_Judicial_del_Estado_de_Puebla_T5_15032026.pdf",
+      "ultimaReforma": "2026-03-16",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "PUE",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Mecanismos Alternativos de Solución de Controversias del Estado Libre y Soberano de Puebla",
+      "url": "https://ojp.puebla.gob.mx/media/k2/attachments/Ley_de_Mecanismos_Alternativos_de_Solución_de_Controversias_del_Estado_Libre_y_Soberano_de_Puebla_T4_23032023.pdf",
+      "ultimaReforma": "2023-03-23",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "PUE",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Responsabilidades de los Servidores Públicos del Estado de Puebla",
+      "url": "https://ojp.puebla.gob.mx/media/k2/attachments/Ley_de_Responsabilidades_de_los_Servidores_Publicos_del_Estado_de_Puebla__15032026_(2).pdf",
+      "ultimaReforma": "2026-03-15",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "PUE",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado para el Estado de Puebla",
+      "url": "https://ojp.puebla.gob.mx/media/k2/attachments/Ley_del_Notariado_para_el_Estaddo_de_Puebla_T5_05082024.pdf",
+      "ultimaReforma": "2024-08-05",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "PUE",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Procedimiento Contencioso Administrativo del Estado de Puebla",
+      "url": "https://ojp.puebla.gob.mx/media/k2/attachments/Ley_del_Procedimiento_Contencioso_Administrativo_del_Estado_de_Puebla_3EV_15032026.pdf",
+      "ultimaReforma": "2026-03-15",
+      "verificado": "2026-09-12"
+    },
+    {
       "entidad": "PUE",
       "municipio": "Atlixco",
       "tipo": "Reglamento",
@@ -345,7 +2587,12 @@
       "titulo": "Código Reglamentario para el Municipio de Puebla",
       "url": "https://gaceta.pueblacapital.gob.mx/media/k2/attachments/COREMUN.pdf",
       "ultimaReforma": "2025-12-10",
-      "verificado": "2026-09-11"
+      "verificado": "2026-09-11",
+      "materias": [
+        "administrativo",
+        "construccion",
+        "urbano"
+      ]
     },
     {
       "entidad": "PUE",
@@ -368,11 +2615,78 @@
     {
       "entidad": "QUE",
       "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado Libre y Soberano de Querétaro",
+      "url": "https://site.legislaturaqueretaro.gob.mx/CloudPLQ/InvEst/Leyes/CON-ID-001.pdf",
+      "ultimaReforma": "2026-07-15",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "QUE",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil del Estado de Querétaro",
+      "url": "https://site.legislaturaqueretaro.gob.mx/CloudPLQ/InvEst/Codigos/COD-ID-02.pdf",
+      "ultimaReforma": "2025-03-07",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "QUE",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal del Estado de Querétaro",
+      "url": "https://site.legislaturaqueretaro.gob.mx/CloudPLQ/InvEst/Codigos/COD-ID-05.pdf",
+      "ultimaReforma": "2025-12-23",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "QUE",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal para el Estado de Querétaro",
+      "url": "https://site.legislaturaqueretaro.gob.mx/CloudPLQ/InvEst/Codigos/COD-ID-07.pdf",
+      "ultimaReforma": "2026-07-15",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "QUE",
+      "municipio": null,
       "tipo": "Código",
       "titulo": "Código Urbano del Estado de Querétaro",
       "url": "http://site.legislaturaqueretaro.gob.mx/CloudPLQ/InvEst/Codigos/COD-ID-06.pdf",
       "ultimaReforma": "2023-11-17",
-      "verificado": "2026-09-11"
+      "verificado": "2026-09-11",
+      "materias": [
+        "urbano",
+        "construccion"
+      ]
+    },
+    {
+      "entidad": "QUE",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles del Estado de Querétaro",
+      "url": "https://site.legislaturaqueretaro.gob.mx/CloudPLQ/InvEst/Codigos/COD-ID-04.pdf",
+      "ultimaReforma": "2024-09-20",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "QUE",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Querétaro",
+      "url": "https://site.legislaturaqueretaro.gob.mx/CloudPLQ/InvEst/Ley-Org/ORG-ID-09.pdf",
+      "ultimaReforma": "2024-08-19",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "QUE",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Hacienda del Estado de Querétaro",
+      "url": "https://site.legislaturaqueretaro.gob.mx/CloudPLQ/InvEst/Leyes/LEY-ID-028.pdf",
+      "ultimaReforma": "2025-12-23",
+      "verificado": "2026-09-12"
     },
     {
       "entidad": "QUE",
@@ -382,6 +2696,42 @@
       "url": "http://site.legislaturaqueretaro.gob.mx/CloudPLQ/InvEst/Leyes/LEY-ID-043.pdf",
       "ultimaReforma": "2022-11-29",
       "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "QUE",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Procedimiento Contencioso Administrativo del Estado de Querétaro",
+      "url": "https://site.legislaturaqueretaro.gob.mx/CloudPLQ/InvEst/Leyes/LEY-ID-046.pdf",
+      "ultimaReforma": "2021-10-08",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "QUE",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Procedimientos Administrativos del Estado de Querétaro",
+      "url": "https://site.legislaturaqueretaro.gob.mx/CloudPLQ/InvEst/Leyes/LEY-ID-047.pdf",
+      "ultimaReforma": "2023-12-27",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "QUE",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Responsabilidades Administrativas del Estado de Querétaro",
+      "url": "https://site.legislaturaqueretaro.gob.mx/CloudPLQ/InvEst/Leyes/LEY-ID-054.pdf",
+      "ultimaReforma": "2021-10-08",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "QUE",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado del Estado de Querétaro",
+      "url": "https://site.legislaturaqueretaro.gob.mx/CloudPLQ/InvEst/Leyes/LEY-ID-070.pdf",
+      "ultimaReforma": "2024-09-20",
+      "verificado": "2026-09-12"
     },
     {
       "entidad": "QUE",
@@ -411,6 +2761,285 @@
       "verificado": "2026-09-11"
     },
     {
+      "entidad": "ROO",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado Libre y Soberano de Quintana Roo",
+      "url": "https://documentos.congresoqroo.gob.mx/leyes/L176-XVIII-20260622-CN1820260622007-Constitución-(1).pdf",
+      "ultimaReforma": "2026-06-22",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "ROO",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil para el Estado de Quintana Roo",
+      "url": "https://documentos.congresoqroo.gob.mx/codigos/C2-XVIII-23062026-20260724T145357-C1820260616258.pdf",
+      "ultimaReforma": "2026-07-23",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "ROO",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal del Estado de Quintana Roo",
+      "url": "https://documentos.congresoqroo.gob.mx/codigos/C5-XVIII-16122025-20251220T182423-L1820251216192-Código-Fiscal.pdf",
+      "ultimaReforma": "2025-12-16",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "ROO",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal para el Estado Libre y Soberano de Quintana Roo",
+      "url": "https://documentos.congresoqroo.gob.mx/codigos/C6-XVIII-10042026-20260413T103001-C1820260410217-Código-Penal.pdf",
+      "ultimaReforma": "2026-04-10",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "ROO",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos y Justicia Administrativa del Estado de Quintana Roo",
+      "url": "https://documentos.congresoqroo.gob.mx/codigos/C12-XVIII-09102024-20241018T095006-L1820241009013.pdf",
+      "ultimaReforma": "2024-10-09",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "ROO",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Quintana Roo",
+      "url": "https://documentos.congresoqroo.gob.mx/leyes/L334-XVIII-20250812-L1820250812134-sub.pdf",
+      "ultimaReforma": "2025-08-12",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "ROO",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Hacienda del Estado de Quintana Roo",
+      "url": "https://documentos.congresoqroo.gob.mx/leyes/L218-XVIII-20251216-L1820251216195-Ley-de-Hacienda-del-Estado.pdf",
+      "ultimaReforma": "2025-12-16",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "ROO",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Justicia Alternativa del Estado de Quintana Roo",
+      "url": "https://documentos.congresoqroo.gob.mx/leyes/L244-XVIII-20210813-L1620210813130-Ley-de-Justicia-Alternativa-del-Estado.pdf",
+      "ultimaReforma": "2021-08-13",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "ROO",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Responsabilidades Administrativas del Estado de Quintana Roo y sus Municipios",
+      "url": "https://documentos.congresoqroo.gob.mx/leyes/L312-XVIII-20241015-L1820241009007.pdf",
+      "ultimaReforma": "2024-10-15",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "ROO",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado para el Estado de Quintana Roo",
+      "url": "https://documentos.congresoqroo.gob.mx/leyes/L201-XVIII-20250812-L1820250812135.pdf",
+      "ultimaReforma": "2025-08-12",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SIN",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado de Sinaloa",
+      "url": "https://gaceta.congresosinaloa.gob.mx:3001/pdfs/leyes/Ley_9.pdf",
+      "ultimaReforma": "2026-08-26",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SIN",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil para el Estado de Sinaloa",
+      "url": "https://gaceta.congresosinaloa.gob.mx:3001/pdfs/leyes/Ley_1.pdf",
+      "ultimaReforma": "2022-03-11",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SIN",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Familiar del Estado de Sinaloa",
+      "url": "https://gaceta.congresosinaloa.gob.mx:3001/pdfs/leyes/Ley_4.pdf",
+      "ultimaReforma": "2026-09-04",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SIN",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal del Estado de Sinaloa",
+      "url": "https://gaceta.congresosinaloa.gob.mx:3001/pdfs/leyes/Ley_5.pdf",
+      "ultimaReforma": "2019-12-25",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SIN",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal para el Estado de Sinaloa",
+      "url": "https://gaceta.congresosinaloa.gob.mx:3001/pdfs/leyes/Ley_7.pdf",
+      "ultimaReforma": "2026-09-04",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SIN",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Sinaloa",
+      "url": "https://gaceta.congresosinaloa.gob.mx:3001/pdfs/leyes/Ley_2.pdf",
+      "ultimaReforma": "2016-12-28",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SIN",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Familiares del Estado de Sinaloa",
+      "url": "https://gaceta.congresosinaloa.gob.mx:3001/pdfs/leyes/Ley_3.pdf",
+      "ultimaReforma": "2019-07-22",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SIN",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Sinaloa",
+      "url": "https://gaceta.congresosinaloa.gob.mx:3001/pdfs/leyes/Ley_104.pdf",
+      "ultimaReforma": "2026-09-04",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SIN",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Hacienda del Estado de Sinaloa",
+      "url": "https://gaceta.congresosinaloa.gob.mx:3001/pdfs/leyes/Ley_43.pdf",
+      "ultimaReforma": "2026-07-17",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SIN",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Justicia Administrativa para el Estado de Sinaloa",
+      "url": "https://gaceta.congresosinaloa.gob.mx:3001/pdfs/leyes/Ley_48.pdf",
+      "ultimaReforma": "2021-09-27",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SIN",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Mecanismos Alternativos de Solución de Controversias del Estado de Sinaloa",
+      "url": "https://gaceta.congresosinaloa.gob.mx:3001/pdfs/leyes/Ley_174.pdf",
+      "ultimaReforma": "2024-11-06",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SIN",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Responsabilidades Administrativas del Estado de Sinaloa",
+      "url": "https://gaceta.congresosinaloa.gob.mx:3001/pdfs/leyes/Ley_77.pdf",
+      "ultimaReforma": "2026-02-13",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SIN",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado del Estado de Sinaloa",
+      "url": "https://gaceta.congresosinaloa.gob.mx:3001/pdfs/leyes/Ley_88.pdf",
+      "ultimaReforma": "2026-09-04",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SLP",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado Libre y Soberano de San Luis Potosí",
+      "url": "http://congresosanluis.gob.mx/sites/default/files/unpload/legislacion/constitucion/2026/09/Constituci%C3%B3n%20Pol%C3%ADtica%20del%20Estado%20de%20Luis%20Potos%C3%AD%20%28al%2002%20de%20septiembre%20de%202026%29.pdf",
+      "ultimaReforma": "2026-09-02",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SLP",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil del Estado de San Luis Potosí",
+      "url": "http://congresosanluis.gob.mx/sites/default/files/unpload/legislacion/codigos/2026/03/Codigo%20Civil%20del%20Estado%20de%20San%20Luis%20Potosi%20%28al%2017%20de%20marzo%20de%202026%29.pdf",
+      "ultimaReforma": "2026-03-17",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SLP",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Familiar para el Estado de San Luis Potosí",
+      "url": "http://congresosanluis.gob.mx/sites/default/files/unpload/legislacion/codigos/2026/05/Codigo%20Familiar%20del%20Estado%20%28al%2020%20de%20mayo%202026%29.pdf",
+      "ultimaReforma": "2026-05-20",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SLP",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal del Estado de San Luis Potosí",
+      "url": "http://congresosanluis.gob.mx/sites/default/files/unpload/legislacion/codigos/2026/01/Codigo%20Fiscal%20del%20Estado%20de%20San%20Luis%20Potosi%20%28al%2024%20diciembre%202025%29.pdf",
+      "ultimaReforma": "2025-12-24",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SLP",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal del Estado de San Luis Potosí",
+      "url": "http://congresosanluis.gob.mx/sites/default/files/unpload/legislacion/codigos/2026/08/Codigo_Penal_Estado%20%28al%2030%20de%20julio%20de%20%202026%29.pdf",
+      "ultimaReforma": "2026-07-30",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SLP",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Procesal Administrativo para el Estado de San Luis Potosí",
+      "url": "http://congresosanluis.gob.mx/sites/default/files/unpload/legislacion/codigos/2025/08/Codigo%20Procesal%20Administrativo%20para%20el%20Estado%20%20%28al%2018%20Sept%202024%29.pdf",
+      "ultimaReforma": "2024-09-18",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SLP",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles para el Estado de San Luis Potosí",
+      "url": "http://congresosanluis.gob.mx/sites/default/files/unpload/legislacion/codigos/2025/10/Codigo%20de%20Procedimientos%20Civiles%20para%20el%20Estado%2012%20Nov%202019.doc",
+      "ultimaReforma": "2019-11-12",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SLP",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de San Luis Potosí",
+      "url": "http://congresosanluis.gob.mx/sites/default/files/unpload/legislacion/leyes/2026/07/Ley%20Organica%20del%20Poder%20Judicial%20%28al%2029%20de%20junio%20de%202026%29.pdf",
+      "ultimaReforma": "2026-06-29",
+      "verificado": "2026-09-12"
+    },
+    {
       "entidad": "SLP",
       "municipio": null,
       "tipo": "Ley",
@@ -418,6 +3047,24 @@
       "url": "http://congresosanluis.gob.mx/sites/default/files/unpload/legislacion/leyes/2026/07/Ley%20sobre%20el%20Regimen%20de%20Propiedad%20en%20Condominio%20%28al%2001%20de%20julio%20de%202026%29.pdf",
       "ultimaReforma": "2026-07-01",
       "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "SLP",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Hacienda para el Estado de San Luis Potosí",
+      "url": "http://congresosanluis.gob.mx/sites/default/files/unpload/legislacion/leyes/2026/02/Ley%20de%20Hacienda%20del%20Estado%20%28al%2030%20enero%202026%29.pdf",
+      "ultimaReforma": "2026-01-30",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SLP",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Mediación y Conciliación del Estado de San Luis Potosí",
+      "url": "http://congresosanluis.gob.mx/sites/default/files/unpload/legislacion/leyes/2023/09/Ley_de_Mediacion_y_Conciliacion_para_el_Estado_11_Sep_2023.pdf",
+      "ultimaReforma": "2023-09-11",
+      "verificado": "2026-09-12"
     },
     {
       "entidad": "SLP",
@@ -436,6 +3083,24 @@
       "url": "http://congresosanluis.gob.mx/sites/default/files/unpload/legislacion/leyes/2026/07/Ley%20de%20Ordenamiento%20Territorial%20y%20Desarrollo%20Urbano%20%28al%2001%20de%20julio%20de%202026%29.pdf",
       "ultimaReforma": "2026-07-01",
       "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "SLP",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Responsabilidades Administrativas para el Estado y Municipios de San Luis Potosí",
+      "url": "http://congresosanluis.gob.mx/sites/default/files/unpload/legislacion/leyes/2026/03/Ley%20de%20Responsabilidades%20Administrativas%20para%20el%20Estado%20y%20Municipios%20%28al%2025%20de%20marzo%20de%202026%29.pdf",
+      "ultimaReforma": "2026-03-25",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SLP",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado para el Estado de San Luis Potosí",
+      "url": "http://congresosanluis.gob.mx/sites/default/files/unpload/legislacion/leyes/2025/01/Ley_del_Notariado_del_Estado_de_san_Luis_Potosi_22_Dic_2024.pdf",
+      "ultimaReforma": "2024-12-22",
+      "verificado": "2026-09-12"
     },
     {
       "entidad": "SLP",
@@ -467,6 +3132,96 @@
     {
       "entidad": "SON",
       "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado Libre y Soberano de Sonora",
+      "url": "https://gestion.api.congresoson.gob.mx/assets/archivos/2026/09/eoKZKrqGyp18BCyAAJ4Jhf89XMgHlHh.pdf",
+      "ultimaReforma": "2026-05-28",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SON",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil para el Estado de Sonora",
+      "url": "https://gestion.api.congresoson.gob.mx/assets/archivos/2024/10/fnkF_cG6x59FKqJEYc1x5leEcKkK1GaV.pdf",
+      "ultimaReforma": "2021-05-14",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SON",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal del Estado de Sonora",
+      "url": "https://gestion.api.congresoson.gob.mx/assets/archivos/2026/02/Q4nWB88ddNR2PyTJ3lErKwRHFLh05hFD.pdf",
+      "ultimaReforma": "2025-12-12",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SON",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal del Estado de Sonora",
+      "url": "https://gestion.api.congresoson.gob.mx/assets/archivos/2026/07/9VxqfLxb7FP4Zq5TGgIxDmN28rcxFJ8o.pdf",
+      "ultimaReforma": "2026-06-11",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SON",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Familia para el Estado de Sonora",
+      "url": "https://gestion.api.congresoson.gob.mx/assets/archivos/2026/02/fMREc7GL_nESN2l_1yshhgzo0zR6NPAW.pdf",
+      "ultimaReforma": "2026-01-26",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SON",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Sonora",
+      "url": "https://gestion.api.congresoson.gob.mx/assets/archivos/2024/07/b9xk6uzoWxmOc_dM83LypU18LZ2DvTmf.pdf",
+      "ultimaReforma": "2019-03-05",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SON",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Sonora",
+      "url": "https://gestion.api.congresoson.gob.mx/assets/archivos/2026/07/OIbFVyhGUYpecH8T2CoQ1KYCk1cmWXv4.pdf",
+      "ultimaReforma": "2026-05-11",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SON",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Hacienda del Estado de Sonora",
+      "url": "https://gestion.api.congresoson.gob.mx/assets/archivos/2026/02/Eq35ssWihMN1LeUyMQBLOQ906izOceSe.pdf",
+      "ultimaReforma": "2025-12-26",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SON",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Justicia Administrativa para el Estado de Sonora",
+      "url": "https://gestion.api.congresoson.gob.mx/assets/archivos/2024/08/yjRFtwyh_PuY1dUGfQLOf_Xe7OgqUtz.pdf",
+      "ultimaReforma": "2022-10-24",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SON",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Mecanismos Alternativos de Solución de Controversias para el Estado de Sonora",
+      "url": "https://gestion.api.congresoson.gob.mx/assets/archivos/2026/06/NSg6GfdLSPFKgKOXNfIYr1WXayZR19f.pdf",
+      "ultimaReforma": "2026-06-11",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SON",
+      "municipio": null,
       "tipo": "Ley",
       "titulo": "Ley de Obras Públicas y Servicios Relacionados con las Mismas para el Estado de Sonora",
       "url": "https://stjsonora.gob.mx/acceso_informacion/marco_normativo/LeyObrasPublicasYServicios.pdf",
@@ -486,10 +3241,37 @@
       "entidad": "SON",
       "municipio": null,
       "tipo": "Ley",
+      "titulo": "Ley de Procedimiento Administrativo del Estado de Sonora",
+      "url": "https://gestion.api.congresoson.gob.mx/assets/archivos/2024/08/3kiBncB8FMd8pLzpJfYIOmajwZHhg6.pdf",
+      "ultimaReforma": "2020-02-20",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SON",
+      "municipio": null,
+      "tipo": "Ley",
       "titulo": "Ley de Protección Civil para el Estado de Sonora",
       "url": "https://proteccioncivil.sonora.gob.mx/images/123/LEY%20DE%20PROTECCION%20CIVIL%20PARA%20EL%20ESTADO%20DE%20SONORA.pdf",
       "ultimaReforma": "2020-12-24",
       "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "SON",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Responsabilidades y Sanciones para el Estado de Sonora",
+      "url": "https://gestion.api.congresoson.gob.mx/assets/archivos/2026/07/Ly0GVF1SWzG68tZ5jg7zZIZwUmQQPJ.pdf",
+      "ultimaReforma": "2026-05-18",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "SON",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado para el Estado de Sonora",
+      "url": "https://gestion.api.congresoson.gob.mx/assets/archivos/2024/08/e7JfIxDXXJ_Eo3OqQLCqsKhoM822ourK.pdf",
+      "ultimaReforma": "2024-04-19",
+      "verificado": "2026-09-12"
     },
     {
       "entidad": "SON",
@@ -529,6 +3311,276 @@
       "verificado": "2026-09-11"
     },
     {
+      "entidad": "TAB",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado Libre y Soberano de Tabasco",
+      "url": "https://congresotabasco.gob.mx/wp-content/uploads/2026/08/Constitucion-Politica-del-Estado-de-Tabasco1.pdf",
+      "ultimaReforma": "2026-08-26",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TAB",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil para el Estado de Tabasco",
+      "url": "https://congresotabasco.gob.mx/wp-content/uploads/2026/09/Codigo-Civil-para-el-Estado-de-Tabasco.pdf",
+      "ultimaReforma": "2026-09-02",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TAB",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal del Estado de Tabasco",
+      "url": "https://congresotabasco.gob.mx/wp-content/uploads/2026/01/Codigo-Fiscal-del-Estado-de-Tabasco.pdf",
+      "ultimaReforma": "2025-12-24",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TAB",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal para el Estado de Tabasco",
+      "url": "https://congresotabasco.gob.mx/wp-content/uploads/2026/08/Codigo-Penal-para-el-Estado-de-Tabasco.pdf",
+      "ultimaReforma": "2026-08-08",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TAB",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Tabasco",
+      "url": "https://congresotabasco.gob.mx/wp/wp-content/uploads/2023/11/Codigo-de-Procedimientos-Civiles.pdf",
+      "ultimaReforma": "2019-10-10",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TAB",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Tabasco",
+      "url": "https://congresotabasco.gob.mx/wp-content/uploads/2026/09/Ley-Organica-del-Poder-Judicial-del-Estado-de-Tabasco.pdf",
+      "ultimaReforma": "2026-09-02",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TAB",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Acceso a la Justicia Alternativa para el Estado de Tabasco",
+      "url": "https://congresotabasco.gob.mx/wp/wp-content/uploads/2019/02/Ley-de-Acceso-a-la-Justicia-Alternativa-para-el-Estado-de-Tabasco.pdf",
+      "ultimaReforma": "2013-10-01",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TAB",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Hacienda del Estado de Tabasco",
+      "url": "https://congresotabasco.gob.mx/wp/wp-content/uploads/2022/01/Ley-de-Hacienda-del-Estado-de-Tabasco.pdf",
+      "ultimaReforma": "2021-12-21",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TAB",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Justicia Administrativa del Estado de Tabasco",
+      "url": "https://congresotabasco.gob.mx/wp-content/uploads/2026/04/Ley-de-Justicia-Administrativa-del-Estado.pdf",
+      "ultimaReforma": "2026-04-11",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TAB",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Responsabilidad Administrativa de los Servidores Públicos, Reglamentaria del Artículo 68 de la Constitución Política del Estado de Tabasco",
+      "url": "https://congresotabasco.gob.mx/wp/wp-content/uploads/2022/04/LEY-DE-RESPONSABILIDAD-ADMINISTRATIVA-DE-LOS-SEVIDORES-PUBLICOS-REGLAMENTARIA-DEL-ARTICULO-68-DEL-TITULO-VII-DE-LA-CONSTITUCION-POLITICA-DEL-ESTADO-DE-TABASCO-1.pdf",
+      "ultimaReforma": "2022-04-11",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TAB",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado para el Estado de Tabasco",
+      "url": "https://congresotabasco.gob.mx/wp-content/uploads/2026/05/Ley-del-Notariado-para-el-Estado-de-Tabasco.pdf",
+      "ultimaReforma": "2026-05-06",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TAM",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado de Tamaulipas",
+      "url": "https://congresotamaulipas.gob.mx/Parlamentario/Archivos/Constituciones/Const%20Pol%20del%20Edo%20POE%2026%20junio%202026.pdf",
+      "ultimaReforma": "2026-06-26",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TAM",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil para el Estado de Tamaulipas",
+      "url": "https://congresotamaulipas.gob.mx/Parlamentario/Archivos/Codigos/Codigo%20Civil%20para%20el%20Estado%20de%20Tamaulipas%2030-03-2026-.pdf",
+      "ultimaReforma": "2026-03-30",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TAM",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal del Estado de Tamaulipas",
+      "url": "https://congresotamaulipas.gob.mx/Parlamentario/Archivos/Codigos/Codigo%20Fiscal%20%2016%20dic%202025-1%20(1)-1.pdf",
+      "ultimaReforma": "2025-12-16",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TAM",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal para el Estado de Tamaulipas",
+      "url": "https://congresotamaulipas.gob.mx/Parlamentario/Archivos/Codigos/Codigo%20Penal%20para%20el%20Estado%20de%20Tamaulipas%2006%20de%20julio%20de%202026.pdf",
+      "ultimaReforma": "2026-07-06",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TAM",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles del Estado de Tamaulipas",
+      "url": "https://congresotamaulipas.gob.mx/Parlamentario/Archivos/Codigos/Codigo%20de%20Procedimientos%20Civiles%20del%20Estado%20de%20Tamaulipas.pdf",
+      "ultimaReforma": "2017-12-18",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TAM",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Tamaulipas",
+      "url": "https://congresotamaulipas.gob.mx/Parlamentario/Archivos/Leyes/Ley%20Organica%20del%20Poder%20Judicial%2003-03-%202026--2.pdf",
+      "ultimaReforma": "2026-03-03",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TAM",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Tribunal de Justicia Administrativa del Estado de Tamaulipas",
+      "url": "https://congresotamaulipas.gob.mx/Parlamentario/Archivos/Leyes/Ley%20Organica%20del%20Tribunal%20de%20Justicia%20Administrativa%20del%20Estado%20de%20Tamaulipas%2012-%2002-2026-.pdf",
+      "ultimaReforma": "2026-02-12",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TAM",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Hacienda para el Estado de Tamaulipas",
+      "url": "https://congresotamaulipas.gob.mx/Parlamentario/Archivos/Leyes/Ley%20de%20Hacienda%2018-08-2026-.pdf",
+      "ultimaReforma": "2026-08-18",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TAM",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Mediación para el Estado de Tamaulipas",
+      "url": "https://congresotamaulipas.gob.mx/Parlamentario/Archivos/Leyes/Ley%20de%20Mediacion%206jun23.pdf",
+      "ultimaReforma": "2023-06-06",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TAM",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Procedimiento Administrativo para el Estado de Tamaulipas",
+      "url": "https://congresotamaulipas.gob.mx/Parlamentario/Archivos/Leyes/Ley%20de%20Procedimiento%20Administrativo%20para%20el%20Estado%20de%20Tamaulipas%2009-04-2026.pdf",
+      "ultimaReforma": "2026-04-09",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TAM",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Responsabilidades Administrativas del Estado de Tamaulipas",
+      "url": "https://congresotamaulipas.gob.mx/Parlamentario/Archivos/Leyes/Ley%20de%20Responsabilidades%20Administrativas%20del%20Estado%20de%20Tamaulipas%2025-06-2026-.pdf",
+      "ultimaReforma": "2026-06-25",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TAM",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado para el Estado de Tamaulipas",
+      "url": "https://congresotamaulipas.gob.mx/Parlamentario/Archivos/Leyes/69%20Ley%20del%20Notariado%2029-abril-2026-.pdf",
+      "ultimaReforma": "2026-04-29",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TLA",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado Libre y Soberano de Tlaxcala",
+      "url": "https://congresodetlaxcala.gob.mx/archivo/leyes2020/pdf/5_constitucion_pol.pdf",
+      "ultimaReforma": "2026-09-01",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TLA",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil para el Estado Libre y Soberano de Tlaxcala",
+      "url": "https://congresodetlaxcala.gob.mx/archivo/leyes2020/pdf/1_codigo_civil_par.pdf",
+      "ultimaReforma": "2024-06-18",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TLA",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Financiero para el Estado de Tlaxcala y sus Municipios",
+      "url": "https://congresodetlaxcala.gob.mx/archivo/leyes2020/pdf/3_codigo_financier.pdf",
+      "ultimaReforma": "2025-11-28",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TLA",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal para el Estado Libre y Soberano de Tlaxcala",
+      "url": "https://congresodetlaxcala.gob.mx/archivo/leyes2020/pdf/4_codigo_penal_par.pdf",
+      "ultimaReforma": "2026-06-05",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TLA",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles para el Estado Libre y Soberano de Tlaxcala",
+      "url": "https://congresodetlaxcala.gob.mx/archivo/leyes2020/pdf/2_codigo_de_proced.pdf",
+      "ultimaReforma": "2018-09-04",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TLA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Tlaxcala",
+      "url": "https://congresodetlaxcala.gob.mx/archivo/leyes2020/pdf/105_Ley_organica_de.pdf",
+      "ultimaReforma": "2025-08-26",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TLA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Tribunal de Justicia Administrativa del Estado de Tlaxcala",
+      "url": "https://congresodetlaxcala.gob.mx/archivo/leyes2020/pdf/107_Ley_Organica_d.pdf",
+      "ultimaReforma": "2025-08-29",
+      "verificado": "2026-09-12"
+    },
+    {
       "entidad": "TLA",
       "municipio": null,
       "tipo": "Ley",
@@ -536,6 +3588,15 @@
       "url": "https://congresodetlaxcala.gob.mx/archivo/leyes2020/pdf/14_Ley_de_asentami.pdf",
       "ultimaReforma": "2018-09-04",
       "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "TLA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Mecanismos Alternativos de Solución de Controversias del Estado de Tlaxcala",
+      "url": "https://congresodetlaxcala.gob.mx/archivo/leyes2020/pdf/57_Ley_de_mecanism.pdf",
+      "ultimaReforma": "2025-03-12",
+      "verificado": "2026-09-12"
     },
     {
       "entidad": "TLA",
@@ -559,6 +3620,15 @@
       "entidad": "TLA",
       "municipio": null,
       "tipo": "Ley",
+      "titulo": "Ley de Responsabilidades de los Servidores Públicos para el Estado de Tlaxcala",
+      "url": "https://congresodetlaxcala.gob.mx/archivo/leyes2020/pdf/76_Ley_de_responsa.pdf",
+      "ultimaReforma": "2018-04-12",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TLA",
+      "municipio": null,
+      "tipo": "Ley",
       "titulo": "Ley de la Construcción del Estado de Tlaxcala",
       "url": "https://congresodetlaxcala.gob.mx/archivo/leyes2020/pdf/53_Ley_de_la_const.pdf",
       "ultimaReforma": "2021-02-10",
@@ -568,10 +3638,370 @@
       "entidad": "TLA",
       "municipio": null,
       "tipo": "Ley",
+      "titulo": "Ley del Notariado para el Estado de Tlaxcala",
+      "url": "https://congresodetlaxcala.gob.mx/archivo/leyes2020/pdf/91_Ley_del_notaria.pdf",
+      "ultimaReforma": "2025-12-18",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TLA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Procedimiento Administrativo del Estado de Tlaxcala y sus Municipios",
+      "url": "https://congresodetlaxcala.gob.mx/archivo/leyes2020/pdf/94_Ley_del_procedi.pdf",
+      "ultimaReforma": "2023-10-03",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "TLA",
+      "municipio": null,
+      "tipo": "Ley",
       "titulo": "Ley que Regula el Régimen de Propiedad en Condominio de Bienes Inmuebles para el Estado de Tlaxcala",
       "url": "https://congresodetlaxcala.gob.mx/archivo/leyes2020/pdf/138_Ley_que_regula.pdf",
       "ultimaReforma": "2016-12-08",
       "verificado": "2026-09-11"
+    },
+    {
+      "entidad": "VER",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado Libre y Soberano de Veracruz de Ignacio de la Llave",
+      "url": "https://legisver.gob.mx/leyes/LeyesPDF/CONSTITUCI%C3%93N13012025(2).pdf",
+      "ultimaReforma": "2025-01-13",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "VER",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil para el Estado de Veracruz de Ignacio de la Llave",
+      "url": "https://www.legisver.gob.mx/leyes/LeyesPDF/CCIVIL2911116.pdf",
+      "ultimaReforma": "2016-11-29",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "VER",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Financiero para el Estado de Veracruz de Ignacio de la Llave",
+      "url": "https://www.legisver.gob.mx/leyes/LeyesPDF/CFINANCIERO30052025.pdf",
+      "ultimaReforma": "2025-05-30",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "VER",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal para el Estado de Veracruz de Ignacio de la Llave",
+      "url": "https://www.legisver.gob.mx/leyes/LeyesPDF/CPENAL07032025.pdf",
+      "ultimaReforma": "2025-03-07",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "VER",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Administrativos para el Estado de Veracruz de Ignacio de la Llave",
+      "url": "https://www.legisver.gob.mx/leyes/LeyesPDF/CPADMINISTRATIVOS04022025.pdf",
+      "ultimaReforma": "2025-02-04",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "VER",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Veracruz",
+      "url": "https://www.legisver.gob.mx/leyes/LeyesPDF/CPCIVILES270115.pdf",
+      "ultimaReforma": "2015-01-27",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "VER",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Veracruz de Ignacio de la Llave",
+      "url": "https://www.legisver.gob.mx/leyes/LeyesPDF/LOPJTO29012025.pdf",
+      "ultimaReforma": "2025-01-29",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "VER",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Mecanismos Alternativos de Solución de Controversias del Estado de Veracruz de Ignacio de la Llave",
+      "url": "https://www.legisver.gob.mx/leyes/LeyesPDF/LMEALSOCOTO24012025.pdf",
+      "ultimaReforma": "2025-01-24",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "VER",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Responsabilidades Administrativas para el Estado de Veracruz de Ignacio de la Llave",
+      "url": "https://www.legisver.gob.mx/leyes/LeyesPDF/LRA191217.pdf",
+      "ultimaReforma": "2017-12-19",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "VER",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado para el Estado de Veracruz de Ignacio de la Llave",
+      "url": "https://www.legisver.gob.mx/leyes/LeyesPDF/NOTARIADO030815.pdf",
+      "ultimaReforma": "2015-08-03",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "YUC",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado de Yucatán",
+      "url": "https://www.congresoyucatan.gob.mx/storage/documentos/constitucion.pdf",
+      "ultimaReforma": "2026-09-04",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "YUC",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil del Estado de Yucatán",
+      "url": "https://www.congresoyucatan.gob.mx/storage/legislacion/codigos/ca9da342d9e6c5faf13d9e39e9ec6591_2022-06-10.pdf",
+      "ultimaReforma": "2022-06-07",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "YUC",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal del Estado de Yucatán",
+      "url": "https://www.congresoyucatan.gob.mx/storage/legislacion/codigos/5c6e68c9b7bea85e9384441c5a6e73ac_2024-01-03.pdf",
+      "ultimaReforma": "2023-12-28",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "YUC",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal del Estado de Yucatán",
+      "url": "https://www.congresoyucatan.gob.mx/storage/legislacion/codigos/82f29302c52b8f05f225b761ebba41c0_2026-08-10.pdf",
+      "ultimaReforma": "2026-07-28",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "YUC",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Familia para el Estado de Yucatán",
+      "url": "https://www.congresoyucatan.gob.mx/storage/legislacion/codigos/d474fca229d7858e2f1156c9c626a090_2024-08-02.pdf",
+      "ultimaReforma": "2024-07-31",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "YUC",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles de Yucatán",
+      "url": "https://www.congresoyucatan.gob.mx/storage/legislacion/codigos/8a2fc7c5d692fbd7edc40459d8809ad3.pdf",
+      "ultimaReforma": "2016-12-28",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "YUC",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Familiares del Estado de Yucatán",
+      "url": "https://www.congresoyucatan.gob.mx/storage/legislacion/codigos/b8c6ac10ec1cb280aa42263fb0b5fdf0.pdf",
+      "ultimaReforma": "2016-12-28",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "YUC",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley General de Hacienda del Estado de Yucatán",
+      "url": "https://www.congresoyucatan.gob.mx/storage/legislacion/leyes/87f6d5a212e123667023473e452c90e1_2026-08-19.pdf",
+      "ultimaReforma": "2025-12-26",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "YUC",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Yucatán",
+      "url": "https://www.congresoyucatan.gob.mx/storage/legislacion/leyes/9b61e60c8013d660df1fc8ecd6a2d5a0_2025-09-25.pdf",
+      "ultimaReforma": "2025-08-28",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "YUC",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Tribunal de Justicia Administrativa del Estado de Yucatán",
+      "url": "https://www.congresoyucatan.gob.mx/storage/legislacion/leyes/b83c458c0be2d14ac3f88acafc1e78c7_2026-06-08.pdf",
+      "ultimaReforma": "2026-05-25",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "YUC",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Actos y Procedimientos Administrativos del Estado de Yucatán",
+      "url": "https://www.congresoyucatan.gob.mx/storage/legislacion/leyes/c46c61dd08f5288c875b246bf35f6ec4_2026-08-19.pdf",
+      "ultimaReforma": "2026-05-25",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "YUC",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Mecanismos Alternativos de Solución de Controversias en el Estado de Yucatán",
+      "url": "https://www.congresoyucatan.gob.mx/storage/legislacion/leyes/58a9b0ab9367a29f6d71d50aaee78eba_2025-08-12.pdf",
+      "ultimaReforma": "2025-06-20",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "YUC",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Responsabilidades Administrativas del Estado de Yucatán",
+      "url": "https://www.congresoyucatan.gob.mx/storage/legislacion/leyes/7d1932a70d6d511d202eb3b093cceaa8_2024-08-06.pdf",
+      "ultimaReforma": "2024-08-05",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "YUC",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de lo Contencioso Administrativo del Estado de Yucatán",
+      "url": "https://www.congresoyucatan.gob.mx/storage/legislacion/leyes/d43b55276abeebf37c1019df77f62312_2026-06-08.pdf",
+      "ultimaReforma": "2026-05-25",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "YUC",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado del Estado de Yucatán",
+      "url": "https://www.congresoyucatan.gob.mx/storage/legislacion/leyes/b6123bca86d034fe65dd856fc6668a2f_2022-06-10.pdf",
+      "ultimaReforma": "2022-06-07",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "ZAC",
+      "municipio": null,
+      "tipo": "Constitución",
+      "titulo": "Constitución Política del Estado Libre y Soberano de Zacatecas",
+      "url": "https://www.congresozac.gob.mx/65/ley&cual=333&tipo=pdf",
+      "ultimaReforma": "2025-01-14",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "ZAC",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Civil del Estado de Zacatecas",
+      "url": "https://www.congresozac.gob.mx/65/ley&cual=101&tipo=pdf",
+      "ultimaReforma": "2023-07-08",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "ZAC",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Familiar del Estado de Zacatecas",
+      "url": "https://www.congresozac.gob.mx/65/ley&cual=104&tipo=pdf",
+      "ultimaReforma": "2026-02-04",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "ZAC",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Fiscal del Estado de Zacatecas y sus Municipios",
+      "url": "https://www.congresozac.gob.mx/65/ley&cual=209&tipo=pdf",
+      "ultimaReforma": "2025-12-31",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "ZAC",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código Penal para el Estado de Zacatecas",
+      "url": "https://www.congresozac.gob.mx/65/ley&cual=103&tipo=pdf",
+      "ultimaReforma": "2026-03-04",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "ZAC",
+      "municipio": null,
+      "tipo": "Código",
+      "titulo": "Código de Procedimientos Civiles para el Estado de Zacatecas",
+      "url": "https://www.congresozac.gob.mx/65/ley&cual=102&tipo=pdf",
+      "ultimaReforma": "2018-02-21",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "ZAC",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley Orgánica del Poder Judicial del Estado de Zacatecas",
+      "url": "https://www.congresozac.gob.mx/65/ley&cual=59&tipo=pdf",
+      "ultimaReforma": "2023-09-30",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "ZAC",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Hacienda del Estado de Zacatecas",
+      "url": "https://www.congresozac.gob.mx/65/ley&cual=57&tipo=pdf",
+      "ultimaReforma": "2025-12-31",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "ZAC",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Justicia Administrativa del Estado de Zacatecas",
+      "url": "https://www.congresozac.gob.mx/65/ley&cual=336&tipo=pdf",
+      "ultimaReforma": "2022-12-31",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "ZAC",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Justicia Alternativa del Estado de Zacatecas",
+      "url": "https://www.congresozac.gob.mx/65/ley&cual=144&tipo=pdf",
+      "ultimaReforma": "2021-02-24",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "ZAC",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Procedimiento Administrativo del Estado y Municipios de Zacatecas",
+      "url": "https://www.congresozac.gob.mx/65/ley&cual=148&tipo=pdf",
+      "ultimaReforma": "2009-09-23",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "ZAC",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Responsabilidades de los Servidores Públicos del Estado y Municipios de Zacatecas",
+      "url": "https://www.congresozac.gob.mx/65/ley&cual=64&tipo=pdf",
+      "ultimaReforma": "2017-07-15",
+      "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "ZAC",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley del Notariado para el Estado de Zacatecas",
+      "url": "https://www.congresozac.gob.mx/65/ley&cual=112&tipo=pdf",
+      "ultimaReforma": "2025-12-18",
+      "verificado": "2026-09-12"
     }
   ]
 }

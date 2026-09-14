@@ -8,8 +8,13 @@ import { buildSystemPromptAbogado } from "@/lib/ai/system-prompt-abogado";
 import { recordLlmCost } from "@/lib/costos/record";
 import { MAX_BODY_BYTES, sanearHistorial } from "@/lib/ai/historial";
 import { fuentesDesdeToolResult, verificarRespuesta, type FuenteVerificacion } from "@/lib/ai/verificacion";
-import { bloqueDocumentosParaPrompt, toolsDocumentos, type DocumentoCargado, type Seccion } from "@/lib/juridico/documentos";
+import { bloqueDocumentosParaPrompt, toolsDocumentos, type DocumentoCargado, type Resumenes, type Seccion } from "@/lib/juridico/documentos";
 import { ejecutarRedactar, toolRedactar } from "@/lib/juridico/redaccion";
+import { asuntoDeConversacion, bloqueAsuntoParaPrompt, ejecutarHerramientaAsunto, toolsAsunto, type Asunto } from "@/lib/juridico/asuntos";
+import { NOMBRES_REDACCION_ESTRUCTURADA, ejecutarRedaccionEstructurada, toolsRedaccionEstructurada } from "@/lib/juridico/redaccion-estructurada";
+import { iniciarTurno, respuestaSse, turnoEnCurso, turnoReciente, type EventoTurno } from "@/lib/juridico/turnos";
+import { reportError } from "@/lib/observability";
+import { mensajeDeErrorParaAbogado } from "@/lib/juridico/errores";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/juridico/chat — el copiloto JURÍDICO (perfil abogado), en streaming.
@@ -25,7 +30,13 @@ import { ejecutarRedactar, toolRedactar } from "@/lib/juridico/redaccion";
 // Los documentos adjuntos a la conversación (POST /api/juridico/documentos) se
 // cargan aquí: su índice va en un bloque del system prompt (y el texto entero
 // si cabe) y el agente los recorre con leer_documento / buscar_en_documento.
-// Eventos SSE: conversation | text | tool_start | tool_done | documento | replace | done | error
+//
+// El turno corre como tarea del proceso (src/lib/juridico/turnos.ts) y la
+// respuesta es una vista reanudable: si el teléfono suspende el fetch o
+// Railway corta el stream, GET ?conversacionId=&desde=N reproduce lo que falta.
+// El mensaje del usuario se guarda al arrancar; la respuesta al terminar (o lo
+// que alcanzó a escribir, con meta.error, si el turno falla).
+// Eventos SSE: turno | conversation | text | tool_start | tool_done | documento | documento_progreso | asunto | replace | done | error
 // ─────────────────────────────────────────────────────────────────────────────
 
 const anthropic = new Anthropic();
@@ -37,9 +48,13 @@ export const maxDuration = 300;
 // Revisar un contrato pide muchas consultas (varios artículos, jurisprudencia);
 // si se agotan, hay una última vuelta SIN herramientas para que redacte.
 const MAX_TOOL_ROUNDS = 10;
+const MAX_TOOL_ROUNDS_CON_DOCUMENTOS = 24;
+// Un escrito entero cabe en una sola llamada a redactar_documento: con 6 144
+// tokens se cortaba a la mitad (y el turno moría con «user messages must have
+// non-empty content»).
+const MAX_TOKENS_SALIDA = 16_000;
 const CHAT_MODEL = process.env.AI_CHAT_MODEL ?? "claude-fable-5";
 const CHAT_MODEL_FALLBACK = "claude-opus-4-8";
-const HEARTBEAT_MS = 10_000;
 
 interface Traza {
   modelo: string;
@@ -105,49 +120,67 @@ export async function POST(req: Request) {
     convCreada = true;
   }
 
+  // Un turno a la vez por conversación.
+  if (turnoEnCurso(convId)) return NextResponse.json({ error: "Ya hay una respuesta en curso en esta conversación; espera a que termine o vuelve a abrirla." }, { status: 409 });
+
   // Documentos de la conversación: bloque propio del system (cacheado aparte del
   // prompt base, que es igual para todas las conversaciones).
   const documentos: DocumentoCargado[] = (
     await prisma.juridicoDocumento.findMany({
       where: { conversacionId: convId },
       orderBy: { createdAt: "asc" },
-      select: { id: true, nombre: true, paginas: true, caracteres: true, texto: true, secciones: true },
+      select: { id: true, nombre: true, paginas: true, caracteres: true, texto: true, secciones: true, resumenes: true },
     })
-  ).map((d) => ({ ...d, secciones: (d.secciones as unknown as Seccion[] | null) ?? [] }));
+  ).map((d) => ({ ...d, secciones: (d.secciones as unknown as Seccion[] | null) ?? [], resumenes: (d.resumenes as unknown as Resumenes | null) ?? null }));
+  // Un expediente se lee por secciones: hacen falta más rondas de herramientas.
+  const maxRondas = documentos.length > 0 ? MAX_TOOL_ROUNDS_CON_DOCUMENTOS : MAX_TOOL_ROUNDS;
+  // El asunto (partes, expediente, decisiones) viene de la base: bloque propio,
+  // sin caché porque cambia dentro del mismo turno cuando el modelo registra algo.
+  let asunto: Asunto | null = await asuntoDeConversacion(convId, userId);
   const system: Anthropic.TextBlockParam[] = [
     { type: "text", text: buildSystemPromptAbogado(), cache_control: { type: "ephemeral" } },
     ...(documentos.length > 0 ? [{ type: "text" as const, text: bloqueDocumentosParaPrompt(documentos), cache_control: { type: "ephemeral" as const } }] : []),
+    { type: "text", text: bloqueAsuntoParaPrompt(asunto) },
   ];
-  // Redactar siempre está; leer/buscar sólo cuando hay documentos.
-  const tools = [...toolsAbogado, toolRedactar, ...(documentos.length > 0 ? toolsDocumentos : [])];
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      const safeEnqueue = (chunk: Uint8Array) => {
-        try {
-          controller.enqueue(chunk);
-        } catch {
-          /* cerrado */
-        }
-      };
-      const emitir = (evento: Record<string, unknown>) => safeEnqueue(encoder.encode(`data: ${JSON.stringify(evento)}\n\n`));
-      const heartbeat = setInterval(() => safeEnqueue(encoder.encode(": ping\n\n")), HEARTBEAT_MS);
-      emitir({ type: "conversation", id: convId, nueva: convCreada });
+  // Redactar y el asunto siempre están; leer/buscar sólo cuando hay documentos.
+  const tools = [...toolsAbogado, toolRedactar, ...toolsRedaccionEstructurada, ...toolsAsunto, ...(documentos.length > 0 ? toolsDocumentos : [])];
 
+  // El mensaje del usuario se guarda YA: si el turno muere, la conversación lo conserva.
+  let mensajeUsuarioId: string | null = null;
+  try {
+    const mu = await prisma.juridicoMensaje.create({ data: { conversacionId: convId, rol: "user", contenido: nuevoMensajeUsuario }, select: { id: true } });
+    mensajeUsuarioId = mu.id;
+  } catch (e) {
+    reportError(e, { ruta: "juridico/chat", paso: "persistir-usuario", conversacionId: convId });
+  }
+
+  const turno = iniciarTurno({
+    conversacionId: convId,
+    userId,
+    correr: async (emitir: (e: EventoTurno) => void) => {
+      emitir({ type: "conversation", id: convId, nueva: convCreada });
       let assistantText = "";
       const traza: Traza = { modelo: CHAT_MODEL, rondas: 0, tools: [], fundamentos: [], cacheReadTokens: 0, ...(documentos.length > 0 ? { documentos: documentos.map((d) => d.nombre) } : {}) };
       const fuentesTurno: FuenteVerificacion[] = [];
-
+      const persistirAsistente = async (extra?: Record<string, unknown>) => {
+        if (!assistantText.trim() && !extra) return null;
+        const creado = await prisma.juridicoMensaje.create({
+          data: { conversacionId: convId!, rol: "assistant", contenido: assistantText, meta: JSON.parse(JSON.stringify({ ...traza, ...extra })) },
+          select: { id: true },
+        });
+        await prisma.juridicoConversacion.update({ where: { id: convId! }, data: { updatedAt: new Date() } });
+        return creado.id;
+      };
       try {
         let currentMessages = [...messages];
         let toolRounds = 0;
         let model = CHAT_MODEL;
         let rondasAgotadas = false;
 
-        while (toolRounds < MAX_TOOL_ROUNDS) {
+        while (toolRounds < maxRondas) {
           const params: Anthropic.MessageCreateParamsStreaming = {
             model,
-            max_tokens: 6144,
+            max_tokens: MAX_TOKENS_SALIDA,
             system,
             tools,
             messages: currentMessages,
@@ -172,6 +205,8 @@ export async function POST(req: Request) {
           let roundOutput = 0;
           let roundCacheWrite = 0;
           let roundCacheRead = 0;
+          let stopReason: string | null = null;
+          let entradaTruncada: string | null = null;
 
           for await (const event of response) {
             if (event.type === "message_start") {
@@ -180,6 +215,7 @@ export async function POST(req: Request) {
               roundCacheRead = event.message.usage?.cache_read_input_tokens ?? 0;
             } else if (event.type === "message_delta") {
               roundOutput = event.usage?.output_tokens ?? roundOutput;
+              stopReason = event.delta.stop_reason ?? stopReason;
             } else if (event.type === "content_block_start") {
               if (event.content_block.type === "tool_use") {
                 hasToolUse = true;
@@ -198,11 +234,20 @@ export async function POST(req: Request) {
               try {
                 parsedInput = JSON.parse(currentToolUse.input || "{}");
               } catch {
+                // JSON a medias: la salida se cortó por max_tokens dentro de la llamada.
                 parsedInput = {};
+                entradaTruncada = currentToolUse.name;
               }
               toolUseBlocks.push({ type: "tool_use", id: currentToolUse.id, name: currentToolUse.name, input: parsedInput });
               currentToolUse = null;
             }
+          }
+          // Bloque abierto al terminar el stream (nunca llegó su stop): se cierra aquí
+          // para que la ronda no mande un mensaje de usuario vacío al API.
+          if (currentToolUse) {
+            toolUseBlocks.push({ type: "tool_use", id: currentToolUse.id, name: currentToolUse.name, input: {} });
+            entradaTruncada = currentToolUse.name;
+            currentToolUse = null;
           }
 
           traza.cacheReadTokens += roundCacheRead;
@@ -215,9 +260,34 @@ export async function POST(req: Request) {
           if (!hasToolUse) break;
 
           const llamadas = toolUseBlocks.filter((b): b is Anthropic.ToolUseBlockParam => b.type === "tool_use");
+          if (llamadas.length === 0) break; // nada que ejecutar: nunca mandar un turno de usuario vacío
           const salidas = await Promise.all(
             llamadas.map(async (block) => {
               const t0 = Date.now();
+              if (entradaTruncada === block.name && stopReason === "max_tokens") {
+                // La llamada se cortó por longitud: se le dice al modelo, en vez de ejecutar con {}.
+                emitir({ type: "tool_done", tool: block.name, ms: 0, resumen: "llamada cortada por longitud" });
+                return { block, result: JSON.stringify({ error: `La llamada a ${block.name} se cortó por longitud (max_tokens) y no se ejecutó. Vuelve a llamarla con un texto más corto o en dos documentos (p. ej. escrito y anexo).`, resumen: "cortada" }), ms: 0 };
+              }
+              if (block.name === "registrar_partes" || block.name === "actualizar_asunto" || block.name === "consultar_asunto") {
+                const r = await ejecutarHerramientaAsunto(block.name, block.input as Record<string, unknown>, { userId, conversacionId: convId!, mensajeId: mensajeUsuarioId });
+                if (r.asunto) {
+                  asunto = r.asunto;
+                  system[system.length - 1] = { type: "text", text: bloqueAsuntoParaPrompt(asunto) };
+                  if (block.name !== "consultar_asunto") emitir({ type: "asunto", asunto });
+                }
+                return { block, result: r.salida, ms: Date.now() - t0 };
+              }
+              if (NOMBRES_REDACCION_ESTRUCTURADA.has(block.name)) {
+                // Esquema → secciones → revisión → edición: avisa al cliente por SSE mientras corre.
+                const r = await ejecutarRedaccionEstructurada(block.name, block.input as Record<string, unknown>, { anthropic, userId, conversacionId: convId!, asunto, emitir });
+                if (r.cargado) {
+                  const i = documentos.findIndex((d) => d.id === r.cargado!.id);
+                  if (i >= 0) documentos[i] = r.cargado;
+                  else documentos.push(r.cargado);
+                }
+                return { block, result: r.salida, ms: Date.now() - t0 };
+              }
               if (block.name === "redactar_documento") {
                 // Guarda el borrador y avisa al cliente (chip con descarga) sin esperar al final del turno.
                 const r = await ejecutarRedactar(block.input as Record<string, unknown>, { userId, conversacionId: convId! });
@@ -251,7 +321,7 @@ export async function POST(req: Request) {
           }
           currentMessages = [...currentMessages, { role: "assistant", content: toolUseBlocks }, { role: "user", content: toolResults }];
           toolRounds++;
-          rondasAgotadas = toolRounds >= MAX_TOOL_ROUNDS;
+          rondasAgotadas = toolRounds >= maxRondas;
         }
         if (rondasAgotadas) {
           // Se acabaron las rondas con herramientas pendientes: sin esto la
@@ -263,7 +333,7 @@ export async function POST(req: Request) {
             ...currentMessages.slice(0, -1),
             { role: "user", content: [...contenido, { type: "text", text: "No hay más consultas disponibles en este turno. Redacta ahora la respuesta completa con lo que ya recuperaste y di explícitamente qué puntos no pudiste verificar en la base." }] },
           ];
-          const final = await anthropic.messages.create({ model, max_tokens: 6144, system, tools, tool_choice: { type: "none" }, messages: cierre, stream: true });
+          const final = await anthropic.messages.create({ model, max_tokens: MAX_TOKENS_SALIDA, system, tools, tool_choice: { type: "none" }, messages: cierre, stream: true });
           let fin = 0;
           let fout = 0;
           let fcw = 0;
@@ -303,31 +373,46 @@ export async function POST(req: Request) {
 
         let assistantMessageId: string | null = null;
         try {
-          await prisma.juridicoMensaje.create({ data: { conversacionId: convId!, rol: "user", contenido: nuevoMensajeUsuario } });
-          if (assistantText.trim()) {
-            const creado = await prisma.juridicoMensaje.create({
-              data: { conversacionId: convId!, rol: "assistant", contenido: assistantText, meta: JSON.parse(JSON.stringify(traza)) },
-              select: { id: true },
-            });
-            assistantMessageId = creado.id;
-          }
-          await prisma.juridicoConversacion.update({ where: { id: convId! }, data: { updatedAt: new Date() } });
+          assistantMessageId = await persistirAsistente();
         } catch (e) {
-          console.error("[juridico/chat] persistencia falló:", e);
+          reportError(e, { ruta: "juridico/chat", paso: "persistir-asistente", conversacionId: convId! });
         }
         emitir({ type: "done", messageId: assistantMessageId, traza });
       } catch (error) {
-        emitir({ type: "error", error: error instanceof Error ? error.message : "Error interno" });
-      } finally {
-        clearInterval(heartbeat);
+        // Se reporta (antes se tragaba) y se guarda lo que alcanzó a escribir.
+        reportError(error, { ruta: "juridico/chat", conversacionId: convId!, userId, rondas: traza.rondas, chars: assistantText.length });
+        const mensaje = mensajeDeErrorParaAbogado(error);
         try {
-          controller.close();
+          await persistirAsistente({ error: mensaje, cortado: true });
         } catch {
-          /* ya cerrado */
+          /* ya se reportó el error principal */
         }
+        emitir({ type: "error", error: mensaje });
+        throw error;
       }
     },
   });
+  void mensajeUsuarioId;
+  return respuestaSse(turno);
+}
 
-  return new Response(stream, { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" } });
+// GET /api/juridico/chat?conversacionId=&desde=N — reanudar un turno: reproduce
+// los eventos desde N y sigue en vivo; 204 si no hay turno en memoria (el
+// cliente entonces recarga la conversación: si el turno terminó, ahí están
+// los mensajes).
+export async function GET(req: Request) {
+  let usuario: { id: string };
+  try {
+    usuario = await requireUser(req);
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof AuthzError ? e.message : "Unauthorized" }, { status: e instanceof AuthzError ? e.status : 401 });
+  }
+  const url = new URL(req.url);
+  const convId = url.searchParams.get("conversacionId") ?? "";
+  const desde = Number(url.searchParams.get("desde") ?? "0") || 0;
+  if (!convId) return NextResponse.json({ error: "conversacionId es requerido" }, { status: 400 });
+  const turno = turnoReciente(convId);
+  if (!turno || turno.userId !== usuario.id) return new Response(null, { status: 204 });
+  return respuestaSse(turno, desde);
+
 }

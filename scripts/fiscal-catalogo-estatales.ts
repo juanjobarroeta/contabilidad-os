@@ -16,7 +16,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { entradaDesde, type EntradaOjn } from "../src/lib/fiscal-kb/catalogo/ojn";
 
-interface Fuente { entidad: string; municipio: string | null; tipo: string; titulo: string; url: string; ultimaReforma: string | null; verificado: string; reemplaza?: string[]; nota?: string }
+interface Fuente { entidad: string; municipio: string | null; tipo: string; titulo: string; url: string; ultimaReforma: string | null; verificado: string; reemplaza?: string[]; nota?: string; materias?: string[] }
 
 const DIR = resolve(__dirname, "../src/lib/fiscal-kb/catalogo");
 const src = JSON.parse(readFileSync(resolve(DIR, "estatales.src.json"), "utf8")) as { entradas: Fuente[] };
@@ -27,11 +27,14 @@ for (const [i, f] of src.entradas.entries()) {
     { idArchivo: `manual-${i + 1}`, titulo: f.titulo, fechaPublicacion: null, ultimaReforma: f.ultimaReforma, tipo: f.tipo },
     { sat: f.entidad, municipio: f.municipio },
     { url: f.url, estatus: "Vigente" },
+    { forzarConstruccion: false },
   );
   // Vigencia: la ingesta lee «Última reforma publicada…» del texto; si el
   // documento no la trae y no se conoce la reforma, la fecha en que se verificó
   // que era el texto vigente es el respaldo honesto (vigente al menos desde ahí).
   e.vigenciaFallback = f.ultimaReforma ?? f.verificado;
+  // Materias explícitas cuando el título no las delata («Código Territorial» es urbanismo).
+  if (f.materias?.length) e.materias = f.materias as EntradaOjn["materias"];
   // La URL verificada puede no llevar extensión (p. ej. «/documentos/2795/download»):
   // el formato real se detecta por bytes al ingerir (texto.ts), así que no se excluye.
   if (e.excluida?.startsWith("Formato")) e.excluida = null;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CLAVES_LEYES, LEYES, LEYES_EXCLUIDAS, alternanciaClaves, clavesPorMateria, parseFechaVigencia } from "./ingest-leyes";
+import { CLAVES_LEYES, LEYES, LEYES_EXCLUIDAS, alternanciaClaves, clavesPorMateria, firmaEstatal, parseFechaVigencia } from "./ingest-leyes";
 
 describe("parseFechaVigencia", () => {
   it("Diputados: «Última reforma publicada DOF dd-mm-aaaa»", () => {
@@ -55,6 +55,13 @@ describe("catálogo de leyes", () => {
     expect(Object.values(LEYES).find((d) => d.entidad === "MOR")?.url).toMatch(/marcojuridico\.morelos\.gob\.mx/);
     // Lo rastreado del OJN: Jalisco trae estatal y municipal.
     expect(Object.values(LEYES).filter((d) => d.entidad === "JAL" && d.ambito === "MUNICIPAL").length).toBeGreaterThan(10);
+  });
+  it("firmaEstatal iguala el mismo ordenamiento escrito distinto (OJN vs congreso)", () => {
+    expect(firmaEstatal({ entidad: "CHH", municipio: null, titulo: "Código de Procedimientos Familiares del Estado de Chihuahua" })).toBe(firmaEstatal({ entidad: "CHH", municipio: null, titulo: "CÓDIGO DE  PROCEDIMIENTOS FAMILIARES DEL ESTADO" }));
+    expect(firmaEstatal({ entidad: "GRO", municipio: null, titulo: "Ley Número 240 de Propiedad en Condominio para el Estado de Guerrero" })).toBe(firmaEstatal({ entidad: "GRO", municipio: null, titulo: "Ley de Propiedad en Condominio para el Estado de Guerrero" }));
+    expect(firmaEstatal({ entidad: "PUE", municipio: "Puebla", titulo: "X" })).not.toBe(firmaEstatal({ entidad: "PUE", municipio: null, titulo: "X" }));
+    // Los códigos urbanos curados conservan su materia aunque el título no la delate.
+    expect(LEYES["GUA-C-TERRITORIAL-MUNICIPIOS-GUANA"]?.materias).toContain("urbano");
   });
   it("la manual gana a la generada con la misma clave, pero hereda lo que no redefine", () => {
     expect(LEYES.LINFONAVIT.urlRef).toMatch(/ref\/lifnvt\.htm$/);

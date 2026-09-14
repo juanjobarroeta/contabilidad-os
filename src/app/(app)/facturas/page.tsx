@@ -10,6 +10,7 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import { Card, Money, Button } from "@/components/ui";
 import { Alert, RetryButton } from "@/components/ui/feedback";
 import { esAsimilado, etiquetaRegimenNomina } from "@/lib/nomina/regimen";
+import { ETIQUETA_CORRIDA, esCorridaEspecial } from "@/lib/nomina/tipo-corrida";
 import { RepresentacionImpresa } from "@/components/facturas/RepresentacionImpresa";
 import {
   PERIODO_TODO,
@@ -48,6 +49,8 @@ interface Invoice {
   naturalezaRevision: boolean;
   regimenNomina: string | null;
   isrRetenidoNomina: number | null;
+  /** ORDINARIA | EXTRAORDINARIA | FINIQUITO | AGUINALDO | PTU (lib/nomina/tipo-corrida). */
+  tipoCorrida?: string | null;
   customer: { razonSocial: string; rfc: string } | null;
   // Contraparte del propio comprobante — el respaldo cuando no hay Customer
   // (público en general XAXX010101000 y extranjeros XEXX010101000).
@@ -737,8 +740,9 @@ export default function FacturasPage() {
                 className="grid w-full grid-cols-[108px_minmax(0,1fr)_130px] items-center gap-3 border-t border-cos-line-soft px-[18px] py-3.5 text-left first:border-t-0 hover:bg-cos-paper max-[860px]:grid-cols-[76px_minmax(0,1fr)_auto]"
               >
                 <span>
-                  <span className={`inline-block rounded-[7px] px-[9px] py-[3px] text-[12px] font-semibold ${meta.badge}`}>
-                    {meta.label}
+                  <span className={`inline-block rounded-[7px] px-[9px] py-[3px] text-[12px] font-semibold ${k === "nomina" && esCorridaEspecial(inv.tipoCorrida) ? "bg-cos-amber-tint text-cos-amber-ink" : meta.badge}`}>
+                    {/* Un finiquito o un aguinaldo no es «Nómina»: el badge dice qué corrida es. */}
+                    {k === "nomina" && esCorridaEspecial(inv.tipoCorrida) ? ETIQUETA_CORRIDA[inv.tipoCorrida] : meta.label}
                   </span>
                   {k === "nomina" && esAsimilado(inv.regimenNomina) && (
                     <span className="mt-1 block text-[11px] font-medium text-cos-ink-faint">Asimilados</span>
@@ -1046,7 +1050,9 @@ function FacturaModal({ inv, onClose, onVer, onCancelled }: { inv: Invoice; onCl
       >
         <div className="flex items-start justify-between">
           <div>
-            <span className={`inline-block rounded-[7px] px-[9px] py-[3px] text-[12px] font-semibold ${meta.badge}`}>{meta.label}</span>
+            <span className={`inline-block rounded-[7px] px-[9px] py-[3px] text-[12px] font-semibold ${k === "nomina" && esCorridaEspecial(inv.tipoCorrida) ? "bg-cos-amber-tint text-cos-amber-ink" : meta.badge}`}>
+              {k === "nomina" && esCorridaEspecial(inv.tipoCorrida) ? ETIQUETA_CORRIDA[inv.tipoCorrida] : meta.label}
+            </span>
             <span className="ml-2.5 text-[13px] text-cos-ink-soft">
               {(k === "nomina" && etiquetaRegimenNomina(inv.regimenNomina)) || meta.plain}
             </span>

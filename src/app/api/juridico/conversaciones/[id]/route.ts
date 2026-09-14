@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { asuntoDeConversacion } from "@/lib/juridico/asuntos";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, puedeUsarJuridico, requireUser } from "@/lib/authz";
 
@@ -30,7 +31,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     orderBy: { createdAt: "asc" },
     select: { id: true, nombre: true, mime: true, bytes: true, paginas: true, caracteres: true, createdAt: true },
   });
-  return NextResponse.json({ id: conv.id, titulo: conv.titulo, mensajes, documentos });
+  const asunto = await asuntoDeConversacion(id, usuario.id);
+  return NextResponse.json({ id: conv.id, titulo: conv.titulo, mensajes, documentos, asunto });
 }
 
 // PATCH /api/juridico/conversaciones/[id] — feedback sobre una respuesta

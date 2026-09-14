@@ -50,7 +50,8 @@ export async function GET(req: Request) {
   const [ingresosYTD, prevYearIngresos, prevYearGastos, company, prevDeclaraciones] = await Promise.all([
     prisma.invoice.findMany({
       where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: yearFrom, lt: yearTo } },
-      select: { id: true, fecha: true, uuid: true, folio: true, serie: true, subtotal: true, total: true, metodoPago: true, customer: { select: { razonSocial: true, rfc: true } } },
+      // contraparteNombre/Rfc: respaldo de nombreContraparte sin Customer.
+      select: { id: true, fecha: true, uuid: true, folio: true, serie: true, subtotal: true, total: true, metodoPago: true, contraparteNombre: true, contraparteRfc: true, customer: { select: { razonSocial: true, rfc: true } } },
       orderBy: { fecha: "asc" },
     }),
     prisma.invoice.aggregate({
