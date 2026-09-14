@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { autorizarJuridico, respuestaDeError } from "@/lib/juridico/api-guardia";
+import { alcance } from "@/lib/juridico/despacho";
 import { crearTareas, listarTareas } from "@/lib/juridico/tareas";
 
 // GET /api/juridico/casos/[id]/tareas — los pendientes del caso.
@@ -8,7 +9,7 @@ import { crearTareas, listarTareas } from "@/lib/juridico/tareas";
 export const dynamic = "force-dynamic";
 
 async function esDelUsuario(casoId: string, userId: string) {
-  return !!(await prisma.juridicoCaso.findFirst({ where: { id: casoId, userId }, select: { id: true } }));
+  return !!(await prisma.juridicoCaso.findFirst({ where: { id: casoId, ...(await alcance(userId)) }, select: { id: true } }));
 }
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {

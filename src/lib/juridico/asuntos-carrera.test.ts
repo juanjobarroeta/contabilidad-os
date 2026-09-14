@@ -41,6 +41,8 @@ vi.mock("@/lib/prisma", () => ({
       },
     },
     juridicoDocumento: { updateMany: async () => ({ count: 0 }) },
+    // El caso nace colgado del despacho; aquí el abogado no tiene ninguno.
+    juridicoMiembro: { findMany: async () => [] },
   },
 }));
 vi.mock("./bitacora", () => ({ apuntar: async () => "b1" }));

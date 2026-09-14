@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { autorizarJuridico, respuestaDeError } from "@/lib/juridico/api-guardia";
+import { alcance } from "@/lib/juridico/despacho";
 import { leerVersion, listarVersiones } from "@/lib/juridico/versiones";
 
 // GET /api/juridico/documentos/[id]/versiones — el historial con autor y qué
@@ -15,7 +16,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     return respuestaDeError(e);
   }
   const { id } = await params;
-  const doc = await prisma.juridicoDocumento.findFirst({ where: { id, userId }, select: { id: true, nombre: true, texto: true, estado: true } });
+  const doc = await prisma.juridicoDocumento.findFirst({ where: { id, OR: [{ userId }, { caso: await alcance(userId) }] }, select: { id: true, nombre: true, texto: true, estado: true } });
   if (!doc) return NextResponse.json({ error: "Documento no encontrado" }, { status: 404 });
   const url = new URL(req.url);
   const n = Number(url.searchParams.get("n") ?? "");

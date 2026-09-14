@@ -175,6 +175,28 @@ Todas cuelgan de `/api/juridico/:path*`, que ya está en el matcher de CORS.
 | `PATCH /api/juridico/usuarios/[id]` | `{ restablecer: true }` → contraseña nueva, una sola vez. **Sólo operador.** |
 | `DELETE /api/juridico/usuarios/[id]` | Quita el acceso sin borrar la cuenta ni sus casos. **Sólo operador.** |
 
+### El despacho (la cuenta)
+
+Un caso ya no es de UNA persona: es del **despacho**, y lo ve quien sea miembro.
+`userId` se conserva en el caso —dice quién lo abrió— pero el acceso es
+«mío O de mi despacho» (`alcance()` en `src/lib/juridico/despacho.ts`).
+
+| Ruta | Qué hace |
+|---|---|
+| `GET /api/juridico/despacho` | El despacho, su equipo y `puedo` (administrar, cerrar caso, redactar). **Si el abogado no tiene despacho se le crea uno** (él como socio) y sus casos y clientes se mudan ahí: no hay pantalla de «crea tu despacho». |
+| `PATCH /api/juridico/despacho` | Renombrarlo (sólo socio). |
+| `GET/POST /api/juridico/despacho/miembros` | El equipo, y sumar a alguien: si no tiene cuenta se le crea con acceso y `contrasenaTemporal` que se enseña **una vez**. Sólo socio. |
+| `PATCH/DELETE /api/juridico/despacho/miembros/[userId]` | Cambiar papel o sacar del despacho. Sólo socio. Un despacho **nunca se queda sin socio**, y sacar a alguien no borra su cuenta ni los casos que trabajó. |
+
+Papeles: `socio` (administra y cierra), `abogado` (trabaja y cierra), `pasante`
+(trabaja y redacta, no cierra ni borra), `administrativo` (ve y agenda, no
+redacta). `puede(rol, permiso)` es puro y está probado; la UI debería pintar con
+el bloque `puedo` que devuelve el GET, no re-implementar la tabla.
+
+`POST /api/juridico/usuarios` (sólo operador) sigue existiendo para dar de alta
+un despacho nuevo desde fuera; para sumar a alguien a un despacho existente, la
+ruta es la del socio.
+
 El chat y la subida de documentos responden **429 con `codigo: "JURIDICO_TOPE_MES"`** y el `consumo` cuando el asiento llegó a su tope (`JURIDICO_USD_MENSUAL`, 60 USD por default). La UI debería enseñar el consumo en el pie y avisar al 80 %.
 
 ### El copiloto

@@ -11,6 +11,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "@/lib/prisma";
 import { apuntar, apuntarVarias, type Actor } from "./bitacora";
+import { alcance } from "./despacho";
 
 export type EstadoTarea = "por_hacer" | "en_curso" | "en_revision" | "hecha" | "cancelada";
 export type PrioridadTarea = "baja" | "normal" | "alta";
@@ -131,7 +132,7 @@ export async function listarTareas(casoId: string, opts: { soloAbiertas?: boolea
 /** Lo que le toca a una persona, de todos sus casos. */
 export async function misTareas(userId: string, opts: { limite?: number } = {}): Promise<(Tarea & { casoTitulo: string })[]> {
   const filas = await prisma.juridicoTarea.findMany({
-    where: { estado: { in: ABIERTAS }, OR: [{ asignadoUserId: userId }, { asignadoUserId: null, caso: { userId } }] },
+    where: { estado: { in: ABIERTAS }, OR: [{ asignadoUserId: userId }, { asignadoUserId: null, caso: await alcance(userId) }] },
     include: { caso: { select: { titulo: true } } },
     take: Math.min(opts.limite ?? 50, 200),
   });
@@ -139,7 +140,7 @@ export async function misTareas(userId: string, opts: { limite?: number } = {}):
 }
 
 export async function actualizarTarea(id: string, userId: string, cambios: Partial<NuevaTarea> & { estado?: EstadoTarea }, actor: Actor): Promise<Tarea> {
-  const actual = await prisma.juridicoTarea.findFirst({ where: { id, caso: { userId } } });
+  const actual = await prisma.juridicoTarea.findFirst({ where: { id, caso: await alcance(userId) } });
   if (!actual) throw new Error("Tarea no encontrada");
   const previa = aTarea(actual);
   if (cambios.estado && !transicionValida(previa.estado, cambios.estado)) {
@@ -168,7 +169,7 @@ export async function actualizarTarea(id: string, userId: string, cambios: Parti
 }
 
 export async function eliminarTarea(id: string, userId: string, actor: Actor): Promise<void> {
-  const t = await prisma.juridicoTarea.findFirst({ where: { id, caso: { userId } }, select: { id: true, casoId: true, titulo: true } });
+  const t = await prisma.juridicoTarea.findFirst({ where: { id, caso: await alcance(userId) }, select: { id: true, casoId: true, titulo: true } });
   if (!t) throw new Error("Tarea no encontrada");
   await prisma.juridicoTarea.delete({ where: { id } });
   await apuntar({ casoId: t.casoId, actor, accion: "tarea.eliminada", entidad: "tarea", entidadId: t.id, resumen: `eliminó el pendiente «${t.titulo}»` });
