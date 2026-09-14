@@ -157,13 +157,22 @@ export async function asuntoDeConversacion(conversacionId: string, userId: strin
     if (a) return a;
   }
   if (!opts.crear) return null;
+  // Las herramientas de una ronda corren EN PARALELO: registrar_partes y
+  // actualizar_asunto llegaban aquí a la vez, ninguna veía el caso de la otra
+  // y la conversación terminaba con dos casos —las tareas en uno y los datos
+  // en el otro— (visto en producción el 14-sep-2026). Gana quien logre pasar
+  // la conversación de `casoId: null` al suyo; el perdedor borra el que creó
+  // y usa el del ganador.
   const creado = await prisma.juridicoCaso.create({ data: { userId, titulo: conv.titulo.slice(0, 120) || "Asunto", responsableUserId: userId }, select: selectAsunto });
-  await prisma.$transaction([
-    prisma.juridicoConversacion.update({ where: { id: conversacionId }, data: { casoId: creado.id } }),
-    // El documento pertenece al CASO, no sólo a la conversación: así sigue
-    // vivo aunque la conversación se archive.
-    prisma.juridicoDocumento.updateMany({ where: { conversacionId }, data: { casoId: creado.id } }),
-  ]);
+  const gane = await prisma.juridicoConversacion.updateMany({ where: { id: conversacionId, casoId: null }, data: { casoId: creado.id } });
+  if (gane.count === 0) {
+    await prisma.juridicoCaso.delete({ where: { id: creado.id } }).catch(() => {});
+    const actual = await prisma.juridicoConversacion.findUnique({ where: { id: conversacionId }, select: { casoId: true } });
+    return actual?.casoId ? await cargarAsunto(actual.casoId, userId) : null;
+  }
+  // El documento pertenece al CASO, no sólo a la conversación: así sigue vivo
+  // aunque la conversación se archive.
+  await prisma.juridicoDocumento.updateMany({ where: { conversacionId }, data: { casoId: creado.id } });
   await apuntar({ casoId: creado.id, actor: { userId, tipo: "copiloto" }, accion: "caso.creado", entidad: "caso", entidadId: creado.id, resumen: `abrió el caso desde la conversación «${conv.titulo}»` });
   return aAsunto(creado);
 }
