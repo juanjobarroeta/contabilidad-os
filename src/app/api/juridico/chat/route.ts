@@ -5,6 +5,7 @@ import { MAX_BODY_BYTES, sanearHistorial } from "@/lib/ai/historial";
 import { INSTANCIA, iniciarTurno, nuevoIdTurno, respuestaSse, respuestaSseDesdeAlmacen, turnoEnCurso, turnoReciente, type AlmacenTurnos } from "@/lib/juridico/turnos";
 import { almacenPrisma } from "@/lib/juridico/turnos-almacen";
 import { cargarContextoConversacion, correrTurnoAbogado } from "@/lib/juridico/turno-abogado";
+import { asegurarConsumoJuridico } from "@/lib/juridico/consumo";
 import { reportError } from "@/lib/observability";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -47,6 +48,11 @@ export async function POST(req: Request) {
   }
   const userId = usuario.id;
   if (!(await puedeUsarJuridico(userId))) return NextResponse.json({ error: "Tu cuenta no tiene acceso al copiloto jurídico" }, { status: 403 });
+
+  // Tope del asiento: el jurídico no tiene empresa, así que la guardia por
+  // empresa no aplica y sin esto corría sin techo (ver src/lib/juridico/consumo.ts).
+  const puede = await asegurarConsumoJuridico(userId);
+  if (!puede.permitido) return NextResponse.json({ error: puede.motivo, codigo: "JURIDICO_TOPE_MES", consumo: puede.consumo }, { status: 429 });
 
   const rawBody = await req.text();
   if (rawBody.length > MAX_BODY_BYTES) {
