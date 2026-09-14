@@ -166,6 +166,17 @@ conversación se archive.
 
 Todas cuelgan de `/api/juridico/:path*`, que ya está en el matcher de CORS.
 
+### Consumo y asientos
+
+| Ruta | Qué hace |
+|---|---|
+| `GET /api/juridico/consumo` | Lo que lleva gastado el asiento este mes (USD), su tope, la fracción, `avisar` al 80 %, `excedido`, y en qué se fue (consultas, verificación, lectura, transcripción). |
+| `GET/POST /api/juridico/usuarios` | Asientos y alta. **Sólo operador.** El alta devuelve `contrasenaTemporal` **una vez** (null si la cuenta ya tenía contraseña). |
+| `PATCH /api/juridico/usuarios/[id]` | `{ restablecer: true }` → contraseña nueva, una sola vez. **Sólo operador.** |
+| `DELETE /api/juridico/usuarios/[id]` | Quita el acceso sin borrar la cuenta ni sus casos. **Sólo operador.** |
+
+El chat y la subida de documentos responden **429 con `codigo: "JURIDICO_TOPE_MES"`** y el `consumo` cuando el asiento llegó a su tope (`JURIDICO_USD_MENSUAL`, 60 USD por default). La UI debería enseñar el consumo en el pie y avisar al 80 %.
+
 ### El copiloto
 
 Dos herramientas nuevas: `proponer_tareas` (nacen con `origen: "copiloto"` y
