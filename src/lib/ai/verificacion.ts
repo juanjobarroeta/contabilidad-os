@@ -38,6 +38,7 @@ import { meteredCreate } from "@/lib/costos/anthropic";
 import type { CostCtx } from "@/lib/costos/record";
 import { getArticulo } from "@/lib/fiscal-kb/search";
 import { claveCita, extraerCitas } from "@/lib/ai/eval/medidas";
+import { ESTADOS } from "@/lib/fiscal-kb/catalogo/ojn";
 
 export const VERIFICACION_MODEL = process.env.AI_VERIFICACION_MODEL ?? "claude-haiku-4-5-20251001";
 /** Caracteres por fuente y en total que ve el verificador (Haiku: ~15 k tokens). */
@@ -242,6 +243,15 @@ export async function verificarRespuesta(
       if (f.cita.startsWith(PREFIJO_VALORES)) agregar(f.cita, [f.texto]);
     }
     for (const c of [...sostenidas, ...faltantes]) {
+      // «Art. 486 CPF Chihuahua»: el abogado cita el código estatal por sus
+      // siglas + estado; la KB lo tiene como CHH-C-PROCEDIMIENTOS-FAMILIARES-CH.
+      // Se resuelve contra lo que las herramientas ya trajeron, ANTES de
+      // buscar «CPF» (Código Penal Federal) en la base.
+      const estatal = resolverCitaEstatal(c, input.respuesta, [...respaldo.values()]);
+      if (estatal) {
+        agregar(estatal.cita, [estatal.texto]);
+        continue;
+      }
       const ref = parsearCita(c);
       const art = ref ? await getArticulo(ref.clave, ref.articulo, input.fechaVigencia) : null;
       if (art) {
@@ -286,6 +296,38 @@ export async function verificarRespuesta(
 }
 
 /** Fuentes de un turno a partir de los JSON que devolvieron las tools de la KB. */
+/**
+ * Una cita del tipo «Art. 486 CPF Chihuahua» (siglas federales + nombre del
+ * estado, o «del Estado de Chihuahua») se resuelve contra la fuente estatal
+ * que las herramientas ya devolvieron para ese artículo (clave «CHH-…»).
+ * Sin estado junto a la cita, o sin fuente de ese estado, devuelve null y la
+ * cita sigue el camino normal. Puro (no consulta la base).
+ */
+export function resolverCitaEstatal(cita: string, respuesta: string, fuentes: FuenteVerificacion[]): FuenteVerificacion | null {
+  const ref = parsearCita(cita);
+  if (!ref) return null;
+  const numero = ref.articulo.replace(/[.\-]/g, "[.\\-]?").replace(/\s+/g, "\\s*");
+  const re = new RegExp(String.raw`\bart(?:[íi]culo|\.)?\s*${numero}\s*(?:,?\s*(?:fracci[óo]n\s+[IVXL]+\s*)?)?(?:de\s+la\s+|del\s+)?${ref.clave}\b[\s,]*(?:(?:de|del|para)\s+(?:el\s+)?(?:estado\s+(?:libre\s+y\s+soberano\s+)?de\s+)?)?([A-Za-zÁÉÍÓÚÑáéíóúñ]+(?:\s+[A-Za-zÁÉÍÓÚÑáéíóúñ]+){0,3})`, "gi");
+  const sinAcentos = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  for (const m of respuesta.matchAll(re)) {
+    const cola = sinAcentos(m[1]);
+    const estado = ESTADOS.find((e) => cola.startsWith(sinAcentos(e.nombre)) || cola.startsWith(sinAcentos(e.nombre.split(" de ")[0])) || cola === e.sat.toLowerCase());
+    if (!estado) continue;
+    const prefijo = `${estado.sat}-`;
+    for (const f of fuentes) {
+      const fr = parsearCitaEstatal(f.cita);
+      if (fr && fr.clave.startsWith(prefijo) && fr.articulo.toUpperCase() === ref.articulo.toUpperCase()) return f;
+    }
+  }
+  return null;
+}
+
+/** «Art. 486 CHH-C-PROCEDIMIENTOS-FAMILIARES-CH» → clave con guiones (parsearCita sólo admite letras). */
+function parsearCitaEstatal(cita: string): { clave: string; articulo: string } | null {
+  const m = cita.trim().match(/^(?:ART\.?|ARTÍCULO)\s+([0-9][0-9A-Za-z-]*(?:\s+BIS)?)\s+([A-Z]{3}-[A-Z0-9-]+)$/i);
+  return m ? { clave: m[2].toUpperCase(), articulo: m[1] } : null;
+}
+
 export function fuentesDesdeToolResult(toolName: string, out: string): FuenteVerificacion[] {
   try {
     const parsed = JSON.parse(out) as { resultados?: { cita: string; texto: string }[]; cita?: string; partes?: { texto: string }[]; texto?: string; tipo?: string; error?: string };
