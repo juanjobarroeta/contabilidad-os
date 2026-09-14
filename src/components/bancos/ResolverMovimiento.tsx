@@ -55,6 +55,13 @@ const CATEGORIAS: { tag: string | null; label: string; icon: typeof Banknote }[]
   { tag: "FINANCIAL_INCOME",     label: "Intereses ganados",        icon: Banknote },
   { tag: "NON_DEDUCTIBLE",       label: "No deducible",             icon: Ban },
   { tag: "INTERNAL_TRANSFER",    label: "Transferencia entre cuentas", icon: ArrowLeftRight },
+  // Centavos que no son de nadie: el depósito de $0.01 con que se valida una
+  // cuenta, la compensación del banco por un retraso suyo. El importador ya
+  // los marca solo cuando reconoce el concepto; el que llega sin concepto
+  // reconocible necesitaba esta salida — «Ignorar» a secas no la da, porque
+  // un ignorado sin categoría BLOQUEA el cierre. Postea contra otros ingresos,
+  // que es lo que ya hacía postMonth con este tag.
+  { tag: "BANK_NOISE",           label: "Centavos del banco (ruido)", icon: Banknote },
   { tag: null,                   label: "Ignorar",                  icon: X },
 ];
 
