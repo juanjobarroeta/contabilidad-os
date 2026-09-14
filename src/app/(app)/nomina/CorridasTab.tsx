@@ -18,6 +18,7 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   Plus, Loader2, X, AlertCircle, CheckCircle2, Play, Calendar, ClipboardList,
   ArrowLeftRight, ChevronDown, ChevronUp, Trash2, History, RefreshCw, Gift, Coins, Sparkles, Ban,
+  Download, FileArchive,
 } from "lucide-react";
 import { RepresentacionImpresa } from "@/components/facturas/RepresentacionImpresa";
 import {
@@ -477,6 +478,18 @@ export default function CorridasTab() {
                   )}
                   {/* Las corridas importadas del SAT ya se pagaron en su momento —
                       sin re-timbrado ni dispersión (histórico de sólo lectura). */}
+                  {/* Excel de la corrida y ZIP de recibos: para cualquier corrida con
+                      recibos, importada o no. */}
+                  <a href={`/api/nomina/run/${run.id}/xlsx`} onClick={(e) => e.stopPropagation()}
+                    className="flex items-center gap-1.5 border border-cos-line px-3 py-1.5 rounded-md text-xs hover:bg-cos-paper" title="La corrida en Excel, un recibo por fila">
+                    <Download className="h-3.5 w-3.5" /> Excel
+                  </a>
+                  {(run.status === "STAMPED" || run.status === "PAID") && (
+                    <a href={`/api/nomina/run/${run.id}/recibos-zip`} onClick={(e) => e.stopPropagation()}
+                      className="flex items-center gap-1.5 border border-cos-line px-3 py-1.5 rounded-md text-xs hover:bg-cos-paper" title="Todos los recibos timbrados (PDF y XML) en un ZIP">
+                      <FileArchive className="h-3.5 w-3.5" /> Recibos
+                    </a>
+                  )}
                   {(run.status === "STAMPED" || run.status === "CALCULATED") && run.origen !== "SAT" && (
                     <a href={`/api/nomina/dispersion?runId=${run.id}`}
                       className="flex items-center gap-1.5 border border-cos-line px-3 py-1.5 rounded-md text-xs hover:bg-cos-paper">

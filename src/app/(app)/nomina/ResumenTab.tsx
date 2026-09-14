@@ -384,6 +384,17 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
                   <FriendlyRow label="Percepciones" value={lastRun.totalPercepciones} />
                   <FriendlyRow label="Deducciones (ISR, IMSS, INFONAVIT)" value={-lastRun.totalDeducciones} negative />
                   <FriendlyRow label="Neto pagado" value={lastRun.totalNeto} total />
+                  {/* Acciones de la corrida, a un clic desde la portada. */}
+                  <div className="mt-3 flex flex-wrap gap-1.5 border-t border-cos-line pt-2.5">
+                    <a href={`/api/nomina/run/${lastRun.id}/xlsx`} className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1 text-[12px] font-semibold text-cos-ink hover:border-cos-brand hover:text-cos-brand-ink">Excel</a>
+                    {(lastRun.status === "STAMPED" || lastRun.status === "PAID") && (
+                      <a href={`/api/nomina/run/${lastRun.id}/recibos-zip`} className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1 text-[12px] font-semibold text-cos-ink hover:border-cos-brand hover:text-cos-brand-ink">Recibos (ZIP)</a>
+                    )}
+                    {lastRun.origen !== "SAT" && (lastRun.status === "STAMPED" || lastRun.status === "CALCULATED") && (
+                      <a href={`/api/nomina/dispersion?runId=${lastRun.id}`} className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1 text-[12px] font-semibold text-cos-ink hover:border-cos-brand hover:text-cos-brand-ink">Dispersión</a>
+                    )}
+                    <Link href={`/nomina?tab=corridas&run=${lastRun.id}`} className="inline-flex items-center gap-1 rounded-control px-2.5 py-1 text-[12px] font-semibold text-cos-brand-ink hover:underline">Ver corrida</Link>
+                  </div>
                   {lastRun.status === "CALCULATED" && (
                     <p className="mt-2 text-[12px] text-cos-amber-ink">
                       Calculada pero sin timbrar — <button onClick={() => onTab("corridas")} className="font-semibold underline">timbra los recibos en Corridas</button>.
