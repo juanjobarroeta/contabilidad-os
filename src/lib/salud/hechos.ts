@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { declaracionesFaltantesEmpresa } from "@/lib/fiscal/cobertura-declaraciones";
+import { solicitudesAbiertas } from "@/lib/solicitudes/registro";
 import type { HechosSalud } from "./evaluar";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -43,6 +44,7 @@ export async function cargarHechosSalud(companyId: string, hoy: Date): Promise<H
     sinConciliar,
     sinConciliarViejos,
     hallazgos,
+    pedidos,
   ] = await Promise.all([
     prisma.company.findUnique({
       where: { id: companyId },
@@ -82,6 +84,7 @@ export async function cargarHechosSalud(companyId: string, hoy: Date): Promise<H
       where: { companyId, estado: "ABIERTO" },
       _count: { _all: true },
     }),
+    solicitudesAbiertas(companyId),
   ]);
 
   const porSeveridad = (s: string) =>
@@ -120,5 +123,11 @@ export async function cargarHechosSalud(companyId: string, hoy: Date): Promise<H
 
     hallazgosError: porSeveridad("error"),
     hallazgosWarn: porSeveridad("warn"),
+
+    // `solicitudesAbiertas` devuelve de la más vieja a la más nueva, así que la
+    // primera ES la más vieja: ordenarla otra vez sería trabajo de más.
+    solicitudesAbiertas: pedidos.length,
+    diasSolicitudMasVieja:
+      pedidos.length > 0 ? Math.floor((hoy.getTime() - pedidos[0].createdAt.getTime()) / DIA_MS) : null,
   };
 }

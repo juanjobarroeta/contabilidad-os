@@ -73,6 +73,11 @@ export interface HechosSalud {
   // ── Hallazgos del auditor ─────────────────────────────────────────────────
   hallazgosError: number;
   hallazgosWarn: number;
+
+  // ── Solicitudes al cliente ────────────────────────────────────────────────
+  solicitudesAbiertas: number;
+  /** La más vieja sin atender, en días. null cuando no hay ninguna abierta. */
+  diasSolicitudMasVieja: number | null;
 }
 
 export interface DimensionSalud {
@@ -98,6 +103,7 @@ export const DIAS_SYNC_BLOQUEA = 21;
 export const DIAS_VIGENCIA_AVISO = 30;
 export const DIAS_OPINION_VIEJA = 45;
 export const DIAS_CE_VIEJA = 45;
+export const DIAS_SOLICITUD_VIEJA = 21;
 
 function datosSat(h: HechosSalud, hoy: Date): DimensionSalud {
   const dias = h.lastAutoSyncAt ? diasEntre(h.lastAutoSyncAt, hoy) : null;
@@ -419,6 +425,38 @@ function hallazgos(h: HechosSalud): DimensionSalud {
   };
 }
 
+function solicitudes(h: HechosSalud): DimensionSalud {
+  const metricas = { abiertas: h.solicitudesAbiertas, diasDeLaMasVieja: h.diasSolicitudMasVieja };
+  if (h.solicitudesAbiertas === 0) {
+    return {
+      clave: "solicitudes",
+      titulo: TITULO_SALUD.solicitudes,
+      estado: "ok",
+      detalle: "No hay nada esperando del cliente.",
+      metricas,
+    };
+  }
+  // Una solicitud vieja no es un recordatorio olvidado: es trabajo detenido. El
+  // estado de cuenta de terminal que nadie mandó en agosto es exactamente esto,
+  // y es lo que dejó un mes entero sin poderse auditar.
+  if (h.diasSolicitudMasVieja != null && h.diasSolicitudMasVieja >= DIAS_SOLICITUD_VIEJA) {
+    return {
+      clave: "solicitudes",
+      titulo: TITULO_SALUD.solicitudes,
+      estado: "atencion",
+      detalle: `${h.solicitudesAbiertas} ${h.solicitudesAbiertas === 1 ? "cosa pedida al cliente sigue" : "cosas pedidas al cliente siguen"} sin llegar; la más vieja lleva ${h.diasSolicitudMasVieja} días.`,
+      metricas,
+    };
+  }
+  return {
+    clave: "solicitudes",
+    titulo: TITULO_SALUD.solicitudes,
+    estado: "ok",
+    detalle: `${h.solicitudesAbiertas} ${h.solicitudesAbiertas === 1 ? "pedido reciente" : "pedidos recientes"} al cliente, todavía en plazo razonable.`,
+    metricas,
+  };
+}
+
 /**
  * Evalúa todas las dimensiones. PURA.
  *
@@ -436,6 +474,7 @@ export function evaluarSalud(h: HechosSalud, hoy: Date): DimensionSalud[] {
     bancos: bancos(h),
     iva_flujo: ivaFlujo(h),
     hallazgos: hallazgos(h),
+    solicitudes: solicitudes(h),
   };
   return ORDEN_SALUD.map((c) => porClave[c]);
 }

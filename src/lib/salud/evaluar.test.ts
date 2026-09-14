@@ -37,6 +37,8 @@ function sana(extra: Partial<HechosSalud> = {}): HechosSalud {
     movimientosSinConciliarViejos: 0,
     hallazgosError: 0,
     hallazgosWarn: 0,
+    solicitudesAbiertas: 0,
+    diasSolicitudMasVieja: null,
     ...extra,
   };
 }
@@ -188,5 +190,29 @@ describe("rankDeltas y requiereAtencion", () => {
     const ayer = evaluarSalud(sana({ declaracionesFaltantes: 2 }), HOY);
     const hoy = evaluarSalud(sana(), HOY);
     expect(requiereAtencion(hoy, diffSalud(ayer, hoy))).toBe(false);
+  });
+});
+
+describe("solicitudes — lo que se le pidió al cliente", () => {
+  const dim = (h: HechosSalud) => evaluarSalud(h, HOY).find((d) => d.clave === "solicitudes")!;
+
+  it("sin nada pedido, está bien", () => {
+    expect(dim(sana()).estado).toBe("ok");
+  });
+
+  it("un pedido reciente NO es un problema todavía", () => {
+    expect(dim(sana({ solicitudesAbiertas: 1, diasSolicitudMasVieja: 3 })).estado).toBe("ok");
+  });
+
+  it("un pedido que lleva tres semanas sin llegar es trabajo detenido", () => {
+    // Es el estado de cuenta de la terminal que nadie mandó: un mes entero sin
+    // poderse auditar porque el pedido se quedó esperando.
+    const d = dim(sana({ solicitudesAbiertas: 2, diasSolicitudMasVieja: 30 }));
+    expect(d.estado).toBe("atencion");
+    expect(d.detalle).toContain("30 días");
+  });
+
+  it("habla en singular cuando es uno solo", () => {
+    expect(dim(sana({ solicitudesAbiertas: 1, diasSolicitudMasVieja: 40 })).detalle).toContain("sigue");
   });
 });

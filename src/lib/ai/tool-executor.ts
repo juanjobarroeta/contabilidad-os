@@ -34,6 +34,8 @@ import type { FamiliaConcepto } from "@/lib/bancos/categorizar-concepto";
 import type { TipoCuenta } from "@/lib/contabilidad/agrupador-candidatos";
 import { NOMBRES_EXPEDIENTE } from "@/lib/expediente/tools";
 import { ejecutarHerramientaExpediente } from "@/lib/expediente/ejecutar";
+import { NOMBRES_SOLICITUDES } from "@/lib/solicitudes/tools";
+import { ejecutarHerramientaSolicitud } from "@/lib/solicitudes/ejecutar";
 
 type ToolInput = Record<string, unknown>;
 
@@ -78,6 +80,15 @@ export async function executeToolCall(
       // mano. La fuente "usuario" se reserva para lo que se captura en la
       // página del expediente, donde la persona escribe el valor ella misma.
       autor: "agente",
+    });
+  }
+
+  if (NOMBRES_SOLICITUDES.has(toolName)) {
+    return ejecutarHerramientaSolicitud(toolName, input as Record<string, unknown>, {
+      companyId,
+      // Igual que en el expediente: quien redacta el pedido es el modelo, y eso
+      // se registra tal cual aunque la conversación la lleve una persona.
+      origen: "agente",
     });
   }
 

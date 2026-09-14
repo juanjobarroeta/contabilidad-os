@@ -35,6 +35,7 @@ import {
 import { VisorCep } from "./VisorCep";
 import { FichaAplicaciones, FichaMovimiento } from "./FichasAplicaciones";
 import { FichaHistoria } from "./FichaHistoria";
+import { FichaSolicitudes } from "./FichaSolicitudes";
 import { cn } from "@/lib/utils";
 import type { ResumenMovimiento } from "@/lib/bancos/aplicaciones";
 
@@ -441,6 +442,10 @@ export function ResolverMovimiento({
           candidatos que ofrecer, y lo que se necesita es abrir ESE CFDI y
           leerlo. La mesa decía «ya está conciliado» sin decir con qué — para
           investigarlo había que irse al archivo. */}
+      {/* Lo que falta va ARRIBA de todo: buscar con qué conciliar un lote cuyo
+          respaldo no ha llegado es trabajo desperdiciado, y la mesa debe
+          decirlo antes de invitar a hacerlo. */}
+      <FichaSolicitudes companyId={companyId} txId={tx.id} />
       {resumen && <FichaMovimiento r={resumen} onVerCep={() => setCepAbierto(true)} clabe={tx.contraparteClabe} descripcion={tx.descripcion} />}
       {resumen && <FichaAplicaciones r={resumen} onVerFactura={onVerFactura} />}
       <FichaHistoria txId={tx.id} />
