@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { headersDescargaXlsx, toXlsx, type HojaXlsx, type XlsxRow } from "@/lib/export/xlsx";
 import { filtrosListaFacturas } from "@/lib/facturas/filtros-lista";
-import { parseReciboNominaHistorico } from "@/lib/nomina/historia-import";
+import { derivarTipoCorrida, parseReciboNominaHistorico } from "@/lib/nomina/historia-import";
 
 // GET /api/facturas/export?companyId=xxx&tipo=&from=&to=&q=&customerId=
 //
@@ -150,6 +150,7 @@ export async function GET(req: Request) {
     "Departamento",
     "Periodicidad",
     "Tipo nómina",
+    "Corrida",
     "Periodo inicio",
     "Periodo fin",
     "Fecha de pago",
@@ -274,6 +275,7 @@ export async function GET(req: Request) {
         c?.departamento ?? "",
         c?.periodicidadPago ?? "",
         c?.tipoNomina ?? inv.tipoNomina ?? "",
+        rec ? derivarTipoCorrida(rec) : inv.tipoCorrida ?? "",
         d(rec?.fechaInicialPago),
         d(rec?.fechaFinalPago),
         d(c?.fechaPago),
@@ -320,7 +322,7 @@ export async function GET(req: Request) {
       nombre: "Nómina",
       headers: hNomina,
       rows: filasNomina,
-      anchos: [38, 11, 32, 14, 20, 12, 18, 16, 11, 9, 12, 12, 12, 8, 9, 9, 12, 11, 10, 11, 12, 10, 12, 13, 11, 11, 10, 12, 13, 11, 10, 12, 10],
+      anchos: [38, 11, 32, 14, 20, 12, 18, 16, 11, 9, 13, 12, 12, 12, 8, 9, 9, 12, 11, 10, 11, 12, 10, 12, 13, 11, 11, 10, 12, 13, 11, 10, 12, 10],
     });
   }
   const libro = toXlsx(hojas);
