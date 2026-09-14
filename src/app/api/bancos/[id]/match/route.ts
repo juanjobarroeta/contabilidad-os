@@ -13,6 +13,7 @@ import {
   tokenIdentificante,
 } from "@/lib/bancos/auto-conciliar";
 import { sugerirPagoJunto } from "@/lib/bancos/pago-junto";
+import { buscarOrigenDevolucion, pareceDevolucionSuelta } from "@/lib/bancos/devoluciones-repo";
 import { signoDeMonto, sugerirCategoriaConcepto, type CompanyRule } from "@/lib/bancos/categorizar-concepto";
 import { sugerirCategoriaConceptoLLM } from "@/lib/bancos/categorizar-llm";
 import {
@@ -108,10 +109,13 @@ export async function GET(req: Request, { params }: Params) {
         },
       },
       taxDeclaration: { select: { id: true, tipo: true, periodo: true, status: true } },
+      // El par de una devolución vinculada, para enseñarlo y poder deshacerlo.
+      devolucionDe: { select: { id: true, fecha: true, monto: true, descripcion: true } },
+      devolucionPor: { select: { id: true, fecha: true, monto: true, descripcion: true } },
     },
   });
   if (!txRow) return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 });
-  const { invoice, conciliacionDetalles, taxDeclaration, ...txPlano } = txRow;
+  const { invoice, conciliacionDetalles, taxDeclaration, devolucionDe, devolucionPor, ...txPlano } = txRow;
   const tx = { ...txPlano, monto: Number(txRow.monto) };
 
   const facturaCruzada = (f: NonNullable<typeof invoice>) => ({
@@ -688,5 +692,38 @@ export async function GET(req: Request, { params }: Params) {
   // aplicaciones con su REP, CEP): las fichas 1 y 2 del resolver se pintan
   // de aquí. `cruce` se conserva para quien todavía lo lea.
   const resumen = await aplicacionesDeMovimiento(tx.id, companyId);
-  return NextResponse.json({ transaction: tx, candidates: scored, impuestos, sugerencia, pagoJunto, cruce, resumen });
+  // ── Devolución (pago rebotado) ────────────────────────────────────────────
+  // El rebote se resuelve VINCULANDO el par, no ignorándolo: ignorar esconde
+  // el rebote y deja la factura pagada, el IVA acreditado y los KPIs contando
+  // un gasto que volvió. La acción vivía sólo en el archivo; la mesa —que es
+  // donde se decide— no la tenía. Ver lib/bancos/devoluciones.ts.
+  const par = devolucionDe ?? devolucionPor;
+  const devolucion = par
+    ? {
+        estado: "vinculada" as const,
+        // `devolucionDe` apunta al pago original: si está, ESTE es el rebote.
+        rol: devolucionDe ? ("rebote" as const) : ("pago" as const),
+        par: { id: par.id, fecha: par.fecha.toISOString().slice(0, 10), monto: Number(par.monto), descripcion: par.descripcion },
+      }
+    : await (async () => {
+        const candidata = {
+          id: tx.id, bankAccountId: tx.bankAccountId, fecha: tx.fecha, monto: tx.monto,
+          descripcion: tx.descripcion, referencia: tx.referencia, status: tx.status,
+          devolucionDeId: tx.devolucionDeId, devolucionPor: null,
+        };
+        // Sin exigir que el banco diga «devuelto»: aquí es una sola consulta y
+        // un depósito equivocado que regresa no lo dice. La referencia manda.
+        const origen = pareceDevolucionSuelta(candidata, { exigirDescripcion: false })
+          ? await buscarOrigenDevolucion(candidata)
+          : null;
+        return origen
+          ? {
+              estado: "sugerida" as const,
+              rol: "rebote" as const,
+              par: { id: origen.origenId, fecha: origen.fecha.toISOString().slice(0, 10), monto: origen.monto, descripcion: origen.descripcion },
+            }
+          : null;
+      })();
+
+  return NextResponse.json({ transaction: tx, candidates: scored, impuestos, sugerencia, pagoJunto, cruce, resumen, devolucion });
 }
