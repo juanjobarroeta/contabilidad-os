@@ -30,7 +30,8 @@
 //     descarta (se entrega la original).
 //
 // Nunca rompe un turno: cualquier fallo devuelve la respuesta original con
-// `verificada: false`. Costo: un llamado a Haiku, subtipo "ai.verificacion".
+// `verificada: false`. Costo: un llamado a Haiku, subtipo "ai.verificacion"
+// (o el que mande quien llama: el jurídico usa "ai.juridico.verificacion").
 // ─────────────────────────────────────────────────────────────────────────────
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -305,7 +306,9 @@ export async function verificarRespuesta(
 
     const msg = await meteredCreate(
       client,
-      { companyId: null, ...input.cost, subtipo: "ai.verificacion" },
+      // El subtipo de quien llama manda: el jurídico manda «ai.juridico.verificacion»
+      // y sin esto caía en «ai.verificacion», fuera de su medición y de su tope.
+      { companyId: null, subtipo: "ai.verificacion", ...input.cost },
       { model: VERIFICACION_MODEL, max_tokens: 4000, system: SYSTEM, messages: [{ role: "user", content: user }] }
     );
     const texto = msg.content

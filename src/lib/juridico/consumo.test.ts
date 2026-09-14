@@ -7,14 +7,18 @@ describe("consumo del asiento", () => {
   const f = [
     { funcion: "ai.juridico", usd: 12.3456, operaciones: 40 },
     { funcion: "ai.juridico.verificacion", usd: 1.2, operaciones: 12 },
-    { funcion: "ai.juridico.vision", usd: 3.5, operaciones: 2 },
+    { funcion: "ai.juridico.vision", usd: 3.0, operaciones: 1 },
+    { funcion: "ai.juridico.ocr", usd: 0.5, operaciones: 1 },
   ];
   it("redondea a centavos, ordena por gasto y traduce el nombre de la función", () => {
     const c = evaluarConsumo(17.0456, 54, f, ahora, 60);
     expect(c.usd).toBe(17.05);
-    expect(c.porFuncion.map((x) => x.funcion)).toEqual(["Consultas y redacción", "Transcripción de escaneos", "Verificación de citas"]);
+    expect(c.porFuncion.map((x) => x.funcion)).toEqual(["Consultas del chat", "Transcripción de escaneos", "Verificación de citas"]);
     expect(c.porFuncion[0].usd).toBe(12.35);
     expect(c.operaciones).toBe(54);
+    // vision y ocr son lo mismo para el abogado: un renglón, sumados.
+    const transcripcion = c.porFuncion.find((x) => x.funcion === "Transcripción de escaneos")!;
+    expect(transcripcion).toMatchObject({ usd: 3.5, operaciones: 2 });
     expect(c.periodo).toBe("2026-09");
   });
   it("avisa al 80 % y marca excedido al llegar al tope", () => {
