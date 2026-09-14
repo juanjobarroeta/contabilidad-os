@@ -81,6 +81,7 @@ async function partirEnLotes(partes: Parte[]): Promise<{ partes: Parte[]; primer
     for (let k = 0; k < partes.length; k += PAGINAS_POR_LOTE) lotes.push({ partes: partes.slice(k, k + PAGINAS_POR_LOTE), primeraPagina: k + 1 });
     return lotes;
   }
+  if (partes.some((p) => p.data.byteLength === 0)) throw new Error("El archivo llegó vacío (0 bytes); no hay nada que transcribir.");
   if (partes.length === 1 && partes[0].tipo === "pdf") {
     try {
       const { PDFDocument } = await import("pdf-lib");
