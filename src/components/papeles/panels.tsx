@@ -17,6 +17,40 @@ import { Download, Loader2, FileText, AlertTriangle, CheckCircle2, Sparkles, Che
 
 const CARD = "rounded-card border border-cos-line bg-cos-card shadow-card print:border-2";
 const THEAD = "bg-cos-paper text-[11px] uppercase tracking-[0.02em] text-cos-ink-faint";
+// ── Tablas largas ────────────────────────────────────────────────────────────
+// Un mes de egresos o 156 recibos de nómina era una tabla sin fin: el
+// encabezado se perdía al segundo scroll, el total quedaba al fondo y el
+// navegador pintaba cientos de filas de golpe. Ahora el encabezado y el total
+// se quedan pegados (arriba y abajo) mientras se recorre, y las filas salen de
+// 60 en 60 con «Ver más». El total es SIEMPRE el de todas las filas, no el de
+// las visibles.
+const FILAS_POR_PAGINA = 60;
+const THEAD_STICKY = `${THEAD} sticky top-0 z-10`;
+const TFOOT_STICKY = "sticky bottom-0 z-10 border-t-2 border-cos-line bg-cos-paper font-semibold";
+
+function usePaginado<T>(rows: T[]) {
+  const [visibles, setVisibles] = useState(FILAS_POR_PAGINA);
+  // Al cambiar el conjunto (otro mes, otro papel) se vuelve a la primera página.
+  useEffect(() => { setVisibles(FILAS_POR_PAGINA); }, [rows]);
+  return { fila: rows.slice(0, visibles), restantes: Math.max(0, rows.length - visibles), verMas: () => setVisibles((v) => v + FILAS_POR_PAGINA) };
+}
+
+function VerMas({ restantes, total, onClick, colSpan }: { restantes: number; total: number; onClick: () => void; colSpan: number }) {
+  if (restantes <= 0) return null;
+  return (
+    <tr className="border-t border-cos-line-soft">
+      <td colSpan={colSpan} className="px-3 py-2">
+        <div className="flex items-center justify-between gap-2">
+          <button onClick={onClick} className="rounded-control border border-cos-line px-3 py-1 text-[12px] font-medium text-cos-ink hover:border-cos-brand hover:text-cos-brand-ink">
+            Ver {Math.min(FILAS_POR_PAGINA, restantes)} más
+          </button>
+          <span className="text-[11.5px] text-cos-ink-faint tabular-nums">{total - restantes} de {total}</span>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 
 // ── IVA PANEL ────────────────────────────────────────────────────────────────
 interface IvaRow {
@@ -414,15 +448,17 @@ function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling, totalLab
   const total = rows.filter(cuenta).reduce((s, r) => s + r.importe, 0);
   const excluidos = rows.filter((r) => !cuenta(r)).length;
   const acciones = !!onToggleExcluir;
+  const pag = usePaginado(rows);
+  const columnas = acciones ? 8 : 7;
   return (
     <div className={`${CARD} overflow-hidden`}>
       <div className="border-b border-cos-line px-4 py-3">
         <h3 className="text-[14px] font-semibold text-cos-ink">{title}</h3>
         <p className="mt-0.5 text-[12px] text-cos-ink-soft">{subtitle}</p>
       </div>
-      <div className="overflow-x-auto">
+      <div className="max-h-[70vh] overflow-auto">
       <table className="w-full min-w-[680px] text-[13px]">
-        <thead className={THEAD}>
+        <thead className={THEAD_STICKY}>
           <tr>
             <th className="px-3 py-2 text-left font-medium">Fecha</th>
             <th className="px-3 py-2 text-left font-medium">Folio</th>
@@ -435,7 +471,7 @@ function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling, totalLab
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
+          {pag.fila.map((r) => (
             <tr key={r.id} className={`border-t border-cos-line-soft ${r.excluidoAcreditamiento || r.sinComplementoPago || r.emisorEnLista69B ? "opacity-55" : ""}`}>
               <td className="px-3 py-1.5 text-[12px] text-cos-ink-faint whitespace-nowrap">{formatDate(r.fecha)}</td>
               <td className="px-3 py-1.5 font-mono text-[12px]">{r.folio ? `${r.serie ?? ""}${r.folio}` : (r.uuid?.slice(0, 8) ?? "—")}</td>
@@ -502,13 +538,16 @@ function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling, totalLab
               )}
             </tr>
           ))}
-          <tr className="border-t-2 border-cos-line bg-cos-paper font-semibold">
+          <VerMas restantes={pag.restantes} total={rows.length} onClick={pag.verMas} colSpan={columnas} />
+        </tbody>
+        <tfoot>
+          <tr className={TFOOT_STICKY}>
             <td colSpan={6} className="px-3 py-2 text-right text-[12px] text-cos-ink-soft">
-              {totalLabel}{excluidos > 0 ? ` (${excluidos} excluido${excluidos === 1 ? "" : "s"} del cálculo)` : ""}
+              {totalLabel} · {rows.length} comprobante{rows.length === 1 ? "" : "s"}{excluidos > 0 ? ` (${excluidos} excluido${excluidos === 1 ? "" : "s"} del cálculo)` : ""}
             </td>
             <td className="px-3 py-2 text-right" colSpan={acciones ? 2 : 1}><Money value={total} size={12} weight={700} /></td>
           </tr>
-        </tbody>
+        </tfoot>
       </table>
       </div>
     </div>
@@ -1259,15 +1298,16 @@ function RetSection({
 }: {
   title: string; subtitle: string; rows: RetRow[]; totales: { isr: number; iva: number; ieps: number; total: number };
 }) {
+  const pag = usePaginado(rows);
   return (
     <div className={`${CARD} overflow-hidden`}>
       <div className="border-b border-cos-line px-4 py-3">
         <h3 className="text-[14px] font-semibold text-cos-ink">{title}</h3>
         <p className="mt-0.5 text-[12px] text-cos-ink-soft">{subtitle}</p>
       </div>
-      <div className="overflow-x-auto">
+      <div className="max-h-[70vh] overflow-auto">
       <table className="w-full min-w-[680px] text-[13px]">
-        <thead className={THEAD}>
+        <thead className={THEAD_STICKY}>
           <tr>
             <th className="px-3 py-2 text-left font-medium">Fecha</th>
             <th className="px-3 py-2 text-left font-medium">Tipo</th>
@@ -1278,7 +1318,7 @@ function RetSection({
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
+          {pag.fila.map((r) => (
             <tr key={r.id + r.tipoRetencion} className="border-t border-cos-line-soft">
               <td className="px-3 py-1.5 text-[12px] text-cos-ink-faint whitespace-nowrap">{formatDate(r.fecha)}</td>
               <td className="px-3 py-1.5 text-[12px] font-medium text-cos-ink">{r.tipoRetencion}</td>
@@ -1291,7 +1331,10 @@ function RetSection({
               <td className="px-3 py-1.5 text-right"><Money value={r.importe} size={12} weight={500} /></td>
             </tr>
           ))}
-          <tr className="border-t-2 border-cos-line bg-cos-paper font-semibold">
+          <VerMas restantes={pag.restantes} total={rows.length} onClick={pag.verMas} colSpan={6} />
+        </tbody>
+        <tfoot>
+          <tr className={TFOOT_STICKY}>
             <td colSpan={5} className="px-3 py-2 text-right text-[12px] text-cos-ink-soft">
               Totales — ISR: <span className="font-mono text-cos-ink">{formatCurrency(totales.isr)}</span>
               {totales.iva > 0 && <>  ·  IVA: <span className="font-mono text-cos-ink">{formatCurrency(totales.iva)}</span></>}
@@ -1299,7 +1342,7 @@ function RetSection({
             </td>
             <td className="px-3 py-2 text-right"><Money value={totales.total} size={12} weight={700} /></td>
           </tr>
-        </tbody>
+        </tfoot>
       </table>
       </div>
     </div>
