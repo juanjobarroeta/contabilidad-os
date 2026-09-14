@@ -139,3 +139,25 @@ describe("corregirNotasPegadas — notas al pie pegadas al número (Orden Juríd
     expect(corregirNotasPegadas([u("1"), u("10")]).map((x) => x.articulo)).toEqual(["1", "10"]);
   });
 });
+
+describe("chunkLaw — encabezados con tabuladores (Chihuahua, Querétaro, Sonora)", () => {
+  it("«ARTÍCULO \t479. \tLos autos…» es un encabezado; cada artículo sale en su chunk", () => {
+    const raw = [
+      "CÓDIGO DE PROCEDIMIENTOS FAMILIARES DEL ESTADO DE CHIHUAHUA",
+      "CAPÍTULO \tII",
+      "REVOCACIÓN",
+      "ARTÍCULO \t479. \tLos \tautos \tdictados \ten \taudiencia \to \tfuera \tde \tella \ty \tque \tno \tfueren \tapelables, \tson",
+      "revocables por el tribunal que los haya dictado.",
+      "ARTÍCULO \t480. Durante la audiencia, el recurso de revocación solo procede en contra del auto",
+      "que:",
+      "I. \tNo admita una prueba.",
+      "ARTÍCULO 486. \tLa apelación solo procede en efecto devolutivo, con excepción de las salvedades",
+      "previstas en este código.",
+    ].join("\n");
+    const chunks = chunkLaw(cleanLawText(raw));
+    expect(chunks.map((c) => c.articulo)).toEqual(["479", "480", "486"]);
+    expect(chunks[0].texto).toContain("ARTÍCULO 479. Los autos dictados en audiencia");
+    expect(chunks[0].texto).not.toContain("\t");
+    expect(chunks[1].texto).toContain("I. No admita una prueba.");
+  });
+});

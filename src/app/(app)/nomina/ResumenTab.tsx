@@ -14,7 +14,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Users2, Play, ChevronRight as ChevronR, AlertTriangle,
-  CalendarDays, BadgeCheck, Clock4, Receipt, FileText, Ban, Loader2, X,
+  CalendarDays, BadgeCheck, Clock4, Receipt, FileText, Ban, Loader2, X, Mail,
 } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Alert, Card, Money, Loading, RetryButton } from "@/components/ui";
@@ -25,7 +25,7 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 // Server constant — en cliente aplica el default (el override por env sólo
 // vive en el servidor; la validación dura del run se hace server-side).
 import { SALARIO_MINIMO_GENERAL } from "@/lib/nomina/constants";
-import { TIPO_RUN_LABEL, STATUS_RUN_LABEL } from "./workspace-shared";
+import { TIPO_RUN_LABEL, STATUS_RUN_LABEL, resumenEnvio } from "./workspace-shared";
 
 interface Employee {
   id: string;
@@ -73,6 +73,12 @@ interface HubData {
   };
 }
 
+/** GET /api/nomina/movimientos — lo que pasó, en orden. */
+interface Movimientos {
+  movimientos: { id: string; fecha: string; titulo: string; detalle: string | null; tipo: string; href: string; actor: string | null }[];
+  especiales: { tipo: string; corridas: number; neto: number }[];
+  ejercicio: number;
+}
 interface PayrollRun {
   id: string;
   periodo: string;
@@ -88,6 +94,11 @@ interface PayrollRun {
   _count?: { items: number };
 }
 
+const MOV_COLOR: Record<string, string> = {
+  CORRIDA: "bg-cos-brand", TIMBRADO: "bg-cos-jade", DISPERSION: "bg-cos-jade",
+  FINIQUITO: "bg-cos-amber", BAJA: "bg-cos-amber", CANCELACION: "bg-cos-red",
+  ALTA: "bg-cos-brand", INCIDENCIA: "bg-cos-ink-faint", EXPEDIENTE: "bg-cos-ink-faint", CORREO: "bg-cos-jade",
+};
 const MONTHS = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 
 export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "empleados" | "cumplimiento") => void }) {
@@ -95,6 +106,7 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [runs, setRuns] = useState<PayrollRun[]>([]);
   const [hub, setHub] = useState<HubData | null>(null);
+  const [movs, setMovs] = useState<Movimientos | null>(null);
   const [loading, setLoading] = useState(true);
   // Error de carga. Si CUALQUIERA de los tres fetches falla, el resumen entero
   // sería mentira (hero de $0.00, equipo vacío) — mejor error + reintentar.
@@ -108,6 +120,19 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelErr, setCancelErr] = useState("");
   const [cancelOkMsg, setCancelOkMsg] = useState("");
+  // «Enviar por correo» desde la portada: mismo endpoint que en Corridas.
+  const [enviandoCorreo, setEnviandoCorreo] = useState(false);
+  const [correoMsg, setCorreoMsg] = useState("");
+  async function enviarRecibos(runId: string, periodo: string, n: number) {
+    if (!confirm(`¿Enviar ${n} recibo${n === 1 ? "" : "s"} por correo a los empleados (periodo ${periodo})?`)) return;
+    setEnviandoCorreo(true); setCorreoMsg("");
+    try {
+      const res = await fetch(`/api/nomina/run/${runId}/enviar-recibos`, { method: "POST" });
+      const data = await res.json();
+      setCorreoMsg(res.ok ? resumenEnvio(data) : (data.error ?? "Error al enviar"));
+    } catch { setCorreoMsg("Error al enviar"); }
+    finally { setEnviandoCorreo(false); }
+  }
   // Representación impresa (imprimir / guardar PDF — también recibos importados).
   const [repInvoiceId, setRepInvoiceId] = useState<string | null>(null);
 
@@ -116,12 +141,16 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
     setLoading(true);
     setLoadError(false);
     try {
-      const [empRes, runRes, hubRes] = await Promise.all([
+      const [empRes, runRes, hubRes, movRes] = await Promise.all([
         fetch(`/api/empleados?companyId=${activeCompany.id}&withUltimoRecibo=1`),
         fetch(`/api/nomina/run?companyId=${activeCompany.id}`),
         fetch(`/api/nomina/hub?companyId=${activeCompany.id}`),
+        // Los movimientos son la portada; si fallan, la portada se queda sin
+        // ellos pero el resto del resumen sigue (no es excluyente como los tres).
+        fetch(`/api/nomina/movimientos?companyId=${activeCompany.id}`).catch(() => null),
       ]);
       if (!empRes.ok || !runRes.ok || !hubRes.ok) throw new Error("hub fetch failed");
+      setMovs(movRes && movRes.ok ? await movRes.json() : null);
       const empData = await empRes.json();
       setEmployees(Array.isArray(empData) ? empData : empData.employees ?? []);
       const runData = await runRes.json();
@@ -252,8 +281,45 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
             </div>
           )}
 
-          {/* nómina en paralelo: recalculamos el histórico timbrado con nuestras tablas */}
-          {runsSat.length > 0 && <ValidacionCalculo companyId={activeCompany.id} />}
+          {/* ÚLTIMOS MOVIMIENTOS — la portada: lo que pasó, en orden. Antes el
+              hub abría en la validación del cálculo, que es un diagnóstico y
+              va al final. */}
+          {movs && movs.movimientos.length > 0 && (
+            <Card className="rounded-card border-cos-line p-5 shadow-card">
+              <div className="mb-2.5 flex items-center justify-between">
+                <span className="rounded-full bg-cos-brand-tint px-2.5 py-1 text-[13px] font-semibold text-cos-brand-ink">Últimos movimientos</span>
+                <button onClick={() => onTab("corridas")} className="text-[12.5px] font-semibold text-cos-brand-ink hover:underline">Ver corridas</button>
+              </div>
+              <ol className="divide-y divide-cos-line-soft">
+                {movs.movimientos.slice(0, 8).map((m) => (
+                  <li key={m.id}>
+                    <Link href={m.href} className="flex items-center gap-3 py-2 hover:bg-cos-paper">
+                      <span className={`h-2 w-2 flex-none rounded-full ${MOV_COLOR[m.tipo] ?? "bg-cos-ink-faint"}`} aria-hidden />
+                      <span className="w-[64px] flex-none font-mono text-[11.5px] text-cos-ink-faint">{formatDate(m.fecha)}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13px] font-medium text-cos-ink">{m.titulo}</span>
+                        {m.detalle && <span className="block truncate text-[11.5px] text-cos-ink-faint">{m.detalle}{m.actor ? ` · ${m.actor}` : ""}</span>}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ol>
+            </Card>
+          )}
+          {/* FINIQUITOS Y CORRIDAS ESPECIALES del ejercicio: la respuesta a
+              «¿cuántos finiquitos llevamos?». Cada chip filtra Corridas. */}
+          {movs && movs.especiales.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[12.5px] text-cos-ink-faint">Especiales {movs.ejercicio}:</span>
+              {movs.especiales.map((e) => (
+                <Link key={e.tipo} href={`/nomina?tab=corridas&tipo=${e.tipo}`}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12.5px] font-semibold ${e.tipo === "FINIQUITO" ? "bg-cos-amber-tint text-cos-amber-ink" : "bg-cos-jade-tint text-cos-jade-ink"}`}>
+                  {TIPO_RUN_LABEL[e.tipo] ?? e.tipo} <span className="font-mono">{e.corridas}</span>
+                  <span className="font-mono font-normal opacity-80">{formatCurrency(e.neto)}</span>
+                </Link>
+              ))}
+            </div>
+          )}
 
           {/* alerta: salarios bajo el mínimo */}
           {bajoMinimo.length > 0 && (
@@ -331,6 +397,26 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
                   <FriendlyRow label="Percepciones" value={lastRun.totalPercepciones} />
                   <FriendlyRow label="Deducciones (ISR, IMSS, INFONAVIT)" value={-lastRun.totalDeducciones} negative />
                   <FriendlyRow label="Neto pagado" value={lastRun.totalNeto} total />
+                  {/* Acciones de la corrida, a un clic desde la portada. */}
+                  <div className="mt-3 flex flex-wrap gap-1.5 border-t border-cos-line pt-2.5">
+                    <a href={`/api/nomina/run/${lastRun.id}/xlsx`} className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1 text-[12px] font-semibold text-cos-ink hover:border-cos-brand hover:text-cos-brand-ink">Excel</a>
+                    {(lastRun.status === "STAMPED" || lastRun.status === "PAID") && (
+                      <a href={`/api/nomina/run/${lastRun.id}/recibos-zip`} className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1 text-[12px] font-semibold text-cos-ink hover:border-cos-brand hover:text-cos-brand-ink">Recibos (ZIP)</a>
+                    )}
+                    {lastRun.origen !== "SAT" && (lastRun.status === "STAMPED" || lastRun.status === "PAID") && (
+                      <button onClick={() => enviarRecibos(lastRun.id, lastRun.periodo, lastRun._count?.items ?? 0)} disabled={enviandoCorreo}
+                        className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1 text-[12px] font-semibold text-cos-ink hover:border-cos-brand hover:text-cos-brand-ink disabled:opacity-50">
+                        {enviandoCorreo ? <Loader2 className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />} Enviar por correo
+                      </button>
+                    )}
+                    {lastRun.origen !== "SAT" && (lastRun.status === "STAMPED" || lastRun.status === "CALCULATED") && (
+                      <a href={`/api/nomina/dispersion?runId=${lastRun.id}`} className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1 text-[12px] font-semibold text-cos-ink hover:border-cos-brand hover:text-cos-brand-ink">Dispersión</a>
+                    )}
+                    <Link href={`/nomina?tab=corridas&run=${lastRun.id}`} className="inline-flex items-center gap-1 rounded-control px-2.5 py-1 text-[12px] font-semibold text-cos-brand-ink hover:underline">Ver corrida</Link>
+                  </div>
+                  {correoMsg && (
+                    <p className={`mt-2 text-[12.5px] ${correoMsg.startsWith("✓") ? "text-cos-jade-ink" : "text-cos-red-ink"}`}>{correoMsg}</p>
+                  )}
                   {lastRun.status === "CALCULATED" && (
                     <p className="mt-2 text-[12px] text-cos-amber-ink">
                       Calculada pero sin timbrar — <button onClick={() => onTab("corridas")} className="font-semibold underline">timbra los recibos en Corridas</button>.
@@ -443,8 +529,11 @@ export default function ResumenTab({ onTab }: { onTab: (t: "corridas" | "emplead
             </Card>
           </div>
 
-          {/* cuotas IMSS (SIPARE): estimado del periodo con vencimiento en curso + registro del pago */}
+          {/* cuotas IMSS (SIPARE): estimado del periodo con vencimiento en curso + registro del pago + exportes SUA/IDSE */}
           <ImssPagosCard companyId={activeCompany.id} />
+          {/* nómina en paralelo: recalculamos el histórico timbrado con nuestras
+              tablas. Es un DIAGNÓSTICO: va al final, no de portada. */}
+          {runsSat.length > 0 && <ValidacionCalculo companyId={activeCompany.id} />}
 
           {/* recordatorio enteramiento */}
           <div className="flex items-start gap-3 rounded-card border border-cos-line bg-cos-card px-5 py-4 text-[13.5px] leading-relaxed text-cos-ink-soft">

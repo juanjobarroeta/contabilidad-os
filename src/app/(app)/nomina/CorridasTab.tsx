@@ -11,19 +11,20 @@ import { descargarUrl } from "@/lib/descargar";
 // workspace) vive al final, con su selector de mes. Lógica sin cambios.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Money, RetryButton } from "@/components/ui";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   Plus, Loader2, X, AlertCircle, CheckCircle2, Play, Calendar, ClipboardList,
   ArrowLeftRight, ChevronDown, ChevronUp, Trash2, History, RefreshCw, Gift, Coins, Sparkles, Ban,
+  Download, FileArchive, Mail,
 } from "lucide-react";
 import { RepresentacionImpresa } from "@/components/facturas/RepresentacionImpresa";
 import {
-  TIPO_RUN_LABEL, STATUS_RUN_LABEL, STATUS_RUN_COLOR,
+  TIPO_RUN_LABEL, TIPO_RUN_COLOR, STATUS_RUN_LABEL, STATUS_RUN_COLOR,
   INCIDENCIA_LABEL,
-  percepExtra,
+  percepExtra, resumenEnvio,
   type Employee, type PayrollRun, type PayrollItemDetail,
   type RunPrefill, type Incidencia, type RunIncidencia,
 } from "./workspace-shared";
@@ -136,6 +137,27 @@ export default function CorridasTab() {
   useEffect(() => { loadEmployees(); }, [loadEmployees]);
   useEffect(() => { loadRuns(); }, [loadRuns]);
   useEffect(() => { loadIncidencias(); }, [loadIncidencias]);
+  // FILTRO POR TIPO. Un finiquito, un aguinaldo y una quincena se pintaban
+  // igual; ahora el tipo es una categoría que se filtra y se ve. Los chips
+  // del Resumen llegan con ?tipo=; el timeline con ?run= (se expande sola).
+  const [tipoFiltro, setTipoFiltro] = useState<string>("TODAS");
+  const runDeepLink = useRef<string | null>(null);
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const t = sp.get("tipo");
+    if (t && t in TIPO_RUN_LABEL) setTipoFiltro(t);
+    runDeepLink.current = sp.get("run");
+  }, []);
+  useEffect(() => {
+    const id = runDeepLink.current;
+    if (!id || runs.length === 0 || !runs.some((r) => r.id === id)) return;
+    runDeepLink.current = null;
+    toggleRunDetail(id);
+    setTimeout(() => document.getElementById(`run-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runs]);
+  const conteoPorTipo = runs.reduce<Record<string, number>>((acc, r) => { acc[r.tipo] = (acc[r.tipo] ?? 0) + 1; return acc; }, {});
+  const runsVisibles = tipoFiltro === "TODAS" ? runs : runs.filter((r) => r.tipo === tipoFiltro);
 
   async function doCancelTimbre() {
     if (!activeCompany || !cancelCtx) return;
@@ -195,6 +217,23 @@ export default function CorridasTab() {
   // Recalcular toda la corrida con las incidencias vigentes del periodo (útil
   // tras capturas masivas). El motor rehace ISR/IMSS/INFONAVIT — nada a mano.
   const [recalcId, setRecalcId] = useState<string | null>(null);
+  // Recibos por correo: Facturapi manda PDF+XML a cada empleado con correo.
+  // El resultado se lee en la misma barra de avisos: enviados, sin correo
+  // (por nombre — es captura pendiente, no error), importados del SAT.
+  const [enviandoId, setEnviandoId] = useState<string | null>(null);
+  async function handleEnviarRecibos(run: PayrollRun) {
+    const n = run._count?.items ?? 0;
+    if (!confirm(`¿Enviar ${n} recibo${n === 1 ? "" : "s"} por correo a los empleados (periodo ${run.periodo})?`)) return;
+    setEnviandoId(run.id);
+    setError("");
+    try {
+      const res = await fetch(`/api/nomina/run/${run.id}/enviar-recibos`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error ?? "Error al enviar"); return; }
+      setError(resumenEnvio(data));
+    } catch { setError("Error al enviar"); }
+    finally { setEnviandoId(null); }
+  }
   async function handleRecalc(runId: string) {
     setRecalcId(runId);
     setError("");
@@ -373,7 +412,18 @@ export default function CorridasTab() {
       </div>
     ) : (
       <div className="space-y-3">
-        {runs.map(run => {
+        {/* Chips por tipo con conteo: Todas · Ordinaria · Finiquito · Aguinaldo … */}
+        {runs.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 pb-1">
+            {(["TODAS", ...Object.keys(TIPO_RUN_LABEL).filter((t) => conteoPorTipo[t])] as string[]).map((t) => (
+              <button key={t} onClick={() => setTipoFiltro(t)}
+                className={`rounded-full px-2.5 py-1 text-[12px] font-medium ${tipoFiltro === t ? "bg-cos-brand text-white" : "bg-cos-paper text-cos-ink-soft hover:bg-cos-line-soft"}`}>
+                {t === "TODAS" ? "Todas" : TIPO_RUN_LABEL[t]} <span className="tabular-nums opacity-70">{t === "TODAS" ? runs.length : conteoPorTipo[t]}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {runsVisibles.map(run => {
           const isExpanded = expandedRunId === run.id;
           // Captura de incidencias: sólo corridas ordinarias de la app
           // que aún no se timbran (los CFDIs emitidos no cambian).
@@ -383,13 +433,20 @@ export default function CorridasTab() {
             ? new Set(runIncidencias.map(i => i.employeeId)).size
             : 0;
           return (
-            <div key={run.id} className="bg-cos-card border border-cos-line rounded-xl overflow-hidden">
+            <div key={run.id} id={`run-${run.id}`} className="bg-cos-card border border-cos-line rounded-xl overflow-hidden">
               {/* Run header — clickable to expand. En móvil se apila: info arriba,
                   botones con wrap abajo; en sm+ vuelve a ser una sola fila. */}
               <div className="p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 cursor-pointer hover:bg-cos-slate-tint/50" onClick={() => toggleRunDetail(run.id)}>
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2 mb-1">
-                    <span className="font-semibold text-sm">{TIPO_RUN_LABEL[run.tipo] ?? run.tipo}</span>
+                    {/* La ordinaria es la norma (sin badge); lo especial se ve. */}
+                    {run.tipo === "ORDINARIA" ? (
+                      <span className="font-semibold text-sm">{TIPO_RUN_LABEL[run.tipo]}</span>
+                    ) : (
+                      <span className={`rounded-md px-2 py-0.5 text-[12px] font-semibold ${TIPO_RUN_COLOR[run.tipo] ?? "bg-cos-slate-tint text-cos-ink-soft"}`}>
+                        {TIPO_RUN_LABEL[run.tipo] ?? run.tipo}
+                      </span>
+                    )}
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${STATUS_RUN_COLOR[run.status] ?? "bg-cos-slate-tint"}`}>
                       {STATUS_RUN_LABEL[run.status] ?? run.status}
                     </span>
@@ -438,6 +495,25 @@ export default function CorridasTab() {
                   )}
                   {/* Las corridas importadas del SAT ya se pagaron en su momento —
                       sin re-timbrado ni dispersión (histórico de sólo lectura). */}
+                  {/* Excel de la corrida y ZIP de recibos: para cualquier corrida con
+                      recibos, importada o no. */}
+                  <a href={`/api/nomina/run/${run.id}/xlsx`} onClick={(e) => e.stopPropagation()}
+                    className="flex items-center gap-1.5 border border-cos-line px-3 py-1.5 rounded-md text-xs hover:bg-cos-paper" title="La corrida en Excel, un recibo por fila">
+                    <Download className="h-3.5 w-3.5" /> Excel
+                  </a>
+                  {(run.status === "STAMPED" || run.status === "PAID") && (
+                    <a href={`/api/nomina/run/${run.id}/recibos-zip`} onClick={(e) => e.stopPropagation()}
+                      className="flex items-center gap-1.5 border border-cos-line px-3 py-1.5 rounded-md text-xs hover:bg-cos-paper" title="Todos los recibos timbrados (PDF y XML) en un ZIP">
+                      <FileArchive className="h-3.5 w-3.5" /> Recibos
+                    </a>
+                  )}
+                  {(run.status === "STAMPED" || run.status === "PAID") && run.origen !== "SAT" && (
+                    <button onClick={() => handleEnviarRecibos(run)} disabled={enviandoId === run.id}
+                      className="flex items-center gap-1.5 border border-cos-line px-3 py-1.5 rounded-md text-xs hover:bg-cos-paper disabled:opacity-50"
+                      title="Enviar a cada empleado su recibo (PDF y XML) al correo del padrón">
+                      {enviandoId === run.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />} Correo
+                    </button>
+                  )}
                   {(run.status === "STAMPED" || run.status === "CALCULATED") && run.origen !== "SAT" && (
                     <a href={`/api/nomina/dispersion?runId=${run.id}`}
                       className="flex items-center gap-1.5 border border-cos-line px-3 py-1.5 rounded-md text-xs hover:bg-cos-paper">

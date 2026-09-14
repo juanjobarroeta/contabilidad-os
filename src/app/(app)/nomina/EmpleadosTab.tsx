@@ -5,8 +5,12 @@
 // /nomina/detalle, ahora con búsqueda, columnas de expediente (RFC, NSS, SBC,
 // estado, último recibo) y enlace al expediente de cada empleado. Conserva
 // intactas las acciones existentes: alta (manual o desde documentos con IA),
-// importación desde recibos timbrados, edición, emisión de recibo y baja con
-// finiquito.
+// importación desde recibos timbrados, emisión de recibo y baja con finiquito.
+//
+// Edición: lo que se corrige a diario (puesto, departamento, periodicidad,
+// correo) se edita EN LA CELDA — clic, escribe, Enter. Lo estructural (salario,
+// SBC, Infonavit/Fonacot, pensión, CLABE) vive en el expediente («Editar
+// ficha»), porque ahí está el contexto para cambiarlo. Modal sólo para la baja.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -14,13 +18,14 @@ import Link from "next/link";
 import { Alert, EmptyState, Money, RetryButton } from "@/components/ui";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { formatDate } from "@/lib/utils";
+import { descargarUrl } from "@/lib/descargar";
 import {
   Plus, Users2, Loader2, X, AlertCircle, CheckCircle2, Receipt,
-  UserX, Wand2, Search, Pencil, ChevronRight,
+  UserX, Wand2, Search, Pencil, ChevronRight, Download,
 } from "lucide-react";
 import { RosterImport } from "./RosterImport";
 import { PERIODICIDAD_LABEL, type Employee } from "./workspace-shared";
-import { NewEmployeeModal, EditEmployeeModal, BajaModal, EmitNominaModal } from "./EmployeeModals";
+import { NewEmployeeModal, BajaModal, EmitNominaModal } from "./EmployeeModals";
 
 export default function EmpleadosTab() {
   const { activeCompany } = useCompany();
@@ -36,9 +41,23 @@ export default function EmpleadosTab() {
   const [q, setQ] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [emitFor, setEmitFor] = useState<Employee | null>(null);
-  const [editFor, setEditFor] = useState<Employee | null>(null);
   const [bajaFor, setBajaFor] = useState<Employee | null>(null);
   const [showImport, setShowImport] = useState(false);
+
+  // Un campo, un PATCH. La ruta sólo toca lo que llega (guardas !== undefined),
+  // así que mandar un campo no borra los demás. Devuelve false si falló.
+  async function patchCampo(emp: Employee, campo: "puesto" | "departamento" | "periodicidadPago" | "email", valor: string): Promise<boolean> {
+    if (!activeCompany) return false;
+    try {
+      const res = await fetch("/api/empleados", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ employeeId: emp.id, companyId: activeCompany.id, [campo]: valor }),
+      });
+      if (!res.ok) { setError((await res.json().catch(() => ({})))?.error ?? "No se pudo guardar"); return false; }
+      setEmployees((prev) => prev.map((x) => (x.id === emp.id ? { ...x, [campo]: valor.trim() || null } : x)));
+      return true;
+    } catch { setError("No se pudo guardar"); return false; }
+  }
 
   const loadEmployees = useCallback(async () => {
     if (!activeCompany) return;
@@ -87,6 +106,11 @@ export default function EmpleadosTab() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {/* El padrón completo en Excel — todas las columnas, no las siete de la tabla. */}
+          <button onClick={() => descargarUrl(`/api/empleados/export?companyId=${activeCompany.id}`, "empleados.xlsx")}
+            className="flex items-center gap-2 border border-cos-line px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-paper" title="Descargar el padrón completo en Excel">
+            <Download className="h-4 w-4" /> Excel
+          </button>
           <button onClick={() => setShowImport(true)} className="flex items-center gap-2 border border-cos-line px-4 py-2 rounded-md text-sm font-medium hover:bg-cos-paper" title="Reconstruir el equipo desde tus recibos de nómina">
             <Wand2 className="h-4 w-4" /> Importar desde recibos
           </button>
@@ -148,15 +172,17 @@ export default function EmpleadosTab() {
           Sin resultados para «{q}».
         </div>
       ) : (
-        <div className="bg-cos-card border border-cos-line rounded-xl overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
+        // La tabla no se corta: alto acotado con scroll propio, encabezado pegajoso, anchos mínimos por columna.
+        <div className="bg-cos-card border border-cos-line rounded-xl max-h-[72vh] overflow-auto">
+          <table className="w-full min-w-[960px] text-sm">
+            <thead className="sticky top-0 z-10">
               <tr className="border-b border-cos-line bg-cos-slate-tint">
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Empleado</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft min-w-[220px]">Empleado</th>
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">NSS</th>
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Puesto</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft min-w-[160px]">Puesto</th>
                 <th className="text-right px-4 py-2.5 text-xs font-medium text-cos-ink-soft" title="Salario diario / Salario diario integrado (SBC)">Salario / SBC</th>
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Periodicidad</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft min-w-[180px]" title="A este correo se le envían sus recibos">Correo</th>
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Estado</th>
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-cos-ink-soft">Último recibo</th>
                 <th className="px-4 py-2.5"></th>
@@ -167,22 +193,30 @@ export default function EmpleadosTab() {
                 <tr key={e.id} className="border-b border-cos-line last:border-0 hover:bg-cos-slate-tint/50">
                   <td className="px-4 py-3">
                     <Link href={`/nomina/empleado/${e.id}`} className="group block text-left" title="Ver expediente del empleado">
-                      <p className="font-medium group-hover:text-cos-brand-ink transition-colors inline-flex items-center gap-1">
-                        {e.nombre} {e.apellidoPaterno} {e.apellidoMaterno ?? ""}
+                      <p className="font-medium group-hover:text-cos-brand-ink transition-colors inline-flex max-w-[260px] items-center gap-1" title={`${e.nombre} ${e.apellidoPaterno} ${e.apellidoMaterno ?? ""}`.trim()}>
+                        <span className="truncate">{e.nombre} {e.apellidoPaterno} {e.apellidoMaterno ?? ""}</span>
                         <ChevronRight className="h-3.5 w-3.5 text-cos-ink-faint opacity-0 group-hover:opacity-100 transition-opacity" />
                       </p>
                       <p className="text-xs text-cos-ink-soft font-mono">{e.rfc}</p>
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-xs font-mono">{e.nss || "—"}</td>
-                  <td className="px-4 py-3 text-xs">{e.puesto ?? "—"}{e.departamento && <p className="text-cos-ink-soft">{e.departamento}</p>}</td>
+                  <td className="px-4 py-3 text-xs">
+                    <CeldaInline valor={e.puesto} placeholder="Puesto" onSave={(v) => patchCampo(e, "puesto", v)} />
+                    <CeldaInline valor={e.departamento} placeholder="Departamento" soft onSave={(v) => patchCampo(e, "departamento", v)} />
+                  </td>
                   <td className="px-4 py-3 text-right font-mono text-xs">
                     <Money value={e.salarioDiario} />
                     {e.salarioDiarioIntegrado != null && (
                       <p className="text-cos-ink-soft" title="SBC (salario diario integrado)">SBC <Money value={e.salarioDiarioIntegrado} /></p>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-xs">{PERIODICIDAD_LABEL[e.periodicidadPago] ?? e.periodicidadPago}</td>
+                  <td className="px-4 py-3 text-xs">
+                    <CeldaInline valor={e.periodicidadPago} opciones={PERIODICIDAD_LABEL} onSave={(v) => patchCampo(e, "periodicidadPago", v)} />
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    <CeldaInline valor={e.email ?? null} placeholder="Sin correo" tipo="email" mono onSave={(v) => patchCampo(e, "email", v)} />
+                  </td>
                   <td className="px-4 py-3">
                     {e.isActive ? (
                       <span className="inline-flex rounded-full bg-cos-jade-tint px-2 py-0.5 text-[10px] font-medium text-cos-jade-ink">Activo</span>
@@ -194,9 +228,9 @@ export default function EmpleadosTab() {
                     {e.ultimoRecibo ? formatDate(e.ultimoRecibo.fechaPago) : "—"}
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap space-x-1.5">
-                    <button onClick={() => setEditFor(e)} className="text-xs border border-cos-line px-2.5 py-1.5 rounded-md hover:bg-cos-paper inline-flex items-center gap-1" title="Editar datos">
+                    <Link href={`/nomina/empleado/${e.id}`} className="text-xs border border-cos-line px-2.5 py-1.5 rounded-md hover:bg-cos-paper inline-flex items-center gap-1" title="Ficha completa y expediente (salario, SBC, Infonavit, CLABE, documentos)">
                       <Pencil className="h-3.5 w-3.5" />
-                    </button>
+                    </Link>
                     {e.isActive && (
                       <>
                         <button onClick={() => setEmitFor(e)} className="text-xs bg-cos-brand text-white px-3 py-1.5 rounded-md hover:bg-cos-brand-deep inline-flex items-center gap-1.5">
@@ -236,14 +270,65 @@ export default function EmpleadosTab() {
         <EmitNominaModal companyId={activeCompany.id} employee={emitFor}
           onClose={() => setEmitFor(null)} onEmitted={(msg) => { setEmitFor(null); setError(`✓ ${msg}`); }} />
       )}
-      {editFor && activeCompany && (
-        <EditEmployeeModal companyId={activeCompany.id} employee={editFor}
-          onClose={() => setEditFor(null)} onSaved={() => { setEditFor(null); loadEmployees(); setError("✓ Empleado actualizado"); }} />
-      )}
       {bajaFor && activeCompany && (
         <BajaModal companyId={activeCompany.id} employee={bajaFor}
           onClose={() => setBajaFor(null)} onDone={(msg) => { setBajaFor(null); loadEmployees(); setError(`✓ ${msg}`); }} />
       )}
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Celda editable: se ve como texto; al clic es un input (o select). Enter o
+// blur guardan si cambió, Esc cancela. Un select guarda al elegir. Mientras
+// guarda muestra el spinner en el sitio del valor: nada salta de lugar.
+// ─────────────────────────────────────────────────────────────────────────────
+function CeldaInline({ valor, placeholder, tipo = "text", opciones, soft, mono, onSave }: {
+  valor: string | null;
+  placeholder?: string;
+  tipo?: "text" | "email";
+  /** Si viene, la celda es un select clave→etiqueta. */
+  opciones?: Record<string, string>;
+  soft?: boolean;
+  mono?: boolean;
+  onSave: (v: string) => Promise<boolean>;
+}) {
+  const [editando, setEditando] = useState(false);
+  const [draft, setDraft] = useState(valor ?? "");
+  const [guardando, setGuardando] = useState(false);
+  useEffect(() => { if (!editando) setDraft(valor ?? ""); }, [valor, editando]);
+
+  async function commit(v: string) {
+    setEditando(false);
+    if (v.trim() === (valor ?? "").trim()) return;
+    setGuardando(true);
+    const ok = await onSave(v);
+    setGuardando(false);
+    if (!ok) setDraft(valor ?? "");
+  }
+  const base = `max-w-[220px] truncate rounded px-1 -mx-1 text-left hover:bg-cos-paper hover:ring-1 hover:ring-cos-line ${soft ? "text-cos-ink-soft" : ""} ${mono ? "font-mono" : ""}`;
+  if (guardando) return <p className={base}><Loader2 className="inline h-3 w-3 animate-spin text-cos-ink-faint" /></p>;
+  if (!editando) {
+    const texto = opciones ? (opciones[valor ?? ""] ?? valor ?? "—") : (valor || "");
+    return (
+      <button type="button" onClick={() => setEditando(true)} title="Clic para editar" className={`${base} block w-full ${!texto ? "text-cos-ink-faint italic" : ""}`}>
+        {texto || placeholder || "—"}
+      </button>
+    );
+  }
+  if (opciones) {
+    return (
+      <select autoFocus value={draft} onChange={(ev) => commit(ev.target.value)} onBlur={() => setEditando(false)}
+        onKeyDown={(ev) => { if (ev.key === "Escape") setEditando(false); }}
+        className="w-full rounded border border-cos-brand bg-cos-card px-1 py-0.5 text-xs text-cos-ink focus:outline-none">
+        {Object.entries(opciones).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+      </select>
+    );
+  }
+  return (
+    <input autoFocus type={tipo} value={draft} placeholder={placeholder} onChange={(ev) => setDraft(ev.target.value)}
+      onBlur={() => commit(draft)}
+      onKeyDown={(ev) => { if (ev.key === "Enter") commit(draft); if (ev.key === "Escape") { setDraft(valor ?? ""); setEditando(false); } }}
+      className={`w-full rounded border border-cos-brand bg-cos-card px-1 py-0.5 text-xs text-cos-ink focus:outline-none ${mono ? "font-mono" : ""}`} />
   );
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { textoDePdf } from "@/lib/fiscal/fuentes/texto";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parsearTextoCsf, mapCsfObligacion, REGIMEN_MAP } from "@/lib/obligaciones";
@@ -29,11 +30,10 @@ export async function POST(req: Request) {
   // Parse PDF text
   let text: string;
   try {
-    // pdf-parse is CommonJS — use require to avoid ESM issues
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pdfParse = require("pdf-parse");
-    const data = await pdfParse(pdfBuffer);
-    text = data.text;
+    // pdf-parse v2: `new PDFParse({data}).getText()` — el módulo ya no exporta
+    // una función; llamarlo tiraba «pdfParse is not a function» y toda CSF
+    // subida salía como «No se pudo leer el PDF».
+    text = await textoDePdf(pdfBuffer);
   } catch (err) {
     console.error("[csf/parse] pdf-parse error:", err);
     return NextResponse.json({ error: "No se pudo leer el PDF. Verifica que sea un CSF válido del SAT." }, { status: 422 });

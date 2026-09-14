@@ -4243,6 +4243,27 @@ model JuridicoDocumento {
   @@index([conversacionId])
 }
 
+model JuridicoTurno {
+  id               String    @id @default(cuid())
+  conversacionId   String
+  userId           String
+  estado           String    @default("en_curso") // en_curso | terminado | error
+  instancia        String // proceso que lo corre (RAILWAY_REPLICA_ID + arranque)
+  latido           DateTime  @default(now())
+  eventos          Json      @default("[]") // EventoTurno[] (SSE), se appendea por lotes
+  checkpoint       Json? // mensajes del API, rondas, texto, fuentes, traza — para continuar en otro proceso
+  mensajeUsuarioId String?
+  pregunta         String    @default("")
+  convCreada       Boolean   @default(false)
+  error            String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  terminadoAt      DateTime?
+
+  @@index([conversacionId, createdAt])
+  @@index([estado, latido])
+}
+
 model JuridicoMensaje {
   id             String   @id @default(cuid())
   conversacionId String

@@ -10,7 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useCallback, useEffect, useState } from "react";
-import { BadgeCheck, CalendarDays, Loader2, ShieldCheck } from "lucide-react";
+import { BadgeCheck, CalendarDays, Download, Loader2, Shield, ShieldCheck } from "lucide-react";
 import { Card } from "@/components/ui";
 import { formatCurrency } from "@/lib/utils";
 
@@ -20,6 +20,8 @@ interface DeclRow {
   monto: number | null;
   lineaCaptura: string | null;
   fechaPresentacion: string | null;
+  /** El cargo bancario aplicado en la mesa: la prueba de pago viene del banco. */
+  pagoBanco?: { id: string; fecha: string; monto: number; banco: string; cuenta: string } | null;
 }
 
 interface BloquePago {
@@ -95,6 +97,21 @@ export default function ImssPagosCard({ companyId }: { companyId: string }) {
       <div className="mb-2.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
         <span className="rounded-full bg-cos-brand-tint px-2.5 py-1 text-[13px] font-semibold text-cos-brand-ink">
           Cuotas IMSS (SIPARE)
+        </span>
+        {/* EXPORTES a la mano. Vivían al fondo de Cumplimiento detrás de dos
+            selectores; el bimestre en curso ya se sabe. Re-exportar otro sigue
+            en Cumplimiento. */}
+        <span className="ml-auto flex flex-wrap items-center gap-1.5">
+          <a href={`/api/nomina/sua-export?companyId=${companyId}&bimestre=${Math.ceil(month / 2)}&year=${year}`}
+            className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1 text-[12px] font-semibold text-cos-ink hover:border-cos-brand hover:text-cos-brand-ink"
+            title={`Archivo SUA del bimestre ${Math.ceil(month / 2)} de ${year}`}>
+            <Download className="h-3.5 w-3.5" /> SUA B{Math.ceil(month / 2)}
+          </a>
+          <a href={`/api/nomina/imss-movimientos?companyId=${companyId}&format=idse&status=PENDING`}
+            className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1 text-[12px] font-semibold text-cos-ink hover:border-cos-brand hover:text-cos-brand-ink"
+            title="Archivo IDSE con los movimientos afiliatorios pendientes (altas, bajas, modificaciones)">
+            <Shield className="h-3.5 w-3.5" /> IDSE
+          </a>
         </span>
         {todoPagado ? (
           <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-cos-jade-ink">
@@ -269,9 +286,24 @@ function BloqueRegistro({
 
       {bloque.pagada && decl ? (
         <p className="mt-1.5 text-[12.5px] text-cos-ink-soft">
-          Pagado {formatCurrency(decl.monto ?? 0)}
-          {decl.fechaPresentacion ? ` el ${fmtFecha(decl.fechaPresentacion.slice(0, 10))}` : ""}
-          {decl.lineaCaptura ? ` · línea de captura ${decl.lineaCaptura}` : ""}.
+          {/* La prueba del pago es el BANCO (lo que la mesa aplicó), no la casilla.
+              La línea de captura es un dato opcional, no un requisito. */}
+          {decl.pagoBanco ? (
+            <>
+              Pagado {formatCurrency(decl.pagoBanco.monto)} el {fmtFecha(decl.pagoBanco.fecha.slice(0, 10))} · {decl.pagoBanco.banco} ····{decl.pagoBanco.cuenta}
+              {" · "}
+              <a href={`/bancos?year=${decl.pagoBanco.fecha.slice(0, 4)}&month=${Number(decl.pagoBanco.fecha.slice(5, 7))}&tx=${decl.pagoBanco.id}`} className="font-medium text-cos-brand-ink underline underline-offset-2">ver en la mesa</a>
+              {decl.lineaCaptura ? ` · línea de captura ${decl.lineaCaptura}` : ""}.
+            </>
+          ) : (
+            <>
+              Registrado {formatCurrency(decl.monto ?? 0)}
+              {decl.fechaPresentacion ? ` el ${fmtFecha(decl.fechaPresentacion.slice(0, 10))}` : ""}
+              {decl.lineaCaptura ? ` · línea de captura ${decl.lineaCaptura}` : ""}
+              {" · "}<span className="text-cos-amber-ink">sin cargo bancario aplicado</span> — concilia el pago en{" "}
+              <a href="/bancos" className="font-medium text-cos-brand-ink underline underline-offset-2">Bancos</a>.
+            </>
+          )}
         </p>
       ) : estimadoPendiente && !mostrarForm ? (
         <button

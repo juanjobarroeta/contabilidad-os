@@ -242,12 +242,56 @@
 > sin crédito y el borrador quedó íntegro en la BD. Desde entonces el turno
 > traduce ese error (y saturación / llave rechazada) a un mensaje en español
 > para el abogado (`src/lib/juridico/errores.ts`) en vez del JSON crudo.
-> **Y Sentry no se enteró (PR #1054):** `reportError` sí escribía en el
+> **Y Sentry no se enteró (PR #1055):** `reportError` sí escribía en el
 > log pero no mandaba nada, porque Next empaqueta `observability.ts` en cada
 > chunk del servidor y el `initialized` de la copia de la ruta era false;
 > ahora pregunta a `Sentry.getClient()` (el cliente sí es uno solo). Ningún
 > error de servidor del hub había llegado a Sentry hasta hoy; sólo los del
 > navegador.
+>
+> **«No pude verificar el texto exacto en la base» (PR #1075, 13-sep-2026).**
+> La abogada preguntó por la apelación en el juicio familiar de Chihuahua y
+> la respuesta marcó así los Arts. 485 y 486, aunque `get_articulo` los
+> había traído. Dos causas: (1) el verificador leía «Art. 486 CPF Chihuahua»
+> como Art. 486 del Código PENAL Federal (la alternancia de claves atrapa
+> «CPF» y el estado se ignoraba) → `resolverCitaEstatal` casa la cita con la
+> fuente estatal ya recuperada (clave «CHH-…», mismo artículo) cuando el
+> nombre del estado sigue a las siglas; (2) el PDF del congreso de Chihuahua
+> trae tabuladores dentro del encabezado («ARTÍCULO \t479.») y `ARTICLE_RE`
+> exige un espacio: 544 artículos quedaron en 135 chunks con 18 etiquetas
+> (por eso el 480 «no existía» y el 479 sólo salía por búsqueda semántica).
+> `cleanLawText` normaliza tabuladores y dobles espacios; 25 leyes cargadas
+> tenían el mismo defecto (Chihuahua, Querétaro, Sonora, Michoacán, BC, CDMX)
+> y se reingirieron con `scripts/kb-reingestar.ts <claves>` (fuerza la
+> reingesta aunque el texto no cambie).
+>
+> **Escaneos que «no se podían leer» (PR #1062, 14-sep-2026).** Juan subió un
+> PDF y recibió el error genérico; el log decía `PDF cannot be empty` de
+> Anthropic. Causa: pdf.js TRANSFIERE el ArrayBuffer a su worker, así que
+> tras extraer el texto el `Uint8Array` de la subida queda *detached* (0
+> bytes); cuando el PDF es un escaneo (< 200 chars) ese mismo buffer iba a
+> visión vacío. Todo escaneo en PDF fallaba desde el PR #1037; las fotos no
+> (no pasan por pdf.js). `parsePdfBuffer` ahora le da una copia a pdf.js
+> (test que comprueba que el buffer sigue intacto), la ruta rechaza 0 bytes
+> con mensaje claro, reporta a Sentry y muestra la razón del modelo.
+>
+> **Turnos que sobreviven un redespliegue (Fase 0 del roadmap, 14-sep-2026).**
+> Quince merges en una hora mataban cada respuesta en curso («el servidor se
+> reinició»). Ahora el turno se persiste en `JuridicoTurno` (migración
+> `20260923`): los eventos SSE se appendean por lotes (`jsonb ||`, los deltas
+> de texto cada 0.8 s, herramientas y fin al momento), hay un checkpoint por
+> ronda (mensajes del API, rondas, texto, fuentes, traza) y el proceso late
+> cada 15 s. El cuerpo del turno salió de la ruta a
+> `src/lib/juridico/turno-abogado.ts` (`cargarContextoConversacion` +
+> `correrTurnoAbogado`, que acepta un checkpoint). `turnos-reanudar.ts`, desde
+> `instrumentation.ts`, barre cada 30 s los turnos «en curso» sin latido en
+> 45 s, los reclama de forma atómica (`updateMany … where latido = visto`) y
+> los continúa desde el checkpoint: primero manda `replace` con el texto del
+> checkpoint (el cliente descarta lo de la ronda interrumpida) y sigue. La
+> vista GET, si no tiene el turno en memoria, lo reproduce desde la base y lo
+> sigue por sondeo (1 s); el 204 queda sólo para «no hay turno reciente». Lo
+> que se repite al reanudar: la ronda interrumpida entera (sus herramientas
+> vuelven a correr; son upserts).
 >
 > **Turnos reanudables (PR #1042).** La primera prueba real de la abogada
 > (alegatos de cinco tipos para un juicio oral familiar en Chihuahua, 8

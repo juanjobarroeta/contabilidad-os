@@ -30,6 +30,22 @@ export async function GET(_req: Request, { params }: { params: Promise<{ snapsho
     return NextResponse.json({ error: "Este snapshot no tiene acuse de respaldo" }, { status: 404 });
   }
 
+  // Acuses que ya viven en la base (SatGo guarda el PDF como data URL): se
+  // sirven directo, sin proveedor de por medio.
+  if (snapshot.acuseUrl.startsWith("data:")) {
+    const m = snapshot.acuseUrl.match(/^data:([^;,]+);base64,([\s\S]+)$/);
+    if (!m) return NextResponse.json({ error: "Acuse ilegible" }, { status: 500 });
+    const bytes = Buffer.from(m[2], "base64");
+    return new NextResponse(new Uint8Array(bytes), {
+      status: 200,
+      headers: {
+        "Content-Type": m[1],
+        "Content-Disposition": `inline; filename="acuse-${snapshot.tipo.toLowerCase()}-${snapshot.id}.${m[1].includes("pdf") ? "pdf" : "bin"}"`,
+        "Cache-Control": "private, max-age=300",
+      },
+    });
+  }
+
   let client: SyntageClient;
   try {
     client = new SyntageClient();

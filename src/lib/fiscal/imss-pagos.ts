@@ -161,6 +161,9 @@ export interface ImssDeclRow {
   fechaPresentacion: string | null; // ISO
   fechaLimitePago: string | null; // ISO
   acuseUrl: string | null;
+  /** El movimiento bancario que la mesa aplicó a esta declaración (taxDeclarationId).
+   *  Es la prueba del pago que sale del banco, no de una casilla. */
+  pagoBanco: { id: string; fecha: string; monto: number; banco: string; cuenta: string } | null;
 }
 
 /**
@@ -229,8 +232,10 @@ function toDeclRow(d: {
   fechaPresentacion: Date | null;
   fechaLimitePago: Date | null;
   acuseUrl: string | null;
+  bankTransactions?: { id: string; fecha: Date; monto: number | { toString(): string }; bankAccount: { banco: string; numeroCuenta: string } }[];
 } | null): ImssDeclRow | null {
   if (!d) return null;
+  const tx = d.bankTransactions?.[0] ?? null;
   return {
     id: d.id,
     status: d.status,
@@ -239,6 +244,9 @@ function toDeclRow(d: {
     fechaPresentacion: d.fechaPresentacion?.toISOString() ?? null,
     fechaLimitePago: d.fechaLimitePago?.toISOString() ?? null,
     acuseUrl: d.acuseUrl,
+    pagoBanco: tx
+      ? { id: tx.id, fecha: tx.fecha.toISOString(), monto: Math.abs(Number(tx.monto)), banco: tx.bankAccount.banco, cuenta: tx.bankAccount.numeroCuenta.slice(-4) }
+      : null,
   };
 }
 
@@ -250,6 +258,13 @@ const DECL_SELECT = {
   fechaPresentacion: true,
   fechaLimitePago: true,
   acuseUrl: true,
+  // El cargo que la mesa conció con esta declaración: la prueba de pago.
+  bankTransactions: {
+    where: { status: "MATCHED" as const },
+    select: { id: true, fecha: true, monto: true, bankAccount: { select: { banco: true, numeroCuenta: true } } },
+    orderBy: { fecha: "desc" as const },
+    take: 1,
+  },
 } as const;
 
 /**

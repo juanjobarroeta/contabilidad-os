@@ -10,7 +10,7 @@
 // para todas las pantallas.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { derivarTipoCorrida, parseReciboNominaHistorico, type TipoCorrida } from "./historia-import";
+import { derivarTipoCorrida, parseReciboNominaHistorico, type TipoCorrida } from "./recibo-parser";
 
 export type { TipoCorrida };
 
