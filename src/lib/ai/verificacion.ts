@@ -37,7 +37,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { meteredCreate } from "@/lib/costos/anthropic";
 import type { CostCtx } from "@/lib/costos/record";
 import { getArticulo } from "@/lib/fiscal-kb/search";
-import { claveCita, extraerCitas } from "@/lib/ai/eval/medidas";
+import { citasConPosicion, claveCita, extraerCitas } from "@/lib/ai/eval/medidas";
 import { ESTADOS } from "@/lib/fiscal-kb/catalogo/ojn";
 
 export const VERIFICACION_MODEL = process.env.AI_VERIFICACION_MODEL ?? "claude-haiku-4-5-20251001";
@@ -61,6 +61,34 @@ export interface ProblemaVerificacion {
   motivo: string;
 }
 
+/** La norma concreta en que descansa una cita (lo que el panel debe abrir). */
+export interface FundamentoCita {
+  /** Cita canónica de la fuente: «Art. 486 CHH-C-PROCEDIMIENTOS-FAMILIARES-CH». */
+  cita: string;
+  ley?: string;
+  articulo?: string;
+  titulo?: string;
+  url?: string;
+}
+
+/** Estado de UNA cita de la respuesta, para pintarla y explicarla. */
+export type EstadoCita = "verificada" | "corregida" | "observada" | "fuera_de_base" | "sin_verificar";
+
+export interface CitaEnRespuesta {
+  /** Estable dentro del mensaje: «c1», «c2»… */
+  id: string;
+  /** Offsets en el TEXTO ENTREGADO (el corregido, si hubo corrección). */
+  inicio: number;
+  fin: number;
+  textoEnRespuesta: string;
+  /** Normalizada: «ART. 486 CPF». */
+  cita: string;
+  fundamento: FundamentoCita | null;
+  estado: EstadoCita;
+  /** Por qué el verificador la marcó (sólo en «corregida» y «observada»). */
+  motivo?: string;
+}
+
 export interface ResultadoVerificacion {
   /** La respuesta que se entrega: la original o la corregida. */
   texto: string;
@@ -72,6 +100,8 @@ export interface ResultadoVerificacion {
   citasNoVerificables: string[];
   /** Motivo por el que se descartó la versión corregida del modelo (si aplica). */
   descartada?: string;
+  /** Con qué norma se resolvió cada cita del texto (null = no se encontró). */
+  resueltas: { cita: string; fundamento: FundamentoCita | null }[];
   ms: number;
 }
 
@@ -212,7 +242,7 @@ export async function verificarRespuesta(
   input: { pregunta: string; respuesta: string; fuentes: FuenteVerificacion[]; cost?: CostCtx; fechaVigencia?: Date }
 ): Promise<ResultadoVerificacion> {
   const t0 = Date.now();
-  const original: ResultadoVerificacion = { texto: input.respuesta, verificada: false, corregida: false, problemas: [], citasNoVerificables: [], ms: 0 };
+  const original: ResultadoVerificacion = { texto: input.respuesta, verificada: false, corregida: false, problemas: [], citasNoVerificables: [], resueltas: [], ms: 0 };
   const citas = extraerCitas(input.respuesta);
   if (citas.length === 0) return original;
 
@@ -242,6 +272,7 @@ export async function verificarRespuesta(
     for (const f of input.fuentes) {
       if (f.cita.startsWith(PREFIJO_VALORES)) agregar(f.cita, [f.texto]);
     }
+    const resueltas: { cita: string; fundamento: FundamentoCita | null }[] = [];
     for (const c of [...sostenidas, ...faltantes]) {
       // «Art. 486 CPF Chihuahua»: el abogado cita el código estatal por sus
       // siglas + estado; la KB lo tiene como CHH-C-PROCEDIMIENTOS-FAMILIARES-CH.
@@ -250,17 +281,24 @@ export async function verificarRespuesta(
       const estatal = resolverCitaEstatal(c, input.respuesta, [...respaldo.values()]);
       if (estatal) {
         agregar(estatal.cita, [estatal.texto]);
+        resueltas.push({ cita: c, fundamento: { cita: estatal.cita } });
         continue;
       }
       const ref = parsearCita(c);
       const art = ref ? await getArticulo(ref.clave, ref.articulo, input.fechaVigencia) : null;
       if (art) {
         agregar(art.cita, art.partes.map((p) => p.texto));
+        resueltas.push({ cita: c, fundamento: { cita: art.cita, ley: art.ley, articulo: art.articulo, titulo: art.titulo, url: art.url } });
         continue;
       }
       const chunk = respaldo.get(claveCita(c));
-      if (chunk) agregar(chunk.cita, [chunk.texto]);
-      else noVerificables.push(c);
+      if (chunk) {
+        agregar(chunk.cita, [chunk.texto]);
+        resueltas.push({ cita: c, fundamento: { cita: chunk.cita } });
+      } else {
+        noVerificables.push(c);
+        resueltas.push({ cita: c, fundamento: null });
+      }
     }
 
     const user = `Pregunta del cliente:\n${input.pregunta}\n\nRespuesta a revisar:\n"""\n${input.respuesta}\n"""\n\nCitas NO VERIFICABLES (no existen en la base; sólo márcalas): ${noVerificables.length ? noVerificables.join(" | ") : "(ninguna)"}\n\nTextos reales de las citas:\n\n${bloques.join("\n\n") || "(ninguno)"}`;
@@ -286,6 +324,7 @@ export async function verificarRespuesta(
       corregida: usarCorregida,
       problemas: v.problemas,
       citasNoVerificables: noVerificables,
+      resueltas,
       ...(rechazo ? { descartada: rechazo } : {}),
       ms: Date.now() - t0,
     };
@@ -326,6 +365,68 @@ export function resolverCitaEstatal(cita: string, respuesta: string, fuentes: Fu
 function parsearCitaEstatal(cita: string): { clave: string; articulo: string } | null {
   const m = cita.trim().match(/^(?:ART\.?|ARTÍCULO)\s+([0-9][0-9A-Za-z-]*(?:\s+BIS)?)\s+([A-Z]{3}-[A-Z0-9-]+)$/i);
   return m ? { clave: m[2].toUpperCase(), articulo: m[1] } : null;
+}
+
+/**
+ * Las citas de la respuesta ENTREGADA, cada una con su lugar, su norma y su
+ * veredicto. Es lo que la UI necesita para que una cita sea clicable y el
+ * panel abra el artículo o la tesis exacta en que descansa.
+ *
+ * Puro y barato: los offsets salen del regex sobre el texto final, así que no
+ * hay pasada extra del modelo ni mapa de posiciones que mantener. Si la
+ * verificación corrigió el texto, se corre sobre el corregido y los offsets
+ * ya corresponden a lo que el abogado lee.
+ *
+ * Límite conocido: sólo reconoce citas con forma de cita («artículo 486 del
+ * CPF», «regla 2.7.1.32», «reg. 2021760»). Una cita en prosa —«el Código de
+ * Procedimientos Familiares de Chihuahua»— no genera marca.
+ */
+export function construirCitas(args: {
+  texto: string;
+  /** Lo que devolvieron las herramientas del turno (respaldo cuando no hubo verificación). */
+  fuentes: { cita: string; texto?: string }[];
+  resueltas?: { cita: string; fundamento: FundamentoCita | null }[];
+  problemas?: ProblemaVerificacion[];
+  citasNoVerificables?: string[];
+  verificada: boolean;
+  corregida: boolean;
+}): CitaEnRespuesta[] {
+  const porClave = new Map<string, FundamentoCita | null>();
+  for (const f of args.fuentes) {
+    if (f.cita.startsWith(PREFIJO_VALORES)) continue;
+    const k = claveCita(f.cita);
+    if (!porClave.has(k)) porClave.set(k, { cita: f.cita });
+  }
+  for (const r of args.resueltas ?? []) porClave.set(claveCita(r.cita), r.fundamento);
+
+  const problemaPorClave = new Map<string, string>();
+  for (const p of args.problemas ?? []) {
+    if (!p.cita) continue;
+    const k = claveCita(p.cita);
+    if (!problemaPorClave.has(k)) problemaPorClave.set(k, p.motivo || p.afirmacion);
+  }
+  const fuera = new Set((args.citasNoVerificables ?? []).map(claveCita));
+
+  // Sin pase de verificación, una cita estatal («Art. 486 CPF Chihuahua») no
+  // casa por clave con su fuente («…CHH-C-PROCEDIMIENTOS-FAMILIARES-CH»): se
+  // resuelve igual que en el pase, por siglas + estado.
+  const conTexto: FuenteVerificacion[] = args.fuentes.filter((f) => !f.cita.startsWith(PREFIJO_VALORES)).map((f) => ({ cita: f.cita, texto: f.texto ?? "" }));
+
+  return citasConPosicion(args.texto).map((u, i) => {
+    const k = claveCita(u.cita);
+    let fundamento = porClave.get(k) ?? null;
+    if (!fundamento && !porClave.has(k)) {
+      const estatal = resolverCitaEstatal(u.cita, args.texto, conTexto);
+      if (estatal) fundamento = { cita: estatal.cita };
+    }
+    const motivo = problemaPorClave.get(k);
+    let estado: EstadoCita;
+    if (fuera.has(k) || (args.verificada && !fundamento)) estado = "fuera_de_base";
+    else if (!args.verificada) estado = "sin_verificar";
+    else if (motivo) estado = args.corregida ? "corregida" : "observada";
+    else estado = "verificada";
+    return { id: `c${i + 1}`, inicio: u.inicio, fin: u.fin, textoEnRespuesta: u.textoEnRespuesta, cita: u.cita, fundamento, estado, ...(motivo ? { motivo } : {}) };
+  });
 }
 
 export function fuentesDesdeToolResult(toolName: string, out: string): FuenteVerificacion[] {

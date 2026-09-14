@@ -43,6 +43,7 @@ export const GET = withAuthz(async (req: Request) => {
         nivel: true,
         tipo: true,
         codAgrup: true,
+        padreCodigo: true,
       },
       orderBy: [{ cuentaSAT: "asc" }, { subcuenta: "asc" }],
     }),
@@ -50,7 +51,7 @@ export const GET = withAuthz(async (req: Request) => {
 
   // Una cuenta con subcuentas acumula: no recibe pólizas y no se ofrece como
   // decisión (se enseña, apagada, con cuántas cuelgan de ella).
-  const padres = padresDelCatalogo(cuentas.map((a) => ({ codigo: a.subcuenta ?? a.cuentaSAT, nivel: a.nivel })));
+  const padres = padresDelCatalogo(cuentas.map((a) => ({ codigo: a.subcuenta ?? a.cuentaSAT, nivel: a.nivel, padreCodigo: a.padreCodigo })));
 
   return NextResponse.json({
     cobertura: cobertura.map((c) => ({

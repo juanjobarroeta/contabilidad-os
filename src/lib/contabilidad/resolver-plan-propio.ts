@@ -34,9 +34,9 @@ async function soloHojas<T extends { cuentaSAT: string; subcuenta: string | null
   if (candidatas.length < 2) return { hojas: candidatas, acumulativas: 0 };
   const catalogo = await prisma.chartAccount.findMany({
     where: { companyId, isActive: true },
-    select: { cuentaSAT: true, subcuenta: true, nivel: true },
+    select: { cuentaSAT: true, subcuenta: true, nivel: true, padreCodigo: true },
   });
-  const padres = padresDelCatalogo(catalogo.map((c) => ({ codigo: c.subcuenta ?? c.cuentaSAT, nivel: c.nivel })));
+  const padres = padresDelCatalogo(catalogo.map((c) => ({ codigo: c.subcuenta ?? c.cuentaSAT, nivel: c.nivel, padreCodigo: c.padreCodigo })));
   const hojas = candidatas.filter((c) => !padres.has(c.subcuenta ?? c.cuentaSAT));
   // Si todas fueran acumulativas (catálogo sin detalle), no se descarta nada.
   return hojas.length > 0 ? { hojas, acumulativas: candidatas.length - hojas.length } : { hojas: candidatas, acumulativas: 0 };

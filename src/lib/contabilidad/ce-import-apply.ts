@@ -30,6 +30,7 @@ import {
   tipoPorCodAgrup,
   convencionQueCuadra,
   type CatalogoCuentaParsed,
+  type BalanzaParseResult,
 } from "./ce-import";
 
 /**
@@ -63,7 +64,14 @@ export async function importarCatalogo(
   companyId: string,
   xml: string,
 ): Promise<ImportarCatalogoResult> {
-  const { cuentas } = parseCatalogoCuentas(xml);
+  return importarCuentasCatalogo(companyId, parseCatalogoCuentas(xml).cuentas);
+}
+
+/** Lo mismo, a partir de cuentas ya parseadas (XML, CSV o Excel: da igual de dónde vengan). */
+export async function importarCuentasCatalogo(
+  companyId: string,
+  cuentas: CatalogoCuentaParsed[],
+): Promise<ImportarCatalogoResult> {
   let creadas = 0;
   let actualizadas = 0;
   let omitidas = 0;
@@ -106,14 +114,15 @@ async function upsertCuenta(
     await prisma.chartAccount.update({
       where: { id: existing.id },
       // codAgrup sólo cuando el CT lo trae: un catálogo sin él no borra la llave.
-      data: { nombre, tipo, nivel: c.nivel, naturaleza: c.natur, isActive: true, codAgrup: c.codAgrup || undefined },
+      // padreCodigo igual: sólo se escribe cuando el XML trae SubCtaDe.
+      data: { nombre, tipo, nivel: c.nivel, naturaleza: c.natur, isActive: true, codAgrup: c.codAgrup || undefined, padreCodigo: c.subCtaDe ?? undefined },
     });
     return "actualizada";
   }
 
   // Al CREAR no hay alternativa: `nombre` es obligatorio en el esquema. El
   // código queda de marcador hasta que un catálogo traiga la descripción.
-  const data = { nombre: desc || c.numCta, tipo, nivel: c.nivel, naturaleza: c.natur, codAgrup: c.codAgrup || null };
+  const data = { nombre: desc || c.numCta, tipo, nivel: c.nivel, naturaleza: c.natur, codAgrup: c.codAgrup || null, padreCodigo: c.subCtaDe ?? null };
 
   await prisma.chartAccount.create({
     data: { companyId, cuentaSAT, subcuenta, ...data },
@@ -149,8 +158,16 @@ export async function importarBalanza(
   xml: string,
   opts: { usar?: "inicial" | "final"; fechaISO?: string } = {},
 ): Promise<ImportarBalanzaResult> {
+  return importarBalanzaParsed(companyId, parseBalanza(xml), opts);
+}
+
+/** Lo mismo, a partir de una balanza ya parseada (XML, CSV o Excel). */
+export async function importarBalanzaParsed(
+  companyId: string,
+  bal: BalanzaParseResult,
+  opts: { usar?: "inicial" | "final"; fechaISO?: string } = {},
+): Promise<ImportarBalanzaResult> {
   const usar = opts.usar ?? "final";
-  const bal = parseBalanza(xml);
 
   // Catálogo de la empresa para resolver naturaleza por código y filtrar a
   // cuentas existentes (las agregadas duplicarían saldos; sólo posteamos las

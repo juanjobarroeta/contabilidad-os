@@ -1,6 +1,6 @@
 # Canonical monthly-close state contract
 
-Date: 2026-09-10
+Date: 2026-09-14
 Roadmap: REL-002A / REL-002B / REL-002C / REL-002D
 
 ## Purpose
@@ -62,9 +62,41 @@ An external historical close is a separate fact. It can remain `CERRADO` while l
 
 ## Remaining REL-002 work
 
-- Observe the next production daily-pass cycle and retain its reopen/close telemetry.
-- Exercise the full ready → contabilizado → declaration close → explicit reopen path in a disposable or dedicated test company. The representative production company was kept read-only.
 - Obtain licensed-accountant acceptance before marking the parent REL-002 item done.
+
+## Production daily-pass monitoring — 2026-09-11 to 2026-09-13
+
+Persisted production telemetry confirms that the scheduler continued evaluating close periods after the initial read-only smoke:
+
+- close-state rows retain daily-pass activity on September 11, 12, and 13;
+- 15 `CierreAviso` rows were emitted, represented by seven `cierre.aviso.enviar` audit events;
+- two `cierre.mes.cerrado` events were recorded with `origenCierre=FUERA_DE_CONTABILIDAD_OS`, one for a July historical declaration and one for an August historical declaration;
+- no `cierre.mes.reabrir_evidencia` event was emitted during the observation window.
+
+This satisfies the production-cycle observation gate and retains both notification and close-provenance evidence. It does not replace licensed-accountant acceptance.
+
+## Production mutating smoke — 2026-09-11 to 2026-09-14
+
+The dedicated mock-data company `COMERCIALIZADORA ALTIPLANO SA DE CV` was used for the controlled transition smoke against June 2026. Its starting ledger had 125 entries, MXN 1,842,653.93 in both cargos and abonos, and semantic digest `47a874f2f6108d4a7dba9d3a0d5f987baed48501f0a6af18ab6fee10279aed74`. Its monthly IVA declaration was `FILED`, locally managed (`isHistorical=false`).
+
+The first run established the transition guard before touching the ledger: attempting to account for the filed period was rejected with `CIERRE_NO_CONTABILIZABLE`, and the database remained unchanged. Explicit reopening then produced `DRAFT`, zero entries, zero totals, and preserved the filed declaration. The subsequent rebuild produced 127 entries and MXN 1,945,448.91 on each side, so the smoke stopped without another mutation.
+
+The deviation was traced to two paired mock internal-transfer rows. A prior counterparty backfill had cleared their cross-account CLABEs because the seed had not marked the structured counterparty data as already populated. That made each imported leg look like an independent transfer and added two entries plus MXN 102,794.98 to each side. PR `#1001` fixed future demo seeds, made the normal backfill preserve existing structured counterparty data, prevented a stale close-page response from crossing periods, and added regression coverage. It merged as `002f73082259b44bbbd4208e0cb090c9e122a172`; Railway deployment `a8dd9996-946e-4346-96f7-eb17c5f13e3f` completed successfully.
+
+After explicit authorization, an atomic, conditional repair restored only those two known mock cross-account references. The repair wrote the audit action `bancos.contraparte.reparar-demo` with the period and count, but no CLABE values. The final one-time smoke then passed:
+
+| Checkpoint | Production result |
+|---|---|
+| Explicit reopen | `DRAFT`, `postedAt=null`, zero entries, and zero totals |
+| Declaration isolation | IVA declaration remained `FILED`, `isHistorical=false`, with `updatedAt=2026-08-29T18:44:20.173Z` |
+| Rebuild | `POSTED`, 125 entries, MXN 1,842,653.93 cargos, and MXN 1,842,653.93 abonos |
+| Ledger identity | Semantic digest returned exactly to `47a874f2f6108d4a7dba9d3a0d5f987baed48501f0a6af18ab6fee10279aed74` |
+| Source split | 51 `CFDI` entries and 74 `BANCO` entries |
+| Internal transfer | One balanced cross-account pair was generated; the duplicate imported leg did not create another pair |
+| Canonical state | `CERRADO`, `origenCierre=CONTABILIDAD_OS`, `estadoContable=POSTED`, `contabilizado=true`, `descargable=true`, and no blockers |
+| Deliverables | Authenticated UI reported all five Anexo 24 XML files ready and enabled the monthly package and XML actions |
+
+The controlled guard → reopen → rebuild → canonical-close path is therefore complete. REL-002 remains `VERIFY` only for licensed-accountant acceptance.
 
 ## Production smoke — 2026-09-10
 
@@ -83,7 +115,7 @@ Representative-period evidence, collected through authenticated read-only reques
 | `2026-08` locally managed | Physical ledger is `POSTED`, `cerradoAt=null`, and one bank movement is not classified | Fresh evaluation returns `BLOQUEADO`; `ce:sin_clasificar` is an error and `contabilizado`, `cerrado`, `descargable`, and `puedeContabilizar` are false |
 | `2026-08` monthly package | Authenticated `GET /api/contabilidad/paquete` against the blocked period | HTTP `409 CIERRE_NO_DESCARGABLE`; no package is generated |
 
-No declaration, accounting transition, close, or reopen was performed against the production company during this smoke. Mutating transition behavior remains covered by the automated engine and route tests until a disposable or dedicated test company is available.
+No declaration, accounting transition, close, or reopen was performed against this representative company during the read-only smoke. The later controlled transition used the dedicated Altiplano mock-data company documented above.
 
 ## Verification
 
@@ -93,3 +125,5 @@ No declaration, accounting transition, close, or reopen was performed against th
 - Production build: compilation, type validation, and 374 static pages passed.
 - All five pull-request checks passed, including the real-Postgres authorization job.
 - Production deployment and the read-only representative-period smoke passed on 2026-09-10.
+- PR `#1001` passed all five pull-request checks; its local verification covered 3,854 tests, type checking, and a 378-page production build.
+- The controlled production transition, exact-ledger comparison, fresh canonical evaluation, deliverables gate, and daily-pass telemetry checks passed on 2026-09-14.

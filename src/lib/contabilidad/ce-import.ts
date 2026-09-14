@@ -38,6 +38,8 @@ export interface CatalogoCuentaParsed {
   nivel: number;
   /** Naturaleza COE: "D" (deudora) | "A" (acreedora). */
   natur: Naturaleza;
+  /** SubCtaDe: la clave interna de la cuenta padre (nivel > 1); null en las de mayor o si el XML no lo trae. */
+  subCtaDe: string | null;
 }
 
 export interface CatalogoParseResult {
@@ -119,6 +121,7 @@ export function parseCatalogoCuentas(xml: string): CatalogoParseResult {
       desc: unescapeXml(attr(a, "Desc") ?? "").trim(),
       nivel: Number.isFinite(nivel) && nivel > 0 ? nivel : 1,
       natur: n,
+      subCtaDe: (() => { const p = attr(a, "SubCtaDe"); const v = p ? unescapeXml(p).trim() : ""; return v || null; })(),
     });
   }
 
