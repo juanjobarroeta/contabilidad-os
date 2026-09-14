@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clasificarCitas, fraccionesMencionadas, fuentesDesdeToolResult, motivoRechazoCorreccion, parsearCita, parsearVeredicto, seleccionarTexto, resolverCitaEstatal } from "./verificacion";
+import { construirCitas, clasificarCitas, fraccionesMencionadas, fuentesDesdeToolResult, motivoRechazoCorreccion, parsearCita, parsearVeredicto, seleccionarTexto, resolverCitaEstatal } from "./verificacion";
 
 describe("clasificarCitas", () => {
   it("una cita con fracción o con año de RMF cuenta como sostenida si la KB la devolvió", () => {
@@ -105,5 +105,51 @@ describe("resolverCitaEstatal", () => {
     expect(resolverCitaEstatal("ART. 486 CPF", "Conforme al Art. 486 CPF, procede.", fuentes)).toBeNull();
     expect(resolverCitaEstatal("ART. 486 CPF", "Art. 486 CPF Puebla", fuentes)).toBeNull();
     expect(resolverCitaEstatal("ART. 63 CPF", "Art. 63 CPF Coahuila", fuentes)?.cita).toBe("Art. 63 COA-C-PROCEDIMIENTOS-FAMILIARES-CO");
+  });
+});
+
+describe("construirCitas", () => {
+  const fuentes = [
+    { cita: "Art. 486 CHH-C-PROCEDIMIENTOS-FAMILIARES-CH" },
+    { cita: "Art. 27 LISR" },
+    { cita: "Valores oficiales · UMA" },
+  ];
+  const texto = "Procede la apelación conforme al artículo 486 del CPF Chihuahua, y el gasto es deducible por el artículo 27 LISR. La regla 2.7.1.32 RMF y la tesis reg. 2021760 apoyan lo anterior. Ver también el artículo 999 LIVA.";
+
+  it("marca cada cita con su lugar, su norma y su veredicto", () => {
+    const citas = construirCitas({
+      texto,
+      fuentes,
+      resueltas: [
+        { cita: "ART. 486 CPF", fundamento: { cita: "Art. 486 CHH-C-PROCEDIMIENTOS-FAMILIARES-CH", ley: "CHH-C-PROCEDIMIENTOS-FAMILIARES-CH", articulo: "486", titulo: "Código de Procedimientos Familiares del Estado de Chihuahua", url: "https://x" } },
+        { cita: "ART. 27 LISR", fundamento: { cita: "Art. 27 LISR" } },
+        { cita: "ART. 999 LIVA", fundamento: null },
+      ],
+      problemas: [{ afirmacion: "el gasto es deducible", cita: "Art. 27 LISR", motivo: "el artículo no dice eso" }],
+      citasNoVerificables: ["ART. 999 LIVA"],
+      verificada: true,
+      corregida: true,
+    });
+    expect(citas.map((c) => [c.id, c.cita, c.estado])).toEqual([
+      ["c1", "ART. 486 CPF", "verificada"],
+      ["c2", "ART. 27 LISR", "corregida"],
+      ["c3", "REGLA 2.7.1.32 RMF", "fuera_de_base"],
+      ["c4", "REG. 2021760", "fuera_de_base"],
+      ["c5", "ART. 999 LIVA", "fuera_de_base"],
+    ]);
+    // Los offsets apuntan al texto literal que el abogado lee.
+    for (const c of citas) expect(texto.slice(c.inicio, c.fin)).toBe(c.textoEnRespuesta);
+    expect(citas[0].fundamento?.titulo).toContain("Chihuahua");
+    expect(citas[1].motivo).toBe("el artículo no dice eso");
+  });
+
+  it("una corrección descartada deja la cita «observada», y sin verificación todas quedan «sin_verificar» pero con su norma", () => {
+    const observada = construirCitas({ texto, fuentes, resueltas: [{ cita: "ART. 27 LISR", fundamento: { cita: "Art. 27 LISR" } }], problemas: [{ afirmacion: "x", cita: "Art. 27 LISR", motivo: "no lo sostiene" }], citasNoVerificables: [], verificada: true, corregida: false });
+    expect(observada.find((c) => c.cita === "ART. 27 LISR")?.estado).toBe("observada");
+    const sin = construirCitas({ texto, fuentes, verificada: false, corregida: false });
+    expect(new Set(sin.map((c) => c.estado))).toEqual(new Set(["sin_verificar"]));
+    expect(sin.find((c) => c.cita === "ART. 486 CPF")?.fundamento?.cita).toBe("Art. 486 CHH-C-PROCEDIMIENTOS-FAMILIARES-CH");
+    // Las tablas de valores no son fundamento de una cita.
+    expect(sin.some((c) => c.fundamento?.cita.startsWith("Valores oficiales"))).toBe(false);
   });
 });

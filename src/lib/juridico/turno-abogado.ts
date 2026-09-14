@@ -14,7 +14,7 @@ import { toolsAbogado } from "@/lib/ai/tools-abogado";
 import { ejecutarHerramientaAbogado } from "@/lib/ai/executor-abogado";
 import { buildSystemPromptAbogado } from "@/lib/ai/system-prompt-abogado";
 import { recordLlmCost } from "@/lib/costos/record";
-import { fuentesDesdeToolResult, verificarRespuesta, type FuenteVerificacion } from "@/lib/ai/verificacion";
+import { construirCitas, fuentesDesdeToolResult, verificarRespuesta, type CitaEnRespuesta, type FuenteVerificacion } from "@/lib/ai/verificacion";
 import { bloqueDocumentosParaPrompt, toolsDocumentos, type DocumentoCargado, type Resumenes, type Seccion } from "@/lib/juridico/documentos";
 import { ejecutarRedactar, toolRedactar } from "@/lib/juridico/redaccion";
 import { asuntoDeConversacion, bloqueAsuntoParaPrompt, ejecutarHerramientaAsunto, toolsAsunto, type Asunto } from "@/lib/juridico/asuntos";
@@ -43,6 +43,8 @@ export interface Traza {
   fundamentos: { cita: string; similitud: number; fuente?: string }[];
   documentos?: string[];
   verificacion?: { verificada: boolean; corregida: boolean; problemas: number; citasNoVerificables: string[]; ms: number };
+  /** Cada cita de la respuesta entregada: dónde está, en qué norma descansa y su veredicto. */
+  citas?: CitaEnRespuesta[];
   cacheReadTokens: number;
   reanudado?: number; // veces que el turno continuó en otro proceso
 }
@@ -349,6 +351,11 @@ export async function correrTurnoAbogado(args: TurnoAbogadoArgs, emitir: (e: Eve
         assistantText = v.texto;
         emitir({ type: "replace", text: assistantText });
       }
+      // Sobre el texto ENTREGADO, para que los offsets sirvan tal cual.
+      traza.citas = construirCitas({ texto: assistantText, fuentes: fuentesTurno, resueltas: v.resueltas, problemas: v.problemas, citasNoVerificables: v.citasNoVerificables, verificada: v.verificada, corregida: v.corregida });
+    } else if (assistantText.trim()) {
+      // Sin pase de verificación se marcan igual, con estado «sin_verificar».
+      traza.citas = construirCitas({ texto: assistantText, fuentes: fuentesTurno, verificada: false, corregida: false });
     }
 
     let assistantMessageId: string | null = null;
