@@ -59,6 +59,28 @@ describe("padresDelCatalogo — quién tiene subcuentas", () => {
     expect(p.get("1001")).toBe(2);
     expect(p.has("1002")).toBe(false);
   });
+  it("lo declarado (SubCtaDe) manda sobre lo inferido, y convive con cuentas sin declaración", () => {
+    const p = padresDelCatalogo([
+      // numeración que la inferencia NO entiende, pero el XML sí declara
+      { codigo: "A", nivel: 1, padreCodigo: null },
+      { codigo: "B", nivel: 2, padreCodigo: "A" },
+      { codigo: "C", nivel: 3, padreCodigo: "B" },
+      { codigo: "D", nivel: 3, padreCodigo: "B" },
+      // sin declaración: cae a la inferencia por código
+      { codigo: "601.01", nivel: 2 },
+      { codigo: "601.01.001", nivel: 3 },
+    ]);
+    expect(p.get("A")).toBe(3);
+    expect(p.get("B")).toBe(2);
+    expect(p.has("C")).toBe(false);
+    expect(p.get("601.01")).toBe(1);
+  });
+
+  it("un SubCtaDe que apunta a una cuenta que no está en el catálogo se ignora y se infiere", () => {
+    const p = padresDelCatalogo([{ codigo: "115001000", nivel: 2, padreCodigo: "999" }, { codigo: "115001001", nivel: 3, padreCodigo: "115001000" }]);
+    expect(p.get("115001000")).toBe(1);
+  });
+
   it("catálogo plano: nadie es padre", () => {
     expect(padresDelCatalogo([{ codigo: "601.01", nivel: 3 }, { codigo: "601.02", nivel: 3 }]).size).toBe(0);
   });

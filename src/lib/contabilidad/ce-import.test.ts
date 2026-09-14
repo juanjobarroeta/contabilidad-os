@@ -126,6 +126,7 @@ describe("parseCatalogoCuentas — Anexo 24 (catalogocuentas)", () => {
       desc: "Bancos",
       nivel: 1,
       natur: "D",
+      subCtaDe: null,
     });
     // Sub-cuenta con punto y nivel 2.
     expect(r.cuentas[1]).toMatchObject({ codAgrup: "102.01", numCta: "102.01", nivel: 2, natur: "D" });
@@ -382,5 +383,17 @@ describe("convencionQueCuadra", () => {
     });
     // Comportamiento histórico intacto: magnitud, lado natural.
     expect(lineas).toEqual([{ codigo: "2101", saldo: 28000 }]);
+  });
+});
+
+describe("parseCatalogoCuentas — SubCtaDe", () => {
+  it("guarda la clave del padre cuando el XML la trae; null en las de mayor", () => {
+    const xml = `<catalogocuentas:Catalogo xmlns:catalogocuentas="http://www.sat.gob.mx/esquemas/ContabilidadE/1_3/CatalogoCuentas" Version="1.3" RFC="CPM2307076Z9" Mes="08" Anio="2026">
+      <catalogocuentas:Ctas CodAgrup="115" NumCta="115000000" Desc="Almacenes" Nivel="1" Natur="D"/>
+      <catalogocuentas:Ctas CodAgrup="115.01" NumCta="115001000" Desc="Almacenes" SubCtaDe="115000000" Nivel="2" Natur="D"/>
+      <catalogocuentas:Ctas CodAgrup="115.01" NumCta="115001001" Desc="Almacen General" SubCtaDe="115001000" Nivel="3" Natur="D"/>
+    </catalogocuentas:Catalogo>`;
+    const r = parseCatalogoCuentas(xml);
+    expect(r.cuentas.map((c) => [c.numCta, c.subCtaDe])).toEqual([["115000000", null], ["115001000", "115000000"], ["115001001", "115001000"]]);
   });
 });
