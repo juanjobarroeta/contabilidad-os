@@ -1,0 +1,14 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Sonda IDSE/SIPARE con e.firma (scripts/probe-idse.ts). Misma base que el
+# worker de CE: Chromium de Playwright + la e.firma descifrada aquí con
+# CREDENTIALS_ENCRYPTION_KEY. Corre una vez y termina (restart policy NEVER).
+# ─────────────────────────────────────────────────────────────────────────────
+FROM mcr.microsoft.com/playwright:v1.62.0-jammy
+WORKDIR /app
+ENV CI=1
+COPY package*.json ./
+RUN npm ci --include=dev
+RUN npx playwright install chromium
+COPY . .
+RUN npx prisma generate
+CMD ["npm", "run", "probe:idse"]
