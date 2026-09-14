@@ -2428,6 +2428,11 @@ model ChartAccount {
   // se invierte agrupador → cuenta de la empresa. Null = el CT no la trae
   // (stubs de balanza) o el catálogo se importó antes de persistirla.
   codAgrup   String?
+  // SubCtaDe del Anexo 24: la clave (NumCta) de la cuenta padre. Con esto la
+  // jerarquía es exacta para cualquier numeración; sin esto se infiere del
+  // código (jerarquia-catalogo.ts). Null en las de mayor y en lo importado
+  // antes de guardarlo.
+  padreCodigo String?
   isActive   Boolean     @default(true)
 
   company          Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
