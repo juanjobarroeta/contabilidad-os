@@ -150,6 +150,11 @@ const JOBS: Job[] = [
   // partir de las 06:00 MX); la cadencia sólo decide cuánto tarda en
   // enterarse de que ya es «hoy».
   { name: "cierre-avance", everyMs: 30 * MIN, firstDelayMs: 12 * MIN, minMs: MIN_CARO },
+  // Foto diaria de salud de toda la cartera (ocho dimensiones + diff contra
+  // ayer). Es el filtro que decide a qué empresas vale la pena dedicarles
+  // razonamiento: sin él habría que mirarlas todas a mano. Mismo gateo por
+  // empresa y día (06:00 MX) que el pase del cierre.
+  { name: "salud-diaria", everyMs: 30 * MIN, firstDelayMs: 14 * MIN, minMs: MIN_CARO },
   { name: "compliance-provision", everyMs: 24 * HOUR, firstDelayMs: 3 * MIN, minMs: MIN_CARO },
   { name: "compliance-sync", everyMs: 6 * HOUR, firstDelayMs: 8 * MIN, minMs: MIN_CARO },
   // Acuses MENSUALES desde Syntage (PDF + parse con Claude). Corría SÓLO en el

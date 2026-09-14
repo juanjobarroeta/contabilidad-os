@@ -447,6 +447,8 @@ model Company {
 
   /** Directorio CLABE → contraparte aprendido de los CEP y las conciliaciones. */
   cuentasContraparte CuentaContraparte[]
+  decisionesMotor    DecisionMotor[]
+  saludSnapshots     SaludSnapshot[]
 }
 
 model CompanyMember {
@@ -9344,4 +9346,132 @@ model SalEnvio {
 
   @@index([companyId, estado])
   @@index([pedidoId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RASTRO DE DECISIÓN DE LOS MOTORES (append-only).
+//
+// Los motores deterministas (auto-conciliación, terminal, REP, traspasos,
+// sin-CFDI, auditor, SAT) deciden decenas de cosas por empresa y día, y hasta
+// ahora sólo quedaba el RESULTADO: este movimiento quedó conciliado con esta
+// factura. El porqué —qué candidatos se consideraron, cuál ganó, por qué se
+// descartaron los otros— se perdía.
+//
+// Eso se cobró en agosto: la auto-conciliación casó un traspaso de $30,000 con
+// la factura de un paciente porque emparejó por monto y fecha, y de paso dejó
+// bloqueado al depósito que sí le tocaba. Nadie lo vio hasta reconstruir el mes
+// a mano. Con el rastro, ese match habría quedado escrito como «candidato único
+// por monto, sin señal de contraparte» y era revisable el mismo día.
+//
+// Y desde que la conciliación decide el IVA acreditable de los gastos PUE
+// (lib/fiscal/iva-pue-flujo), un match equivocado ya no es un renglón mal
+// cuadrado: mueve la cifra de la declaración.
+//
+// Es append-only: una decisión no se edita ni se borra, se escribe otra. El
+// `resultado` guarda qué quedó; `razones` guarda POR QUÉ, en forma legible
+// (regla + detalle), no un score suelto.
+//
+// NUNCA guardar secretos aquí: es metadata de decisiones, como AuditLog.
+// ─────────────────────────────────────────────────────────────────────────────
+model DecisionMotor {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+
+  /// Modelo Prisma afectado: "BankTransaction" | "Invoice" | "FiscalHallazgo" | …
+  entidad   String
+  /// Id de la fila afectada. Sin FK: `entidad` cambia a qué tabla apunta.
+  entidadId String
+
+  /// Quién decidió: "auto-conciliar" | "terminal" | "rep-aplicar" | "traspasos" |
+  /// "sin-cfdi" | "auditor.<checkClave>" | "sat-sync" | …
+  motor        String
+  /// Versión de la LÓGICA que decidió, para saber con qué reglas se decidió
+  /// cuando el motor cambie. La fija el módulo del motor, no la migración.
+  motorVersion String @default("1")
+
+  /// "motor" (corrida automática) | "usuario" (un humano en la app) | "agente".
+  actor   String  @default("motor")
+  actorId String?
+
+  /// "match" | "rechazo" | "ignorar" | "abrir" | "resolver" | "categorizar" | …
+  accion String
+
+  /// Qué quedó: { invoiceId, porcion, categoria, estado… }. Libre por motor.
+  resultado Json?
+  /// POR QUÉ, legible: [{ regla, detalle, score?, candidatoId?, candidatoTipo? }].
+  /// Incluye los candidatos DESCARTADOS con la regla que los descartó — es la
+  /// mitad que no existía y la que explica un match dudoso.
+  razones   Json
+  /// Otras entidades consideradas o tocadas (candidatos, facturas del lote).
+  refs      String[]
+
+  /// Huella del contenido de `razones`, para no repetir la MISMA decisión.
+  ///
+  /// Un match se escribe una vez y el movimiento sale del universo sin
+  /// conciliar. Un RECHAZO, en cambio, se vuelve a tomar en CADA corrida
+  /// mientras el movimiento siga sin conciliar: sin huella, la tabla crecería
+  /// con copias idénticas del mismo «no pude» todos los días, y el volumen se
+  /// comería lo que el rastro vale.
+  ///
+  /// Con ella un rechazo sólo se escribe cuando el razonamiento CAMBIÓ —
+  /// apareció un candidato, cambió un puntaje—, que es justo cuando vuelve a
+  /// ser noticia. `null` en las decisiones que siempre se escriben.
+  huella    String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  /// La consulta de la mesa: la historia de UNA entidad, más reciente primero.
+  @@index([companyId, entidad, entidadId, createdAt])
+  /// El barrido de salud/agente: qué decidieron los motores desde ayer.
+  @@index([companyId, createdAt])
+  /// ¿Ya escribimos esta misma decisión? (dedupe de rechazos repetidos)
+  @@index([companyId, entidad, huella])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SALUD DIARIA DE UNA EMPRESA — una fila por empresa y día local MX.
+//
+// Las señales ya existen, dispersas: cobertura del SAT, opinión de
+// cumplimiento, declaraciones contra obligaciones, contabilidad electrónica,
+// bancos sin conciliar, IVA de PUE sin pago, hallazgos abiertos. Nadie las
+// junta, así que no hay forma de contestar «¿qué cambió en esta empresa desde
+// ayer?» sin abrir siete pantallas.
+//
+// Esta tabla es ese cálculo, congelado por día: el estado de cada dimensión y
+// el DELTA contra el snapshot anterior. Es barata (sólo lecturas) y determinista
+// (sin modelo), y su razón de ser es servir de FILTRO: sólo las empresas con
+// delta o con pendientes abiertas merecen que un agente las razone. Sin este
+// filtro, una pasada diaria por toda la cartera no se paga.
+//
+// Misma idea que el pase diario del cierre (lib/cierre/avance), pero para toda
+// la empresa y no sólo el workflow de cierre.
+// ─────────────────────────────────────────────────────────────────────────────
+model SaludSnapshot {
+  id        String   @id @default(cuid())
+  companyId String
+  /// Día local MX en formato YYYY-MM-DD. La llave natural del snapshot: el
+  /// cálculo depende del reloj, así que el día tiene que ser explícito.
+  dia       String
+  createdAt DateTime @default(now())
+
+  /// El peor estado entre las dimensiones: "ok" | "atencion" | "bloquea" | "sin_datos".
+  estado String
+
+  /// El snapshot completo: [{ clave, estado, titulo, detalle, metricas }].
+  dimensiones Json
+  /// Qué cambió contra el día anterior: [{ clave, de, a, sentido, titulo }].
+  /// Vacío el primer día (no hay contra qué comparar) y en un día sin cambios.
+  deltas      Json
+
+  /// Atajo para el filtro: hay delta a peor o algo que bloquea. Se guarda
+  /// calculado para no tener que abrir el JSON al elegir a quién razonar.
+  requiereAtencion Boolean @default(false)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, dia])
+  @@index([companyId, createdAt])
+  /// A quién le toca pasada del agente hoy.
+  @@index([dia, requiereAtencion])
 }

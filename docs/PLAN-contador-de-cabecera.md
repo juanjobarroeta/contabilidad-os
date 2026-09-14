@@ -1,6 +1,6 @@
 # Contador de cabecera — plan de construcción por fases
 
-> Estado: **diseño, sin código.** Este documento fija el orden de construcción
+> Estado: **F0 y F2 construidas; F1 en adelante, diseño.** Este documento fija el orden de construcción
 > y el contrato entre fases. Cada fase es un PR que entrega valor por sí solo y
 > deja la base de la siguiente. Nada aquí exige Managed Agents ni un runtime
 > nuevo: todo corre en la app, con el loop de agente, el medidor de costos y
@@ -50,7 +50,27 @@ expediente que valga, y el agente no puede explicar nada.
 
 ## Fases
 
-### F0 — Rastro de decisión (`DecisionMotor`)
+### F0 — Rastro de decisión (`DecisionMotor`) — **construida**
+
+> **Lo que quedó.** `prisma/schema.prisma` (modelo `DecisionMotor`, migración
+> `20260924_decision_motor_salud`), `src/lib/decisiones.ts` (escritura
+> best-effort, acotado de razones, dedupe por huella, `historiaDeEntidad`),
+> `src/lib/bancos/decision-conciliacion.ts` (el razonamiento de la
+> auto-conciliación en palabras, PURO), `auto-conciliar.ts` instrumentado sin
+> tocar el score, `GET /api/bancos/transactions/[txId]/historia` y la ficha
+> «Historia» de la mesa.
+>
+> **Lo que falta.** Los demás motores: `terminal`, `rep-aplicar`,
+> `traspasos-aplicar`, `movimientos-sin-cfdi`, el auditor y el pipeline SAT.
+> El módulo genérico ya está, así que instrumentar cada uno es sumarle su
+> función de razones.
+>
+> **Una cosa que el diseño no preveía.** Un rechazo se vuelve a decidir
+> idéntico en CADA corrida diaria, así que sin candado el rastro crecería
+> escribiendo lo mismo para siempre. Se resolvió con `huella` (FNV-1a del
+> razonamiento) + la marca `repetible`: se escribe la primera vez y cuando el
+> razonamiento cambia, no cuando el motor vuelve a pasar.
+
 
 **Qué.** Tabla append-only donde cada motor deja constancia de lo que decidió
 sobre una entidad y por qué, en forma estructurada.
@@ -177,7 +197,23 @@ notas abajo con filtro por tema y estado. Y un bloque cacheado en el system
 prompt del copiloto: hechos vigentes + últimas N notas + pendientes abiertas.
 Con eso el chat deja de ser genérico sin tocar el chat.
 
-### F2 — Salud diaria y delta
+### F2 — Salud diaria y delta — **construida**
+
+> **Lo que quedó.** `src/lib/salud/claves.ts` (sin Node, para que el cliente
+> las importe), `evaluar.ts` (PURO: ocho dimensiones, diff, ranking y el filtro
+> `requiereAtencion`), `hechos.ts` (el cargador con Prisma), `snapshot.ts`
+> (`correrSaludDiaria`, upsert por `(companyId, dia)`), la ruta
+> `/api/cron/salud-diaria` y el job en `cron-scheduler.ts`.
+>
+> **Lo que falta.** La dimensión de **solicitudes** llega con F4 (aún no hay
+> tabla que contar), y la UI que enseña la foto llega con F5. El snapshot ya
+> se guarda desde hoy: cuando exista el rail, tendrá historia que enseñar.
+>
+> **Decisión que vale la pena recordar.** El diff NO avisa de un problema que
+> sigue igual que ayer. Es la regla del pase del cierre y es la que separa este
+> trabajo del rail actual, que repite «13,778 posibles duplicados» todos los
+> días hasta que se aprende a ignorarlo.
+
 
 **Qué.** Una función pura `evaluarSalud(hechos)` que junta lo que ya se
 calcula por separado en un `SaludSnapshot` por empresa y día, y un diff contra
@@ -333,7 +369,7 @@ F0 rastro ─┬─► F1 expediente ─┬─► F3 agente ─► F5 rail ─�
 F4 solicitudes: motor puro desde F2; el agente las usa desde F3.
 ```
 
-F0 y F2 pueden ir en paralelo. F1 depende de F0 para tener evidencia que
+F0 y F2 fueron en paralelo y ya están. F1 depende de F0 para tener evidencia que
 citar. F3 no arranca sin F1 y F2. F4 se puede adelantar como motor puro
 (terminal, estados de cuenta) en cuanto F2 exista.
 
