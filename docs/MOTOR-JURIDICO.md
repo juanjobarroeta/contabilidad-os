@@ -275,6 +275,24 @@
 > (test que comprueba que el buffer sigue intacto), la ruta rechaza 0 bytes
 > con mensaje claro, reporta a Sentry y muestra la razón del modelo.
 >
+> **Turnos que sobreviven un redespliegue (Fase 0 del roadmap, 14-sep-2026).**
+> Quince merges en una hora mataban cada respuesta en curso («el servidor se
+> reinició»). Ahora el turno se persiste en `JuridicoTurno` (migración
+> `20260923`): los eventos SSE se appendean por lotes (`jsonb ||`, los deltas
+> de texto cada 0.8 s, herramientas y fin al momento), hay un checkpoint por
+> ronda (mensajes del API, rondas, texto, fuentes, traza) y el proceso late
+> cada 15 s. El cuerpo del turno salió de la ruta a
+> `src/lib/juridico/turno-abogado.ts` (`cargarContextoConversacion` +
+> `correrTurnoAbogado`, que acepta un checkpoint). `turnos-reanudar.ts`, desde
+> `instrumentation.ts`, barre cada 30 s los turnos «en curso» sin latido en
+> 45 s, los reclama de forma atómica (`updateMany … where latido = visto`) y
+> los continúa desde el checkpoint: primero manda `replace` con el texto del
+> checkpoint (el cliente descarta lo de la ronda interrumpida) y sigue. La
+> vista GET, si no tiene el turno en memoria, lo reproduce desde la base y lo
+> sigue por sondeo (1 s); el 204 queda sólo para «no hay turno reciente». Lo
+> que se repite al reanudar: la ronda interrumpida entera (sus herramientas
+> vuelven a correr; son upserts).
+>
 > **Turnos reanudables (PR #1042).** La primera prueba real de la abogada
 > (alegatos de cinco tipos para un juicio oral familiar en Chihuahua, 8
 > minutos) murió con «Load failed» en el iPhone. Dos causas, las dos
