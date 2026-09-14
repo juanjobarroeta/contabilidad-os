@@ -7,18 +7,11 @@
 
 import { ComplianceProviderNoDisponible, type ComplianceProvider } from "../provider";
 import type { CsfResult, OpinionResult } from "../types";
+import { textoDePdf } from "../../fuentes/texto";
 import { SatGoClient } from "./client";
 import { interpretarOpinionImss } from "./imss";
 
 export type RfcResolver = (companyId: string) => Promise<string>;
-
-async function textoDePdf(pdf: Buffer): Promise<string> {
-  // pdf-parse es CommonJS — igual que en obligaciones/csf.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const pdfParse = require("pdf-parse");
-  const data = await pdfParse(pdf);
-  return String(data?.text ?? "");
-}
 
 export class SatGoComplianceProvider implements ComplianceProvider {
   private readonly client: SatGoClient;
