@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planearTraspasos, subcuentaBancoSpec, IGNORED_TAGS_VALIDOS } from "./posting";
+import { planearTraspasos, subcuentaBancoSpec, IGNORED_TAGS_VALIDOS, esParDevolucion } from "./posting";
 
 const CLABE_X = "012180001111111111";
 const CLABE_Y = "014180002222222222";
@@ -213,5 +213,17 @@ describe("repartoMovimiento — el sobrante no se diluye en Clientes", () => {
 
   it("las porciones se toman en valor absoluto (los pagos vienen negativos)", () => {
     expect(repartoMovimiento(5000, null, [-2000, -1000])).toEqual({ asignado: 3000, sobrante: 2000, excedente: 0 });
+  });
+});
+
+// El rebote de un pago se resuelve vinculando las dos patas, y vincular las
+// deja IGNORED sin categoría. Antes eso volvía a bloquear el cierre («2
+// ignorados sin categoría») justo después de haberlo resuelto bien.
+describe("esParDevolucion() — el par ES la categoría", () => {
+  it("las dos patas del par cuentan; un ignorado suelto no", () => {
+    expect(esParDevolucion({ devolucionDeId: "pago", devolucionPor: null })).toBe(true);
+    expect(esParDevolucion({ devolucionDeId: null, devolucionPor: { id: "rebote" } })).toBe(true);
+    expect(esParDevolucion({ devolucionDeId: null, devolucionPor: null })).toBe(false);
+    expect(esParDevolucion({ devolucionDeId: null })).toBe(false);
   });
 });

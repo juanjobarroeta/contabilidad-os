@@ -172,6 +172,16 @@ function monthRange(year: number, month: number): { start: Date; end: Date } {
  */
 
 /** Tags válidos de IGNORED — cualquier otro valor bloquea el cierre. */
+/**
+ * ¿Es una de las dos patas de una devolución vinculada (un pago que rebotó)?
+ *
+ * Vincular el rebote deja a las dos en IGNORED y sin categoría —el par ES la
+ * categoría—, así que sin esto el mes no cerraba: «2 ignorados sin categoría»
+ * justo después de haber resuelto bien el rebote. Ver lib/bancos/devoluciones.ts.
+ */
+export const esParDevolucion = (t: { devolucionDeId: string | null; devolucionPor?: { id: string } | null }) =>
+  t.devolucionDeId !== null || (t.devolucionPor ?? null) !== null;
+
 export const IGNORED_TAGS_VALIDOS = new Set([
   "PENDING_MONTHLY_CFDI",
   "TAX_PAYMENT",
@@ -455,6 +465,7 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     accAnticiposClientes,
     accAnticiposProveedores,
     accCaja,
+    accDeudoresDiv,
   ] = await Promise.all([
     resolveAccount(companyId, COE_CODES.BANCOS),
     resolveAccount(companyId, COE_CODES.CLIENTES_NACIONALES),
@@ -484,6 +495,7 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     resolveAccount(companyId, COE_CODES.ANTICIPOS_CLIENTES),
     resolveAccount(companyId, COE_CODES.ANTICIPOS_PROVEEDORES),
     resolveAccount(companyId, COE_CODES.CAJA),
+    resolveAccount(companyId, COE_CODES.DEUDORES_DIVERSOS),
   ]);
 
   // ─── 1. CFDIs emitted (INGRESO) ────────────────────────────────────────
@@ -987,8 +999,11 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       // ...y el invoiceId de cada porción: la liquidación resuelve mirando LA
       // FACTURA (nómina → acreedores; módulo → su CxC), no sólo el sentido.
       conciliacionDetalles: { select: { invoiceId: true, montoAsignado: true } },
+      // El otro lado de una devolución vinculada (el par pago ↔ rebote).
+      devolucionPor: { select: { id: true } },
     },
   })).map((t) => ({ ...t, monto: Number(t.monto) }));
+
 
   // Subcuentas de banco: con 2+ cuentas, cada una postea en su subcuenta
   // contable propia (creada y ligada bajo demanda); con una, la cuenta base.
@@ -1096,7 +1111,7 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
   // el movimiento DESAPARECÍA del libro — el saldo de Bancos dejaba de atar
   // contra el estado de cuenta sin que nada lo delatara.
   const sinCategoria = bankTxs.filter(
-    (t) => t.status === "IGNORED" && !IGNORED_TAGS_VALIDOS.has(t.notes ?? "")
+    (t) => t.status === "IGNORED" && !IGNORED_TAGS_VALIDOS.has(t.notes ?? "") && !esParDevolucion(t)
   );
   // ANTICIPOS: no bloquean —el pasivo está bien asentado y los libros cierran—
   // pero el mes NO se cierra en silencio sobre ellos. Cada uno es una factura
@@ -1155,6 +1170,23 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
         `Movimiento sin conciliar: ${tx.fecha.toISOString().slice(0, 10)} ${tx.descripcion.slice(0, 40)} $${absAmount.toFixed(2)}`
       );
       continue; // not posted
+    }
+
+    // Devolución vinculada (pago rebotado): las dos patas se contabilizan
+    // contra deudores diversos, no contra el gasto. Así el saldo de Bancos
+    // sigue atando con el estado de cuenta —el dinero salió y volvió de
+    // verdad— y el par se neta solo en la cuenta puente. Cuando el rebote cae
+    // en el mes siguiente, lo que queda al cierre es exactamente lo que es:
+    // una cuenta por cobrar al banco. Ver lib/bancos/devoluciones.ts.
+    if (esParDevolucion(tx)) {
+      if (isCredit) {
+        drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,    monto: absAmount, tipo: "CARGO" });
+        drafts.push({ ...base, chartAccountId: accDeudoresDiv.id, monto: absAmount, tipo: "ABONO" });
+      } else {
+        drafts.push({ ...base, chartAccountId: accDeudoresDiv.id, monto: absAmount, tipo: "CARGO" });
+        drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,    monto: absAmount, tipo: "ABONO" });
+      }
+      continue;
     }
 
     // Enteramiento de impuestos conciliado (MATCHED ↔ TaxDeclaration): postea
