@@ -6,6 +6,7 @@ import { tools } from "@/lib/ai/tools";
 import { executeToolCall } from "@/lib/ai/tool-executor";
 import { buildSystemBlocks } from "@/lib/ai/system-prompt";
 import { bloqueCierre } from "@/lib/cierre/contexto";
+import { bloqueExpediente } from "@/lib/expediente/cargar";
 import { evaluarCierre } from "@/lib/cierre/evaluar";
 import { empresaTieneCierreGuiado } from "@/lib/cierre/gate";
 import { esClavePaso } from "@/lib/cierre/claves";
@@ -194,7 +195,20 @@ export async function POST(req: Request) {
 
   // System prompt en bloques: el estable lleva cache_control (junto con `tools`
   // es casi toda la entrada del turno) y el de navegación va después.
-  const systemBlocks = buildSystemBlocks(empresa, { ruta: rutaActual, bloqueCierre: bloqueDelCierre });
+  // El expediente: lo que ya se sabe de esta empresa y lo que quedó pendiente.
+  // Es lo que separa «según tus datos hay 13,778 posibles duplicados» de «el
+  // estado de cuenta de la terminal sigue sin llegar, y sin él esos cargos no
+  // se pueden auditar». Si falla, el chat sigue: es contexto, no un requisito.
+  const bloqueDelExpediente = await bloqueExpediente(companyId).catch((e) => {
+    console.error("[chat] expediente falló:", e instanceof Error ? e.message : e);
+    return "";
+  });
+
+  const systemBlocks = buildSystemBlocks(empresa, {
+    ruta: rutaActual,
+    bloqueCierre: bloqueDelCierre,
+    bloqueExpediente: bloqueDelExpediente,
+  });
 
   // Stream response with tool-use loop
   const encoder = new TextEncoder();

@@ -15,6 +15,13 @@ export interface ContextoNavegacion {
    * paso. Se recibe hecho para que este módulo no dependa del cierre.
    */
   bloqueCierre?: string;
+  /**
+   * Bloque del expediente de la empresa ya redactado
+   * (src/lib/expediente/prompt.ts). Va DESPUÉS del breakpoint de caché: el
+   * modelo lo escribe con sus herramientas dentro del mismo turno, y meterlo
+   * en el prefijo estable invalidaría la caché entera en cada anotación.
+   */
+  bloqueExpediente?: string;
 }
 
 /**
@@ -51,6 +58,8 @@ export function buildSystemBlocks(
   if (nav) bloques.push({ type: "text", text: nav });
   const cierre = contexto?.bloqueCierre?.trim();
   if (cierre) bloques.push({ type: "text", text: cierre });
+  const expediente = contexto?.bloqueExpediente?.trim();
+  if (expediente) bloques.push({ type: "text", text: expediente });
   return bloques;
 }
 

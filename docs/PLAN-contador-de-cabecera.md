@@ -1,6 +1,6 @@
 # Contador de cabecera — plan de construcción por fases
 
-> Estado: **F0 y F2 construidas; F1 en adelante, diseño.** Este documento fija el orden de construcción
+> Estado: **F0, F1 y F2 construidas; F3 en adelante, diseño.** Este documento fija el orden de construcción
 > y el contrato entre fases. Cada fase es un PR que entrega valor por sí solo y
 > deja la base de la siguiente. Nada aquí exige Managed Agents ni un runtime
 > nuevo: todo corre en la app, con el loop de agente, el medidor de costos y
@@ -129,7 +129,34 @@ los gastos PUE (`lib/fiscal/iva-pue-flujo`): un match equivocado ya no es
 sólo un renglón mal cuadrado, cambia la cifra de la declaración. Un
 `DecisionMotor` de conciliación debe poder responder «¿qué IVA movió esto?».
 
-### F1 — Expediente por empresa (memoria versionada)
+### F1 — Expediente por empresa (memoria versionada) — **construida**
+
+> **Lo que quedó.** `ExpedienteHecho` + `ExpedienteNota` (migración
+> `20260925_expediente_empresa`), `src/lib/expediente/claves.ts` (sin Node),
+> `hechos.ts` (versionado por vigencia, con `decidirEscritura` PURA),
+> `notas.ts`, `prompt.ts` (el bloque del system prompt, PURO), `cargar.ts`,
+> `tools.ts` (definiciones sin Prisma) y `ejecutar.ts`. Cuatro herramientas
+> nuevas del copiloto —`registrar_hecho`, `anotar_expediente`,
+> `consultar_expediente`, `cerrar_pendiente`—, el bloque enganchado en
+> `/api/ai/chat` después del breakpoint de caché, las rutas
+> `/api/expediente*` y la página `/expediente` en la sidebar.
+>
+> **La regla que gobierna el módulo.** Un hecho NO se edita: se cierra y se
+> abre otro. Sobreescribir era más corto y borraba la única respuesta a «¿desde
+> cuándo?» — que es justo la pregunta que aparece cuando un cargo no cuadra con
+> el contrato.
+>
+> **Quién puede pisar a quién.** Lo que una persona verifica en `/expediente`
+> queda intocable para los motores y para el agente. El modelo NUNCA escribe
+> con fuente «usuario», ni siquiera cuando la conversación la lleva una
+> persona: quien escribe la fila es el modelo interpretando lo que le dijeron,
+> y esa interpretación no puede pisar un dato confirmado a mano.
+>
+> **Lo que falta.** Los hechos automáticos desde los motores (afiliación de
+> terminal desde `tarjetaDeLiquidacion`, banco desde `banco-por-descripcion`):
+> el módulo ya los acepta, falta llamarlo desde cada motor. Y la nota
+> `resumen_corrida`, que la escribe F3.
+
 
 **El patrón ya está en la casa.** El copiloto jurídico dejó de recordar desde
 el chat: `JuridicoAsunto` + `JuridicoParte` viven en la base, el modelo los
@@ -369,7 +396,7 @@ F0 rastro ─┬─► F1 expediente ─┬─► F3 agente ─► F5 rail ─�
 F4 solicitudes: motor puro desde F2; el agente las usa desde F3.
 ```
 
-F0 y F2 fueron en paralelo y ya están. F1 depende de F0 para tener evidencia que
+F0, F1 y F2 ya están. F1 dependía de F0 para tener evidencia que
 citar. F3 no arranca sin F1 y F2. F4 se puede adelantar como motor puro
 (terminal, estados de cuenta) en cuanto F2 exista.
 

@@ -32,6 +32,8 @@ import {
 import { DIAS_DEADLINE_AVISO } from "@/lib/briefing/matutino-format";
 import type { FamiliaConcepto } from "@/lib/bancos/categorizar-concepto";
 import type { TipoCuenta } from "@/lib/contabilidad/agrupador-candidatos";
+import { NOMBRES_EXPEDIENTE } from "@/lib/expediente/tools";
+import { ejecutarHerramientaExpediente } from "@/lib/expediente/ejecutar";
 
 type ToolInput = Record<string, unknown>;
 
@@ -63,6 +65,22 @@ export async function executeToolCall(
   companyId: string,
   context: ToolContext = {}
 ): Promise<string> {
+  // El expediente se despacha antes del switch: sus herramientas viven en su
+  // propio módulo (con sus reglas de versionado y de lo verificado a mano) y
+  // copiarlas aquí las partiría en dos sitios que se desincronizan.
+  if (NOMBRES_EXPEDIENTE.has(toolName)) {
+    return ejecutarHerramientaExpediente(toolName, input as Record<string, unknown>, {
+      companyId,
+      userId: context.userId ?? null,
+      // SIEMPRE "agente", aunque la conversación la lleve una persona: quien
+      // escribe la fila es el modelo interpretando lo que le dijeron, y esa
+      // interpretación no debe poder pisar un hecho que alguien verificó a
+      // mano. La fuente "usuario" se reserva para lo que se captura en la
+      // página del expediente, donde la persona escribe el valor ella misma.
+      autor: "agente",
+    });
+  }
+
   switch (toolName) {
     case "preview_factura":
       return previewTimbrar(input, companyId, {
