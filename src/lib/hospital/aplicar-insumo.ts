@@ -196,9 +196,10 @@ export async function aplicarInsumo(db: PrismaClient, args: AplicarInsumoArgs) {
     });
 
     // ── Contabilidad (P3c): la salida al paciente es costo de farmacia al costo
-    // del lote (COSTO_FARMACIA / INVENTARIO_FARMACIA, fuente HOSPITAL). Sólo con
+    // del lote (COSTO_FARMACIA_16/_0 según la tasa con que se facturó, contra
+    // INVENTARIO_FARMACIA; fuente HOSPITAL). Sólo con
     // HospConfig.contabilidadActiva; ver lib/hospital/asientos.ts. ──
-    await asentarSalidaFarmacia(tx, { ...movimiento, descripcion: etiqueta });
+    await asentarSalidaFarmacia(tx, { ...movimiento, descripcion: etiqueta, cargo });
     // ── fin contabilidad ──
 
     const amparo = recetaRef

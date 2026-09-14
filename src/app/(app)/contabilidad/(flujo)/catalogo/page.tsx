@@ -28,7 +28,7 @@ interface CuentaPropia {
 }
 interface Cobertura {
   codigoMotor: string;
-  estado: "unica" | "override" | "ambigua" | "sin_candidata" | "por_dimension";
+  estado: "unica" | "override" | "ambigua" | "sin_candidata" | "por_dimension" | "por_modulo";
   candidatas: number;
   acumulativas?: number;
   cuenta?: { cuentaSAT: string; nombre: string };
@@ -36,6 +36,19 @@ interface Cobertura {
   dimension: "FIJA" | "CONTRAPARTE" | "EJERCICIO";
   padron?: "BANCO" | "CLIENTE" | "PROVEEDOR" | "RELACIONADA";
   porque: string;
+}
+
+interface CuentaMini { id: string; codigo: string; nombre: string }
+
+/** Un renglón del mapa del hospital: GET /api/hospital/contabilidad/mapa. */
+interface RenglonHospital {
+  clave: string;
+  descripcion: string;
+  cuentaSAT: string;
+  origen: "DEFAULT" | "CONFIG" | "OVERRIDE";
+  cuenta: CuentaMini | null;
+  candidatas: CuentaMini[];
+  sugerencia: { cuenta: CuentaMini; confianza: "EXACTA" | "PARECIDA"; porque: string; alternativas: CuentaMini[] } | null;
 }
 
 interface Pareja {
@@ -63,6 +76,9 @@ const CHIP_ESTADO: Record<Cobertura["estado"], { t: string; cls: string }> = {
   // No es un pendiente: es el catálogo bien armado, con un auxiliar por
   // contraparte. Se enseña aparte y sin pedir nada.
   por_dimension: { t: "Por contraparte", cls: "bg-cos-brand-tint text-cos-brand-ink" },
+  // Tampoco: el módulo ya decide ese código por clave (un hospital parte su
+  // 401.01 por servicio). La decisión se toma abajo, no aquí.
+  por_modulo: { t: "Por módulo", cls: "bg-cos-brand-tint text-cos-brand-ink" },
 };
 
 export default function CatalogoPage() {
@@ -82,6 +98,7 @@ export default function CatalogoPage() {
   // rechazo, y volver a verla la próxima vez es más barato que un enlace malo.
   const [descartadas, setDescartadas] = useState<Set<string>>(new Set());
   const [enlazando, setEnlazando] = useState<string | null>(null);
+  const [hospital, setHospital] = useState<RenglonHospital[] | null>(null);
 
   const cargar = useCallback(async () => {
     if (!activeCompany) return;
@@ -113,7 +130,20 @@ export default function CatalogoPage() {
     }
   }, [activeCompany]);
 
-  useEffect(() => { cargar(); cargarAuxiliares(); }, [cargar, cargarAuxiliares]);
+  // El mapa del hospital sólo existe con el módulo contratado: un 403 aquí no
+  // es un error, es una empresa que no es hospital.
+  const cargarHospital = useCallback(async () => {
+    if (!activeCompany) return;
+    try {
+      const res = await fetch(`/api/hospital/contabilidad/mapa?companyId=${activeCompany.id}`);
+      const d = await res.json();
+      setHospital(res.ok && Array.isArray(d?.claves) ? d.claves : null);
+    } catch {
+      setHospital(null);
+    }
+  }, [activeCompany]);
+
+  useEffect(() => { cargar(); cargarAuxiliares(); cargarHospital(); }, [cargar, cargarAuxiliares, cargarHospital]);
 
   // Pendientes = lo que una persona SÍ puede contestar. Un código que se
   // resuelve por contraparte no entra: pedir que se elija uno de 31 auxiliares
@@ -123,6 +153,17 @@ export default function CatalogoPage() {
     [cobertura]
   );
   const porDimension = useMemo(() => (cobertura ?? []).filter((c) => c.estado === "por_dimension"), [cobertura]);
+  const porModulo = useMemo(() => (cobertura ?? []).filter((c) => c.estado === "por_modulo"), [cobertura]);
+  // Las claves del hospital que piden decisión: varias candidatas, o ya decidida
+  // (se enseña para poder cambiarla). Las que resuelven solas no estorban.
+  const filasHospital = useMemo(
+    () => (hospital ?? []).filter((r) => r.candidatas.length > 1 || r.origen === "OVERRIDE"),
+    [hospital]
+  );
+  const sugerenciasExactas = useMemo(
+    () => filasHospital.filter((r) => r.sugerencia?.confianza === "EXACTA").length,
+    [filasHospital]
+  );
   const overrides = useMemo(() => (cobertura ?? []).filter((c) => c.estado === "override"), [cobertura]);
   const unicas = useMemo(() => (cobertura ?? []).filter((c) => c.estado === "unica"), [cobertura]);
   // ¿La empresa declara agrupadores en cuentas propias? Sin ninguno, el motor
@@ -238,6 +279,33 @@ export default function CatalogoPage() {
     }
   }
 
+  /** Guarda la cuenta de una clave del hospital (o aplica de una las propuestas seguras). */
+  async function decidirHospital(cuerpo: Record<string, unknown>, quien: string, mensaje: (d: { aplicadas?: string[] }) => string) {
+    if (!activeCompany) return;
+    setEnlazando(quien); setError(""); setAviso("");
+    try {
+      const res = await fetch("/api/hospital/contabilidad/mapa", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: activeCompany.id, ...cuerpo }),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(d?.error ?? "No se pudo guardar la decisión del hospital");
+      setHospital(Array.isArray(d?.claves) ? d.claves : null);
+      setAviso(
+        <>
+          {mensaje(d ?? {})} Aplica en la siguiente contabilización —{" "}
+          <Link href="/contabilidad/cierre" className="font-medium underline">ir al Cierre</Link>.
+        </>
+      );
+      await cargar();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo guardar la decisión del hospital");
+    } finally {
+      setEnlazando(null);
+    }
+  }
+
   async function quitar(codigoMotor: string) {
     if (!activeCompany) return;
     if (!confirm(`¿Quitar la decisión de ${codigoMotor}? El código vuelve a resolverse solo (o a quedar ambiguo).`)) return;
@@ -341,6 +409,108 @@ export default function CatalogoPage() {
             <StatTile label="Decisiones tomadas" tone="brand" value={overrides.length} sub="overrides del contador" />
           </StatStrip>
 
+          {/* ── Hospital: la decisión es por CLAVE, y el sistema la propone ────── */}
+          {filasHospital.length > 0 && (
+            <section className="mb-5 rounded-card border border-cos-line bg-cos-card">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-cos-line px-5 py-3.5">
+                <h2 className="text-sm font-semibold text-cos-ink">Cuentas del hospital · {filasHospital.length}</h2>
+                {sugerenciasExactas > 0 && (
+                  <button
+                    onClick={() =>
+                      decidirHospital(
+                        { aplicarSugerencias: true },
+                        "sugerencias",
+                        (d) => `${d.aplicadas?.length ?? 0} cuentas del hospital quedaron decididas por nombre.`
+                      )
+                    }
+                    disabled={enlazando !== null}
+                    className="ml-auto inline-flex items-center gap-1.5 rounded-control bg-cos-brand px-3 py-1.5 text-[12px] font-medium text-white hover:bg-cos-brand-deep disabled:opacity-50"
+                  >
+                    {enlazando === "sugerencias" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                    Aplicar {sugerenciasExactas} propuestas
+                  </button>
+                )}
+              </div>
+              <p className="px-5 pt-3 text-xs text-cos-ink-soft">
+                Tu catálogo parte los ingresos, el costo y el inventario por SERVICIO —28 cuentas con el agrupador
+                401.01, una por servicio—, así que «¿cuál es LA cuenta de ventas?» no tiene respuesta. El módulo sí sabe
+                de qué servicio es cada asiento, y aquí se decide por eso: una cuenta por clave. Lo que el nombre dice sin
+                lugar a dudas se aplica en bloque; lo que es criterio —laboratorio o imagen para los estudios— lo eliges tú.
+              </p>
+              <ul>
+                {filasHospital.map((r) => (
+                  <li key={r.clave} className="border-t border-cos-line-soft px-5 py-3">
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[13px]">
+                      <span className="text-cos-ink">{r.descripcion}</span>
+                      <span className="font-mono text-[11px] text-cos-ink-faint">
+                        agrup {r.cuentaSAT} · {r.candidatas.length} candidatas
+                      </span>
+                      {r.origen === "OVERRIDE" && r.cuenta && (
+                        <span className="ml-auto inline-flex items-center gap-1 rounded-cos-chip bg-cos-jade-tint px-1.5 py-0.5 text-[11px] text-cos-jade-ink">
+                          <Check className="h-3 w-3" />
+                          {r.cuenta.codigo} {r.cuenta.nombre}
+                        </span>
+                      )}
+                    </div>
+                    {r.sugerencia && (
+                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-cos-paper px-3 py-1.5 text-[12.5px]">
+                        <span
+                          className={cn(
+                            "rounded-cos-chip px-1.5 py-0.5 text-[11px]",
+                            r.sugerencia.confianza === "EXACTA" ? "bg-cos-jade-tint text-cos-jade-ink" : "bg-cos-amber-tint text-cos-amber-ink"
+                          )}
+                        >
+                          {r.sugerencia.confianza === "EXACTA" ? "Propuesta" : "Revísala"}
+                        </span>
+                        <span className="font-mono text-cos-ink">{r.sugerencia.cuenta.codigo}</span>
+                        <span className="min-w-0 truncate text-cos-ink">{r.sugerencia.cuenta.nombre}</span>
+                        <span className="min-w-0 text-cos-ink-faint">{r.sugerencia.porque}</span>
+                        <button
+                          onClick={() =>
+                            decidirHospital(
+                              { cuentas: { [r.clave]: { cuentaSAT: r.cuentaSAT, subcuenta: r.sugerencia!.cuenta.codigo } } },
+                              r.clave,
+                              () => `${r.descripcion} → ${r.sugerencia!.cuenta.codigo} ${r.sugerencia!.cuenta.nombre}.`
+                            )
+                          }
+                          disabled={enlazando !== null}
+                          className="ml-auto shrink-0 rounded-control border border-cos-line bg-cos-card px-2.5 py-1 text-[12px] font-medium text-cos-ink hover:bg-cos-paper disabled:opacity-50"
+                        >
+                          Usar ésta
+                        </button>
+                      </div>
+                    )}
+                    {/* Elegir a mano, pero sólo entre las candidatas del agrupador: buscar
+                        en 2 340 cuentas es de donde salen los enlaces malos. */}
+                    <select
+                      value=""
+                      disabled={enlazando !== null}
+                      onChange={(e) => {
+                        const cuenta = r.candidatas.find((c) => c.id === e.target.value);
+                        if (!cuenta) return;
+                        decidirHospital(
+                          { cuentas: { [r.clave]: { cuentaSAT: r.cuentaSAT, subcuenta: cuenta.codigo } } },
+                          r.clave,
+                          () => `${r.descripcion} → ${cuenta.codigo} ${cuenta.nombre}.`
+                        );
+                      }}
+                      className="mt-2 w-full rounded-control border border-cos-line bg-cos-card px-2.5 py-1.5 text-[12.5px] text-cos-ink"
+                    >
+                      <option value="">
+                        {r.origen === "OVERRIDE" ? "Cambiar a otra cuenta…" : `Elegir entre las ${r.candidatas.length} cuentas con agrupador ${r.cuentaSAT}…`}
+                      </option>
+                      {r.candidatas.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.codigo} — {c.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           {porDimension.length > 0 && (
             <section className="rounded-cos border border-cos-line bg-cos-panel p-4">
               <h2 className="text-sm font-semibold text-cos-ink">Se resuelven por contraparte, no aquí</h2>
@@ -357,6 +527,27 @@ export default function CatalogoPage() {
                     <span className="rounded-cos-chip bg-cos-brand-tint px-1.5 py-0.5 text-cos-brand-ink">
                       {c.candidatas} auxiliares
                     </span>
+                    <span className="text-cos-ink-soft">{c.porque}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {porModulo.length > 0 && (
+            <section className="mt-5 rounded-cos border border-cos-line bg-cos-panel p-4">
+              <h2 className="text-sm font-semibold text-cos-ink">Se deciden por clave del módulo, no por código</h2>
+              <p className="mt-1 text-xs text-cos-ink-soft">
+                El mismo código es varias cuentas tuyas según el servicio que lo origina: un cargo de quirófano y uno de
+                urgencias son los dos 401.01 y van a cuentas distintas. Por eso no se decide aquí, sino arriba, una vez
+                por clave del hospital.
+              </p>
+              <ul className="mt-3 space-y-2">
+                {porModulo.map((c) => (
+                  <li key={c.codigoMotor} className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs">
+                    <span className="font-mono font-medium text-cos-ink">{c.codigoMotor}</span>
+                    <span className="text-cos-ink">{c.nombreAgrupador ?? ""}</span>
+                    <span className="rounded-cos-chip bg-cos-brand-tint px-1.5 py-0.5 text-cos-brand-ink">{c.candidatas} candidatas</span>
                     <span className="text-cos-ink-soft">{c.porque}</span>
                   </li>
                 ))}

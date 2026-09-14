@@ -616,14 +616,19 @@ signos y notas (sin nombre ni CURP).
 
 **Contabilidad** (el módulo asienta cuando el contador activa `contabilidadActiva`; antes, sólo previsualiza)
 ```
-GET  /api/hospital/contabilidad/mapa?companyId= → { claves: [{ clave, descripcion, cuentaSAT, subcuenta?, origen: "DEFAULT"|"CONFIG"|"OVERRIDE" }], activa }
+GET  /api/hospital/contabilidad/mapa?companyId= → { claves: [{ clave, descripcion, cuentaSAT, subcuenta?, origen: "DEFAULT"|"CONFIG"|"OVERRIDE",
+       candidatas: [{ id, codigo, nombre }], sugerencia: { cuenta, confianza: "EXACTA"|"PARECIDA", porque, alternativas } | null }], activa }
+     · candidatas = cuentas de DETALLE del plan propio con ese agrupador (vacío si el código ya resuelve solo); sugerencia = cuál le toca,
+       leyendo el servicio en el nombre (src/lib/hospital/sugerir-mapa.ts). Un plan de hospital parte 401.01 en 28 cuentas por servicio:
+       la decisión es por CLAVE, no por código, y por eso la cola del hub marca esos códigos «por módulo» y no pide elegir
      · claves del motor: INGRESO_HOSPITALIZACION (401.01), INGRESO_QUIROFANO (401.01), INGRESO_URGENCIAS, INGRESO_ESTUDIOS, INGRESO_FARMACIA_16, INGRESO_FARMACIA_0 (401.02),
        INGRESO_MATERIAL, INGRESO_OTROS, HONORARIOS_POR_CUENTA_DE_TERCEROS (205.06 acreedores diversos: médicos), RETENCION_ISR_HONORARIOS (216.04),
        (INGRESO_FARMACIA_0 usa 401.04 «gravados al 0 %»; 401.02 es «tasa general de contado»)
-       RETENCION_IVA_HONORARIOS (216.10), COSTO_FARMACIA (501.01), INVENTARIO_FARMACIA (115.01), ANTICIPOS_PACIENTES (206.01), CAJA (101.01), BANCOS (102.01), FONDOS_EN_TRANSITO (107.05), CLIENTES (105.01),
+       RETENCION_IVA_HONORARIOS (216.10), COSTO_FARMACIA_16 y COSTO_FARMACIA_0 (501.01: el costo sigue a la tasa del ingreso), INVENTARIO_FARMACIA (115.01), ANTICIPOS_PACIENTES (206.01), CAJA (101.01), BANCOS (102.01), FONDOS_EN_TRANSITO (107.05), CLIENTES (105.01),
        COMISION_TERMINAL (701.10), IVA_ACREDITABLE (118.01)
-PUT  /api/hospital/contabilidad/mapa { cuentas: { <clave>: { cuentaSAT?, subcuenta? } | null }, activa? } → guarda en HospConfig.cuentasContables (subcuenta = cuenta concreta
-       del plan → también PostingCuentaOverride hospital:<clave>); `activa` enciende/apaga contabilidadActiva
+PUT  /api/hospital/contabilidad/mapa { cuentas: { <clave>: { cuentaSAT?, subcuenta? } | null }, activa?, aplicarSugerencias? } → guarda en HospConfig.cuentasContables
+       (subcuenta = cuenta concreta del plan → también PostingCuentaOverride hospital:<clave>); `activa` enciende/apaga contabilidadActiva;
+       `aplicarSugerencias` guarda de una las propuestas EXACTAS y devuelve `aplicadas: ClaveMotor[]` (las PARECIDAS nunca: ésas las mira una persona)
 GET  /api/hospital/contabilidad/preview?companyId=&anio=&mes= → { piernasCfdi: [{ invoiceId, uuid, total, piernas: [{ clave, cuenta, monto }] }],
        asientosHospital: [{ fecha, descripcion, cargo, abono, monto, referenciaTipo, asentado }], totales }
 POST /api/hospital/contabilidad/asentar { companyId, anio, mes } → { ok, asentados, revisados } asienta lo pendiente del mes (UTC, como los periodos del libro) con fuente
@@ -649,7 +654,8 @@ POST /api/hospital/contabilidad/apertura { fecha, lineas: [{ codigo, saldo }] } 
 ```
 Motor: `src/lib/contabilidad/hospital.ts` (patrón taller.ts) parte el ingreso de cada CFDI ligado a cargos (HospCargo.invoiceId) en piernas por categoría e
 `ivaContexto`; los honorarios facturados por el hospital van a HONORARIOS_POR_CUENTA_DE_TERCEROS (pasivo), no a ingreso. Fuente HOSPITAL
-(`src/lib/accounting/postings.ts`, postBalancedEntry): salida de farmacia a un episodio = COSTO_FARMACIA / INVENTARIO_FARMACIA al costo del lote;
+(`src/lib/accounting/postings.ts`, postBalancedEntry): salida de farmacia a un episodio = COSTO_FARMACIA_16 o COSTO_FARMACIA_0 (la misma regla de IVA del
+ingreso, leída del cargo que ampara la salida: ingreso y costo nunca caen en lados distintos de la tasa) contra INVENTARIO_FARMACIA al costo del lote;
 alta del episodio = retenciones de ISR 10 % e IVA 2/3 de los honorarios de cada médico persona física con RFC, sólo cuando el hospital es persona moral
 (HONORARIOS_POR_CUENTA_DE_TERCEROS contra 216.04/216.10; el saldo del pasivo es lo neto a pagar); depósito RECIBIDO = CAJA (efectivo) o FONDOS_EN_TRANSITO
 (tarjeta, transferencia, cheque) contra ANTICIPOS_PACIENTES; APLICADO = ANTICIPOS_PACIENTES contra CLIENTES; DEVUELTO = al revés.

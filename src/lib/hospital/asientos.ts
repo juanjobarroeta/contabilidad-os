@@ -50,11 +50,12 @@
 // postBalancedEntry y postMonth.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { HospCobroEstado, HospDepositoEstado, HospFormaPago, HospMovimientoTipo, Prisma, PrismaClient } from "@prisma/client";
+import type { HospCobroEstado, HospDepositoEstado, HospFormaPago, HospIvaContexto, HospMovimientoTipo, Prisma, PrismaClient } from "@prisma/client";
 import { assertPeriodoAbierto } from "../contabilidad/candado";
 import { PeriodoCerradoError } from "../contabilidad/ejercicio";
 import {
   cargarConfigContable,
+  claveDeCostoFarmacia,
   codigoDeCuenta,
   mapaCuentas,
   resolverCuenta,
@@ -181,6 +182,12 @@ export interface MovimientoParaAsiento {
   asientoAt?: Date | null;
   /** Para la descripción del asiento (insumo · lote); opcional. */
   descripcion?: string | null;
+  /**
+   * El cargo que ampara la salida: de ahí sale la tasa con la que se facturó y,
+   * con ella, a qué costo de farmacia va (16 % suministro / 0 % venta directa).
+   * Sin cargo, el default del ingreso.
+   */
+  cargo?: { ivaContexto?: HospIvaContexto | null; ivaTasa?: number | { toString(): string } | null } | null;
 }
 
 /** Sólo la salida a un paciente con costo de lote se vuelve costo; MERMA/CADUCIDAD no son costo de venta. */
@@ -196,7 +203,9 @@ export function planSalidaFarmacia(m: MovimientoParaAsiento): AsientoPlan | null
     monto,
     referencia: m.id,
     referenciaTipo: TIPO_ASIENTO.FARMACIA_SALIDA,
-    cargo: "COSTO_FARMACIA",
+    cargo: claveDeCostoFarmacia(
+      m.cargo ? { ivaContexto: m.cargo.ivaContexto, ivaTasa: m.cargo.ivaTasa == null ? null : Number(m.cargo.ivaTasa) } : null
+    ),
     abono: "INVENTARIO_FARMACIA",
     marcar: (tx, at) => tx.hospMovimientoInsumo.update({ where: { id: m.id }, data: { asientoAt: at } }).then(() => undefined),
   };

@@ -1,11 +1,13 @@
 /**
  * GET /api/hospital/contabilidad/mapa?companyId=
  *   → { activa, claves: [{ clave, descripcion, tipo, cuentaSAT, subcuenta, origen: DEFAULT|CONFIG|OVERRIDE, cuenta: { id, codigo, nombre } | null }] }
- * PUT /api/hospital/contabilidad/mapa { companyId, cuentas: { <clave>: { cuentaSAT, subcuenta? } | null }, activa? }
+ * PUT /api/hospital/contabilidad/mapa { companyId, cuentas: { <clave>: { cuentaSAT, subcuenta? } | null }, activa?, aplicarSugerencias? }
  *   · `cuentaSAT`: código agrupador del SAT con el que se asienta la clave (se crea del catálogo si falta);
  *   · `subcuenta`: una cuenta CONCRETA del catálogo de la empresa (código propio o subcuenta) → además
  *     PostingCuentaOverride `hospital:<clave>`; · null borra la decisión (vuelve al default);
- *   · `activa` enciende/apaga el asentado (HospConfig.contabilidadActiva).
+ *   · `activa` enciende/apaga el asentado (HospConfig.contabilidadActiva);
+ *   · `aplicarSugerencias` guarda de una las propuestas EXACTAS del catálogo propio
+ *     (ver src/lib/hospital/sugerir-mapa.ts) y devuelve `aplicadas: ClaveMotor[]`.
  *
  * Ver src/lib/hospital/contabilidad.ts.
  */
@@ -42,16 +44,34 @@ const putSchema = z.object({
   companyId: z.string().min(1),
   cuentas: z.record(z.string(), z.object({ cuentaSAT: codigo.optional(), subcuenta: codigo.nullable().optional() }).nullable()).default({}),
   activa: z.boolean().optional(),
+  /**
+   * Toma las propuestas EXACTAS del mapa y las guarda como decisión, todas de
+   * una. Las PARECIDAS no: ésas las mira una persona. Lo que venga explícito en
+   * `cuentas` manda sobre la propuesta.
+   */
+  aplicarSugerencias: z.boolean().optional(),
 });
 
 export const PUT = withHospital(async (req: Request) => {
   const body = await req.json().catch(() => null);
   const parsed = putSchema.safeParse(body);
   if (!parsed.success) return errorZod(parsed.error);
-  const { companyId, cuentas, activa } = parsed.data;
+  const { companyId, cuentas, activa, aplicarSugerencias } = parsed.data;
 
   const { user } = await requireWriter(companyId, req);
   await requireModule(companyId, "HOSPITAL", req);
+
+  // Las propuestas seguras, como si las hubiera tecleado quien decide: entran
+  // por la misma puerta (y la misma validación) que una elección a mano.
+  const aplicadas: string[] = [];
+  if (aplicarSugerencias) {
+    const mapa = await mapaCuentas(prisma, companyId);
+    for (const r of mapa.claves) {
+      if (r.sugerencia?.confianza !== "EXACTA" || cuentas[r.clave] !== undefined) continue;
+      cuentas[r.clave] = { cuentaSAT: r.cuentaSAT, subcuenta: r.sugerencia.cuenta.codigo };
+      aplicadas.push(r.clave);
+    }
+  }
 
   const config = await prisma.hospConfig.findUnique({ where: { companyId }, select: { cuentasContables: true } });
   const actual: ConfigCuentas = leerConfigCuentas(config?.cuentasContables);
@@ -104,7 +124,7 @@ export const PUT = withHospital(async (req: Request) => {
     accion: "hospital.contabilidad.mapa",
     entidad: "HospConfig",
     entidadId: companyId,
-    detalle: { cuentas, activa: activa ?? null },
+    detalle: { cuentas, activa: activa ?? null, aplicadas },
   });
-  return NextResponse.json(await mapaCuentas(prisma, companyId));
+  return NextResponse.json({ ...(await mapaCuentas(prisma, companyId)), aplicadas });
 });

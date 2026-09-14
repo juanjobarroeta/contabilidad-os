@@ -7,6 +7,7 @@ import { coberturaPlanPropio } from "@/lib/contabilidad/resolver-plan-propio";
 import { COE_CODES } from "@/lib/contabilidad/catalog";
 import { CODIGO_AGRUPADOR_OFICIAL } from "@/lib/contabilidad/codigo-agrupador";
 import { padresDelCatalogo } from "@/lib/contabilidad/jerarquia-catalogo";
+import { CLAVES_MOTOR, MAPA_DEFAULT, cargarConfigContable } from "@/lib/hospital/contabilidad";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // La cola de ambigüedades del plan propio (brief UX, módulo P1-4): los códigos
@@ -31,7 +32,7 @@ export const GET = withAuthz(async (req: Request) => {
   if (!companyId) return NextResponse.json({ error: "companyId requerido" }, { status: 400 });
   await requireMembership(companyId, undefined, req);
 
-  const [cobertura, cuentas] = await Promise.all([
+  const [cobertura, cuentas, hospital] = await Promise.all([
     coberturaPlanPropio(companyId, Object.values(COE_CODES)),
     prisma.chartAccount.findMany({
       where: { companyId, isActive: true },
@@ -47,7 +48,14 @@ export const GET = withAuthz(async (req: Request) => {
       },
       orderBy: [{ cuentaSAT: "asc" }, { subcuenta: "asc" }],
     }),
+    // Con la contabilidad del hospital encendida, sus códigos ya no se deciden
+    // por código sino por CLAVE (ver lib/hospital/contabilidad.ts): el mismo
+    // 401.01 es quirófano, urgencias o farmacia según el cargo que lo origina.
+    cargarConfigContable(prisma, companyId).catch(() => null),
   ]);
+  const codigosDelHospital = hospital?.activa
+    ? new Set(CLAVES_MOTOR.map((c) => hospital.cuentas[c]?.cuentaSAT ?? MAPA_DEFAULT[c].cuentaSAT))
+    : new Set<string>();
 
   // Una cuenta con subcuentas acumula: no recibe pólizas y no se ofrece como
   // decisión (se enseña, apagada, con cuántas cuelgan de ella).
@@ -56,6 +64,11 @@ export const GET = withAuthz(async (req: Request) => {
   return NextResponse.json({
     cobertura: cobertura.map((c) => ({
       ...c,
+      // Ambigua sólo lo es si alguien puede contestarla. Si el módulo ya decide
+      // ese código por clave, la pregunta se hace en el mapa del hospital.
+      ...(c.estado === "ambigua" && codigosDelHospital.has(c.codigoMotor)
+        ? { estado: "por_modulo" as const, porque: "Lo decide el mapa del hospital: la cuenta la elige el servicio del cargo, no una preferencia." }
+        : {}),
       nombreAgrupador: CODIGO_AGRUPADOR_OFICIAL[c.codigoMotor] ?? null,
     })),
     cuentas: cuentas.map((a) => {
