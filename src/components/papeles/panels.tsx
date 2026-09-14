@@ -208,7 +208,8 @@ export function IvaPanel({ companyId, year, month }: { companyId: string; year: 
       )}
       <IvaSection
         title="IVA acreditable (pagado)"
-        subtitle="IVA que pagaste a tus proveedores, acreditable contra el trasladado. Si le retuviste IVA a un proveedor, esa parte NO se acredita este mes (Art. 5-IV LIVA): se acredita el mes siguiente al de su entero."
+        subtitle="IVA que pagaste a tus proveedores, acreditable contra el trasladado. Un gasto PPD entra cuando se PAGA (su REP), aunque el CFDI sea de un mes anterior. Si le retuviste IVA a un proveedor, esa parte NO se acredita este mes (Art. 5-IV LIVA): se acredita el mes siguiente al de su entero."
+        complementoLabel="pagado (REP)"
         rows={data.acreditable}
         totalLabel="Total acreditable"
         excluidoLabel="no acreditado"
@@ -437,10 +438,12 @@ function SaldoFavorAnteriorLine({
   );
 }
 
-function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling, totalLabel = "Total", excluidoLabel = "excluido" }: {
+function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling, totalLabel = "Total", excluidoLabel = "excluido", complementoLabel = "cobrado (REP)" }: {
   title: string; subtitle: string; rows: IvaRow[];
   onToggleExcluir?: (id: string, next: boolean) => void; toggling?: string | null;
   totalLabel?: string; excluidoLabel?: string;
+  /** Un PPD armado desde el complemento: «cobrado (REP)» en ingresos, «pagado (REP)» en egresos. */
+  complementoLabel?: string;
 }) {
   if (rows.length === 0) return null;
   // Lo excluido del acreditamiento no suma al total (coincide con el motor).
@@ -482,8 +485,8 @@ function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling, totalLab
               <td className="px-3 py-1.5 text-[12px] text-cos-ink-soft">
                 {r.metodoPago}
                 {r.esComplemento && (
-                  <span className="ml-1.5 inline-flex items-center rounded-full bg-cos-brand-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-brand-ink" title="Ingreso PPD causado al cobrarse — armado desde el complemento de pago (REP) de este periodo">
-                    cobrado (REP)
+                  <span className="ml-1.5 inline-flex items-center rounded-full bg-cos-brand-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-brand-ink" title="PPD liquidado en este periodo — armado desde el complemento de pago (REP); la fecha es la del pago, no la del CFDI">
+                    {complementoLabel}
                   </span>
                 )}
                 {r.excluidoAcreditamiento ? (
