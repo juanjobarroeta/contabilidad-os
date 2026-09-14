@@ -34,11 +34,14 @@ export interface Consumo {
 }
 
 const NOMBRES: Record<string, string> = {
-  "ai.juridico": "Consultas y redacción",
+  "ai.juridico": "Consultas del chat",
   "ai.juridico.verificacion": "Verificación de citas",
-  "ai.juridico.extraccion": "Lectura de documentos",
+  "ai.juridico.extraccion": "Datos de documentos",
   "ai.juridico.vision": "Transcripción de escaneos",
+  "ai.juridico.ocr": "Transcripción de escaneos",
   "ai.juridico.resumen": "Resúmenes de expediente",
+  "ai.juridico.redaccion": "Redacción por secciones",
+  "ai.juridico.revision": "Relectura antes de entregar",
 };
 
 /** Primer instante del mes en curso, con el huso de México. */
@@ -62,8 +65,15 @@ export function evaluarConsumo(usd: number, operaciones: number, porFuncion: { f
     fraccion: Math.round(fraccion * 100) / 100,
     avisar: fraccion >= UMBRAL_AVISO && fraccion < 1,
     excedido: fraccion >= 1,
-    porFuncion: porFuncion
-      .map((f) => ({ funcion: NOMBRES[f.funcion] ?? f.funcion, usd: Math.round(f.usd * 100) / 100, operaciones: f.operaciones }))
+    // Dos subtipos pueden compartir nombre (ocr y vision son «transcripción»):
+    // se suman en un solo renglón, que es como lo lee el abogado.
+    porFuncion: [...porFuncion.reduce((m, f) => {
+      const nombre = NOMBRES[f.funcion] ?? f.funcion;
+      const previo = m.get(nombre) ?? { funcion: nombre, usd: 0, operaciones: 0 };
+      m.set(nombre, { funcion: nombre, usd: previo.usd + f.usd, operaciones: previo.operaciones + f.operaciones });
+      return m;
+    }, new Map<string, { funcion: string; usd: number; operaciones: number }>()).values()]
+      .map((f) => ({ ...f, usd: Math.round(f.usd * 100) / 100 }))
       .sort((a, b) => b.usd - a.usd),
     operaciones,
   };
