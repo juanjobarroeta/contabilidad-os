@@ -1,6 +1,6 @@
 # Contador de cabecera — plan de construcción por fases
 
-> Estado: **F0, F1, F2 y F4 construidas; F3, F5 y F6, diseño.** Este documento fija el orden de construcción
+> Estado: **F0–F4 construidas; F5 y F6, diseño.** Este documento fija el orden de construcción
 > y el contrato entre fases. Cada fase es un PR que entrega valor por sí solo y
 > deja la base de la siguiente. Nada aquí exige Managed Agents ni un runtime
 > nuevo: todo corre en la app, con el loop de agente, el medidor de costos y
@@ -271,7 +271,33 @@ El diff produce `deltas`: qué dimensión cambió y en qué sentido. Igual que
 06:00 MX, barato: sólo lecturas. Guarda el snapshot y los deltas. **Este es el
 filtro**: sólo las empresas con delta o con pendientes abiertas pasan a F3.
 
-### F3 — El contador razona (agente in-app)
+### F3 — El contador razona (agente in-app) — **construida**
+
+> **Lo que quedó.** `src/lib/contador/claves.ts` (sin Node: cadencia por plan,
+> forma del resumen, `tocaHoy`), `prompt.ts` PURO (el system prompt por
+> objetivos, el mensaje de la pasada y el normalizador de la salida),
+> `herramientas.ts` + `ejecutar.ts` (`leer_salud`, `leer_historia`,
+> `cerrar_pasada`), `pasada.ts` (el bucle, el filtro y la guardia de
+> presupuesto), la ruta `/api/cron/contador-pasada` y el job en
+> `cron-scheduler.ts` a las 07:00 MX — después de la salud, porque lee su foto.
+>
+> **Cambio contra el diseño: la salida es una HERRAMIENTA, no texto.** El plan
+> decía «una nota `resumen_corrida` estructurada»; parsear prosa para obtenerla
+> es frágil y falla justo cuando el modelo tiene más que decir. El cierre es
+> ahora la herramienta `cerrar_pasada` con el esquema, y el bucle termina
+> cuando la llama. Un renglón sin causa o sin acción se descarta al
+> normalizar: nombrar un problema sin su porqué es el ruido que este trabajo
+> existe para eliminar.
+>
+> **El presupuesto se mira antes de invocar al modelo.** Una pasada automática
+> nunca debe ser lo que vacía el tope de IA del cliente: quien paga el copiloto
+> es él, y quedarse sin chat porque un cron gastó su mes es indefendible.
+>
+> **Lo que falta.** Los **eventos** (disparadores inmediatos desde los crons:
+> `SatSyncRequest` FAILED, `ceSatSyncOk=false`, e.firma a menos de 30 días) y
+> el **escalamiento al operador** por Telegram. El renglón `escalado` ya existe
+> y ya sale primero en el resumen; falta el canal que lo saque de la app.
+
 
 **Qué.** Job `contador-pasada` que, para cada empresa que F2 marcó, corre una
 pasada del agente con el loop existente (`tool-executor.ts`) y un system
@@ -422,10 +448,9 @@ F0 rastro ─┬─► F1 expediente ─┬─► F3 agente ─► F5 rail ─�
 F4 solicitudes: motor puro desde F2; el agente las usa desde F3.
 ```
 
-F0, F1, F2 y F4 ya están. F1 dependía de F0 para tener evidencia que
-citar; F4 se adelantó como motor puro (terminal) en cuanto F2 existió, y
-el agente las usará desde F3. Falta F3, que ya tiene todo lo que
-necesitaba, y encima de él F5 y F6.
+F0, F1, F2, F3 y F4 ya están. F1 dependía de F0 para tener evidencia que
+citar; F4 se adelantó como motor puro (terminal) en cuanto F2 existió y F3
+ya lo usa. Faltan F5 (rail) y F6 (digests), que leen de lo construido.
 
 Cada fase es un PR con migración, tests de la parte pura y, cuando toca UI,
 la ficha o página correspondiente. Ninguna fase rompe lo que hoy corre: los
