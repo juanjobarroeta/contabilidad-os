@@ -38,6 +38,7 @@ const AUTENTICADORES: RegExp[] = [
   /\bempresasAccesiblesIds\b/,
   /\bisOperador\b/,
   /\bpuedeUsarJuridico\b/, // copiloto jurídico: operador o User.accesoJuridico, sin empresa
+  /\bautorizarJuridico\b/, // lo anterior + requireUser, envuelto (src/lib/juridico/api-guardia.ts)
   // Capa despacho (src/lib/despacho.ts, src/lib/invitations-server.ts)
   /\brequireDespachoRole\b/,
   /\brequireOwnDespacho\b/,
@@ -86,6 +87,7 @@ const ESCOPADORES: RegExp[] = [
   /\bempresasAccesiblesIds\b/,
   /\bisOperador\b/,
   /\bpuedeUsarJuridico\b/, // copiloto jurídico: operador o User.accesoJuridico, sin empresa
+  /\bautorizarJuridico\b/, // lo anterior + requireUser, envuelto (src/lib/juridico/api-guardia.ts)
   /\brequireDespachoRole\b/,
   /\brequireOwnDespacho\b/,
   /\brequireDespachoAdminForCompany\b/,

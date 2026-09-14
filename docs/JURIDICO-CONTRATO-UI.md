@@ -149,9 +149,32 @@ reporta y la acción sigue.
 rellenó lo existente), para que un documento siga vivo en el caso aunque su
 conversación se archive.
 
-Falta (siguiente PR): las rutas `/api/juridico/casos*`, `/clientes*` y
-`/casos/[id]/tareas*`, y que el copiloto proponga tareas. Las rutas
-`/api/juridico/asuntos*` de hoy siguen funcionando.
+### Rutas (ya existen)
+
+| Ruta | Qué hace |
+|---|---|
+| `GET /api/juridico/casos?estado=&q=` | Lista con conteos por estado, partes, documentos, conversaciones, pendientes abiertos y próximo vencimiento. |
+| `POST /api/juridico/casos` | Abre un caso. |
+| `GET /api/juridico/casos/[id]` | Ficha completa: partes, decisiones, cliente, conversaciones, documentos y tareas. |
+| `PATCH /api/juridico/casos/[id]` | `estado`, `responsableUserId`, `clienteId`, o `moverConversacionId` para traer una conversación al caso. |
+| `GET/POST /api/juridico/casos/[id]/tareas` | Pendientes del caso; POST acepta una o varias. |
+| `PATCH/DELETE /api/juridico/tareas/[id]` | Mover, asignar, reprogramar o quitar. |
+| `GET /api/juridico/casos/[id]/bitacora` | Append-only, lo nuevo primero, con `frase` ya redactada y el nombre del actor resuelto. Paginación con `antesDe`. |
+| `GET/POST /api/juridico/clientes` | Directorio y alta. El alta responde **409 con `candidatos`** si detecta un posible duplicado; `forzar: true` la fuerza y `comprobar: true` sólo consulta. |
+| `GET/PATCH /api/juridico/clientes/[id]` | Ficha, en qué casos aparece y con qué papel. |
+| `GET /api/juridico/documentos/[id]/versiones` | Historial con autor, motivo y secciones cambiadas; `?n=3` devuelve el texto de esa versión (W-06). |
+
+Todas cuelgan de `/api/juridico/:path*`, que ya está en el matcher de CORS.
+
+### El copiloto
+
+Dos herramientas nuevas: `proponer_tareas` (nacen con `origen: "copiloto"` y
+sin responsable — propone, no manda) y `consultar_tareas`. Cuando el copiloto
+redacta o sube un documento, éste hereda el caso y queda apuntado en la
+bitácora; al sobrescribir un borrador, la versión anterior se congela con autor
+`copiloto` y el motivo del cambio.
+
+Las rutas `/api/juridico/asuntos*` de hoy siguen funcionando.
 
 ## 5. Reglas que no cambian
 

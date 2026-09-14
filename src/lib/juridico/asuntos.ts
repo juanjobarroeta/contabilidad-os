@@ -16,6 +16,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { apuntar } from "./bitacora";
 import { recordLlmCost, type CostCtx } from "@/lib/costos/record";
 
 export interface Parte {
@@ -156,8 +157,14 @@ export async function asuntoDeConversacion(conversacionId: string, userId: strin
     if (a) return a;
   }
   if (!opts.crear) return null;
-  const creado = await prisma.juridicoCaso.create({ data: { userId, titulo: conv.titulo.slice(0, 120) || "Asunto" }, select: selectAsunto });
-  await prisma.juridicoConversacion.update({ where: { id: conversacionId }, data: { casoId: creado.id } });
+  const creado = await prisma.juridicoCaso.create({ data: { userId, titulo: conv.titulo.slice(0, 120) || "Asunto", responsableUserId: userId }, select: selectAsunto });
+  await prisma.$transaction([
+    prisma.juridicoConversacion.update({ where: { id: conversacionId }, data: { casoId: creado.id } }),
+    // El documento pertenece al CASO, no sólo a la conversación: así sigue
+    // vivo aunque la conversación se archive.
+    prisma.juridicoDocumento.updateMany({ where: { conversacionId }, data: { casoId: creado.id } }),
+  ]);
+  await apuntar({ casoId: creado.id, actor: { userId, tipo: "copiloto" }, accion: "caso.creado", entidad: "caso", entidadId: creado.id, resumen: `abrió el caso desde la conversación «${conv.titulo}»` });
   return aAsunto(creado);
 }
 

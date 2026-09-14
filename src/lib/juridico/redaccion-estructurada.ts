@@ -30,6 +30,8 @@ import { createHash } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { apuntar } from "./bitacora";
+import { guardarVersion } from "./versiones";
 import { recordLlmCost, type CostCtx } from "@/lib/costos/record";
 import { searchFiscalKnowledge } from "@/lib/fiscal-kb/search";
 import { extraerCitas } from "@/lib/ai/eval/medidas";
@@ -259,15 +261,24 @@ async function guardar(
     estado,
     revision: extra.revision === undefined ? undefined : (extra.revision as unknown as Prisma.InputJsonValue | null) ?? Prisma.JsonNull,
   };
+  // El caso del documento: se hereda de la conversación (Fase 1).
+  const conv = await prisma.juridicoConversacion.findUnique({ where: { id: ctx.conversacionId }, select: { casoId: true } });
+  const casoId = conv?.casoId ?? null;
   let doc;
   if (docId) {
-    const previo = await prisma.juridicoDocumento.findFirst({ where: { id: docId, conversacionId: ctx.conversacionId, userId: ctx.userId }, select: { texto: true, estado: true, versiones: true } });
+    const previo = await prisma.juridicoDocumento.findFirst({ where: { id: docId, conversacionId: ctx.conversacionId, userId: ctx.userId }, select: { texto: true, estado: true, versiones: true, plan: true } });
     if (!previo) throw new Error("Borrador no encontrado en esta conversación");
     const versiones = ((previo.versiones as unknown as Version[] | null) ?? []).slice(-(MAX_VERSIONES - 1));
-    if (extra.motivoVersion && previo.estado !== "esquema" && previo.texto.trim()) versiones.push({ fecha: new Date().toISOString(), motivo: extra.motivoVersion, markdown: previo.texto });
-    doc = await prisma.juridicoDocumento.update({ where: { id: docId }, data: { ...datos, versiones: versiones as unknown as Prisma.InputJsonValue }, select: selectDoc });
+    if (extra.motivoVersion && previo.estado !== "esquema" && previo.texto.trim()) {
+      versiones.push({ fecha: new Date().toISOString(), motivo: extra.motivoVersion, markdown: previo.texto });
+      // Y con autor, que es lo que sirve de evidencia: la versión ANTERIOR,
+      // congelada antes de sobrescribirla, firmada por quien pidió el cambio.
+      await guardarVersion({ documentoId: docId, texto: previo.texto, plan: previo.plan, planNuevo: plan, actor: { userId: ctx.userId, tipo: "copiloto" }, motivo: extra.motivoVersion, casoId });
+    }
+    doc = await prisma.juridicoDocumento.update({ where: { id: docId }, data: { ...datos, casoId, versiones: versiones as unknown as Prisma.InputJsonValue }, select: selectDoc });
   } else {
-    doc = await prisma.juridicoDocumento.create({ data: { ...datos, conversacionId: ctx.conversacionId, userId: ctx.userId }, select: selectDoc });
+    doc = await prisma.juridicoDocumento.create({ data: { ...datos, casoId, conversacionId: ctx.conversacionId, userId: ctx.userId }, select: selectDoc });
+    if (casoId) await apuntar({ casoId, actor: { userId: ctx.userId, tipo: "copiloto" }, accion: "documento.creado", entidad: "documento", entidadId: doc.id, resumen: `redactó «${doc.nombre}»`, datos: { estado } });
   }
   await prisma.juridicoConversacion.update({ where: { id: ctx.conversacionId }, data: { updatedAt: new Date() } });
   const { plan: _p, versiones: _v, revision, ...resto } = doc;
