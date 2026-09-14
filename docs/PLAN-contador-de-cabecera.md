@@ -5,6 +5,12 @@
 > deja la base de la siguiente. Nada aquí exige Managed Agents ni un runtime
 > nuevo: todo corre en la app, con el loop de agente, el medidor de costos y
 > el scheduler que ya existen.
+>
+> **Revisado contra main al 2026-09-14.** Tres cambios recientes tocan este
+> plan y quedan incorporados abajo: el copiloto jurídico ya guarda su memoria
+> en la base con el patrón que F1 necesita (#1051), la terminal ya tiene
+> captura del voucher en caja (#1050), y la conciliación ahora decide el IVA
+> acreditable de los PUE (#1060).
 
 ## Qué queremos que sea
 
@@ -34,12 +40,12 @@ expediente que valga, y el agente no puede explicar nada.
 |---|---|---|
 | Motores deterministas (auditor 13 checks, auto-conciliar, terminal, REP, traspasos, sin-CFDI, cobertura SAT/declaraciones) | Sí | Ninguno registra *por qué* rechazó lo que rechazó. Sólo queda el resultado final. |
 | Narrativa por empresa | `AuditBrief` (una fila, se sobreescribe) | Historia. No sabemos qué se hizo la semana pasada. |
-| Conocimiento del cliente («tiene terminal Banorte», «paga a 30 días») | No | Todo. Cada corrida arranca de cero. |
+| Conocimiento del cliente («tiene terminal Banorte», «paga a 30 días») | Sólo en el copiloto jurídico (`JuridicoAsunto`, #1051) | El mismo patrón para la empresa. Cada corrida contable arranca de cero. |
 | Salud por empresa | Señales dispersas (`onboarding/estado`, `sat-cobertura`, `cobertura-declaraciones`, columnas de frescura en `Company`) | Un solo cálculo que las junte y diga qué cambió desde ayer. |
 | Copiloto (chat) | 47 tools, KB fiscal, escrituras propuestas | Contexto de la empresa más allá de los datos básicos. |
 | Rail derecho | Cartas por causa raíz | Sigue siendo una lista de problemas. No dice qué se hizo ni qué se necesita. |
 | Digests (push, WhatsApp, cierre) | Sí, sin LLM | Son conteos. |
-| Pedirle cosas al cliente | Avisos sueltos (estado de cuenta faltante) | Un objeto «solicitud» con motivo, entidad ligada y seguimiento. |
+| Pedirle cosas al cliente | Avisos sueltos (estado de cuenta faltante); captura de voucher en caja para hospital (#1050) | Un objeto «solicitud» con motivo, entidad ligada y seguimiento. |
 | Programación | Auditor, auto-conciliar y digests corren **sólo** desde GitHub Actions | Están fuera del scheduler in-app, que es el que se ha probado confiable. |
 
 ## Fases
@@ -89,7 +95,35 @@ componente sirve para una factura o un hallazgo.
 el agente explica con razones reales, la mesa enseña la lógica. Y es
 observabilidad gratis: cuando el motor se equivoque, la razón queda escrita.
 
+**La evidencia ya existe.** En agosto la conciliación automática casó un
+traspaso de $30,000 con la factura de un paciente porque emparejó por monto y
+fecha, y ese error bloqueó al depósito que sí le tocaba (#1050). Nadie lo vio
+hasta que se reconstruyó el mes en Excel. Con rastro, ese match habría quedado
+escrito como «candidato único por monto, sin contraparte» y habría sido
+revisable el mismo día. La lección del voucher aplica al rastro: el orden de
+las señales va en `razones` (titular de la tarjeta antes que importe), no
+sólo el score final.
+
+**Y ahora pesa más.** Desde #1060 la conciliación decide el IVA acreditable de
+los gastos PUE (`lib/fiscal/iva-pue-flujo`): un match equivocado ya no es
+sólo un renglón mal cuadrado, cambia la cifra de la declaración. Un
+`DecisionMotor` de conciliación debe poder responder «¿qué IVA movió esto?».
+
 ### F1 — Expediente por empresa (memoria versionada)
+
+**El patrón ya está en la casa.** El copiloto jurídico dejó de recordar desde
+el chat: `JuridicoAsunto` + `JuridicoParte` viven en la base, el modelo los
+registra con herramientas (`registrar_partes`, `actualizar_asunto`,
+`consultar_asunto`), el bloque «Asunto» va en el system prompt y se refresca
+dentro del mismo turno cuando el modelo escribe algo, y lo `verificado` a
+mano nunca se pisa (#1051, `src/lib/juridico/asuntos.ts`). F1 es ese mismo
+patrón para la empresa: mismas convenciones (`fuente`, `verificado`, bloque
+`bloqueExpedienteParaPrompt`, refresco intra-turno), otra entidad.
+
+Nota de nombres: `JuridicoAsunto.expediente` es el número de expediente
+judicial. Aquí «expediente» es el legajo contable de la empresa. Son cosas
+distintas y conviene que los modelos lleven prefijo (`ExpedienteHecho`,
+`ExpedienteNota`) para que no se confundan en el schema.
 
 **Qué.** Dos tablas. Una de **hechos** duraderos sobre el cliente y otra de
 **notas** cronológicas de trabajo.
@@ -104,6 +138,7 @@ ExpedienteHecho {
   vigenteDesde DateTime
   vigenteHasta DateTime?   // null = vigente. Nunca se edita: se cierra y se abre otro.
   confianza    "alta" | "media" | "baja"
+  verificado   Boolean  @default(false)  // confirmado por una persona; el motor y el agente no lo pisan
 }
 @@index([companyId, clave, vigenteHasta])
 
@@ -160,6 +195,9 @@ detalle):
   contabilizar (`estado_contable`).
 - **Bancos** — movimientos sin conciliar por antigüedad, estados de cuenta
   faltantes, terminales sin liquidación cuadrada.
+- **IVA en flujo** — gastos PUE del periodo sin pago conciliado (IVA que NO
+  se acreditó) y empresas en modo `SUPUESTO_PAGADO` porque no concilian
+  banco (#1060). Es la dimensión que conecta bancos con la declaración.
 - **Hallazgos** — abiertos por severidad, nuevos desde ayer.
 - **Solicitudes** (F4) — pendientes del cliente y su antigüedad.
 
@@ -220,8 +258,8 @@ cliente.
 ```
 Solicitud {
   id, companyId, createdAt
-  tipo        "estado_cuenta_banco" | "estado_cuenta_terminal" | "comprobante" |
-              "aclaracion" | "documento_fiscal" | "decision" | ...
+  tipo        "estado_cuenta_banco" | "estado_cuenta_terminal" | "voucher_terminal" |
+              "comprobante" | "aclaracion" | "documento_fiscal" | "decision" | ...
   motivo      String   @db.Text   // por qué, en una frase
   refs        String[]            // movimientos, facturas, hallazgos
   periodo?    String              // YYYY-MM
@@ -236,19 +274,27 @@ Solicitud {
 terminal (`tarjetaDeLiquidacion` los reconoce por la afiliación) y no hay
 estado de cuenta de la terminal cargado, el sistema no puede cuadrar el lote
 contra las ventas ni las comisiones, y nadie se entera hasta que el operador
-audita a mano. Con F1+F4:
+audita a mano. Desde #1050 hay una segunda fuente, mejor que el estado de
+cuenta: el voucher fotografiado en caja (`src/lib/hospital/voucher.ts`,
+`HospCobro`), que dice a quién corresponde cada deslizada en el único momento
+en que alguien lo sabe. Nada se aplica solo; la cajera confirma. Con F1+F4:
 
 1. F0/F1 registran el hecho `terminal.afiliacion = {banco, afiliacion,
    tarjetas}` en cuanto aparecen liquidaciones.
-2. F2 detecta «mes con liquidaciones de terminal sin estado de cuenta de
-   terminal» como dimensión de bancos en `atencion`.
-3. F3 (o el propio motor, sin LLM) abre una `Solicitud` tipo
-   `estado_cuenta_terminal` con motivo y periodo, ligada a los movimientos.
+2. F2 detecta dos cosas: «mes con liquidaciones de terminal sin estado de
+   cuenta de terminal» y, donde exista captura en caja, «lote con deslizadas
+   sin voucher registrado». Ambas como dimensión de bancos en `atencion`.
+3. F3 (o el propio motor, sin LLM) abre la `Solicitud` que corresponde:
+   `voucher_terminal` para los cobros del día que faltan (la fuente primaria,
+   pedida a la caja) y `estado_cuenta_terminal` para el cuadre mensual del
+   lote (la fuente de respaldo). Motivo, periodo y movimientos ligados.
 4. En la mesa, al seleccionar cualquiera de esos movimientos,
-   `ResolverMovimiento` muestra la solicitud abierta y ofrece subir el estado
-   de cuenta ahí mismo. En WhatsApp, el digest la lleva como pedido concreto.
+   `ResolverMovimiento` muestra la solicitud abierta y ofrece resolverla ahí
+   mismo: subir el estado de cuenta, o abrir la lectura de voucher. En
+   WhatsApp, el digest la lleva como pedido concreto.
 5. Al recibirse, el motor de terminal cuadra el lote y cierra la solicitud
-   con `recibidaRef`.
+   con `recibidaRef`. Cada cuadre deja su `DecisionMotor` con el orden de
+   señales que #1050 fijó: titular de la tarjeta primero, importe después.
 
 El mismo mecanismo cubre estados de cuenta bancarios faltantes, comprobantes
 de gastos sin CFDI, decisiones del cierre y documentos fiscales que pide el
