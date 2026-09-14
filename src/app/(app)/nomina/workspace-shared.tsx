@@ -248,6 +248,8 @@ export interface Employee {
   nss: string;
   /** CP del domicilio FISCAL del empleado (CSF) — DomicilioFiscalReceptor del recibo. */
   codigoPostal?: string | null;
+  /** Para enviarle sus recibos (Facturapi). Vacío = el envío lo reporta por nombre. */
+  email?: string | null;
   salarioDiario: number;
   salarioDiarioIntegrado: number | null;
   periodicidadPago: string;
