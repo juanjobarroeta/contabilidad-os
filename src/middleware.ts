@@ -83,6 +83,10 @@ export const config = {
     // status, el mismo modo de falla que AUTOMOTRIZ-2 más abajo.
     "/api/auth/token",
     "/api/auth/token/:path*",
+    // El abogado cambia su contraseña desde el satélite jurídico (la primera se
+    // la damos nosotros al darlo de alta). Sin este renglón el preflight no
+    // lleva Access-Control-Allow-Origin y Safari tira el fetch sin status.
+    "/api/auth/change-password",
     // Onboarding desde satélites (wizard Automotriz): alta de cuenta, parseo
     // de la CSF y checkout de Stripe se llaman cross-origin con bearer token.
     "/api/auth/signup",
