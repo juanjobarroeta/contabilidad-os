@@ -51,6 +51,7 @@ describe("evaluarPuntoDePartida", () => {
     const saldos = r.pasos.find((p) => p.clave === "saldos")!;
     expect(saldos.estado).toBe("parcial");
     expect(saldos.detalle).toBe("Tenemos tu balanza del SAT de julio 2026");
+    expect(saldos.accion).toEqual({ tipo: "apertura-desde-ce", anio: 2026, mes: 7, etiqueta: "Generar apertura con la balanza de julio 2026" });
   });
 
   it("e.firma por vencer y bancos sin estados: parciales con su petición", () => {

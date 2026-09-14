@@ -22,6 +22,9 @@ const ESTILO: Record<PasoPuntoDePartida["estado"], { icono: typeof CheckCircle2;
 export function PuntoDePartida({ companyId }: { companyId: string }) {
   const [r, setR] = useState<Resultado | null>(null);
   const [cargando, setCargando] = useState(true);
+  const [ejecutando, setEjecutando] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<{ tono: "ok" | "error"; texto: string } | null>(null);
+  const [version, setVersion] = useState(0);
 
   useEffect(() => {
     let vivo = true;
@@ -32,7 +35,28 @@ export function PuntoDePartida({ companyId }: { companyId: string }) {
       .catch(() => { if (vivo) setR(null); })
       .finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
-  }, [companyId]);
+  }, [companyId, version]);
+
+  async function ejecutar(p: PasoPuntoDePartida) {
+    if (!p.accion) return;
+    setEjecutando(p.clave); setAviso(null);
+    try {
+      const res = await fetch("/api/contabilidad/apertura/desde-ce", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId, anio: p.accion.anio, mes: p.accion.mes }),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(d?.error ?? "No se pudo generar la apertura");
+      const total = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(d?.balanza?.totalCargos ?? 0);
+      setAviso({ tono: "ok", texto: `Apertura generada: ${d?.balanza?.entries ?? 0} partida(s) por ${total}.` });
+      setVersion((v) => v + 1);
+    } catch (e) {
+      setAviso({ tono: "error", texto: e instanceof Error ? e.message : "No se pudo generar la apertura" });
+    } finally {
+      setEjecutando(null);
+    }
+  }
 
   if (cargando) {
     return (
@@ -41,7 +65,7 @@ export function PuntoDePartida({ companyId }: { companyId: string }) {
       </div>
     );
   }
-  if (!r || r.listos === r.total) return null;
+  if (!r || (r.listos === r.total && !aviso)) return null;
 
   const enlace = (p: PasoPuntoDePartida, children: React.ReactNode) =>
     p.href.startsWith("#") ? (
@@ -63,6 +87,9 @@ export function PuntoDePartida({ companyId }: { companyId: string }) {
       <p className="mb-3 text-xs text-cos-ink-soft">
         Con la e.firma bajamos del SAT los CFDI y la Contabilidad Electrónica; lo demás se pide una vez y en el formato que tengas.
       </p>
+      {aviso && (
+        <p className={cn("mb-3 rounded-md px-3 py-2 text-[12px]", aviso.tono === "ok" ? "bg-cos-jade-tint text-cos-jade-ink" : "bg-cos-red-tint text-cos-red-ink")}>{aviso.texto}</p>
+      )}
       <ul className="divide-y divide-cos-line-soft">
         {r.pasos.map((p) => {
           const e = ESTILO[p.estado];
@@ -82,7 +109,18 @@ export function PuntoDePartida({ companyId }: { companyId: string }) {
                 </div>
                 {p.peticion && <p className="mt-0.5 text-[12px] text-cos-ink">{p.peticion}</p>}
               </div>
-              {p.estado !== "listo" && <div className="shrink-0 pt-0.5">{enlace(p, "Resolver →")}</div>}
+              {p.accion ? (
+                <button
+                  onClick={() => ejecutar(p)}
+                  disabled={ejecutando !== null}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-control bg-cos-brand px-3 py-1.5 text-[12px] font-medium text-white hover:bg-cos-brand-deep disabled:opacity-50"
+                >
+                  {ejecutando === p.clave && <Loader2 className="h-3 w-3 animate-spin" />}
+                  {p.accion.etiqueta}
+                </button>
+              ) : (
+                p.estado !== "listo" && <div className="shrink-0 pt-0.5">{enlace(p, "Resolver →")}</div>
+              )}
             </li>
           );
         })}

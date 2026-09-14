@@ -51,6 +51,8 @@ export interface PasoPuntoDePartida {
   peticion?: string;
   /** A dónde ir para resolverlo (ancla en /empresa o ruta). */
   href: string;
+  /** Algo que la app puede hacer sola con lo que ya tiene, de un clic. */
+  accion?: { tipo: "apertura-desde-ce"; anio: number; mes: number; etiqueta: string };
 }
 
 export interface PuntoDePartida {
@@ -122,8 +124,9 @@ export function evaluarPuntoDePartida(h: HechosPuntoDePartida): PuntoDePartida {
     pasos.push({
       clave: "saldos", titulo: "Saldos iniciales", estado: "parcial",
       detalle: `Tenemos tu balanza del SAT de ${mesTexto(h.ultimaBalanzaSat)}`,
-      peticion: "Falta generar la apertura con esa balanza (Importar Contabilidad Electrónica → base de los saldos iniciales).",
+      peticion: "Falta generar la apertura con esa balanza; no hay que subir nada.",
       href: "#contabilidad-electronica",
+      accion: { tipo: "apertura-desde-ce", anio: h.ultimaBalanzaSat.anio, mes: h.ultimaBalanzaSat.mes, etiqueta: `Generar apertura con la balanza de ${mesTexto(h.ultimaBalanzaSat)}` },
     });
   } else {
     pasos.push({
