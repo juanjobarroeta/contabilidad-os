@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("../auth", () => ({ auth: vi.fn() }));
 vi.mock("../prisma", () => ({ prisma: {} }));
 
-import { enforceConstruccionRol } from "./rol";
+import { enforceConstruccionRol, soloVeSusCajas } from "./rol";
 
 const req = (method: string, path: string) =>
   new Request(`https://x.test${path}`, { method });
@@ -126,5 +126,21 @@ describe("enforceConstruccionRol", () => {
   it("fuera de /api/construccion no restringe (p. ej. cambiar contraseña)", () => {
     expect(allowed("RESIDENTE", "POST", "/api/auth/change-password")).toBe(true);
     expect(allowed("TESORERIA", "POST", "/api/auth/change-password")).toBe(true);
+  });
+});
+
+describe("soloVeSusCajas", () => {
+  it("el residente sólo ve las cajas que él abrió", () => {
+    expect(soloVeSusCajas("RESIDENTE")).toBe(true);
+  });
+
+  it("admin y supervisión ven todas las cajas de la empresa", () => {
+    // null = admin/dueño de siempre (sin rol restringido)
+    expect(soloVeSusCajas(null)).toBe(false);
+    expect(soloVeSusCajas(undefined)).toBe(false);
+    expect(soloVeSusCajas("ADMIN")).toBe(false);
+    // Revisan y cierran: si llegan a la página (por permiso extra), ven todo
+    expect(soloVeSusCajas("CONTABILIDAD")).toBe(false);
+    expect(soloVeSusCajas("TESORERIA")).toBe(false);
   });
 });

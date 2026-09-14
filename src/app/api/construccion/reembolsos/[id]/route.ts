@@ -14,6 +14,8 @@ import {
   requireWriter,
   withAuthz,
 } from "@/lib/authz";
+import type { ConstruccionRol } from "@prisma/client";
+import { soloVeSusCajas } from "@/lib/construccion/rol";
 
 const patchSchema = z.object({
   semanaInicio: z.string().optional(),
@@ -41,8 +43,16 @@ async function loadReembolso(id: string, req: Request, write = false) {
     await requireModule(r.companyId, "CONSTRUCCION");
     return { ...r, esAdmin };
   }
-  await requireMembership(r.companyId, undefined, req);
+  const { user, membership } = await requireMembership(r.companyId, undefined, req);
   await requireModule(r.companyId, "CONSTRUCCION");
+  // Misma regla que el listado: el residente no abre la caja de otro ni por
+  // URL directa (si no, esconderlas de la lista sería sólo cosmético).
+  const esResidente = soloVeSusCajas(
+    (membership as { construccionRol?: ConstruccionRol | null }).construccionRol
+  );
+  if (esResidente && r.creadaPorId !== user.id) {
+    throw new AuthzError(403, "Esta caja chica es de otro usuario");
+  }
   return { ...r, esAdmin: false };
 }
 
