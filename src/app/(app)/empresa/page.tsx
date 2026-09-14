@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { errorRegistroPatronal } from "@/lib/nomina/registro-patronal";
 import { MandatoEfirmaExistente } from "@/components/legal/MandatoEfirmaExistente";
+import { PuntoDePartida } from "@/components/empresa/PuntoDePartida";
 
 type DocType = "CSF" | "TARJETA_IMSS" | "ACUSE_ANUAL" | "ACUSE_MENSUAL" | "OTRO";
 type ImportDoc = {
@@ -834,9 +835,12 @@ export default function EmpresaPage() {
         </Alert>
       )}
 
+      {/* ── Punto de partida: qué hay, qué falta y qué pedir ── */}
+      {activeCompany && <PuntoDePartida companyId={activeCompany.id} />}
+
       {/* ── Constancia de Situación Fiscal ── */}
       {activeCompany && (
-        <div className="bg-cos-card border border-cos-line rounded-xl shadow-sm p-5 mb-5">
+        <div id="csf" className="scroll-mt-24 bg-cos-card border border-cos-line rounded-xl shadow-sm p-5 mb-5">
           <div className="flex items-start gap-3 mb-3">
             <div className="h-9 w-9 rounded-lg bg-cos-brand-tint flex items-center justify-center shrink-0">
               <FileText className="h-4 w-4 text-cos-brand-ink" />
@@ -1232,7 +1236,7 @@ export default function EmpresaPage() {
         </div>
 
         {/* ── e.firma / FIEL ── */}
-        <div className="bg-cos-card rounded-xl border border-cos-line shadow-sm overflow-hidden">
+        <div id="fiel" className="scroll-mt-24 bg-cos-card rounded-xl border border-cos-line shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-lg bg-cos-amber-tint flex items-center justify-center shrink-0">
@@ -1543,7 +1547,7 @@ export default function EmpresaPage() {
         </div>
 
         {/* ── Importar Contabilidad Electrónica (Anexo 24) ── */}
-        <div className="bg-cos-card rounded-xl border border-cos-line shadow-sm overflow-hidden mt-5">
+        <div id="contabilidad-electronica" className="scroll-mt-24 bg-cos-card rounded-xl border border-cos-line shadow-sm overflow-hidden mt-5">
           <div className="px-5 py-4 border-b border-cos-line flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-lg bg-cos-brand-tint flex items-center justify-center shrink-0">
