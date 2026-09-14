@@ -67,8 +67,12 @@ export async function GET(req: Request) {
   const member = await getEffectiveCompanyMembership(usuario.id, companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
-  const from = new Date(Date.UTC(year, month - 1, 1));
-  const to = new Date(Date.UTC(year, month, 1));
+  // Mismos límites del mes que el motor (computeTaxPosition): hora LOCAL del
+  // servidor, no UTC. Con UTC aquí y local allá, un REP con FechaPago en las
+  // horas de frontera caía en meses distintos y el papel no cuadraba con el
+  // copiloto por $180 en el trasladado (agosto 2026). Un solo criterio.
+  const from = new Date(year, month - 1, 1);
+  const to = new Date(year, month, 1);
   const periodo = `${year}-${String(month).padStart(2, "0")}`;
 
   // Previous month's declaration for saldo a favor carryover
@@ -543,7 +547,7 @@ export async function GET(req: Request) {
   // IVA retenido a proveedores el MES ANTERIOR (y enterado con aquella
   // declaración): acreditable en ésta (Art. 5-IV LIVA). Mismo criterio de flujo
   // que el motor mensual.
-  const prevFrom = new Date(Date.UTC(year, month - 2, 1));
+  const prevFrom = new Date(year, month - 2, 1);
   const retenidoMesAnteriorAcreditable = await ivaRetenidoAProveedoresEnPeriodo(companyId, prevFrom, from);
 
   const sum = (rs: Row[]) => rs.reduce((s, r) => s + r.importe, 0);
