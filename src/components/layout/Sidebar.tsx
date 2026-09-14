@@ -30,6 +30,7 @@ import {
   LayoutGrid,
   ClipboardCheck,
   type LucideIcon,
+  NotebookPen,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -52,6 +53,10 @@ const SECTIONS: NavSection[] = [
       // headers). Una entrada donde había dos — rediseño Piloto, Fase 1.
       { href: "/clientes", label: "Directorio", icon: Users },
       { href: "/bancos", label: "Bancos", icon: Landmark },
+      // El expediente: lo que sabemos del cliente y la bitácora de trabajo.
+      // Vive en Operación porque se consulta a diario, no una vez al año como
+      // los datos de «Mi Empresa».
+      { href: "/expediente", label: "Expediente", icon: NotebookPen },
     ],
   },
   {

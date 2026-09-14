@@ -449,6 +449,8 @@ model Company {
   /** Directorio CLABE → contraparte aprendido de los CEP y las conciliaciones. */
   cuentasContraparte CuentaContraparte[]
   decisionesMotor    DecisionMotor[]
+  expedienteHechos   ExpedienteHecho[]
+  expedienteNotas    ExpedienteNota[]
   saludSnapshots     SaludSnapshot[]
 }
 
@@ -9609,4 +9611,98 @@ model SaludSnapshot {
   @@index([companyId, createdAt])
   /// A quién le toca pasada del agente hoy.
   @@index([dia, requiereAtencion])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EL EXPEDIENTE DE LA EMPRESA — lo que un contador sabe de su cliente.
+//
+// El copiloto era genérico porque no sabía nada de la empresa que no estuviera
+// en una tabla contable: qué terminales tiene y con qué afiliación, quién lleva
+// el cierre, qué clientes pagan tarde, qué se revisó el mes pasado y qué quedó
+// pendiente. Eso vivía en la cabeza del contador y en hilos de chat que nadie
+// vuelve a leer.
+//
+// El patrón es el que el copiloto jurídico ya probó (#1051): la memoria vive en
+// la base, no en la conversación; el modelo la alimenta con herramientas y la
+// recibe en el system prompt; y lo que una persona verificó a mano NUNCA lo
+// pisa el motor ni el agente.
+//
+// Dos tablas porque son dos cosas distintas: HECHOS duraderos (qué es cierto de
+// este cliente, versionado por vigencia) y NOTAS cronológicas (qué se hizo y
+// qué quedó pendiente).
+//
+// NUNCA guardar secretos aquí: son datos de operación, y el bloque del prompt
+// los manda al modelo en cada turno.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Un hecho duradero sobre la empresa, versionado por vigencia.
+///
+/// NO se edita: un hecho que cambia se CIERRA (vigenteHasta) y se abre otro.
+/// Ésa es la única forma de contestar «¿desde cuándo tiene esa terminal?», que
+/// es justo la pregunta que aparece cuando un cargo no cuadra con el contrato.
+model ExpedienteHecho {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+
+  /// Clave estable: "terminal.afiliacion", "cliente.plazo_pago", "cierre.responsable"…
+  clave String
+  /// El valor. Json porque un hecho puede ser un texto, un número o una ficha.
+  valor Json
+
+  /// Quién lo estableció. El motor deduce, el agente infiere, la persona sabe.
+  fuente String @default("motor")
+  /// Qué lo respalda: ids de DecisionMotor, de entidades, de documentos.
+  evidencia String[]
+
+  vigenteDesde DateTime  @default(now())
+  /// null = vigente hoy. Es el campo por el que se filtra siempre.
+  vigenteHasta DateTime?
+
+  /// "alta" | "media" | "baja". Un hecho de baja confianza se enseña como tal.
+  confianza String @default("media")
+  /// Confirmado por una persona. Ni el motor ni el agente lo vuelven a tocar.
+  verificado Boolean @default(false)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  /// La consulta de todos los días: los hechos vigentes de una empresa.
+  @@index([companyId, clave, vigenteHasta])
+  @@index([companyId, vigenteHasta])
+}
+
+/// La bitácora de trabajo de la empresa: qué se revisó, qué se decidió, qué
+/// quedó pendiente y por qué.
+///
+/// Una nota `pendiente` abierta es un COMPROMISO: la siguiente pasada del
+/// agente la lee antes que nada. Es lo que evita que cada corrida empiece de
+/// cero y vuelva a reportar lo que ya se decidió dejar así.
+model ExpedienteNota {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+
+  autor   String  @default("motor")
+  autorId String?
+
+  /// "observacion" | "decision" | "pendiente" | "resumen_corrida"
+  tipo String
+  /// "conciliacion" | "sat" | "cumplimiento" | "declaraciones" | "ce" | "nomina" | "general"
+  tema String
+
+  titulo String
+  cuerpo String   @db.Text
+  refs   String[]
+
+  /// "abierta" | "resuelta". Sólo los pendientes se resuelven.
+  estado            String    @default("abierta")
+  resueltaAt        DateTime?
+  /// La nota que la cerró: el porqué del cierre queda enlazado, no perdido.
+  resueltaPorNotaId String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+  @@index([companyId, estado, tipo])
+  @@index([companyId, tema, createdAt])
 }

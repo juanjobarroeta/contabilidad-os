@@ -5,8 +5,13 @@ import { MATERIAS_CONTADOR } from "@/lib/fiscal-kb/materias";
 const CLAVES_GET_ARTICULO = [...clavesPorMateria(MATERIAS_CONTADOR), "RMF"];
 
 import type Anthropic from "@anthropic-ai/sdk";
+import { toolsExpediente } from "@/lib/expediente/tools";
 
 export const tools: Anthropic.Tool[] = [
+  // La memoria de la empresa (expediente): hechos duraderos y bitácora de
+  // trabajo. Van primero porque son las que hacen que el copiloto deje de
+  // responder como si acabara de conocer al cliente.
+  ...toolsExpediente,
   {
     name: "query_invoices",
     description:
