@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { autorizarJuridico, respuestaDeError } from "@/lib/juridico/api-guardia";
 import { asegurarDespacho, cambiarRol, esRol, puede, quitarMiembro } from "@/lib/juridico/despacho";
+import { prohibido } from "@/lib/juridico/errores-api";
 
 // PATCH /api/juridico/despacho/miembros/[userId] { rol } — cambia el papel.
 // DELETE — lo saca del despacho. Ni una ni otra borran su cuenta ni los casos
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
 async function socioDe(req: Request) {
   const yo = await autorizarJuridico(req);
   const d = await asegurarDespacho(yo);
-  if (!puede(d.rol, "administrarDespacho")) throw new Error("Sólo un socio administra el equipo del despacho.");
+  if (!puede(d.rol, "administrarDespacho")) throw prohibido("Sólo un socio administra el equipo del despacho.");
   return d;
 }
 
@@ -24,7 +25,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ userId
     await cambiarRol(d.despachoId, userId, body.rol);
     return NextResponse.json({ ok: true });
   } catch (e) {
-    if (e instanceof Error && /Sólo un socio/.test(e.message)) return NextResponse.json({ error: e.message }, { status: 403 });
     return respuestaDeError(e);
   }
 }
@@ -36,7 +36,6 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ userI
     await quitarMiembro(d.despachoId, userId);
     return NextResponse.json({ ok: true });
   } catch (e) {
-    if (e instanceof Error && /Sólo un socio/.test(e.message)) return NextResponse.json({ error: e.message }, { status: 403 });
     return respuestaDeError(e);
   }
 }

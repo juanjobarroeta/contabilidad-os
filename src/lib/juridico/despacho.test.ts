@@ -28,3 +28,15 @@ describe("papeles del despacho", () => {
     expect(esRol(null)).toBe(false);
   });
 });
+
+describe("errores de negocio con su status", () => {
+  it("dejar al despacho sin socio es 409, no 401", async () => {
+    const { ErrorJuridico, conflicto, noEncontrado, prohibido } = await import("./errores-api");
+    expect(conflicto("x")).toBeInstanceOf(ErrorJuridico);
+    expect(conflicto("x").status).toBe(409);
+    expect(noEncontrado("Miembro").status).toBe(404);
+    expect(noEncontrado("Miembro").message).toBe("Miembro no encontrado");
+    expect(prohibido("no eres socio").status).toBe(403);
+    expect(new ErrorJuridico("falta el nombre").status).toBe(400);
+  });
+});

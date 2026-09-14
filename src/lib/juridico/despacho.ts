@@ -12,6 +12,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "@/lib/prisma";
 import { crearAsiento, normalizarEmail, type AsientoJuridico } from "./usuarios";
+import { ErrorJuridico, conflicto, noEncontrado } from "./errores-api";
 
 export type RolDespacho = "socio" | "abogado" | "pasante" | "administrativo";
 
@@ -141,9 +142,9 @@ export async function invitar(despachoId: string, datos: { email: string; nombre
 /** Cambia el papel de alguien. Un despacho no se queda sin socios. */
 export async function cambiarRol(despachoId: string, userId: string, rol: RolDespacho): Promise<void> {
   const actual = await prisma.juridicoMiembro.findUnique({ where: { despachoId_userId: { despachoId, userId } }, select: { rol: true } });
-  if (!actual) throw new Error("Miembro no encontrado");
+  if (!actual) throw noEncontrado("Miembro");
   if (actual.rol === "socio" && rol !== "socio" && (await socios(despachoId)) <= 1) {
-    throw new Error("El despacho se quedaría sin socio: nombra a otro antes de cambiar este papel.");
+    throw conflicto("El despacho se quedaría sin socio: nombra a otro antes de cambiar este papel.");
   }
   await prisma.juridicoMiembro.update({ where: { despachoId_userId: { despachoId, userId } }, data: { rol } });
 }
@@ -154,8 +155,8 @@ export async function cambiarRol(despachoId: string, userId: string, rol: RolDes
  */
 export async function quitarMiembro(despachoId: string, userId: string): Promise<void> {
   const actual = await prisma.juridicoMiembro.findUnique({ where: { despachoId_userId: { despachoId, userId } }, select: { rol: true } });
-  if (!actual) throw new Error("Miembro no encontrado");
-  if (actual.rol === "socio" && (await socios(despachoId)) <= 1) throw new Error("El despacho se quedaría sin socio: nombra a otro antes de sacar a éste.");
+  if (!actual) throw noEncontrado("Miembro");
+  if (actual.rol === "socio" && (await socios(despachoId)) <= 1) throw conflicto("El despacho se quedaría sin socio: nombra a otro antes de sacar a éste.");
   await prisma.juridicoMiembro.delete({ where: { despachoId_userId: { despachoId, userId } } });
 }
 
@@ -165,7 +166,7 @@ async function socios(despachoId: string): Promise<number> {
 
 export async function renombrar(despachoId: string, nombre: string): Promise<void> {
   const limpio = nombre.trim().slice(0, 120);
-  if (limpio.length < 2) throw new Error("El despacho necesita un nombre.");
+  if (limpio.length < 2) throw new ErrorJuridico("El despacho necesita un nombre.");
   await prisma.juridicoDespacho.update({ where: { id: despachoId }, data: { nombre: limpio } });
 }
 
