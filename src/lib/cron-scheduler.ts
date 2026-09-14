@@ -155,6 +155,10 @@ const JOBS: Job[] = [
   // razonamiento: sin él habría que mirarlas todas a mano. Mismo gateo por
   // empresa y día (06:00 MX) que el pase del cierre.
   { name: "salud-diaria", everyMs: 30 * MIN, firstDelayMs: 14 * MIN, minMs: MIN_CARO },
+  // La pasada del contador: lo único caro del sistema. Va DESPUÉS de la salud
+  // (07:00 MX contra sus 06:00) porque lee la foto del día, y sólo toca a las
+  // empresas que esa foto marcó. El handler se auto-gatea por empresa y día.
+  { name: "contador-pasada", everyMs: 60 * MIN, firstDelayMs: 25 * MIN, minMs: MIN_CARO },
   { name: "compliance-provision", everyMs: 24 * HOUR, firstDelayMs: 3 * MIN, minMs: MIN_CARO },
   { name: "compliance-sync", everyMs: 6 * HOUR, firstDelayMs: 8 * MIN, minMs: MIN_CARO },
   // Acuses MENSUALES desde Syntage (PDF + parse con Claude). Corría SÓLO en el
