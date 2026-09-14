@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
 import { parseCfdiXml } from "./sat-fiel";
+import { tipoCorridaDeXml } from "./nomina/tipo-corrida";
 import { clasificarCfdi } from "./fiscal/clasificar-cfdi";
 import { parchearClienteDesdeCfdi } from "./facturas/cliente-fiscal-repo";
 import { identidadDesdeCfdi, regimenParaAlta } from "./facturas/identidad-receptor";
@@ -113,6 +114,7 @@ export async function importarCfdiXml(args: ImportarCfdiArgs): Promise<Resultado
             regimenNomina: parsed.nomina.tipoRegimen,
             tipoNomina: parsed.nomina.tipoNomina ?? null,
             isrRetenidoNomina: parsed.nomina.isrRetenido ?? null,
+            tipoCorrida: tipoCorridaDeXml(xmlContent),
           },
         });
       }
@@ -255,6 +257,7 @@ export async function importarCfdiXml(args: ImportarCfdiArgs): Promise<Resultado
       regimenNomina: cfdi.nomina?.tipoRegimen ?? null,
       tipoNomina: cfdi.nomina?.tipoNomina ?? null,
       isrRetenidoNomina: cfdi.nomina?.isrRetenido ?? null,
+      tipoCorrida: cfdi.nomina ? tipoCorridaDeXml(xmlContent) : null,
       moneda: cfdi.moneda ?? "MXN",
       subtotal: cfdi.subtotal,
       total: cfdi.total,

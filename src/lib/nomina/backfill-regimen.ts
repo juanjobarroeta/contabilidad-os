@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { tipoCorridaDeXml } from "./tipo-corrida";
 import { parseCfdiXml } from "@/lib/sat-fiel";
 import { REGIMENES_ASIMILADOS } from "@/lib/nomina/regimen";
 
@@ -30,9 +31,12 @@ export async function backfillNominaRegimen(
   const TIME_BUDGET_MS = opts?.timeBudgetMs ?? 240_000;
   const startedAt = Date.now();
 
+  // Dos deudas, una pasada: filas sin régimen (importadas antes de parsear el
+  // complemento) y filas sin tipo de corrida (importadas antes de derivarlo).
+  // Un finiquito sin tipoCorrida se llamaba «Nómina» en toda la app.
   const where = {
     tipo: "NOMINA" as const,
-    regimenNomina: null,
+    OR: [{ regimenNomina: null }, { tipoCorrida: null }],
     rawXml: { not: null },
     ...(companyId ? { companyId } : {}),
   };
@@ -69,6 +73,7 @@ export async function backfillNominaRegimen(
           regimenNomina: n.tipoRegimen,
           tipoNomina: n.tipoNomina ?? null,
           isrRetenidoNomina: n.isrRetenido ?? null,
+          tipoCorrida: tipoCorridaDeXml(inv.rawXml),
         },
       });
       updated++;

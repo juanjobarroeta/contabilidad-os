@@ -972,6 +972,12 @@ model Invoice {
   regimenNomina     String?
   tipoNomina        String? // "O" ordinaria | "E" extraordinaria
   isrRetenidoNomina Decimal? @db.Decimal(18, 6)
+  // Qué corrida ES el recibo, derivado del complemento (derivarTipoCorrida):
+  // ORDINARIA | EXTRAORDINARIA | FINIQUITO | AGUINALDO | PTU. TipoNomina del
+  // SAT sólo dice O/E — un finiquito viaja como "O" — así que sin esto la
+  // pantalla llamaba «Nómina» a todo y un finiquito de $18k parecía quincena.
+  // Null = no es nómina o se importó antes de derivarlo (lo rellena el backfill).
+  tipoCorrida       String?
 
   // SAT stamping data (from PAC/Facturapi)
   status         InvoiceStatus @default(DRAFT)
