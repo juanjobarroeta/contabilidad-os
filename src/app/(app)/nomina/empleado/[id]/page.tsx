@@ -16,12 +16,13 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
-  ArrowLeft, BadgeCheck, Loader2, Receipt, TrendingUp, UserRound, FileText,
+  ArrowLeft, BadgeCheck, Loader2, Receipt, TrendingUp, UserRound, FileText, Pencil,
 } from "lucide-react";
 import { Alert, Card, Money, Loading, RetryButton } from "@/components/ui";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { AcumuladosEmpleado } from "@/lib/nomina/acumulados";
-import { TIPO_RUN_LABEL, STATUS_RUN_LABEL, PERIODICIDAD_LABEL } from "../../workspace-shared";
+import { TIPO_RUN_LABEL, STATUS_RUN_LABEL, PERIODICIDAD_LABEL, type Employee } from "../../workspace-shared";
+import { EditEmployeeModal } from "../../EmployeeModals";
 import { DocumentosEmpleado } from "./DocumentosEmpleado";
 
 interface EmpleadoFicha {
@@ -122,6 +123,21 @@ export default function ExpedienteEmpleadoPage() {
 
   useEffect(() => { load(anio, 1, false); }, [load, anio]);
 
+  // «Editar ficha»: el modal completo (salario, SBC, Infonavit/Fonacot, pensión,
+  // CLABE) necesita la fila entera del roster, no la ficha resumida de esta
+  // página — si le faltaran campos, guardar los borraría. Se pide al abrir.
+  const [editFor, setEditFor] = useState<Employee | null>(null);
+  const [abriendoEdicion, setAbriendoEdicion] = useState(false);
+  async function abrirEdicion(companyId: string, employeeId: string) {
+    setAbriendoEdicion(true);
+    try {
+      const res = await fetch(`/api/empleados?companyId=${companyId}&includeInactive=1`);
+      const d = await res.json();
+      const fila = (Array.isArray(d) ? (d as Employee[]) : []).find((x) => x.id === employeeId) ?? null;
+      setEditFor(fila);
+    } finally { setAbriendoEdicion(false); }
+  }
+
   if (loading && !data) return <Loading />;
 
   if (error && !data) {
@@ -184,6 +200,11 @@ export default function ExpedienteEmpleadoPage() {
             {e.numEmpleado ? ` · No. ${e.numEmpleado}` : ""}
           </p>
         </div>
+        <button onClick={() => abrirEdicion(e.companyId, e.id)} disabled={abriendoEdicion}
+          className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-cos-card px-3.5 py-1.5 text-[13px] font-semibold text-cos-ink hover:border-cos-brand hover:text-cos-brand-ink disabled:opacity-50"
+          title="Salario, SBC, periodicidad, Infonavit/Fonacot, pensión, CLABE">
+          {abriendoEdicion ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />} Editar ficha
+        </button>
       </div>
 
       <Card className="mt-4 rounded-card border-cos-line p-5 shadow-card">
@@ -369,6 +390,10 @@ export default function ExpedienteEmpleadoPage() {
         ficha={{ salarioDiario: data.empleado.salarioDiario, salarioDiarioIntegrado: data.empleado.salarioDiarioIntegrado, puesto: data.empleado.puesto, fechaIngreso: data.empleado.fechaIngreso }}
         onFichaChanged={() => load(anio, 1, false)}
       />
+      {editFor && (
+        <EditEmployeeModal companyId={data.empleado.companyId} employee={editFor}
+          onClose={() => setEditFor(null)} onSaved={() => { setEditFor(null); load(anio, 1, false); }} />
+      )}
     </div>
   );
 }
