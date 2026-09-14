@@ -6,6 +6,7 @@ import { registrarBitacora } from "@/lib/audit";
 import { coberturaPlanPropio } from "@/lib/contabilidad/resolver-plan-propio";
 import { COE_CODES } from "@/lib/contabilidad/catalog";
 import { CODIGO_AGRUPADOR_OFICIAL } from "@/lib/contabilidad/codigo-agrupador";
+import { padresDelCatalogo } from "@/lib/contabilidad/jerarquia-catalogo";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // La cola de ambigüedades del plan propio (brief UX, módulo P1-4): los códigos
@@ -47,19 +48,27 @@ export const GET = withAuthz(async (req: Request) => {
     }),
   ]);
 
+  // Una cuenta con subcuentas acumula: no recibe pólizas y no se ofrece como
+  // decisión (se enseña, apagada, con cuántas cuelgan de ella).
+  const padres = padresDelCatalogo(cuentas.map((a) => ({ codigo: a.subcuenta ?? a.cuentaSAT, nivel: a.nivel })));
+
   return NextResponse.json({
     cobertura: cobertura.map((c) => ({
       ...c,
       nombreAgrupador: CODIGO_AGRUPADOR_OFICIAL[c.codigoMotor] ?? null,
     })),
-    cuentas: cuentas.map((a) => ({
-      id: a.id,
-      codigo: a.subcuenta ?? a.cuentaSAT,
-      nombre: a.nombre,
-      nivel: a.nivel,
-      tipo: a.tipo,
-      codAgrup: a.codAgrup,
-    })),
+    cuentas: cuentas.map((a) => {
+      const codigo = a.subcuenta ?? a.cuentaSAT;
+      return {
+        id: a.id,
+        codigo,
+        nombre: a.nombre,
+        nivel: a.nivel,
+        tipo: a.tipo,
+        codAgrup: a.codAgrup,
+        subcuentas: padres.get(codigo) ?? 0,
+      };
+    }),
   });
 });
 

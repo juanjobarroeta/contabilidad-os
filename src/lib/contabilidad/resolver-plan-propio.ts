@@ -21,6 +21,26 @@
 import { prisma } from "../prisma";
 import type { ChartAccount } from "@prisma/client";
 import { dimensionDe, type Dimension, type Padron } from "./dimension-codigo";
+import { padresDelCatalogo } from "./jerarquia-catalogo";
+
+
+/**
+ * De varias candidatas, las que NO son acumulativas. Una cuenta con subcuentas
+ * no recibe pólizas: si «501001000 Farmacia» y sus seis hijas comparten el
+ * agrupador, la decisión es entre las hijas. Sólo se carga el catálogo cuando
+ * hay más de una candidata; con una sola no hay nada que distinguir.
+ */
+async function soloHojas<T extends { cuentaSAT: string; subcuenta: string | null }>(companyId: string, candidatas: T[]): Promise<{ hojas: T[]; acumulativas: number }> {
+  if (candidatas.length < 2) return { hojas: candidatas, acumulativas: 0 };
+  const catalogo = await prisma.chartAccount.findMany({
+    where: { companyId, isActive: true },
+    select: { cuentaSAT: true, subcuenta: true, nivel: true },
+  });
+  const padres = padresDelCatalogo(catalogo.map((c) => ({ codigo: c.subcuenta ?? c.cuentaSAT, nivel: c.nivel })));
+  const hojas = candidatas.filter((c) => !padres.has(c.subcuenta ?? c.cuentaSAT));
+  // Si todas fueran acumulativas (catálogo sin detalle), no se descarta nada.
+  return hojas.length > 0 ? { hojas, acumulativas: candidatas.length - hojas.length } : { hojas: candidatas, acumulativas: 0 };
+}
 
 /**
  * La cuenta PROPIA para un código del motor, o null si no hay resolución
@@ -38,9 +58,9 @@ export async function resolverCuentaPropia(
 
   const candidatas = await prisma.chartAccount.findMany({
     where: { companyId, isActive: true, codAgrup: codigoMotor },
-    take: 2,
   });
-  return candidatas.length === 1 ? candidatas[0] : null;
+  const { hojas } = await soloHojas(companyId, candidatas);
+  return hojas.length === 1 ? hojas[0] : null;
 }
 
 export interface CoberturaCodigo {
@@ -53,7 +73,10 @@ export interface CoberturaCodigo {
    * saldo de todos a la elegida. Ésas salen como `por_dimension`.
    */
   estado: "unica" | "override" | "ambigua" | "sin_candidata" | "por_dimension";
+  /** Candidatas de detalle (sin las acumulativas). */
   candidatas: number;
+  /** Cuentas con subcuentas que comparten el agrupador y quedaron fuera. */
+  acumulativas?: number;
   cuenta?: { cuentaSAT: string; nombre: string };
   /** Qué elige la cuenta: nada (FIJA), la contraparte, o el ejercicio. */
   dimension: Dimension;
@@ -90,10 +113,11 @@ export async function coberturaPlanPropio(
       });
       continue;
     }
-    const candidatas = await prisma.chartAccount.findMany({
+    const todas = await prisma.chartAccount.findMany({
       where: { companyId, isActive: true, codAgrup: codigoMotor },
       select: { cuentaSAT: true, subcuenta: true, nombre: true },
     });
+    const { hojas: candidatas, acumulativas } = await soloHojas(companyId, todas);
     const dim = dimensionDe(codigoMotor);
     // Varias candidatas bajo un código dimensional NO es una ambigüedad que
     // alguien deba resolver: es el catálogo bien armado. Una sola candidata sí
@@ -114,6 +138,7 @@ export async function coberturaPlanPropio(
         candidatas.length === 1
           ? { cuentaSAT: candidatas[0].subcuenta ?? candidatas[0].cuentaSAT, nombre: candidatas[0].nombre }
           : undefined,
+      acumulativas,
       dimension: dim.dimension,
       padron: dim.padron,
       porque: dim.porque,

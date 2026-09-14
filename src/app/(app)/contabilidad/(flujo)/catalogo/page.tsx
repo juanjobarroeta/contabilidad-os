@@ -23,16 +23,36 @@ interface CuentaPropia {
   nivel: number;
   tipo: string | null;
   codAgrup: string | null;
+  /** Cuentas que cuelgan de ésta. > 0 = acumulativa: no recibe pólizas. */
+  subcuentas: number;
 }
 interface Cobertura {
   codigoMotor: string;
   estado: "unica" | "override" | "ambigua" | "sin_candidata" | "por_dimension";
   candidatas: number;
+  acumulativas?: number;
   cuenta?: { cuentaSAT: string; nombre: string };
   nombreAgrupador: string | null;
   dimension: "FIJA" | "CONTRAPARTE" | "EJERCICIO";
   padron?: "BANCO" | "CLIENTE" | "PROVEEDOR" | "RELACIONADA";
   porque: string;
+}
+
+interface Pareja {
+  chartAccountId: string;
+  codigo: string;
+  nombreCuenta: string;
+  customerId: string;
+  customerNombre: string;
+  customerRfc: string;
+  confianza: "EXACTA" | "PARECIDA";
+}
+interface Auxiliares {
+  codigoMotor: string;
+  nombreAgrupador: string | null;
+  pares: Pareja[];
+  sinPareja: { chartAccountId: string; codigo: string; nombreCuenta: string; motivo: "sin_candidata" | "varias_candidatas" }[];
+  yaLigados: number;
 }
 
 const CHIP_ESTADO: Record<Cobertura["estado"], { t: string; cls: string }> = {
@@ -57,6 +77,11 @@ export default function CatalogoPage() {
   const [filtroCat, setFiltroCat] = useState<"todos" | "sin_agrupador" | "sin_nombre">("todos");
   const [aviso, setAviso] = useState<React.ReactNode>("");
   const [error, setError] = useState("");
+  const [auxiliares, setAuxiliares] = useState<Auxiliares[]>([]);
+  // «No es» sólo esconde la propuesta en esta sesión: no hay dónde guardar un
+  // rechazo, y volver a verla la próxima vez es más barato que un enlace malo.
+  const [descartadas, setDescartadas] = useState<Set<string>>(new Set());
+  const [enlazando, setEnlazando] = useState<string | null>(null);
 
   const cargar = useCallback(async () => {
     if (!activeCompany) return;
@@ -77,7 +102,18 @@ export default function CatalogoPage() {
     }
   }, [activeCompany]);
 
-  useEffect(() => { cargar(); }, [cargar]);
+  const cargarAuxiliares = useCallback(async () => {
+    if (!activeCompany) return;
+    try {
+      const res = await fetch(`/api/contabilidad/auxiliares?companyId=${activeCompany.id}`);
+      const d = await res.json();
+      setAuxiliares(res.ok && Array.isArray(d?.codigos) ? d.codigos : []);
+    } catch {
+      setAuxiliares([]);
+    }
+  }, [activeCompany]);
+
+  useEffect(() => { cargar(); cargarAuxiliares(); }, [cargar, cargarAuxiliares]);
 
   // Pendientes = lo que una persona SÍ puede contestar. Un código que se
   // resuelve por contraparte no entra: pedir que se elija uno de 31 auxiliares
@@ -98,8 +134,13 @@ export default function CatalogoPage() {
     [cuentas]
   );
 
+  // Las acumulativas (con subcuentas) van al final y apagadas: la decisión es
+  // entre las cuentas de detalle, que es donde caen las pólizas.
   const candidatasDe = useCallback(
-    (codigo: string) => cuentas.filter((c) => c.codAgrup === codigo),
+    (codigo: string) =>
+      cuentas
+        .filter((c) => c.codAgrup === codigo)
+        .sort((a, b) => (a.subcuentas > 0 ? 1 : 0) - (b.subcuentas > 0 ? 1 : 0)),
     [cuentas]
   );
 
@@ -107,7 +148,7 @@ export default function CatalogoPage() {
     const q = busqueda.trim().toLowerCase();
     if (!q) return [];
     return cuentas
-      .filter((c) => c.nivel >= 3)
+      .filter((c) => c.subcuentas === 0)
       .filter((c) => c.codigo.toLowerCase().startsWith(q) || c.nombre.toLowerCase().includes(q))
       .slice(0, 8);
   }, [busqueda, cuentas]);
@@ -149,6 +190,51 @@ export default function CatalogoPage() {
       setError(e instanceof Error ? e.message : "No se pudo guardar la decisión");
     } finally {
       setGuardando(false);
+    }
+  }
+
+  async function enlazar(par: Pareja) {
+    if (!activeCompany) return;
+    setEnlazando(par.chartAccountId); setError("");
+    try {
+      const res = await fetch("/api/contabilidad/auxiliares", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: activeCompany.id, parejas: [{ chartAccountId: par.chartAccountId, customerId: par.customerId }] }),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(d?.error ?? "No se pudo enlazar");
+      setAviso(
+        <>
+          <span className="font-mono">{par.codigo}</span> {par.nombreCuenta} → {par.customerNombre}. Aplica en la siguiente
+          contabilización.
+        </>
+      );
+      await cargarAuxiliares();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo enlazar");
+    } finally {
+      setEnlazando(null);
+    }
+  }
+
+  async function aplicarExactas(codigoMotor: string) {
+    if (!activeCompany) return;
+    setEnlazando(`exactas-${codigoMotor}`); setError("");
+    try {
+      const res = await fetch("/api/contabilidad/auxiliares", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: activeCompany.id, codigoMotor, modo: "exactas" }),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(d?.error ?? "No se pudieron aplicar las exactas");
+      setAviso(`${d.aplicadas ?? 0} auxiliares de ${codigoMotor} enlazados por nombre idéntico. Aplica en la siguiente contabilización.`);
+      await cargarAuxiliares();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudieron aplicar las exactas");
+    } finally {
+      setEnlazando(null);
     }
   }
 
@@ -278,6 +364,81 @@ export default function CatalogoPage() {
             </section>
           )}
 
+          {/* ── Auxiliares por contraparte: propuestas que confirma una persona ── */}
+          {auxiliares.some((a) => a.pares.length > 0) && (
+            <section className="mb-5 rounded-card border border-cos-line bg-cos-card">
+              <h2 className="border-b border-cos-line px-5 py-3.5 text-sm font-semibold text-cos-ink">
+                Auxiliares por confirmar ·{" "}
+                {auxiliares.reduce((n, a) => n + a.pares.filter((x) => !descartadas.has(x.chartAccountId)).length, 0)}
+              </h2>
+              <p className="px-5 pt-3 text-xs text-cos-ink-soft">
+                Tu catálogo nombra a la contraparte en cada auxiliar («201001010 Union garza…») y el padrón la tiene con su
+                razón social. Los nombres idénticos se enlazan solos; los parecidos —truncados, con una errata— los confirma
+                alguien que los mire: un enlace malo cuadra igual, con el saldo en el renglón de otro.
+              </p>
+              <ul>
+                {auxiliares
+                  .filter((a) => a.pares.length > 0)
+                  .map((a) => {
+                    const exactas = a.pares.filter((x) => x.confianza === "EXACTA");
+                    const parecidas = a.pares.filter((x) => x.confianza === "PARECIDA" && !descartadas.has(x.chartAccountId));
+                    return (
+                      <li key={a.codigoMotor} className="border-t border-cos-line-soft px-5 py-3">
+                        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[13px]">
+                          <span className="font-mono text-cos-ink">{a.codigoMotor}</span>
+                          <span className="text-cos-ink-soft">{a.nombreAgrupador ?? ""}</span>
+                          <span className="font-mono text-[11px] text-cos-ink-faint">
+                            {a.yaLigados} enlazados · {parecidas.length} por confirmar · {a.sinPareja.length} sin pareja
+                          </span>
+                          {exactas.length > 0 && (
+                            <button
+                              onClick={() => aplicarExactas(a.codigoMotor)}
+                              disabled={enlazando !== null}
+                              className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-cos-card px-2.5 py-1 text-[12px] font-medium text-cos-ink hover:bg-cos-paper disabled:opacity-50"
+                            >
+                              {enlazando === `exactas-${a.codigoMotor}` && <Loader2 className="h-3 w-3 animate-spin" />}
+                              Enlazar {exactas.length} idénticos
+                            </button>
+                          )}
+                        </div>
+                        {parecidas.length > 0 && (
+                          <ul className="mt-2 space-y-1">
+                            {parecidas.map((x) => (
+                              <li key={x.chartAccountId} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-cos-paper px-3 py-1.5 text-[12.5px]">
+                                <span className="font-mono text-cos-ink">{x.codigo}</span>
+                                <span className="min-w-0 truncate text-cos-ink">{x.nombreCuenta}</span>
+                                <span className="text-cos-ink-faint">→</span>
+                                <span className="min-w-0 truncate text-cos-ink">{x.customerNombre}</span>
+                                <span className="font-mono text-[11px] text-cos-ink-faint">{x.customerRfc}</span>
+                                <span className="ml-auto flex shrink-0 items-center gap-1.5">
+                                  <button
+                                    onClick={() => enlazar(x)}
+                                    disabled={enlazando !== null}
+                                    className="inline-flex items-center gap-1 rounded-control bg-cos-brand px-2.5 py-1 text-[12px] font-medium text-white hover:bg-cos-brand-deep disabled:opacity-50"
+                                  >
+                                    {enlazando === x.chartAccountId ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                                    Enlazar
+                                  </button>
+                                  <button
+                                    onClick={() => setDescartadas((prev) => new Set(prev).add(x.chartAccountId))}
+                                    disabled={enlazando !== null}
+                                    className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1 text-[12px] text-cos-ink-soft hover:bg-cos-card disabled:opacity-50"
+                                  >
+                                    <X className="h-3 w-3" />
+                                    No es
+                                  </button>
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </li>
+                    );
+                  })}
+              </ul>
+            </section>
+          )}
+
           {/* ── La cola de ambigüedades ── */}
           <section className="mb-5 rounded-card border border-cos-line bg-cos-card">
             <h2 className="border-b border-cos-line px-5 py-3.5 text-sm font-semibold text-cos-ink">
@@ -313,7 +474,9 @@ export default function CatalogoPage() {
                           {p.nombreAgrupador ?? "(agrupador sin nombre oficial)"}
                         </span>
                         {p.estado === "ambigua" && (
-                          <span className="font-mono text-[11px] text-cos-ink-faint">{p.candidatas} candidatas</span>
+                          <span className="font-mono text-[11px] text-cos-ink-faint">
+                            {p.candidatas} candidatas{p.acumulativas ? ` · ${p.acumulativas} acumulativas fuera` : ""}
+                          </span>
                         )}
                         <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", CHIP_ESTADO[p.estado].cls)}>
                           {CHIP_ESTADO[p.estado].t}
@@ -340,29 +503,38 @@ export default function CatalogoPage() {
                             className="mb-2 w-full max-w-sm rounded-control border border-cos-line bg-cos-card px-3 py-1.5 text-[13px] placeholder:text-cos-ink-faint"
                           />
                           <ul className="max-h-56 overflow-y-auto">
-                            {opciones.map((c) => (
-                              <li key={c.id}>
-                                <label
-                                  className={cn(
-                                    "flex cursor-pointer items-baseline gap-3 rounded-md px-2 py-1.5",
-                                    eleccion === c.id ? "bg-cos-brand-tint" : "hover:bg-cos-card"
-                                  )}
-                                >
-                                  <input
-                                    type="radio"
-                                    name={`cand-${p.codigoMotor}`}
-                                    checked={eleccion === c.id}
-                                    onChange={() => setEleccion(c.id)}
-                                    className="translate-y-0.5 accent-[--brand]"
-                                  />
-                                  <span className="w-20 shrink-0 font-mono text-[13px]">{c.codigo}</span>
-                                  <span className="min-w-0 flex-1 truncate text-[13px] text-cos-ink">{c.nombre}</span>
-                                  {c.codAgrup && (
-                                    <span className="font-mono text-[11px] text-cos-ink-faint">agrup {c.codAgrup}</span>
-                                  )}
-                                </label>
-                              </li>
-                            ))}
+                            {opciones.map((c) => {
+                              const acumulativa = c.subcuentas > 0;
+                              return (
+                                <li key={c.id}>
+                                  <label
+                                    className={cn(
+                                      "flex items-baseline gap-3 rounded-md px-2 py-1.5",
+                                      acumulativa
+                                        ? "cursor-not-allowed text-cos-ink-faint"
+                                        : eleccion === c.id ? "cursor-pointer bg-cos-brand-tint" : "cursor-pointer hover:bg-cos-card"
+                                    )}
+                                    title={acumulativa ? "Acumulativa: tiene subcuentas y no recibe pólizas" : undefined}
+                                  >
+                                    <input
+                                      type="radio"
+                                      name={`cand-${p.codigoMotor}`}
+                                      checked={eleccion === c.id}
+                                      disabled={acumulativa}
+                                      onChange={() => setEleccion(c.id)}
+                                      className="translate-y-0.5 accent-[--brand]"
+                                    />
+                                    <span className="w-20 shrink-0 font-mono text-[13px]">{c.codigo}</span>
+                                    <span className={cn("min-w-0 flex-1 truncate text-[13px]", acumulativa ? "text-cos-ink-faint" : "text-cos-ink")}>{c.nombre}</span>
+                                    {acumulativa ? (
+                                      <span className="font-mono text-[11px] text-cos-ink-faint">acumulativa · {c.subcuentas} subcuentas</span>
+                                    ) : c.codAgrup ? (
+                                      <span className="font-mono text-[11px] text-cos-ink-faint">agrup {c.codAgrup}</span>
+                                    ) : null}
+                                  </label>
+                                </li>
+                              );
+                            })}
                             {opciones.length === 0 && (
                               <li className="px-2 py-1.5 text-[12px] text-cos-ink-faint">Sin resultados.</li>
                             )}

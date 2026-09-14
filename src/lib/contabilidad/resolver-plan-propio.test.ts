@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 // override del contador o la resolución por módulo de la Fase 2), y un código
 // sin candidatas cae al fallback agrupador de siempre.
 
-type Cuenta = { id: string; companyId: string; cuentaSAT: string; subcuenta: string | null; nombre: string; codAgrup: string | null; isActive: boolean };
+type Cuenta = { id: string; companyId: string; cuentaSAT: string; subcuenta: string | null; nombre: string; codAgrup: string | null; isActive: boolean; nivel: number };
 const state = vi.hoisted(() => ({ cuentas: [] as Cuenta[], overrides: [] as { companyId: string; codigoMotor: string; chartAccountId: string }[] }));
 
 vi.mock("../prisma", () => ({
@@ -12,7 +12,7 @@ vi.mock("../prisma", () => ({
     chartAccount: {
       findMany: async ({ where, take }: any) => {
         const hits = state.cuentas.filter(
-          (c) => c.companyId === where.companyId && c.isActive === where.isActive && c.codAgrup === where.codAgrup,
+          (c) => c.companyId === where.companyId && c.isActive === where.isActive && ("codAgrup" in where ? c.codAgrup === where.codAgrup : true),
         );
         return (take ? hits.slice(0, take) : hits).map((c) => ({ ...c }));
       },
@@ -33,7 +33,7 @@ import { resolverCuentaPropia, coberturaPlanPropio } from "./resolver-plan-propi
 
 const cta = (id: string, codAgrup: string | null, over: Partial<Cuenta> = {}): Cuenta => ({
   id, companyId: "c1", cuentaSAT: `1301-00${id}-0000`, subcuenta: null,
-  nombre: `CUENTA ${id}`, codAgrup, isActive: true, ...over,
+  nombre: `CUENTA ${id}`, codAgrup, isActive: true, nivel: 3, ...over,
 });
 
 beforeEach(() => { state.cuentas = []; state.overrides = []; });
@@ -57,6 +57,27 @@ describe("resolverCuentaPropia()", () => {
 
   it("sin candidatas devuelve null (fallback agrupador de siempre)", async () => {
     expect(await resolverCuentaPropia("c1", "999.99")).toBeNull();
+  });
+
+  it("una acumulativa y su única hoja bajo el mismo agrupador: resuelve a la hoja", async () => {
+    state.cuentas = [
+      cta("01", "154.01", { cuentaSAT: "154001000", nivel: 2 }),
+      cta("02", "154.01", { cuentaSAT: "154001001", nivel: 3 }),
+    ];
+    expect((await resolverCuentaPropia("c1", "154.01"))?.id).toBe("02");
+  });
+
+  it("una acumulativa y varias hojas sigue siendo ambigua, pero entre las hojas", async () => {
+    state.cuentas = [
+      cta("01", "501.01", { cuentaSAT: "501001000", nivel: 2 }),
+      cta("02", "501.01", { cuentaSAT: "501001001", nivel: 3 }),
+      cta("03", "501.01", { cuentaSAT: "501001002", nivel: 3 }),
+    ];
+    expect(await resolverCuentaPropia("c1", "501.01")).toBeNull();
+    const [cob] = await coberturaPlanPropio("c1", ["501.01"]);
+    expect(cob.estado).toBe("ambigua");
+    expect(cob.candidatas).toBe(2);
+    expect(cob.acumulativas).toBe(1);
   });
 
   it("un override a cuenta inactiva no resuelve (no re-postear a una muerta)", async () => {
