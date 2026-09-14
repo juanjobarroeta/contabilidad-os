@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { autorizarJuridico, respuestaDeError } from "@/lib/juridico/api-guardia";
+import { alcance } from "@/lib/juridico/despacho";
 import { frase, leerBitacora } from "@/lib/juridico/bitacora";
 
 // GET /api/juridico/casos/[id]/bitacora — quién hizo qué y cuándo, lo nuevo
@@ -15,7 +16,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     return respuestaDeError(e);
   }
   const { id } = await params;
-  if (!(await prisma.juridicoCaso.findFirst({ where: { id, userId }, select: { id: true } }))) {
+  if (!(await prisma.juridicoCaso.findFirst({ where: { id, ...(await alcance(userId)) }, select: { id: true } }))) {
     return NextResponse.json({ error: "Caso no encontrado" }, { status: 404 });
   }
   const url = new URL(req.url);

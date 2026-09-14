@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { autorizarJuridico, respuestaDeError } from "@/lib/juridico/api-guardia";
+import { alcance } from "@/lib/juridico/despacho";
 import { actualizarCliente, obtenerCliente } from "@/lib/juridico/clientes";
 
 // GET /api/juridico/clientes/[id] — la ficha y en qué casos aparece.
@@ -18,7 +19,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const cliente = await obtenerCliente(id, userId);
   if (!cliente) return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
   const [casos, partes] = await Promise.all([
-    prisma.juridicoCaso.findMany({ where: { clienteId: id, userId }, orderBy: { updatedAt: "desc" }, select: { id: true, titulo: true, estado: true, updatedAt: true } }),
+    prisma.juridicoCaso.findMany({ where: { clienteId: id, ...(await alcance(userId)) }, orderBy: { updatedAt: "desc" }, select: { id: true, titulo: true, estado: true, updatedAt: true } }),
     prisma.juridicoParte.findMany({ where: { clienteId: id }, select: { id: true, rol: true, casoId: true, caso: { select: { titulo: true } } } }),
   ]);
   return NextResponse.json({ ...cliente, casos, papeles: partes.map((p) => ({ parteId: p.id, rol: p.rol, casoId: p.casoId, casoTitulo: p.caso.titulo })) });

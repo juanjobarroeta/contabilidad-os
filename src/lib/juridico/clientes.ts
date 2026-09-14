@@ -13,6 +13,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "@/lib/prisma";
 import { apuntar, type Actor } from "./bitacora";
+import { alcance, despachoParaCrear } from "./despacho";
 import { normalizarCurp, normalizarNombre, normalizarRfc, textoPlano } from "./asuntos";
 
 export interface Cliente {
@@ -66,7 +67,7 @@ export async function candidatos(userId: string, d: DatosCliente): Promise<Clien
   if (!n.nombre && !n.rfc && !n.curp) return [];
   const filas = await prisma.juridicoCliente.findMany({
     where: {
-      userId,
+      ...(await alcance(userId)),
       OR: [...(n.rfc ? [{ rfc: n.rfc }] : []), ...(n.curp ? [{ curp: n.curp }] : []), ...(n.nombreNormalizado ? [{ nombreNormalizado: n.nombreNormalizado }] : [])],
     },
     select: CAMPOS,
@@ -79,7 +80,7 @@ export async function listarClientes(userId: string, opts: { busqueda?: string; 
   const q = (opts.busqueda ?? "").trim();
   const filas = await prisma.juridicoCliente.findMany({
     where: {
-      userId,
+      ...(await alcance(userId)),
       ...(q
         ? {
             OR: [
@@ -98,7 +99,7 @@ export async function listarClientes(userId: string, opts: { busqueda?: string; 
 }
 
 export async function obtenerCliente(id: string, userId: string): Promise<Cliente | null> {
-  const f = await prisma.juridicoCliente.findFirst({ where: { id, userId }, select: CAMPOS });
+  const f = await prisma.juridicoCliente.findFirst({ where: { id, ...(await alcance(userId)) }, select: CAMPOS });
   return f ? aCliente(f) : null;
 }
 
@@ -112,6 +113,7 @@ export async function crearCliente(userId: string, d: DatosCliente, actor: Actor
   const f = await prisma.juridicoCliente.create({
     data: {
       userId,
+      despachoId: await despachoParaCrear(userId),
       tipoPersona: n.tipoPersona ?? "fisica",
       nombre: n.nombre,
       nombreNormalizado: n.nombreNormalizado,
@@ -171,7 +173,7 @@ export function camposCambiados(antes: Cliente, despues: Cliente): string[] {
  * `clienteId`, crea la ficha con los datos de la parte.
  */
 export async function ligarParteACliente(parteId: string, userId: string, actor: Actor, clienteId?: string): Promise<{ clienteId: string; creado: boolean }> {
-  const parte = await prisma.juridicoParte.findFirst({ where: { id: parteId, caso: { userId } }, select: { id: true, casoId: true, nombre: true, rfc: true, curp: true, tipoPersona: true, domicilio: true, representante: true, email: true, telefono: true, verificado: true } });
+  const parte = await prisma.juridicoParte.findFirst({ where: { id: parteId, caso: await alcance(userId) }, select: { id: true, casoId: true, nombre: true, rfc: true, curp: true, tipoPersona: true, domicilio: true, representante: true, email: true, telefono: true, verificado: true } });
   if (!parte) throw new Error("Parte no encontrada");
   let id = clienteId ?? null;
   let creado = false;

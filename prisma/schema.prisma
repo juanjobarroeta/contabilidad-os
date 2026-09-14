@@ -59,6 +59,7 @@ model User {
   juridicoConversaciones JuridicoConversacion[]
   juridicoCasos          JuridicoCaso[]
   juridicoClientes       JuridicoCliente[]
+  juridicoMembresias     JuridicoMiembro[]
   // Refresh tokens de la API de satélites (flujo access corto + refresh rotatorio).
   apiRefreshTokens    ApiRefreshToken[]
   passwordResetTokens PasswordResetToken[]
@@ -4177,7 +4178,10 @@ model JuridicoConversacion {
 // de aquí, no de su memoria de la conversación (src/lib/juridico/asuntos.ts).
 model JuridicoCaso {
   id                String    @id @default(cuid())
+  // Quién lo abrió. El ACCESO lo da el despacho; esto se conserva para saber
+  // de quién salió y para los casos anteriores al despacho.
   userId            String
+  despachoId        String?
   titulo            String
   materia           String? // civil | familiar | mercantil | penal | laboral | administrativo | fiscal | amparo | otro
   via               String? // juicio oral civil, ordinario familiar, ejecutivo mercantil, amparo indirecto…
@@ -4198,6 +4202,7 @@ model JuridicoCaso {
   updatedAt         DateTime  @updatedAt
 
   user           User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  despacho       JuridicoDespacho?      @relation(fields: [despachoId], references: [id], onDelete: SetNull)
   clienteRef     JuridicoCliente?       @relation(fields: [clienteId], references: [id], onDelete: SetNull)
   conversaciones JuridicoConversacion[]
   partes         JuridicoParte[]
@@ -4207,6 +4212,8 @@ model JuridicoCaso {
 
   @@index([userId, updatedAt])
   @@index([userId, estado])
+  @@index([despachoId, updatedAt])
+  @@index([despachoId, estado])
   @@index([clienteId])
   // La tabla se sigue llamando JuridicoAsunto: renombrarla obligaría a parar el
   // producto durante el rollover (el contenedor viejo consulta el nombre viejo).
@@ -4304,9 +4311,49 @@ model JuridicoTurno {
 // El DIRECTORIO del despacho: una persona (física o moral) se captura una vez
 // y se reutiliza entre casos. JuridicoParte pasa a ser el PAPEL que alguien
 // juega en un caso; esto es quién es.
+// El DESPACHO es la cuenta: un caso lo trabaja un equipo (el socio revisa, el
+// pasante junta anexos, el abogado redacta). Hasta la Fase 1 un caso era de UNA
+// persona, así que no había forma de repartir trabajo sin compartir la cuenta.
+//
+// Es un despacho propio del jurídico, no el `Despacho` contable: aquél arrastra
+// empresas, tiers y cupos que aquí no significan nada, y lo tocan otras manos.
+model JuridicoDespacho {
+  id              String   @id @default(cuid())
+  nombre          String
+  creadoPorUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  miembros JuridicoMiembro[]
+  casos    JuridicoCaso[]
+  clientes JuridicoCliente[]
+
+  @@index([creadoPorUserId])
+}
+
+// Quién trabaja en el despacho y con qué papel. Un usuario puede estar en
+// varios (un abogado externo que lleva casos de dos despachos).
+model JuridicoMiembro {
+  id         String   @id @default(cuid())
+  despachoId String
+  userId     String
+  // socio: administra el despacho y cierra casos · abogado: trabaja los casos ·
+  // pasante: trabaja pero no cierra ni borra · administrativo: agenda y consulta.
+  rol        String   @default("abogado")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  despacho JuridicoDespacho @relation(fields: [despachoId], references: [id], onDelete: Cascade)
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([despachoId, userId])
+  @@index([userId])
+}
+
 model JuridicoCliente {
   id                String   @id @default(cuid())
   userId            String
+  despachoId        String?
   tipoPersona       String   @default("fisica") // fisica | moral
   nombre            String
   // Sin acentos, sin forma societaria y en minúsculas: con esto se deduplica
@@ -4324,10 +4371,12 @@ model JuridicoCliente {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  casos  JuridicoCaso[]
-  partes JuridicoParte[]
+  user     User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  despacho JuridicoDespacho? @relation(fields: [despachoId], references: [id], onDelete: SetNull)
+  casos    JuridicoCaso[]
+  partes   JuridicoParte[]
 
+  @@index([despachoId, nombreNormalizado])
   @@index([userId, nombreNormalizado])
   @@index([userId, rfc])
   @@index([userId, updatedAt])

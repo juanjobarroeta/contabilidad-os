@@ -6,6 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "@/lib/prisma";
 import { apuntar, type Actor } from "./bitacora";
+import { alcance, despachoParaCrear } from "./despacho";
 import { urgencia, type Tarea } from "./tareas";
 
 export type EstadoCaso = "abierto" | "en_tramite" | "cerrado";
@@ -40,9 +41,10 @@ const ABIERTAS = ["por_hacer", "en_curso", "en_revision"];
 
 export async function listarCasos(userId: string, opts: { estado?: EstadoCaso; busqueda?: string; limite?: number } = {}): Promise<CasoEnLista[]> {
   const q = (opts.busqueda ?? "").trim();
+  const mios = await alcance(userId);
   const filas = await prisma.juridicoCaso.findMany({
     where: {
-      userId,
+      ...mios,
       ...(opts.estado ? { estado: opts.estado } : {}),
       ...(q
         ? {
@@ -89,7 +91,7 @@ export async function listarCasos(userId: string, opts: { estado?: EstadoCaso; b
 
 /** Cuántos casos hay en cada estado (para las pestañas de la lista). */
 export async function conteoPorEstado(userId: string): Promise<Record<EstadoCaso, number>> {
-  const filas = await prisma.juridicoCaso.groupBy({ by: ["estado"], where: { userId }, _count: { _all: true } });
+  const filas = await prisma.juridicoCaso.groupBy({ by: ["estado"], where: await alcance(userId), _count: { _all: true } });
   const out: Record<EstadoCaso, number> = { abierto: 0, en_tramite: 0, cerrado: 0 };
   for (const f of filas) if (esEstadoCaso(f.estado)) out[f.estado] = f._count._all;
   return out;
@@ -100,6 +102,7 @@ export async function crearCaso(userId: string, datos: { titulo: string; materia
   const c = await prisma.juridicoCaso.create({
     data: {
       userId,
+      despachoId: await despachoParaCrear(userId),
       titulo,
       materia: datos.materia ?? null,
       via: datos.via ?? null,
@@ -118,7 +121,7 @@ export async function crearCaso(userId: string, datos: { titulo: string; materia
 }
 
 export async function cambiarEstadoCaso(id: string, userId: string, estado: EstadoCaso, actor: Actor): Promise<void> {
-  const actual = await prisma.juridicoCaso.findFirst({ where: { id, userId }, select: { estado: true, titulo: true } });
+  const actual = await prisma.juridicoCaso.findFirst({ where: { id, ...(await alcance(userId)) }, select: { estado: true, titulo: true } });
   if (!actual) throw new Error("Caso no encontrado");
   if (actual.estado === estado) return;
   await prisma.juridicoCaso.update({ where: { id }, data: { estado, cerradoAt: estado === "cerrado" ? new Date() : null } });
@@ -135,7 +138,7 @@ export async function cambiarEstadoCaso(id: string, userId: string, estado: Esta
 
 /** Asigna el caso a alguien del despacho (por ahora, el propio abogado). */
 export async function asignarResponsable(id: string, userId: string, responsableUserId: string | null, actor: Actor): Promise<void> {
-  const c = await prisma.juridicoCaso.findFirst({ where: { id, userId }, select: { titulo: true } });
+  const c = await prisma.juridicoCaso.findFirst({ where: { id, ...(await alcance(userId)) }, select: { titulo: true } });
   if (!c) throw new Error("Caso no encontrado");
   await prisma.juridicoCaso.update({ where: { id }, data: { responsableUserId } });
   await apuntar({ casoId: id, actor, accion: "caso.actualizado", entidad: "caso", entidadId: id, resumen: responsableUserId ? `asignó el caso «${c.titulo}»` : `dejó el caso «${c.titulo}» sin responsable`, datos: { responsableUserId } });
@@ -143,10 +146,10 @@ export async function asignarResponsable(id: string, userId: string, responsable
 
 /** Liga el caso con una ficha del directorio. */
 export async function ligarClienteACaso(id: string, userId: string, clienteId: string | null, actor: Actor): Promise<void> {
-  const c = await prisma.juridicoCaso.findFirst({ where: { id, userId }, select: { titulo: true } });
+  const c = await prisma.juridicoCaso.findFirst({ where: { id, ...(await alcance(userId)) }, select: { titulo: true } });
   if (!c) throw new Error("Caso no encontrado");
   if (clienteId) {
-    const existe = await prisma.juridicoCliente.findFirst({ where: { id: clienteId, userId }, select: { id: true, nombre: true } });
+    const existe = await prisma.juridicoCliente.findFirst({ where: { id: clienteId, ...(await alcance(userId)) }, select: { id: true, nombre: true } });
     if (!existe) throw new Error("Cliente no encontrado");
     await prisma.juridicoCaso.update({ where: { id }, data: { clienteId } });
     await apuntar({ casoId: id, actor, accion: "cliente.ligado", entidad: "cliente", entidadId: clienteId, resumen: `ligó el caso con ${existe.nombre}`, datos: { clienteId } });
@@ -160,7 +163,7 @@ export async function ligarClienteACaso(id: string, userId: string, clienteId: s
 export async function moverConversacionACaso(conversacionId: string, casoId: string, userId: string, actor: Actor): Promise<void> {
   const conv = await prisma.juridicoConversacion.findFirst({ where: { id: conversacionId, userId }, select: { id: true, titulo: true, casoId: true } });
   if (!conv) throw new Error("Conversación no encontrada");
-  const caso = await prisma.juridicoCaso.findFirst({ where: { id: casoId, userId }, select: { id: true, titulo: true } });
+  const caso = await prisma.juridicoCaso.findFirst({ where: { id: casoId, ...(await alcance(userId)) }, select: { id: true, titulo: true } });
   if (!caso) throw new Error("Caso no encontrado");
   await prisma.$transaction([
     prisma.juridicoConversacion.update({ where: { id: conversacionId }, data: { casoId } }),

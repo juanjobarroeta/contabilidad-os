@@ -17,6 +17,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { apuntar } from "./bitacora";
+import { alcance, despachoParaCrear } from "./despacho";
 import { recordLlmCost, type CostCtx } from "@/lib/costos/record";
 
 export interface Parte {
@@ -144,7 +145,7 @@ function aAsunto(r: AsuntoRow): Asunto {
 }
 
 export async function cargarAsunto(id: string, userId: string): Promise<Asunto | null> {
-  const r = await prisma.juridicoCaso.findFirst({ where: { id, userId }, select: selectAsunto });
+  const r = await prisma.juridicoCaso.findFirst({ where: { id, ...(await alcance(userId)) }, select: selectAsunto });
   return r ? aAsunto(r) : null;
 }
 
@@ -163,7 +164,7 @@ export async function asuntoDeConversacion(conversacionId: string, userId: strin
   // en el otro— (visto en producción el 14-sep-2026). Gana quien logre pasar
   // la conversación de `casoId: null` al suyo; el perdedor borra el que creó
   // y usa el del ganador.
-  const creado = await prisma.juridicoCaso.create({ data: { userId, titulo: conv.titulo.slice(0, 120) || "Asunto", responsableUserId: userId }, select: selectAsunto });
+  const creado = await prisma.juridicoCaso.create({ data: { userId, despachoId: await despachoParaCrear(userId), titulo: conv.titulo.slice(0, 120) || "Asunto", responsableUserId: userId }, select: selectAsunto });
   const gane = await prisma.juridicoConversacion.updateMany({ where: { id: conversacionId, casoId: null }, data: { casoId: creado.id } });
   if (gane.count === 0) {
     await prisma.juridicoCaso.delete({ where: { id: creado.id } }).catch(() => {});
