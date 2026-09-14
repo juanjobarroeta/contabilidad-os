@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { conciliarPorRepEmpresa } from "./rep-aplicar";
 import { cercaPeroNoExactoEnLote, mismoImporte, tarjetaContradice, tarjetaDeLiquidacion } from "./terminal";
 import { detectarTraspasosEmpresa } from "./traspasos-aplicar";
+import { filtrarDecisionesNuevas, registrarDecisiones, type EntradaDecision } from "@/lib/decisiones";
+import { decisionDeConciliacion, etiquetaFactura } from "./decision-conciliacion";
 import {
   campoMontoPorTipo,
   esTipoImpuestoConciliable,
@@ -382,6 +384,10 @@ export async function autoConciliarCuenta(
   })).map((t) => ({ ...t, monto: Number(t.monto) }));
 
   let matched = 0;
+  // El rastro de esta corrida. Se acumula y se escribe de una sola vez al
+  // final: una inserción por vuelta multiplicaría los viajes a la base por el
+  // número de movimientos sin conciliar.
+  const decisiones: EntradaDecision[] = [];
 
   // PAGOS DE IMPUESTOS AUTO-IGNORADOS. El import los manda a IGNORED con nota
   // TAX_PAYMENT *antes* de que la conciliación corra, así que el camino por
@@ -511,7 +517,18 @@ export async function autoConciliarCuenta(
       for (const inv of porRfc) if (!yaEsta.has(inv.id)) candidates.push(inv);
     }
 
-    if (candidates.length === 0) continue;
+    if (candidates.length === 0) {
+      decisiones.push(
+        decisionDeConciliacion({
+          companyId,
+          tx: { id: tx.id, monto: tx.monto, fecha: tx.fecha, descripcion: tx.descripcion },
+          aplicado: false,
+          candidatos: [],
+          tarjetaLote: tarjetaDeLiquidacion(tx.descripcion),
+        }),
+      );
+      continue;
+    }
 
     // ¿A qué CLABEs ya le habíamos pagado/cobrado a este cliente? Una CLABE que
     // ya se vio en un movimiento CONCILIADO con el mismo RFC identifica la
@@ -536,6 +553,10 @@ export async function autoConciliarCuenta(
     const enLote = tarjetaLote !== null;
     const bono = bonoImporteUnico(absAmount, candidates.map((c) => Number(c.total)), { enLoteTerminal: enLote });
 
+    const foliosDelConcepto = foliosEnConcepto(tx.descripcion);
+    const rfcTxNorm = (tx.contraparteRfc ?? "").toUpperCase();
+    const descripcionNorm = tx.descripcion.toUpperCase();
+
     const scored = candidates
       .map((inv) => {
         // Identidad efectiva de la factura: el Customer si existe; si no, la
@@ -543,8 +564,29 @@ export async function autoConciliarCuenta(
         // se apagaba en los EGRESO del SAT, que casi nunca tienen Customer.
         const rfcFactura = inv.customer?.rfc ?? inv.contraparteRfc ?? null;
         const nombreFactura = inv.customer?.razonSocial ?? inv.contraparteNombre ?? null;
+
+        // Las MISMAS señales que puntúa `scoreCandidate`, materializadas como
+        // booleanos para poder explicar el resultado. No entran en el score: el
+        // score se calcula abajo exactamente igual que siempre, así que narrar
+        // la decisión no puede cambiarla.
+        const rfcNorm = (rfcFactura ?? "").toUpperCase();
+        const clabeConocida = Boolean(
+          rfcFactura && clabesPorRfc.has(rfcFactura) && tx.contraparteClabe,
+        );
+        const senalesCandidato = {
+          rfcExacto: Boolean(rfcNorm && rfcTxNorm && rfcNorm === rfcTxNorm),
+          rfcEnTexto: Boolean(rfcNorm && rfcNorm !== rfcTxNorm && descripcionNorm.includes(rfcNorm)),
+          nombre: mismoNombre(tx.contraparteNombre, nombreFactura),
+          folio: folioNombrado(inv, foliosDelConcepto),
+          clabeConocida,
+          importeExacto: mismoImporte(Number(inv.total), absAmount, enLote),
+          tarjetaContraria: tarjetaContradice(tarjetaLote, inv.formaPago),
+          cercaEnLote: cercaPeroNoExactoEnLote(enLote, Number(inv.total), absAmount),
+        };
+
         return {
           inv,
+          senales: senalesCandidato,
           score: scoreCandidate(
             {
               total: Number(inv.total),
@@ -553,31 +595,51 @@ export async function autoConciliarCuenta(
               customerNombre: nombreFactura,
               serie: inv.serie,
               folio: inv.folio,
-              clabesConocidas:
-                rfcFactura && clabesPorRfc.has(rfcFactura) && tx.contraparteClabe
-                  ? [tx.contraparteClabe]
-                  : [],
+              clabesConocidas: clabeConocida && tx.contraparteClabe ? [tx.contraparteClabe] : [],
             },
             senales,
             absAmount,
-          ) + (bono && mismoImporte(Number(inv.total), absAmount, enLote) ? bono : 0)
-            - (tarjetaContradice(tarjetaLote, inv.formaPago) ? CASTIGO_TARJETA_CONTRARIA : 0)
-            - (cercaPeroNoExactoEnLote(enLote, Number(inv.total), absAmount) ? CASTIGO_CERCA_EN_LOTE : 0),
+          ) + (bono && senalesCandidato.importeExacto ? bono : 0)
+            - (senalesCandidato.tarjetaContraria ? CASTIGO_TARJETA_CONTRARIA : 0)
+            - (senalesCandidato.cercaEnLote ? CASTIGO_CERCA_EN_LOTE : 0),
         };
       })
       .sort((a, b) => b.score - a.score);
 
     const best = scored[0];
     const secondBest = scored[1];
+    const aplicado = isAutoApplicable(best.score, secondBest?.score ?? null);
 
-    if (isAutoApplicable(best.score, secondBest?.score ?? null)) {
+    if (aplicado) {
       await prisma.bankTransaction.update({
         where: { id: tx.id },
         data: { status: "MATCHED", invoiceId: best.inv.id },
       });
       matched++;
     }
+
+    decisiones.push(
+      decisionDeConciliacion({
+        companyId,
+        tx: { id: tx.id, monto: tx.monto, fecha: tx.fecha, descripcion: tx.descripcion },
+        aplicado,
+        candidatos: scored.map((s) => ({
+          invoiceId: s.inv.id,
+          etiqueta: etiquetaFactura(s.inv),
+          score: s.score,
+          senales: s.senales,
+        })),
+        tarjetaLote,
+        umbral: AUTO_MATCH_MIN_SCORE,
+        brecha: AUTO_MATCH_AMBIGUITY_GAP,
+      }),
+    );
   }
+
+  // Una sola escritura por corrida, y sólo de lo que cambió: los rechazos se
+  // vuelven a decidir cada día, pero sólo se guardan cuando el razonamiento es
+  // distinto al que ya está escrito.
+  registrarDecisiones(await filtrarDecisionesNuevas(decisiones));
 
   return { matched, total: unmatched.length, impuestosLc };
 }

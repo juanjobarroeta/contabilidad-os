@@ -34,6 +34,7 @@ import {
 } from "./resolver-tipos";
 import { VisorCep } from "./VisorCep";
 import { FichaAplicaciones, FichaMovimiento } from "./FichasAplicaciones";
+import { FichaHistoria } from "./FichaHistoria";
 import type { ResumenMovimiento } from "@/lib/bancos/aplicaciones";
 
 /** Categorías sin factura: un toque las ignora CON su tag, que es lo que
@@ -395,6 +396,7 @@ export function ResolverMovimiento({
           investigarlo había que irse al archivo. */}
       {resumen && <FichaMovimiento r={resumen} onVerCep={() => setCepAbierto(true)} clabe={tx.contraparteClabe} descripcion={tx.descripcion} />}
       {resumen && <FichaAplicaciones r={resumen} onVerFactura={onVerFactura} />}
+      <FichaHistoria txId={tx.id} />
 
       {!resumen && cruzado && (
         <div className="rounded-control border border-cos-jade-ink/25 bg-cos-jade-tint/50 px-3 py-2.5">
