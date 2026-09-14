@@ -23,7 +23,7 @@ interface Opinion {
 
 const ETIQUETA: Record<string, string> = {
   POSITIVA: "Positiva", NEGATIVA: "Negativa", NO_LOCALIZADO: "RFC no localizado",
-  SIN_OBLIGACIONES: "Sin registro patronal", ERROR: "PDF sin interpretar",
+  SIN_OBLIGACIONES: "Sin opinión · registro patronal en baja", ERROR: "PDF sin interpretar",
 };
 
 export default function OpinionImssCard({ companyId }: { companyId: string }) {
