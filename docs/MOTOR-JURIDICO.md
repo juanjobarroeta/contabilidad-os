@@ -291,7 +291,10 @@
 > vista GET, si no tiene el turno en memoria, lo reproduce desde la base y lo
 > sigue por sondeo (1 s); el 204 queda sólo para «no hay turno reciente». Lo
 > que se repite al reanudar: la ronda interrumpida entera (sus herramientas
-> vuelven a correr; son upserts).
+> vuelven a correr; son upserts). **Probado en producción (14-sep-2026):** un
+> contrato de prestación de servicios sobrevivió CUATRO redespliegues —cinco
+> contenedores— y terminó en 14 rondas con `reanudado=4`, un solo mensaje de
+> asistente y su Word de 41 989 caracteres.
 >
 > **Aviso antes del reclamo (14-sep-2026).** `/api/cron/ia-salud` hace la
 > llamada más barata que existe (un token con Haiku) cada 5 min desde el
