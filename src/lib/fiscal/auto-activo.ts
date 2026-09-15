@@ -9,7 +9,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { clasificarCfdi, type ClasificarInput } from "./clasificar-cfdi";
+import { clasificarCfdi, partirInversionPorConcepto, type ClasificarInput } from "./clasificar-cfdi";
 import { tipoActivoDesdeSubtipo, TASA_DEPRECIACION } from "./depreciacion";
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -34,34 +34,65 @@ export async function crearActivoDesdeCfdiSiAplica(
   db: Db,
   args: CrearActivoDesdeCfdiArgs
 ): Promise<string | null> {
+  const ids = await crearActivosDesdeCfdi(db, args);
+  return ids[0] ?? null;
+}
+
+/**
+ * Los activos de un CFDI de inversión, UNO POR TRATAMIENTO. Devuelve los ids
+ * creados (vacío si no aplica o si ya existían).
+ *
+ * Antes era uno solo, con el subtotal completo y el nombre del primer renglón:
+ * laptop + licencia + memoria en la misma factura quedaba como un activo
+ * llamado «Laptop» depreciándose todo al 30 %. Ver partirInversionPorConcepto.
+ */
+export async function crearActivosDesdeCfdi(
+  db: Db,
+  args: CrearActivoDesdeCfdiArgs
+): Promise<string[]> {
   const clasif = clasificarCfdi(args.clasifInput);
-  if (clasif.naturaleza !== "INVERSION") return null;
-  if (!args.subtotal || args.subtotal <= 0) return null;
+  if (clasif.naturaleza !== "INVERSION") return [];
+  if (!args.subtotal || args.subtotal <= 0) return [];
 
-  // Idempotencia: ¿ya hay un activo para este CFDI?
-  const existente = await db.activoFijo.findFirst({
+  const grupos = partirInversionPorConcepto(
+    clasif.subtipoInversion ?? "otro",
+    args.clasifInput.items ?? [],
+    args.subtotal,
+  );
+  if (grupos.length === 0) return [];
+
+  // Idempotencia POR TIPO: re-importar el CFDI no duplica, y una factura que
+  // ya tenía su activo de cómputo puede recibir el intangible que le faltaba.
+  const existentes = await db.activoFijo.findMany({
     where: { invoiceId: args.invoiceId },
-    select: { id: true },
+    select: { tipo: true },
   });
-  if (existente) return null;
+  const yaHay = new Set(existentes.map((e) => e.tipo));
 
-  const tipo = tipoActivoDesdeSubtipo(clasif.subtipoInversion);
-  const creado = await db.activoFijo.create({
-    data: {
-      companyId: args.companyId,
-      invoiceId: args.invoiceId,
-      descripcion: (args.descripcion ?? "").trim() || "Inversión (CFDI)",
-      tipo,
-      moi: args.subtotal,
-      fechaAdquisicion: args.fecha,
-      tasaAnual: TASA_DEPRECIACION[tipo].tasa,
-      // Tope Art. 36-II sólo si el clasificador detectó auto de pasajeros; en
-      // I03 ambiguo queda false (sin tope) y autoCreado marca que hay que revisar.
-      esAutomovil: clasif.posibleTopeAutomovil === true,
-      autoCreado: true,
-    },
-  });
-  return creado.id;
+  const ids: string[] = [];
+  for (const g of grupos) {
+    const tipo = tipoActivoDesdeSubtipo(g.subtipo);
+    if (yaHay.has(tipo)) continue;
+    if (!(g.importe > 0)) continue;
+    const creado = await db.activoFijo.create({
+      data: {
+        companyId: args.companyId,
+        invoiceId: args.invoiceId,
+        descripcion: g.descripcion.trim() || (args.descripcion ?? "").trim() || "Inversión (CFDI)",
+        tipo,
+        moi: g.importe,
+        fechaAdquisicion: args.fecha,
+        tasaAnual: TASA_DEPRECIACION[tipo].tasa,
+        // Tope Art. 36-II sólo si el clasificador detectó auto de pasajeros; en
+        // I03 ambiguo queda false (sin tope) y autoCreado marca que hay que revisar.
+        esAutomovil: tipo === "transporte" && clasif.posibleTopeAutomovil === true,
+        autoCreado: true,
+      },
+    });
+    yaHay.add(tipo);
+    ids.push(creado.id);
+  }
+  return ids;
 }
 
 /**

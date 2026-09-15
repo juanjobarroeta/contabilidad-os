@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
-import { crearActivoDesdeCfdiSiAplica } from "@/lib/fiscal/auto-activo";
+import { crearActivosDesdeCfdi } from "@/lib/fiscal/auto-activo";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (or GET) /api/cron/activos-backfill
@@ -61,7 +61,7 @@ async function handle(req: Request) {
 
     for (const inv of page) {
       scanned++;
-      const id = await crearActivoDesdeCfdiSiAplica(prisma, {
+      const ids = await crearActivosDesdeCfdi(prisma, {
         companyId: inv.companyId,
         invoiceId: inv.id,
         subtotal: Number(inv.subtotal),
@@ -70,10 +70,10 @@ async function handle(req: Request) {
         clasifInput: {
           tipo: inv.tipo,
           usoCfdi: inv.usoCfdi ?? null,
-          items: inv.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: Number(it.importe) })),
+          items: inv.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: Number(it.importe), descripcion: it.descripcion })),
         },
       });
-      if (id) creados++;
+      creados += ids.length;
     }
 
     lastId = page[page.length - 1].id;
