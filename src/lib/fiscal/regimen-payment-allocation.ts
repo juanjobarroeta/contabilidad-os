@@ -20,6 +20,61 @@ export type RegimenPaymentProjectionCode =
   | "ASSIGNMENT_REQUIRED"
   | "REGIME_TRANSITION_REVIEW";
 
+export type PpdRegimenReadinessFailureCode =
+  | RegimenPaymentProjectionCode
+  | "PARENT_INVOICE_NOT_FOUND"
+  | "PARENT_UUID_AMBIGUOUS"
+  | "PARENT_INVOICE_NOT_ELIGIBLE"
+  | "FOREIGN_CURRENCY_REQUIRES_REVIEW"
+  | "PAYMENT_AMOUNT_UNAVAILABLE";
+
+export interface PpdRegimenReadinessPendingItem {
+  id: string;
+  parentUuid: string;
+  fechaPago: string | null;
+  pago: {
+    invoiceId: string;
+    uuid: string | null;
+    serie: string | null;
+    folio: string | null;
+  };
+  ok: false;
+  code: PpdRegimenReadinessFailureCode;
+  error: string;
+  parent: null | {
+    invoiceId: string;
+    uuid: string | null;
+    tipo: string;
+    fecha: string;
+    serie: string | null;
+    folio: string | null;
+    contraparte: string | null;
+    rfc: string | null;
+    moneda: string;
+  };
+}
+
+export interface PpdRegimenReadinessApiResponse {
+  periodo: string;
+  estado: "SIN_PAGOS_PPD" | "COMPLETA" | "PENDIENTE";
+  evidenciaCompleta: boolean;
+  resumen: {
+    totalRelaciones: number;
+    proyectables: number;
+    pendientes: number;
+    sinFacturaPadre: number;
+    sinImporte: number;
+    monedaExtranjera: number;
+    sinAsignacion: number;
+    transicionesRegimen: number;
+    otros: number;
+  };
+  pagosPendientes: PpdRegimenReadinessPendingItem[];
+  alcance: "RELACIONES_PPD_CON_FECHA_PAGO_EN_EL_MES";
+  usadaEnCalculoAutomatico: false;
+  limitaciones: string[];
+}
+
 export type IntegerProrationResult =
   | { ok: true; amount: number }
   | { ok: false; code: RegimenPaymentProjectionCode; error: string };

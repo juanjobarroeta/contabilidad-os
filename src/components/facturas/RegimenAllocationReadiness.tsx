@@ -160,7 +160,7 @@ export function RegimenAllocationReadiness({
       )}
 
       <p className="mt-2 text-[11.5px] text-cos-ink-faint">
-        Evidencia por fecha de emisión. Todavía no distribuye pagos PPD, no separa IVA y no cambia cálculos ni cierres.
+        Esta cola cubre la fecha de emisión. Los pagos PPD se revisan por FechaPago en una cola separada; ninguna cambia IVA, cálculos ni cierres.
       </p>
     </section>
   );
