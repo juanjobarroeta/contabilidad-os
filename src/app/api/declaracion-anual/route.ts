@@ -12,7 +12,7 @@ import { efosRfcsBloqueados } from "@/lib/fiscal/efos/service";
 import { perdidasDisponibles, aplicarPerdidas, primeraActualizacion } from "@/lib/fiscal/perdidas";
 import { evidenciaPresentacion } from "@/lib/fiscal/presentacion";
 import {
-  assertAnnualCalculationSupported,
+  assertAnnualCompanyCalculationSupported,
   isRegimenCalculationNotSupportedError,
   tipoPersonaFromRfc,
 } from "@/lib/fiscal/regimen-capabilities";
@@ -39,13 +39,22 @@ export async function GET(req: Request) {
 
   const company = await prisma.company.findUnique({
     where: { id: companyId },
-    select: { rfc: true, razonSocial: true, regimenFiscal: true },
+    select: {
+      rfc: true,
+      razonSocial: true,
+      regimenFiscal: true,
+      regimenes: { select: { code: true } },
+    },
   });
   if (!company) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
 
   const tipoPersona = tipoPersonaFromRfc(company.rfc);
   try {
-    assertAnnualCalculationSupported(company.regimenFiscal, tipoPersona);
+    assertAnnualCompanyCalculationSupported({
+      regimenFiscal: company.regimenFiscal,
+      regimenes: company.regimenes.map((regimen) => regimen.code),
+      tipoPersona,
+    });
   } catch (error) {
     if (isRegimenCalculationNotSupportedError(error)) {
       return regimenCalculationErrorResponse(error);
@@ -218,6 +227,7 @@ export async function GET(req: Request) {
     ejercicio,
     tipoPersona: tipoPersona!,
     regimenFiscal: company.regimenFiscal,
+    regimenes: company.regimenes.map((regimen) => regimen.code),
     ingresosPorCfdis: ingresosCfdis,
     otrosIngresos: parseFloat(searchParams.get("otrosIngresos") ?? "0"),
     ingresosAsimilados,
@@ -340,11 +350,19 @@ export async function POST(req: Request) {
   // SAT acuses use a separate path and remain available for assisted regimes.
   const company = await prisma.company.findUnique({
     where: { id: companyId },
-    select: { rfc: true, regimenFiscal: true },
+    select: {
+      rfc: true,
+      regimenFiscal: true,
+      regimenes: { select: { code: true } },
+    },
   });
   if (!company) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
   try {
-    assertAnnualCalculationSupported(company.regimenFiscal, tipoPersonaFromRfc(company.rfc));
+    assertAnnualCompanyCalculationSupported({
+      regimenFiscal: company.regimenFiscal,
+      regimenes: company.regimenes.map((regimen) => regimen.code),
+      tipoPersona: tipoPersonaFromRfc(company.rfc),
+    });
   } catch (error) {
     if (isRegimenCalculationNotSupportedError(error)) {
       return regimenCalculationErrorResponse(error);

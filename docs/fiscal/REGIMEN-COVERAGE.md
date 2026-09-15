@@ -24,7 +24,7 @@ Status values:
 - `BLOCK`: the baseline generic fallback could produce a wrong result and had to be disabled.
 - `NO-CALC`: deliberately no calculation for this code/scenario.
 
-## Runtime calculation boundary (FISC-001)
+## Runtime calculation boundary (FISC-001 / FISC-002)
 
 `src/lib/fiscal/regimen-capabilities.ts` is the canonical product registry: 19 SAT codes and 20 tracks, with independent `626-PF` and `626-PM` entries. Every track has explicit `CAT`, `CAL`, `MON`, `ANN`, `ACC`, `FILE`, and `QA` capability flags.
 
@@ -34,6 +34,8 @@ Automatic calculation is currently enabled only for:
 - Annual: `601 PM` and `612 PF`.
 
 All other tracks, unknown codes, unknown taxpayer types, and incompatible code/type combinations fail before invoice or balance queries with HTTP `422` and stable code `NOT_SUPPORTED`. The declarations UI says `Cálculo asistido por tu contador` (or `Cálculo no aplicable`) and renders no amount. Catalog recognition, CFDI/document storage, and imported SAT declaration history remain available.
+
+Calculation callers resolve the legacy primary `Company.regimenFiscal` together with every current `CompanyRegimen` row. Until invoices, deductions, credits, and adjustments have explicit regime-basket attribution, two or more distinct regimes fail before fiscal reads with `422 NOT_SUPPORTED` and reason `MULTI_REGIME_COMPOSITION_REQUIRED`. This prevents the primary regime engine from absorbing another regime's income; it is a safety boundary, not completed multi-regime composition.
 
 ## Current coverage audit
 
