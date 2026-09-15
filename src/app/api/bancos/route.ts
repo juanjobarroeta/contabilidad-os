@@ -26,7 +26,13 @@ export async function GET(req: Request) {
     include: {
       _count: { select: { transactions: true } },
       transactions: {
-        orderBy: { fecha: "desc" },
+        // EL ÚLTIMO DEL DÍA, NO CUALQUIERA DE ESE DÍA. Ordenar sólo por fecha
+        // deja un empate: el 31 de agosto de Santander trae tres movimientos y
+        // Postgres devolvía el que quería. La pantalla enseñaba $36,079.41 como
+        // «saldo en banco» cuando el estado cerraba en $5,959.41 — el saldo
+        // corrido de un renglón intermedio. El desempate es el orden en que se
+        // importaron, que es el del estado de cuenta.
+        orderBy: [{ fecha: "desc" }, { createdAt: "desc" }, { id: "desc" }],
         take: 1,
         select: { fecha: true, saldo: true },
       },
