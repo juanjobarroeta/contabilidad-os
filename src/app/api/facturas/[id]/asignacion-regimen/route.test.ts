@@ -130,11 +130,12 @@ describe("/api/facturas/[id]/asignacion-regimen", () => {
     expect(body).toMatchObject({
       periodo: "2026-08",
       asignable: true,
+      puedeEditar: false,
       estado: "COMPLETA",
       usadaEnCalculoAutomatico: false,
       regimenesDisponibles: [
-        { code: "612", label: expect.any(String) },
         { code: "606", label: expect.any(String) },
+        { code: "612", label: expect.any(String) },
       ],
       asignacion: {
         revision: 1,

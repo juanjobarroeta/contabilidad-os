@@ -11,6 +11,7 @@ import {
   invoiceRegimenPeriodContext,
   validateInvoiceRegimenAllocations,
 } from "@/lib/fiscal/regimen-allocation";
+import type { InvoiceRegimenAssignmentApiResponse } from "@/lib/fiscal/regimen-allocation-client";
 
 const ASSIGNABLE_INVOICE_TYPES = new Set(["INGRESO", "EGRESO"]);
 const MAX_NOTE_LENGTH = 500;
@@ -71,7 +72,10 @@ function invoiceContext(invoice: {
   });
 }
 
-function serializeInvoiceAssignment(invoice: NonNullable<Awaited<ReturnType<typeof loadInvoice>>>) {
+function serializeInvoiceAssignment(
+  invoice: NonNullable<Awaited<ReturnType<typeof loadInvoice>>>,
+  puedeEditar: boolean,
+): InvoiceRegimenAssignmentApiResponse {
   const context = invoiceContext(invoice);
   if (!context) throw new Error("La factura tiene una fecha inválida.");
 
@@ -94,7 +98,8 @@ function serializeInvoiceAssignment(invoice: NonNullable<Awaited<ReturnType<type
     },
     periodo: context.periodo,
     asignable: ASSIGNABLE_INVOICE_TYPES.has(invoice.tipo),
-    regimenesDisponibles: context.regimenCodes.map((code) => ({
+    puedeEditar,
+    regimenesDisponibles: [...context.regimenCodes].sort().map((code) => ({
       code,
       label: REGIMEN_LABELS[code] ?? null,
     })),
@@ -161,7 +166,7 @@ export async function GET(
   const member = await getEffectiveCompanyMembership(session.user.id, invoice.companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
-  return NextResponse.json(serializeInvoiceAssignment(invoice));
+  return NextResponse.json(serializeInvoiceAssignment(invoice, member.role !== "VIEWER"));
 }
 
 // PUT /api/facturas/[id]/asignacion-regimen
@@ -328,7 +333,7 @@ export async function PUT(
   if (!updatedInvoice) {
     return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
   }
-  return NextResponse.json(serializeInvoiceAssignment(updatedInvoice));
+  return NextResponse.json(serializeInvoiceAssignment(updatedInvoice, true));
 }
 
 // DELETE removes a wrong current attribution. It deliberately returns the
@@ -388,5 +393,5 @@ export async function DELETE(
   if (!updatedInvoice) {
     return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
   }
-  return NextResponse.json(serializeInvoiceAssignment(updatedInvoice));
+  return NextResponse.json(serializeInvoiceAssignment(updatedInvoice, true));
 }

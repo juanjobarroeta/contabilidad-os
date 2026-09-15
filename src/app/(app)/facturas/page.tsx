@@ -25,6 +25,7 @@ import { repVencido } from "@/lib/facturas/rep-plazo";
 import { RecurrentesView } from "@/components/facturas/RecurrentesView";
 import { submenusFacturas, type VistaFacturas } from "@/lib/facturas/submenus";
 import { estadoRepFactura } from "@/lib/facturas/complementos-vista";
+import { RegimenAssignmentPanel } from "@/components/facturas/RegimenAssignmentPanel";
 
 // ── Types (mirrors /api/facturas) ─────────────────────────────────────────────
 interface Invoice {
@@ -1053,7 +1054,7 @@ function FacturaModal({ inv, onClose, onVer, onCancelled }: { inv: Invoice; onCl
       onClick={onClose}
     >
       <div
-        className="w-full max-w-[440px] rounded-[18px] bg-cos-card p-6 shadow-[0_30px_60px_-20px_oklch(0.2_0.05_258_/_0.5)]"
+        className="max-h-[calc(100vh-36px)] w-full max-w-[440px] overflow-y-auto rounded-[18px] bg-cos-card p-6 shadow-[0_30px_60px_-20px_oklch(0.2_0.05_258_/_0.5)]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between">
@@ -1134,6 +1135,10 @@ function FacturaModal({ inv, onClose, onVer, onCancelled }: { inv: Invoice; onCl
               <span>Total</span><Money value={inv.total} size={18} weight={700} />
             </div>
           </div>
+        )}
+
+        {(inv.tipo === "INGRESO" || inv.tipo === "EGRESO") && (
+          <RegimenAssignmentPanel invoiceId={inv.id} />
         )}
 
         <button
