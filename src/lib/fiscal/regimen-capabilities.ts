@@ -324,6 +324,41 @@ function assertCompanyCalculationSupported(
 ): RegimenCapability {
   const codes = companyRegimenCodes(context.regimenFiscal, context.regimenes);
   if (codes.length > 1) {
+    // A monthly-only regime cannot contaminate a different monthly engine when
+    // its registry status is explicitly NOT_APPLICABLE. This covers common PF
+    // combinations such as 612 + 605/611/614: salary, dividends, and interest
+    // are annual baskets, while the 612 provisional still has one unambiguous
+    // engine. Any second runnable, assisted, unknown, or incompatible track
+    // still requires explicit allocations and remains fail-closed. Annual
+    // calculation never takes this shortcut because those baskets must be
+    // composed in the annual return.
+    if (calculation === "MONTHLY") {
+      let selected: RegimenCapability | null = null;
+      let selectionIsSafe = true;
+      for (const code of codes) {
+        const resolution = resolveRegimenTrack(code, context.tipoPersona);
+        if (!resolution.ok) {
+          selectionIsSafe = false;
+          break;
+        }
+        const status = resolution.capability.capabilities.monthly;
+        if (ENABLED_FOR_CALCULATION.has(status)) {
+          if (selected) {
+            selectionIsSafe = false;
+            break;
+          }
+          selected = resolution.capability;
+        } else if (status !== "NOT_APPLICABLE") {
+          selectionIsSafe = false;
+          break;
+        }
+      }
+      if (selectionIsSafe) {
+        if (selected) return selected;
+        return assertCalculationSupported(calculation, codes[0], context.tipoPersona);
+      }
+    }
+
     const regimenes = codes.map((code) => descriptorForResolution(code, context.tipoPersona, calculation));
     throw new RegimenCalculationNotSupportedError(
       calculation,

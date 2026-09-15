@@ -126,11 +126,47 @@ describe("regimen capability registry", () => {
     }).trackId).toBe("612");
   });
 
-  it("fails closed before composing monthly amounts from multiple regimes", () => {
+  it("runs the only monthly engine when every other regime is not applicable monthly", () => {
+    expect(assertMonthlyCompanyCalculationSupported({
+      regimenFiscal: "605",
+      regimenes: ["611", "612", "614"],
+      tipoPersona: "PF",
+    }).trackId).toBe("612");
+  });
+
+  it.each(["608", "999", "601"])(
+    "does not ignore an assisted, unknown, or incompatible monthly track (%s)",
+    (otherCode) => {
+      expect(() => assertMonthlyCompanyCalculationSupported({
+        regimenFiscal: "612",
+        regimenes: [otherCode],
+        tipoPersona: "PF",
+      })).toThrowError(RegimenCalculationNotSupportedError);
+    },
+  );
+
+  it("keeps an all-not-applicable monthly set explicitly not applicable", () => {
+    try {
+      assertMonthlyCompanyCalculationSupported({
+        regimenFiscal: "605",
+        regimenes: ["611", "614"],
+        tipoPersona: "PF",
+      });
+      expect.fail("expected a fail-closed result");
+    } catch (error) {
+      expect((error as RegimenCalculationNotSupportedError).toPayload()).toMatchObject({
+        calculation: "MONTHLY",
+        reason: "NOT_APPLICABLE",
+        regimen: { code: "605" },
+      });
+    }
+  });
+
+  it("fails closed before composing two independent monthly engines", () => {
     try {
       assertMonthlyCompanyCalculationSupported({
         regimenFiscal: "612",
-        regimenes: ["605", "612"],
+        regimenes: ["606", "612"],
         tipoPersona: "PF",
       });
       expect.fail("expected a fail-closed result");
@@ -143,7 +179,7 @@ describe("regimen capability registry", () => {
         reason: "MULTI_REGIME_COMPOSITION_REQUIRED",
         regimenes: [
           { code: "612", trackId: "612" },
-          { code: "605", trackId: "605" },
+          { code: "606", trackId: "606" },
         ],
       });
     }
