@@ -22,7 +22,63 @@
 import * as XLSX from "xlsx";
 import { tipoPorCodAgrup, type BalanzaParseResult, type CatalogoCuentaParsed } from "./ce-import";
 import { naturalezaPorTipo, type Naturaleza } from "./coe-saldos";
+import { esAgrupadorOficial } from "./agrupador";
+import { CODIGO_AGRUPADOR_OFICIAL } from "./codigo-agrupador";
 import { segmentosDeCodigo } from "./jerarquia-catalogo";
+
+/**
+ * EL AGRUPADOR TAL COMO LO ESCRIBE CADA SISTEMA: código o NOMBRE.
+ *
+ * CONTPAQi exporta «115.01»; el sistema de un hospital exporta «Inventario» en
+ * una columna que igual se llama «Agrupador del SAT». Copiar la celda tal cual
+ * dejaba `codAgrup = "Inventario"` —que no es del Anexo 24— y con eso el SAT
+ * rechaza el catálogo y el motor no puede invertir ni una cuenta: el contador
+ * ve «2 340 cuentas sin agrupador válido» sobre un archivo que traía el dato
+ * completo, sólo que escrito con letras.
+ *
+ * Los nombres del Anexo 24 son una lista cerrada, así que traducirlos no es
+ * adivinar. Un nombre que no esté en la lista se deja como vino: inventarse un
+ * código sería peor que no poner ninguno.
+ */
+export function agrupadorDeCelda(texto: string): string {
+  const crudo = (texto ?? "").trim();
+  if (!crudo) return "";
+  const comoCodigo = crudo.replace(/\s+/g, "");
+  if (esAgrupadorOficial(comoCodigo)) return comoCodigo;
+  const porNombre = CODIGO_POR_NOMBRE.get(normalizarNombreAgrupador(crudo));
+  return porNombre ?? comoCodigo;
+}
+
+/** Sin acentos, sin signos y en minúsculas: «Ventas y/o servicios gravados al 0%». */
+function normalizarNombreAgrupador(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/**
+ * Nombre oficial → código. Un mismo nombre puede estar en dos niveles
+ * («Inventario» es 115 y también 115.01), y gana EL MÁS ESPECÍFICO: la cuenta
+ * que alguien nombró «Inventario» en su plan es de detalle, y es 115.01 lo que
+ * el SAT ya aceptó en los catálogos presentados. Entre dos del mismo nivel
+ * («Ingresos» es 400 y 401) gana el menor, que es el que agrupa.
+ */
+const CODIGO_POR_NOMBRE = new Map<string, string>();
+const profundidad = (c: string) => c.split(".").length;
+for (const [codigo, nombre] of Object.entries(CODIGO_AGRUPADOR_OFICIAL)) {
+  const k = normalizarNombreAgrupador(nombre);
+  const previo = CODIGO_POR_NOMBRE.get(k);
+  if (
+    !previo ||
+    profundidad(codigo) > profundidad(previo) ||
+    (profundidad(codigo) === profundidad(previo) && codigo < previo)
+  ) {
+    CODIGO_POR_NOMBRE.set(k, codigo);
+  }
+}
 
 export type ColumnaCatalogo = "codigo" | "nombre" | "agrupador" | "nivel" | "naturaleza" | "padre" | "tipo";
 export type ColumnaBalanza = "codigo" | "nombre" | "saldoIni" | "debe" | "haber" | "saldoFin";
@@ -132,6 +188,7 @@ export function parseCatalogoTabular(contenido: string | Uint8Array): CatalogoTa
   type Parcial = { codigo: string; nombre: string; agrupador: string; nivel: number | null; natur: Naturaleza | null; padre: string | null; tipo: string };
   const parciales: Parcial[] = [];
   let sinCodigo = 0;
+  let traducidasPorNombre = 0;
   for (let i = fila + 1; i < filas.length; i++) {
     const f = filas[i];
     if (f.every((c) => !c)) continue;
@@ -139,10 +196,13 @@ export function parseCatalogoTabular(contenido: string | Uint8Array): CatalogoTa
     if (!codigo) { sinCodigo++; continue; }
     const nivelTxt = celda(f, "nivel");
     const nivelNum = nivelTxt ? parseInt(nivelTxt, 10) : NaN;
+    const agrupadorCrudo = celda(f, "agrupador");
+    const agrupador = agrupadorDeCelda(agrupadorCrudo);
+    if (agrupador && agrupador !== agrupadorCrudo.replace(/\s+/g, "")) traducidasPorNombre++;
     parciales.push({
       codigo,
       nombre: celda(f, "nombre"),
-      agrupador: celda(f, "agrupador").replace(/\s+/g, ""),
+      agrupador,
       nivel: Number.isFinite(nivelNum) && nivelNum > 0 ? nivelNum : null,
       natur: naturalezaDe(celda(f, "naturaleza")),
       padre: celda(f, "padre").replace(/\s+/g, "") || null,
@@ -150,6 +210,13 @@ export function parseCatalogoTabular(contenido: string | Uint8Array): CatalogoTa
     });
   }
   if (sinCodigo > 0) advertencias.push(`${sinCodigo} fila(s) sin código se omitieron.`);
+  // Se dice cuántas venían con letras, porque es una TRADUCCIÓN: quien revisa
+  // tiene derecho a saber que el código no venía así en el archivo.
+  if (traducidasPorNombre > 0) {
+    advertencias.push(
+      `${traducidasPorNombre} cuenta(s) traían el agrupador por NOMBRE («Inventario») y se tradujeron a su código del Anexo 24 («115.01»).`,
+    );
+  }
 
   // Nivel: columna → cadena de padres → segmentos del código.
   const porCodigo = new Map(parciales.map((p) => [p.codigo, p]));

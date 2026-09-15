@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import * as XLSX from "xlsx";
-import { detectarColumnas, filasDeArchivo, importeDeTexto, parseBalanzaTabular, parseCatalogoTabular } from "./catalogo-tabular";
+import { detectarColumnas, filasDeArchivo, importeDeTexto, parseBalanzaTabular, parseCatalogoTabular, agrupadorDeCelda } from "./catalogo-tabular";
 
 const CONTPAQI = `Código,Nombre,Tipo,Naturaleza,Nivel,Código agrupador SAT
 101000000,Caja,Activo,Deudora,1,101
@@ -109,5 +109,37 @@ Total,,70000,10000,10000,86000
     ]);
     const sinFinal = parseBalanzaTabular("Cuenta,Saldo inicial,Debe,Haber\n102.01,100,50,20\n");
     expect(sinFinal.cuentas[0].saldoFin).toBe(130);
+  });
+});
+
+// El archivo que manda un hospital trae el agrupador con letras: «Agrupador
+// del SAT: Inventario». Copiarlo tal cual dejaba codAgrup = "Inventario", que
+// no es del Anexo 24: el SAT rechaza el catálogo y el motor no puede invertir
+// ni una cuenta, con el dato completo en el archivo y sólo mal escrito.
+describe("agrupadorDeCelda()", () => {
+  it("un código del Anexo 24 se respeta tal cual", () => {
+    expect(agrupadorDeCelda("115.01")).toBe("115.01");
+    expect(agrupadorDeCelda(" 115.01 ")).toBe("115.01");
+  });
+
+  // Un mismo nombre vive en dos niveles («Inventario» es 115 y 115.01): gana el
+  // más específico, que es lo que le toca a una cuenta de detalle y lo que el
+  // SAT ya aceptó en los catálogos presentados.
+  it("un nombre oficial se traduce a su código, con acentos o sin ellos", () => {
+    expect(agrupadorDeCelda("Inventario")).toBe("115.01");
+    expect(agrupadorDeCelda("Maquinaria y equipo")).toBe("153.01");
+    // Sin acentos y en mayúsculas, como lo exporta más de un sistema.
+    expect(agrupadorDeCelda("ESTIMACION DE CUENTAS INCOBRABLES")).toBe("108");
+    expect(agrupadorDeCelda("Estimación de cuentas incobrables")).toBe("108");
+    expect(agrupadorDeCelda("Ventas y/o servicios gravados al 0%")).toBe("401.04");
+  });
+
+  it("nombre repetido: gana el padre, que es el que va antes en el catálogo", () => {
+    expect(agrupadorDeCelda("Ingresos")).toBe("400");
+  });
+
+  it("lo que no está en la lista se deja como vino: inventar un código es peor", () => {
+    expect(agrupadorDeCelda("Almacen de mi tío")).toBe("Almacendemitío");
+    expect(agrupadorDeCelda("")).toBe("");
   });
 });
