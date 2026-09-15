@@ -17,3 +17,10 @@ export class ErrorJuridico extends Error {
 export const noEncontrado = (que: string) => new ErrorJuridico(`${que} no encontrado`, 404);
 export const conflicto = (mensaje: string) => new ErrorJuridico(mensaje, 409);
 export const prohibido = (mensaje: string) => new ErrorJuridico(mensaje, 403);
+
+/**
+ * Lo que mandó el cliente está mal formado o fuera de rango. 400, no 409: un
+ * 409 dice «el estado del servidor no lo permite» y se reintenta distinto;
+ * esto se corrige en la petición. La app necesita poder distinguirlos.
+ */
+export const invalido = (mensaje: string) => new ErrorJuridico(mensaje, 400);
