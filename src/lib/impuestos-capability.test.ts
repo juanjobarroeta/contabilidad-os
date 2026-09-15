@@ -34,6 +34,7 @@ describe("computeTaxPosition regimen gate", () => {
       perdidaFiscalPendiente: null,
       perdidaFiscalAnio: null,
       regimenFiscal,
+      regimenes: [],
       rfc,
       plataformaActividad: null,
     });
@@ -50,6 +51,26 @@ describe("computeTaxPosition regimen gate", () => {
       code: "NOT_SUPPORTED",
       calculation: "MONTHLY",
       regimen: { trackId },
+    });
+    expect(mocks.invoiceFindMany).not.toHaveBeenCalled();
+  });
+
+  it("rejects multiple CSF regimes before reading or mixing invoices", async () => {
+    mocks.companyFindUnique.mockResolvedValue({
+      coeficienteUtilidad: null,
+      coeficienteAnio: null,
+      perdidaFiscalPendiente: null,
+      perdidaFiscalAnio: null,
+      regimenFiscal: "612",
+      regimenes: [{ code: "605" }, { code: "612" }],
+      rfc: "AAAA010101AAA",
+      plataformaActividad: null,
+    });
+
+    await expect(computeTaxPosition("company-1", 2026, 8)).rejects.toMatchObject({
+      code: "NOT_SUPPORTED",
+      status: 422,
+      reason: "MULTI_REGIME_COMPOSITION_REQUIRED",
     });
     expect(mocks.invoiceFindMany).not.toHaveBeenCalled();
   });

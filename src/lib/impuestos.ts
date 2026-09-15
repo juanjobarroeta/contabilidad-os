@@ -14,7 +14,7 @@ import { ivaRetenidoAProveedoresEnPeriodo } from "./fiscal/iva-retenciones-db";
 import { aplicarFlujoPue, pagosPueDelPeriodo, puesAnterioresPagadosEnPeriodo, type ModoPue } from "./fiscal/iva-pue-flujo";
 import { reconciliacionActiva } from "./fiscal/conciliacion-pue";
 import { normalizarUuid, variantesUuid } from "./fiscal/uuid";
-import { assertMonthlyCalculationSupported, tipoPersonaFromRfc } from "./fiscal/regimen-capabilities";
+import { assertMonthlyCompanyCalculationSupported, tipoPersonaFromRfc } from "./fiscal/regimen-capabilities";
 
 /**
  * Prisma `where` que EXCLUYE los CFDIs de egreso emitidos por un proveedor 69-B
@@ -570,15 +570,17 @@ export async function computeTaxPosition(
       perdidaFiscalPendiente: true,
       perdidaFiscalAnio: true,
       regimenFiscal: true,
+      regimenes: { select: { code: true } },
       rfc: true,
       plataformaActividad: true,
     },
   });
   if (!company) throw new Error(`Empresa no encontrada: ${companyId}`);
-  const regimenTrack = assertMonthlyCalculationSupported(
-    company.regimenFiscal,
-    tipoPersonaFromRfc(company.rfc),
-  );
+  const regimenTrack = assertMonthlyCompanyCalculationSupported({
+    regimenFiscal: company.regimenFiscal,
+    regimenes: company.regimenes.map((regimen) => regimen.code),
+    tipoPersona: tipoPersonaFromRfc(company.rfc),
+  });
 
   const invoiceInclude = {
     taxes: true,

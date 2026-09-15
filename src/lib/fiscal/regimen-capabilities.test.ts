@@ -5,7 +5,10 @@ import {
   REGIMEN_TRACK_IDS,
   RegimenCalculationNotSupportedError,
   assertAnnualCalculationSupported,
+  assertAnnualCompanyCalculationSupported,
   assertMonthlyCalculationSupported,
+  assertMonthlyCompanyCalculationSupported,
+  companyRegimenCodes,
   resolveRegimenTrack,
   tipoPersonaFromRfc,
 } from "./regimen-capabilities";
@@ -105,5 +108,52 @@ describe("regimen capability registry", () => {
     expect(tipoPersonaFromRfc("AAAA010101AAA")).toBe("PF");
     expect(tipoPersonaFromRfc("mock-rfc")).toBeNull();
     expect(tipoPersonaFromRfc(null)).toBeNull();
+  });
+
+  it("builds one canonical set from the legacy scalar and every CSF regimen", () => {
+    expect(companyRegimenCodes("612, 605", ["605", "606", " 612 ", null])).toEqual([
+      "612",
+      "605",
+      "606",
+    ]);
+  });
+
+  it("keeps a single duplicated CSF regimen on its implemented engine", () => {
+    expect(assertMonthlyCompanyCalculationSupported({
+      regimenFiscal: "612",
+      regimenes: ["612"],
+      tipoPersona: "PF",
+    }).trackId).toBe("612");
+  });
+
+  it("fails closed before composing monthly amounts from multiple regimes", () => {
+    try {
+      assertMonthlyCompanyCalculationSupported({
+        regimenFiscal: "612",
+        regimenes: ["605", "612"],
+        tipoPersona: "PF",
+      });
+      expect.fail("expected a fail-closed result");
+    } catch (error) {
+      expect(error).toBeInstanceOf(RegimenCalculationNotSupportedError);
+      expect((error as RegimenCalculationNotSupportedError).toPayload()).toMatchObject({
+        code: "NOT_SUPPORTED",
+        title: "Separación por régimen requerida",
+        calculation: "MONTHLY",
+        reason: "MULTI_REGIME_COMPOSITION_REQUIRED",
+        regimenes: [
+          { code: "612", trackId: "612" },
+          { code: "605", trackId: "605" },
+        ],
+      });
+    }
+  });
+
+  it("fails closed before composing annual amounts from multiple regimes", () => {
+    expect(() => assertAnnualCompanyCalculationSupported({
+      regimenFiscal: "612",
+      regimenes: ["605", "612"],
+      tipoPersona: "PF",
+    })).toThrowError(RegimenCalculationNotSupportedError);
   });
 });

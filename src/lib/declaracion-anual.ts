@@ -7,12 +7,14 @@
 // This is a pure calculation module — no DB calls. The API route feeds it data.
 
 import { tarifaAnualPF, aplicarTarifa } from "@/lib/fiscal/tarifas";
-import { assertAnnualCalculationSupported } from "@/lib/fiscal/regimen-capabilities";
+import { assertAnnualCompanyCalculationSupported } from "@/lib/fiscal/regimen-capabilities";
 
 export type DeclaracionAnualInput = {
   ejercicio: number;
   tipoPersona: "PM" | "PF";
   regimenFiscal: string; // "601", "612", "626", etc.
+  /** Full current CSF regime set. Omitted only by legacy/internal callers. */
+  regimenes?: string[];
 
   // ── Ingresos ──
   ingresosPorCfdis: number;         // Sum of CFDI ingresos (subtotal)
@@ -105,7 +107,11 @@ function r2(n: number): number {
 
 export function calcularDeclaracionAnual(input: DeclaracionAnualInput): DeclaracionAnualResult {
   const { ejercicio, tipoPersona, regimenFiscal } = input;
-  const regimenTrack = assertAnnualCalculationSupported(regimenFiscal, tipoPersona);
+  const regimenTrack = assertAnnualCompanyCalculationSupported({
+    regimenFiscal,
+    regimenes: input.regimenes,
+    tipoPersona,
+  });
 
   // ── Ingresos acumulables ──
   const ingresoCfdis = input.ingresosPorCfdis;

@@ -134,6 +134,7 @@ export type CapabilityFailureReason =
   | "UNKNOWN_REGIME"
   | "UNKNOWN_TAXPAYER_TYPE"
   | "INCOMPATIBLE_TAXPAYER_TYPE"
+  | "MULTI_REGIME_COMPOSITION_REQUIRED"
   | "ASSISTED_ONLY"
   | "NOT_APPLICABLE"
   | "ENGINE_NOT_IMPLEMENTED";
@@ -188,19 +189,23 @@ export function resolveRegimenTrack(
   return { ok: true, capability };
 }
 
+export interface RegimenCalculationDescriptor {
+  code: string | null;
+  trackId: RegimenTrackId | null;
+  label: string | null;
+  tipoPersona: TipoPersonaFiscal | null;
+  capability: CapabilityStatus | null;
+}
+
 export interface RegimenCalculationErrorPayload {
   code: "NOT_SUPPORTED";
   error: string;
   title: string;
   calculation: CalculationKind;
   reason: CapabilityFailureReason;
-  regimen: {
-    code: string | null;
-    trackId: RegimenTrackId | null;
-    label: string | null;
-    tipoPersona: TipoPersonaFiscal | null;
-    capability: CapabilityStatus | null;
-  };
+  regimen: RegimenCalculationDescriptor;
+  /** Every active track considered. Present for multi-regime failures. */
+  regimenes?: RegimenCalculationDescriptor[];
 }
 
 export class RegimenCalculationNotSupportedError extends Error {
@@ -211,12 +216,15 @@ export class RegimenCalculationNotSupportedError extends Error {
     readonly calculation: CalculationKind,
     readonly reason: CapabilityFailureReason,
     readonly regimen: RegimenCalculationErrorPayload["regimen"],
+    readonly regimenes?: RegimenCalculationDescriptor[],
   ) {
     const periodLabel = calculation === "MONTHLY" ? "mensual" : "anual";
     const regimenLabel = regimen.label
       ? `${regimen.code} · ${regimen.label}`
       : regimen.code ?? "sin régimen reconocido";
-    const message = reason === "NOT_APPLICABLE"
+    const message = reason === "MULTI_REGIME_COMPOSITION_REQUIRED"
+      ? `Este contribuyente tiene varios regímenes activos (${(regimenes ?? []).map((r) => r.code).filter(Boolean).join(", ")}). ContabilidadOS todavía no puede separar sus ingresos y deducciones por régimen, así que no generó ningún importe.`
+      : reason === "NOT_APPLICABLE"
       ? `Este régimen no requiere el cálculo ${periodLabel} en ContabilidadOS. No se generó ningún importe.`
       : reason === "UNKNOWN_REGIME"
         ? `ContabilidadOS no reconoce el régimen fiscal (${regimenLabel}) y no generó ningún importe. Verifica la CSF con tu contador.`
@@ -235,10 +243,13 @@ export class RegimenCalculationNotSupportedError extends Error {
       error: this.message,
       title: this.reason === "NOT_APPLICABLE"
         ? "Cálculo no aplicable"
+        : this.reason === "MULTI_REGIME_COMPOSITION_REQUIRED"
+          ? "Separación por régimen requerida"
         : "Cálculo asistido por tu contador",
       calculation: this.calculation,
       reason: this.reason,
       regimen: this.regimen,
+      ...(this.regimenes ? { regimenes: this.regimenes } : {}),
     };
   }
 }
@@ -250,6 +261,79 @@ export function isRegimenCalculationNotSupportedError(
 }
 
 const ENABLED_FOR_CALCULATION: ReadonlySet<CapabilityStatus> = new Set(["SUPPORTED", "PARTIAL"]);
+
+/**
+ * Canonical current regime set for calculation. The normalized scalar remains
+ * first for legacy rows, but every CompanyRegimen code participates. A stale
+ * scalar/relation mismatch therefore becomes a multi-regime boundary instead
+ * of silently choosing either side.
+ */
+export function companyRegimenCodes(
+  regimenFiscal: string | null | undefined,
+  regimenes: ReadonlyArray<string | null | undefined> = [],
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const add = (raw: string | null | undefined) => {
+    for (const part of raw?.split(",") ?? []) {
+      const code = part.trim();
+      if (!code || seen.has(code)) continue;
+      seen.add(code);
+      out.push(code);
+    }
+  };
+  add(regimenFiscal);
+  for (const code of regimenes) add(code);
+  return out;
+}
+
+export interface CompanyCalculationContext {
+  regimenFiscal: string | null | undefined;
+  regimenes?: ReadonlyArray<string | null | undefined>;
+  tipoPersona: TipoPersonaFiscal | null;
+}
+
+function descriptorForResolution(
+  code: string | null,
+  tipoPersona: TipoPersonaFiscal | null,
+  calculation: CalculationKind,
+): RegimenCalculationDescriptor {
+  const resolution = resolveRegimenTrack(code, tipoPersona);
+  if (!resolution.ok) {
+    return {
+      code: resolution.code,
+      trackId: resolution.capability?.trackId ?? null,
+      label: resolution.code ? REGIMEN_LABELS[resolution.code] ?? null : null,
+      tipoPersona: resolution.tipoPersona,
+      capability: null,
+    };
+  }
+  const dimension = calculation === "MONTHLY" ? "monthly" : "annual";
+  return {
+    code: resolution.capability.code,
+    trackId: resolution.capability.trackId,
+    label: resolution.capability.label,
+    tipoPersona,
+    capability: resolution.capability.capabilities[dimension],
+  };
+}
+
+function assertCompanyCalculationSupported(
+  calculation: CalculationKind,
+  context: CompanyCalculationContext,
+): RegimenCapability {
+  const codes = companyRegimenCodes(context.regimenFiscal, context.regimenes);
+  if (codes.length > 1) {
+    const regimenes = codes.map((code) => descriptorForResolution(code, context.tipoPersona, calculation));
+    throw new RegimenCalculationNotSupportedError(
+      calculation,
+      "MULTI_REGIME_COMPOSITION_REQUIRED",
+      regimenes[0],
+      regimenes,
+    );
+  }
+  return assertCalculationSupported(calculation, codes[0] ?? null, context.tipoPersona);
+}
 
 function assertCalculationSupported(
   calculation: CalculationKind,
@@ -303,6 +387,22 @@ export function assertAnnualCalculationSupported(
   tipoPersona: TipoPersonaFiscal | null,
 ): RegimenCapability & { trackId: AnnualCalculationTrackId } {
   return assertCalculationSupported("ANNUAL", regimenFiscal, tipoPersona) as RegimenCapability & {
+    trackId: AnnualCalculationTrackId;
+  };
+}
+
+export function assertMonthlyCompanyCalculationSupported(
+  context: CompanyCalculationContext,
+): RegimenCapability & { trackId: MonthlyCalculationTrackId } {
+  return assertCompanyCalculationSupported("MONTHLY", context) as RegimenCapability & {
+    trackId: MonthlyCalculationTrackId;
+  };
+}
+
+export function assertAnnualCompanyCalculationSupported(
+  context: CompanyCalculationContext,
+): RegimenCapability & { trackId: AnnualCalculationTrackId } {
+  return assertCompanyCalculationSupported("ANNUAL", context) as RegimenCapability & {
     trackId: AnnualCalculationTrackId;
   };
 }

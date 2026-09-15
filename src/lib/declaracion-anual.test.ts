@@ -100,4 +100,20 @@ describe("annual regimen capability gate", () => {
       regimenFiscal: "626",
     })).toThrowError(RegimenCalculationNotSupportedError);
   });
+
+  it("does not mix annual income from independent CSF regimes", () => {
+    try {
+      calcularDeclaracionAnual({
+        ...inputPF(2026, 250_000),
+        regimenes: ["605", "612"],
+      });
+      expect.fail("expected a fail-closed result");
+    } catch (error) {
+      expect((error as RegimenCalculationNotSupportedError).toPayload()).toMatchObject({
+        code: "NOT_SUPPORTED",
+        calculation: "ANNUAL",
+        reason: "MULTI_REGIME_COMPOSITION_REQUIRED",
+      });
+    }
+  });
 });
