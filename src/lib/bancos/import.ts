@@ -392,8 +392,10 @@ export async function importBankStatement(opts: {
   // "base64" cuando el archivo es binario (Excel .xlsx/.xls) y se envió
   // codificado; "text" (default) para CSV/TXT/OFX enviados como texto.
   encoding?: "text" | "base64";
+  /** Mes que el contador está trabajando ("2026-08"), para avisar si no cuadra. */
+  mesEsperado?: string | null;
 }): Promise<ImportResult> {
-  const { bankAccountId, companyId, fileContent, filename, encoding } = opts;
+  const { bankAccountId, companyId, fileContent, filename, encoding, mesEsperado } = opts;
 
   // Guardia anti-duplicado: una cuenta puente (alimentada por ingest externo)
   // nunca recibe estados de cuenta. Ver src/lib/bancos/fuentes.ts.
@@ -444,6 +446,17 @@ export async function importBankStatement(opts: {
     periodo,
   });
 
+  // EL ARCHIVO DE OTRO MES. Pasó en producción: el contador subió el estado de
+  // julio mientras trabajaba agosto, y la cuenta quedó «sin estado de cuenta
+  // del mes» sin que nada lo dijera — el archivo entró bien, sólo que era el
+  // que no era. El importador ya sabe qué periodo cubre; sólo faltaba comparar.
+  const warnings = [...(parseResult.warnings ?? [])];
+  if (mesEsperado && periodo && !periodo.startsWith(mesEsperado)) {
+    warnings.push(
+      `El archivo cubre ${periodo} y estás trabajando ${mesEsperado}. Si querías subir el estado de cuenta de ${mesEsperado}, éste es otro.`,
+    );
+  }
+
   const descartadas = parseResult.descartadas;
   return {
     ok: true,
@@ -454,7 +467,7 @@ export async function importBankStatement(opts: {
     format: parseResult.format,
     detectedBank: parseResult.detectedBank,
     periodo,
-    warnings: parseResult.warnings,
+    warnings,
     message:
       `${imported} movimiento(s) importados` +
       `${skipped > 0 ? `, ${skipped} omitido(s) por parecer duplicados de movimientos ya existentes` : ""}` +

@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCompany } from "@/components/layout/CompanyProvider";
+import { usePeriod } from "@/components/contabilidad/PeriodProvider";
 import { RepresentacionImpresa } from "@/components/facturas/RepresentacionImpresa";
 import { Card, Money, Chip } from "@/components/ui";
 import { Alert, RetryButton } from "@/components/ui/feedback";
@@ -172,6 +173,7 @@ export function GestionBancos({
   onResolverEnLaMesa?: (tx: BankTx) => void;
 }) {
   const { activeCompany } = useCompany();
+  const { year, month } = usePeriod();
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [txs, setTxs] = useState<BankTx[]>([]);
@@ -435,7 +437,11 @@ export function GestionBancos({
     // bytes, el servidor detecta la codificación real y el formato por FIRMA
     // (la extensión miente: los .xls de BBVA son XML).
     const fileContent = await fileToBase64(file);
-    const res = await fetch(`/api/bancos/${selectedId}/upload`, {
+    // El mes que se está trabajando viaja con el archivo: si el estado de cuenta
+    // es de otro, el importador lo dice en vez de dejar el mes «sin estado de
+    // cuenta» en silencio (pasó: julio subido mientras se trabajaba agosto).
+    const mes = `${year}-${String(month).padStart(2, "0")}`;
+    const res = await fetch(`/api/bancos/${selectedId}/upload?mes=${mes}`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ fileContent, filename: file.name, encoding: "base64" }),
     });

@@ -132,6 +132,7 @@ export async function importCfdiFromXml(opts: {
       usoCfdi: cfdi.usoCfdi ?? "G03",
       naturaleza: clasif.fuente === "no_aplica" ? null : clasif.naturaleza,
       naturalezaRevision: clasif.requiereRevision,
+      naturalezaMotivo: clasif.motivoRevision ?? null,
       moneda: cfdi.moneda ?? "MXN",
       subtotal: cfdi.subtotal,
       total: cfdi.total,
