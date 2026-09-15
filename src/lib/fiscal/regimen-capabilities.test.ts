@@ -9,6 +9,7 @@ import {
   assertMonthlyCalculationSupported,
   assertMonthlyCompanyCalculationSupported,
   companyRegimenCodes,
+  companyRegimenCodesForPeriod,
   resolveRegimenTrack,
   tipoPersonaFromRfc,
 } from "./regimen-capabilities";
@@ -116,6 +117,122 @@ describe("regimen capability registry", () => {
       "605",
       "606",
     ]);
+  });
+
+  it("uses the scalar only when no CompanyRegimen evidence exists", () => {
+    expect(companyRegimenCodesForPeriod({
+      regimenFiscal: "612, 605",
+      regimenes: [],
+      from: new Date("2025-01-01T00:00:00.000Z"),
+      to: new Date("2026-01-01T00:00:00.000Z"),
+    })).toEqual(["612", "605"]);
+  });
+
+  it("includes a currently active row in the current period", () => {
+    expect(companyRegimenCodesForPeriod({
+      regimenFiscal: "612",
+      regimenes: [{
+        code: "626",
+        since: new Date("2026-01-01T00:00:00.000Z"),
+        endedAt: null,
+        active: true,
+      }],
+      from: new Date("2026-08-01T00:00:00.000Z"),
+      to: new Date("2026-09-01T00:00:00.000Z"),
+    })).toEqual(["626"]);
+  });
+
+  it("resolves the rows whose known lifecycle overlaps the requested period", () => {
+    expect(companyRegimenCodesForPeriod({
+      regimenFiscal: "626",
+      regimenes: [
+        {
+          code: "612",
+          since: new Date("2024-01-01T00:00:00.000Z"),
+          endedAt: new Date("2026-09-15T00:00:00.000Z"),
+          active: false,
+        },
+        {
+          code: "626",
+          since: new Date("2026-01-01T00:00:00.000Z"),
+          endedAt: null,
+          active: true,
+        },
+      ],
+      from: new Date("2025-08-01T00:00:00.000Z"),
+      to: new Date("2025-09-01T00:00:00.000Z"),
+    })).toEqual(["612"]);
+  });
+
+  it("includes a regime ended during the period and excludes one ended at its start", () => {
+    expect(companyRegimenCodesForPeriod({
+      regimenFiscal: "626",
+      regimenes: [
+        {
+          code: "606",
+          since: null,
+          endedAt: new Date("2025-08-15T00:00:00.000Z"),
+          active: false,
+        },
+        {
+          code: "612",
+          since: null,
+          endedAt: new Date("2025-08-01T00:00:00.000Z"),
+          active: false,
+        },
+      ],
+      from: new Date("2025-08-01T00:00:00.000Z"),
+      to: new Date("2025-09-01T00:00:00.000Z"),
+    })).toEqual(["606"]);
+  });
+
+  it("excludes a regime that starts at the period end", () => {
+    expect(companyRegimenCodesForPeriod({
+      regimenFiscal: "612",
+      regimenes: [{
+        code: "626",
+        since: new Date("2025-09-01T00:00:00.000Z"),
+        endedAt: null,
+        active: true,
+      }],
+      from: new Date("2025-08-01T00:00:00.000Z"),
+      to: new Date("2025-09-01T00:00:00.000Z"),
+    })).toEqual([]);
+  });
+
+  it("does not inject the current scalar when relation evidence has no overlap", () => {
+    const codes = companyRegimenCodesForPeriod({
+      regimenFiscal: "626",
+      regimenes: [{
+        code: "626",
+        since: new Date("2026-01-01T00:00:00.000Z"),
+        endedAt: null,
+        active: true,
+      }],
+      from: new Date("2025-01-01T00:00:00.000Z"),
+      to: new Date("2026-01-01T00:00:00.000Z"),
+    });
+
+    expect(codes).toEqual([]);
+    expect(() => assertAnnualCompanyCalculationSupported({
+      regimenFiscal: null,
+      regimenes: codes,
+      tipoPersona: "PF",
+    })).toThrowError(RegimenCalculationNotSupportedError);
+  });
+
+  it("includes a regime that overlaps any part of an annual interval", () => {
+    expect(companyRegimenCodesForPeriod({
+      regimenFiscal: "626",
+      regimenes: [{
+        code: "612",
+        since: new Date("2025-11-01T00:00:00.000Z"),
+        endedAt: new Date("2026-02-01T00:00:00.000Z"),
+        active: false,
+      }],
+      from: new Date("2025-01-01T00:00:00.000Z"),
+      to: new Date("2026-01-01T00:00:00.000Z"),
+    })).toEqual(["612"]);
   });
 
   it("keeps a single duplicated CSF regimen on its implemented engine", () => {

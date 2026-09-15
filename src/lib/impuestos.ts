@@ -14,7 +14,11 @@ import { ivaRetenidoAProveedoresEnPeriodo } from "./fiscal/iva-retenciones-db";
 import { aplicarFlujoPue, pagosPueDelPeriodo, puesAnterioresPagadosEnPeriodo, type ModoPue } from "./fiscal/iva-pue-flujo";
 import { reconciliacionActiva } from "./fiscal/conciliacion-pue";
 import { normalizarUuid, variantesUuid } from "./fiscal/uuid";
-import { assertMonthlyCompanyCalculationSupported, tipoPersonaFromRfc } from "./fiscal/regimen-capabilities";
+import {
+  assertMonthlyCompanyCalculationSupported,
+  companyRegimenCodesForPeriod,
+  tipoPersonaFromRfc,
+} from "./fiscal/regimen-capabilities";
 
 /**
  * Prisma `where` que EXCLUYE los CFDIs de egreso emitidos por un proveedor 69-B
@@ -548,14 +552,14 @@ export async function computeTaxPosition(
   /** Optional upper bound for "precierre" (mid-month cutoff). Defaults to month end. */
   cutoff?: Date
 ): Promise<TaxPosition> {
-  const from = new Date(year, month - 1, 1);
-  const to = cutoff ?? new Date(year, month, 1);
-  const yearFrom = new Date(year, 0, 1);
+  const from = new Date(Date.UTC(year, month - 1, 1));
+  const to = cutoff ?? new Date(Date.UTC(year, month, 1));
+  const yearFrom = new Date(Date.UTC(year, 0, 1));
   const periodo = `${year}-${String(month).padStart(2, "0")}`;
 
   const prevYear = year - 1;
-  const prevYearFrom = new Date(prevYear, 0, 1);
-  const prevYearTo = new Date(prevYear, 11, 31, 23, 59, 59);
+  const prevYearFrom = new Date(Date.UTC(prevYear, 0, 1));
+  const prevYearTo = new Date(Date.UTC(prevYear + 1, 0, 1));
   const prevPeriodo =
     month === 1 ? `${year - 1}-12` : `${year}-${String(month - 1).padStart(2, "0")}`;
 
@@ -570,15 +574,23 @@ export async function computeTaxPosition(
       perdidaFiscalPendiente: true,
       perdidaFiscalAnio: true,
       regimenFiscal: true,
-      regimenes: { where: { active: true }, select: { code: true } },
+      regimenes: {
+        select: { code: true, since: true, endedAt: true, active: true },
+      },
       rfc: true,
       plataformaActividad: true,
     },
   });
   if (!company) throw new Error(`Empresa no encontrada: ${companyId}`);
-  const regimenTrack = assertMonthlyCompanyCalculationSupported({
+  const regimenesPeriodo = companyRegimenCodesForPeriod({
     regimenFiscal: company.regimenFiscal,
-    regimenes: company.regimenes.map((regimen) => regimen.code),
+    regimenes: company.regimenes,
+    from,
+    to,
+  });
+  const regimenTrack = assertMonthlyCompanyCalculationSupported({
+    regimenFiscal: null,
+    regimenes: regimenesPeriodo,
     tipoPersona: tipoPersonaFromRfc(company.rfc),
   });
 
@@ -613,12 +625,12 @@ export async function computeTaxPosition(
       include: invoiceInclude,
     }).then((rows) => rows.map((inv) => ({ ...inv, subtotal: Number(inv.subtotal), totalImpuestos: Number(inv.totalImpuestos), taxes: inv.taxes.map((t) => ({ ...t, importe: Number(t.importe), base: t.base === null ? null : Number(t.base) })) }))),
     prisma.invoice.aggregate({
-      where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: prevYearFrom, lte: prevYearTo } },
+      where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: prevYearFrom, lt: prevYearTo } },
       _sum: { subtotal: true },
       _count: { id: true },
     }),
     prisma.invoice.aggregate({
-      where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: prevYearFrom, lte: prevYearTo }, ...efosWhere },
+      where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: prevYearFrom, lt: prevYearTo }, ...efosWhere },
       _sum: { subtotal: true },
     }),
     prisma.invoice.aggregate({
@@ -691,11 +703,11 @@ export async function computeTaxPosition(
   // incluye (+), así que el neto es total − 2·E.
   const [prevYearIngresosE, prevYearEgresosE, acumuladosE] = await Promise.all([
     prisma.invoice.aggregate({
-      where: { companyId, tipo: "INGRESO", tipoSat: "E", status: "STAMPED", fecha: { gte: prevYearFrom, lte: prevYearTo } },
+      where: { companyId, tipo: "INGRESO", tipoSat: "E", status: "STAMPED", fecha: { gte: prevYearFrom, lt: prevYearTo } },
       _sum: { subtotal: true },
     }),
     prisma.invoice.aggregate({
-      where: { companyId, tipo: "EGRESO", tipoSat: "E", status: "STAMPED", fecha: { gte: prevYearFrom, lte: prevYearTo }, ...efosWhere },
+      where: { companyId, tipo: "EGRESO", tipoSat: "E", status: "STAMPED", fecha: { gte: prevYearFrom, lt: prevYearTo }, ...efosWhere },
       _sum: { subtotal: true },
     }),
     prisma.invoice.aggregate({
@@ -804,7 +816,7 @@ export async function computeTaxPosition(
   ivaAcreditablePUE += ivaAcreditablePueAnteriores;
   // Lo retenido el MES ANTERIOR (enterado con aquella declaración) se acredita
   // en ésta. Se calcula con el mismo criterio de flujo para el periodo previo.
-  const prevFrom = new Date(year, month - 2, 1);
+  const prevFrom = new Date(Date.UTC(year, month - 2, 1));
   const ivaRetenidoMesAnteriorAcreditable = await ivaRetenidoAProveedoresEnPeriodo(companyId, prevFrom, from);
   const ivaAcreditableBruto = ivaAcreditablePUE + ivaAcreditablePPD + ivaRetenidoMesAnteriorAcreditable;
   const ivaAcreditableDevengado = facturasEgresos.reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * ivaTrasladado(inv), 0);

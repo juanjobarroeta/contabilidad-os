@@ -13,6 +13,7 @@ import { perdidasDisponibles, aplicarPerdidas, primeraActualizacion } from "@/li
 import { evidenciaPresentacion } from "@/lib/fiscal/presentacion";
 import {
   assertAnnualCompanyCalculationSupported,
+  companyRegimenCodesForPeriod,
   isRegimenCalculationNotSupportedError,
   tipoPersonaFromRfc,
 } from "@/lib/fiscal/regimen-capabilities";
@@ -37,33 +38,42 @@ export async function GET(req: Request) {
   const member = await getEffectiveCompanyMembership(session.user.id, companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
+  const yearStart = new Date(Date.UTC(ejercicio, 0, 1));
+  const yearEndExclusive = new Date(Date.UTC(ejercicio + 1, 0, 1));
+
   const company = await prisma.company.findUnique({
     where: { id: companyId },
     select: {
       rfc: true,
       razonSocial: true,
       regimenFiscal: true,
-      regimenes: { where: { active: true }, select: { code: true } },
+      regimenes: {
+        select: { code: true, since: true, endedAt: true, active: true },
+      },
     },
   });
   if (!company) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
 
   const tipoPersona = tipoPersonaFromRfc(company.rfc);
+  const regimenesEjercicio = companyRegimenCodesForPeriod({
+    regimenFiscal: company.regimenFiscal,
+    regimenes: company.regimenes,
+    from: yearStart,
+    to: yearEndExclusive,
+  });
+  let regimenFiscalEjercicio: string;
   try {
-    assertAnnualCompanyCalculationSupported({
-      regimenFiscal: company.regimenFiscal,
-      regimenes: company.regimenes.map((regimen) => regimen.code),
+    regimenFiscalEjercicio = assertAnnualCompanyCalculationSupported({
+      regimenFiscal: null,
+      regimenes: regimenesEjercicio,
       tipoPersona,
-    });
+    }).code;
   } catch (error) {
     if (isRegimenCalculationNotSupportedError(error)) {
       return regimenCalculationErrorResponse(error);
     }
     throw error;
   }
-
-  const yearStart = new Date(ejercicio, 0, 1);
-  const yearEnd = new Date(ejercicio, 11, 31, 23, 59, 59);
 
   // Proveedores 69-B definitivos → sus egresos NO son deducibles (Art. 69-B);
   // se excluyen de las compras igual que en el motor provisional.
@@ -85,7 +95,7 @@ export async function GET(req: Request) {
   ] = await Promise.all([
     // Total CFDI ingresos for the year
     prisma.invoice.aggregate({
-      where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: yearStart, lte: yearEnd } },
+      where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: yearStart, lt: yearEndExclusive } },
       _sum: { subtotal: true, totalImpuestos: true },
     }),
     // CFDI egresos del ejercicio, AGRUPADOS por naturaleza fiscal: las
@@ -93,7 +103,7 @@ export async function GET(req: Request) {
     // las SIN_EFECTOS no son deducibles; ambas se excluyen de "compras".
     prisma.invoice.groupBy({
       by: ["naturaleza"],
-      where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: yearStart, lte: yearEnd }, ...efosWhere },
+      where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: yearStart, lt: yearEndExclusive }, ...efosWhere },
       _sum: { subtotal: true },
     }),
     // Payroll totals for the year
@@ -102,7 +112,7 @@ export async function GET(req: Request) {
         payrollRun: {
           companyId,
           status: { in: ["CALCULATED", "STAMPED", "PAID"] },
-          fechaPago: { gte: yearStart, lte: yearEnd },
+          fechaPago: { gte: yearStart, lt: yearEndExclusive },
         },
       },
       _sum: {
@@ -152,7 +162,7 @@ export async function GET(req: Request) {
         companyId, tipo: "NOMINA", status: "STAMPED",
         regimenNomina: { in: REGIMENES_ASIMILADOS },
         notas: { contains: "recib", mode: "insensitive" },
-        fecha: { gte: yearStart, lte: yearEnd },
+        fecha: { gte: yearStart, lt: yearEndExclusive },
       },
       _sum: { subtotal: true, isrRetenidoNomina: true },
     }),
@@ -191,7 +201,7 @@ export async function GET(req: Request) {
   // 69-B: monto excluido por proveedores definitivos (ya descontado de egresosCfdis).
   const efosExcluidos = efosBloqueados.size > 0
     ? (await prisma.invoice.aggregate({
-        where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: yearStart, lte: yearEnd }, customer: { rfc: { in: [...efosBloqueados] } } },
+        where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: yearStart, lt: yearEndExclusive }, customer: { rfc: { in: [...efosBloqueados] } } },
         _sum: { subtotal: true }, _count: { id: true },
       }))
     : null;
@@ -226,8 +236,8 @@ export async function GET(req: Request) {
   const input: DeclaracionAnualInput = {
     ejercicio,
     tipoPersona: tipoPersona!,
-    regimenFiscal: company.regimenFiscal,
-    regimenes: company.regimenes.map((regimen) => regimen.code),
+    regimenFiscal: regimenFiscalEjercicio,
+    regimenes: regimenesEjercicio,
     ingresosPorCfdis: ingresosCfdis,
     otrosIngresos: parseFloat(searchParams.get("otrosIngresos") ?? "0"),
     ingresosAsimilados,
@@ -273,7 +283,9 @@ export async function GET(req: Request) {
   const result = calcularDeclaracionAnual(input);
 
   return NextResponse.json({
-    company: { rfc: company.rfc, razonSocial: company.razonSocial, regimenFiscal: company.regimenFiscal },
+    // The workpaper label must show the regime resolved for this exercise, not
+    // the company's current scalar when the user is reviewing history.
+    company: { rfc: company.rfc, razonSocial: company.razonSocial, regimenFiscal: regimenFiscalEjercicio },
     ...result,
     // Sources for transparency
     dataSources: {
@@ -346,6 +358,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
 
+  const yearStart = new Date(Date.UTC(Number(ejercicio), 0, 1));
+  const yearEndExclusive = new Date(Date.UTC(Number(ejercicio) + 1, 0, 1));
+
   // Saving this endpoint means persisting an in-app calculated result. Imported
   // SAT acuses use a separate path and remain available for assisted regimes.
   const company = await prisma.company.findUnique({
@@ -353,14 +368,22 @@ export async function POST(req: Request) {
     select: {
       rfc: true,
       regimenFiscal: true,
-      regimenes: { where: { active: true }, select: { code: true } },
+      regimenes: {
+        select: { code: true, since: true, endedAt: true, active: true },
+      },
     },
   });
   if (!company) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
+  const regimenesEjercicio = companyRegimenCodesForPeriod({
+    regimenFiscal: company.regimenFiscal,
+    regimenes: company.regimenes,
+    from: yearStart,
+    to: yearEndExclusive,
+  });
   try {
     assertAnnualCompanyCalculationSupported({
-      regimenFiscal: company.regimenFiscal,
-      regimenes: company.regimenes.map((regimen) => regimen.code),
+      regimenFiscal: null,
+      regimenes: regimenesEjercicio,
       tipoPersona: tipoPersonaFromRfc(company.rfc),
     });
   } catch (error) {

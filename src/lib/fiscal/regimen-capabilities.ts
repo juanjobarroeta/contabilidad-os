@@ -204,7 +204,7 @@ export interface RegimenCalculationErrorPayload {
   calculation: CalculationKind;
   reason: CapabilityFailureReason;
   regimen: RegimenCalculationDescriptor;
-  /** Every active track considered. Present for multi-regime failures. */
+  /** Every track considered for the requested period. Present for multi-regime failures. */
   regimenes?: RegimenCalculationDescriptor[];
 }
 
@@ -223,7 +223,7 @@ export class RegimenCalculationNotSupportedError extends Error {
       ? `${regimen.code} · ${regimen.label}`
       : regimen.code ?? "sin régimen reconocido";
     const message = reason === "MULTI_REGIME_COMPOSITION_REQUIRED"
-      ? `Este contribuyente tiene varios regímenes activos (${(regimenes ?? []).map((r) => r.code).filter(Boolean).join(", ")}). ContabilidadOS todavía no puede separar sus ingresos y deducciones por régimen, así que no generó ningún importe.`
+      ? `Este contribuyente tiene varios regímenes asociados al periodo (${(regimenes ?? []).map((r) => r.code).filter(Boolean).join(", ")}). ContabilidadOS todavía no puede separar sus ingresos y deducciones por régimen, así que no generó ningún importe.`
       : reason === "NOT_APPLICABLE"
       ? `Este régimen no requiere el cálculo ${periodLabel} en ContabilidadOS. No se generó ningún importe.`
       : reason === "UNKNOWN_REGIME"
@@ -285,6 +285,57 @@ export function companyRegimenCodes(
   add(regimenFiscal);
   for (const code of regimenes) add(code);
   return out;
+}
+
+export interface CompanyRegimenPeriodRow {
+  code: string | null | undefined;
+  since: Date | null;
+  endedAt: Date | null;
+  active: boolean;
+}
+
+/**
+ * Regime set known to overlap a requested half-open interval `[from, to)`.
+ *
+ * Once CompanyRegimen evidence exists it is authoritative: the current scalar
+ * is only a fallback for legacy companies with no relation rows. `endedAt` is
+ * when a later CSF confirmed that a code was absent, not an asserted legal end
+ * date. An inactive row without a usable end therefore stays included as the
+ * conservative, fail-closed choice.
+ */
+export function companyRegimenCodesForPeriod(params: {
+  regimenFiscal: string | null | undefined;
+  regimenes: ReadonlyArray<CompanyRegimenPeriodRow>;
+  from: Date;
+  to: Date;
+}): string[] {
+  const fromMs = params.from.getTime();
+  const toMs = params.to.getTime();
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || fromMs >= toMs) return [];
+
+  if (params.regimenes.length === 0) {
+    return companyRegimenCodes(params.regimenFiscal);
+  }
+
+  const overlapping = params.regimenes.filter((regimen) => {
+    const sinceMs = regimen.since?.getTime();
+    const startsBeforeEnd = sinceMs === undefined
+      || !Number.isFinite(sinceMs)
+      || sinceMs < toMs;
+
+    // `active` is the latest known truth. An inactive row uses the confirmation
+    // timestamp as its conservative upper bound; a missing/invalid timestamp is
+    // not enough evidence to exclude that regime from any period.
+    const endedMs = regimen.active ? null : regimen.endedAt?.getTime();
+    const endsAfterStart = endedMs === null
+      || endedMs === undefined
+      || !Number.isFinite(endedMs)
+      || endedMs > fromMs;
+
+    return startsBeforeEnd && endsAfterStart;
+  });
+
+  return companyRegimenCodes(null, overlapping.map((regimen) => regimen.code));
 }
 
 export interface CompanyCalculationContext {
