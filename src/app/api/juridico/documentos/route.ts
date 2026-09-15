@@ -16,6 +16,8 @@ import {
   type Resumenes,
 } from "@/lib/juridico/documentos";
 import { asegurarConsumoJuridico } from "@/lib/juridico/consumo";
+import { asegurarSuscripcion } from "@/lib/juridico/suscripcion";
+import { despachoParaCrear } from "@/lib/juridico/despacho";
 import { reportError } from "@/lib/observability";
 import { actualizarAsunto, asuntoDeConversacion, extraerDatosDeDocumento, registrarPartes } from "@/lib/juridico/asuntos";
 import { MAX_BYTES_IMAGEN, MAX_BYTES_PDF_VISION, MAX_IMAGENES_POR_DOCUMENTO, MAX_PAGINAS_PDF_VISION, esHeic, tipoImagen, transcribirConVision, type MediaImagen } from "@/lib/juridico/vision";
@@ -119,6 +121,10 @@ export async function POST(req: Request) {
   const userId = usuario.id;
   if (!(await puedeUsarJuridico(userId))) return NextResponse.json({ error: "Tu cuenta no tiene acceso al copiloto jurídico" }, { status: 403 });
   // Transcribir un escaneo cuesta: el mismo tope que el chat.
+  // Lo que paga el despacho (o su prueba) antes que el tope técnico: el
+  // mensaje que importa es «elige un plan», no «te pasaste de USD».
+  const sus = await asegurarSuscripcion(await despachoParaCrear(userId));
+  if (!sus.permitido) return NextResponse.json({ error: sus.motivo, codigo: "JURIDICO_SIN_PLAN", estado: sus.estado }, { status: 402 });
   const puede = await asegurarConsumoJuridico(userId);
   if (!puede.permitido) return NextResponse.json({ error: puede.motivo, codigo: "JURIDICO_TOPE_MES", consumo: puede.consumo }, { status: 429 });
 

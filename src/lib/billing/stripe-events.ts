@@ -30,6 +30,14 @@ export interface BillingRepo {
     stripeSessionId: string;
     userId: string | null;
   }): Promise<void>;
+  /**
+   * Aplica el estado de una suscripción al DESPACHO jurídico (se cobra por
+   * asiento, no por empresa). Devuelve false si el despacho ya no existe.
+   */
+  aplicarDespachoJuridico?(
+    despachoId: string,
+    data: { plan: string; stripeSubscriptionId?: string; stripeCustomerId?: string; asientos?: number; periodoFin?: Date }
+  ): Promise<boolean>;
   /** Actualiza campos de facturación del User. */
   updateUserBilling(
     userId: string,
@@ -112,6 +120,36 @@ function str(v: unknown): string | null {
  *   customer.subscription.deleted → CANCELED
  *   invoice.payment_failed        → PAST_DUE
  */
+/**
+ * El estado de la suscripción de Stripe, traducido al plan del despacho.
+ * `active`, `trialing` y `past_due` dejan trabajar (Stripe todavía reintenta);
+ * lo demás suspende o cancela. Nunca borra casos ni documentos. Puro salvo por
+ * el repo, como el resto del módulo.
+ */
+export function planDesdeEstadoStripe(estado: string): "activo" | "suspendido" | "cancelado" {
+  if (estado === "active" || estado === "trialing" || estado === "past_due") return "activo";
+  if (estado === "canceled" || estado === "incomplete_expired") return "cancelado";
+  return "suspendido";
+}
+
+async function aplicarSuscripcionJuridica(
+  repo: BillingRepo,
+  despachoId: string,
+  d: { suscripcionId?: string | null; clienteId?: string | null; asientos?: number; estado: string; periodoFin?: Date | null }
+): Promise<ApplyResult> {
+  if (!repo.aplicarDespachoJuridico) return { handled: false, detail: "el repo no sabe de despachos jurídicos" };
+  const plan = planDesdeEstadoStripe(d.estado);
+  const ok = await repo.aplicarDespachoJuridico(despachoId, {
+    plan,
+    ...(d.suscripcionId ? { stripeSubscriptionId: d.suscripcionId } : {}),
+    ...(d.clienteId ? { stripeCustomerId: d.clienteId } : {}),
+    ...(d.asientos && d.asientos > 0 ? { asientos: d.asientos } : {}),
+    ...(d.periodoFin ? { periodoFin: d.periodoFin } : {}),
+  });
+  if (!ok) return { handled: false, detail: `despacho jurídico ${despachoId} no encontrado` };
+  return { handled: true, detail: `despacho jurídico ${despachoId} → ${plan}${d.asientos ? ` (${d.asientos} asientos)` : ""}` };
+}
+
 export async function applyStripeEvent(
   event: StripeEventLike,
   repo: BillingRepo,
@@ -121,6 +159,18 @@ export async function applyStripeEvent(
   switch (event.type) {
     case "checkout.session.completed": {
       const metadataCompra = (obj.metadata ?? {}) as Record<string, unknown>;
+      // Copiloto jurídico: la suscripción es de un DESPACHO y se cobra por
+      // asiento, no de una empresa. Se reconoce por metadata.juridicoDespachoId.
+      const despachoJuridico = str(metadataCompra.juridicoDespachoId);
+      if (despachoJuridico) {
+        const r = await aplicarSuscripcionJuridica(repo, despachoJuridico, {
+          suscripcionId: str((obj as { subscription?: unknown }).subscription),
+          clienteId: str((obj as { customer?: unknown }).customer),
+          asientos: Number(metadataCompra.asientos) || undefined,
+          estado: "active",
+        });
+        return r;
+      }
       // Compra de uso extra de IA: pago único (mode=payment) marcado por la ruta
       // /api/billing/ia-extra con metadata.tipo="ia_extra". Suma AiCreditGrant a
       // la empresa para el mes indicado; idempotente por id de sesión.
@@ -177,6 +227,18 @@ export async function applyStripeEvent(
 
     case "customer.subscription.updated":
     case "customer.subscription.deleted": {
+      const metaSus = ((obj as { metadata?: unknown }).metadata ?? {}) as Record<string, unknown>;
+      const despachoSus = str(metaSus.juridicoDespachoId);
+      if (despachoSus) {
+        const sus = obj as { status?: unknown; items?: { data?: { quantity?: number }[] }; current_period_end?: unknown; id?: unknown; customer?: unknown };
+        return aplicarSuscripcionJuridica(repo, despachoSus, {
+          suscripcionId: str(sus.id),
+          clienteId: str(sus.customer),
+          asientos: sus.items?.data?.[0]?.quantity,
+          estado: str(sus.status) ?? "active",
+          periodoFin: typeof sus.current_period_end === "number" ? new Date(sus.current_period_end * 1000) : null,
+        });
+      }
       const subscriptionId = idOf(obj.id);
       const customerId = idOf(obj.customer);
 

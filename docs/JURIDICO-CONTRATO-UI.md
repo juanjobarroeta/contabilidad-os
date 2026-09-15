@@ -172,6 +172,35 @@ conversación se archive.
 
 Todas cuelgan de `/api/juridico/:path*`, que ya está en el matcher de CORS.
 
+### Plan y prueba del despacho
+
+Se cobra **por asiento**; la unidad del plan es el **documento**, no tokens ni
+créditos: es lo que un abogado ya sabe cotizar y es lo que de verdad cuesta
+(una consulta sale en centavos, un contrato son diecinueve generaciones).
+
+| | Prueba | Plan |
+|---|---|---|
+| Duración | 14 días | mensual |
+| Documentos de fondo | 5 | 10 por asiento |
+| Consultas | sin contador | sin contador |
+| Tarjeta | no | sí |
+
+| Ruta | Qué hace |
+|---|---|
+| `GET /api/juridico/suscripcion` | Plan, días restantes, documentos usados, asientos, `puedoPagar` y las condiciones. |
+| `POST /api/juridico/suscripcion/checkout` | Liga de pago de Stripe; cantidad = asientos (por default, los miembros de hoy). **Sólo socio.** 503 si el cobro no está configurado en el entorno. |
+
+Cuando el despacho no puede trabajar, el chat y la subida responden **402 con
+`codigo: "JURIDICO_SIN_PLAN"`** y el `estado`; el `motivo` ya viene redactado
+en español y **siempre dice que los casos y documentos siguen ahí**. Enséñalo
+tal cual.
+
+Dos reglas de producto, deliberadas: pasarse de los documentos incluidos en un
+plan de paga **no corta el servicio** —se avisa y se cobra el excedente, porque
+dejar a un abogado a medias de un escrito por una cuota es peor negocio que
+facturarle un paquete—; y `past_due` **sigue dejando trabajar**, porque Stripe
+todavía está reintentando el cobro.
+
 ### Notas de voz
 
 `POST /api/juridico/transcribir` — multipart con el campo `audio`; devuelve

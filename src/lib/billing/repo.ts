@@ -30,6 +30,12 @@ export function prismaBillingRepo(): BillingRepo {
       return u?.id ?? null;
     },
 
+    async aplicarDespachoJuridico(despachoId, data) {
+      const existe = await prisma.juridicoDespacho.findUnique({ where: { id: despachoId }, select: { id: true } });
+      if (!existe) return false;
+      await prisma.juridicoDespacho.update({ where: { id: despachoId }, data });
+      return true;
+    },
     async updateUserBilling(userId, data) {
       await prisma.user.update({ where: { id: userId }, data });
     },

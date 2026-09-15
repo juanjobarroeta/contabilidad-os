@@ -4322,6 +4322,16 @@ model JuridicoDespacho {
   id              String   @id @default(cuid())
   nombre          String
   creadoPorUserId String
+  // prueba | activo | suspendido | cancelado. Nace en prueba: el despacho
+  // trabaja de verdad antes de pagar (ver src/lib/juridico/suscripcion.ts).
+  plan            String   @default("prueba")
+  pruebaHasta     DateTime?
+  /** Asientos pagados (la cantidad de la suscripción en Stripe). */
+  asientos        Int      @default(1)
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  /** Hasta cuándo está pagado el periodo en curso. */
+  periodoFin      DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -4330,6 +4340,8 @@ model JuridicoDespacho {
   clientes JuridicoCliente[]
 
   @@index([creadoPorUserId])
+  @@index([stripeSubscriptionId])
+  @@index([plan])
 }
 
 // Quién trabaja en el despacho y con qué papel. Un usuario puede estar en

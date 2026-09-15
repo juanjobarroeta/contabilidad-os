@@ -13,6 +13,7 @@
 import { prisma } from "@/lib/prisma";
 import { crearAsiento, normalizarEmail, type AsientoJuridico } from "./usuarios";
 import { ErrorJuridico, conflicto, noEncontrado } from "./errores-api";
+import { finDePrueba } from "./suscripcion";
 
 export type RolDespacho = "socio" | "abogado" | "pasante" | "administrativo";
 
@@ -85,7 +86,7 @@ export async function asegurarDespacho(userId: string): Promise<Membresia> {
   if (ya) return ya;
   const u = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
   const nombre = `Despacho de ${(u?.name ?? "").trim() || (u?.email ?? "abogado").split("@")[0]}`.slice(0, 120);
-  const d = await prisma.juridicoDespacho.create({ data: { nombre, creadoPorUserId: userId, miembros: { create: { userId, rol: "socio" } } }, select: { id: true, nombre: true } });
+  const d = await prisma.juridicoDespacho.create({ data: { nombre, creadoPorUserId: userId, plan: "prueba", pruebaHasta: finDePrueba(), miembros: { create: { userId, rol: "socio" } } }, select: { id: true, nombre: true } });
   await prisma.$transaction([
     prisma.juridicoCaso.updateMany({ where: { userId, despachoId: null }, data: { despachoId: d.id } }),
     prisma.juridicoCliente.updateMany({ where: { userId, despachoId: null }, data: { despachoId: d.id } }),
