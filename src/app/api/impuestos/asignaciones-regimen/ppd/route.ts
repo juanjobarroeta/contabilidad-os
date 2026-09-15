@@ -8,20 +8,12 @@ import { invoiceRegimenPeriodContext } from "@/lib/fiscal/regimen-allocation";
 import {
   projectPpdRegimenAllocation,
   proratePpdBaseCentavos,
-  type RegimenPaymentProjectionCode,
+  type PpdRegimenReadinessApiResponse,
+  type PpdRegimenReadinessFailureCode,
 } from "@/lib/fiscal/regimen-payment-allocation";
 import { normalizarUuid, variantesUuid } from "@/lib/fiscal/uuid";
 
 const PENDING_PREVIEW_LIMIT = 25;
-
-type LocalFailureCode =
-  | "PARENT_INVOICE_NOT_FOUND"
-  | "PARENT_UUID_AMBIGUOUS"
-  | "PARENT_INVOICE_NOT_ELIGIBLE"
-  | "FOREIGN_CURRENCY_REQUIRES_REVIEW"
-  | "PAYMENT_AMOUNT_UNAVAILABLE";
-
-type PpdReadinessFailureCode = LocalFailureCode | RegimenPaymentProjectionCode;
 
 const LIMITACIONES = [
   "La proyección usa la asignación del CFDI padre y la FechaPago del REP.",
@@ -273,8 +265,8 @@ export async function GET(req: Request) {
   });
 
   const failures = evaluated.filter((row): row is Extract<typeof row, { ok: false }> => !row.ok);
-  const countCode = (code: PpdReadinessFailureCode) => failures.filter((row) => row.code === code).length;
-  const parentFailureCodes = new Set<PpdReadinessFailureCode>([
+  const countCode = (code: PpdRegimenReadinessFailureCode) => failures.filter((row) => row.code === code).length;
+  const parentFailureCodes = new Set<PpdRegimenReadinessFailureCode>([
     "PARENT_INVOICE_NOT_FOUND",
     "PARENT_UUID_AMBIGUOUS",
     "PARENT_INVOICE_NOT_ELIGIBLE",
@@ -287,7 +279,7 @@ export async function GET(req: Request) {
     || row.code === "REGIME_TRANSITION_REVIEW"
   ).length;
 
-  return NextResponse.json({
+  const response: PpdRegimenReadinessApiResponse = {
     periodo: `${period.year}-${String(period.month).padStart(2, "0")}`,
     estado: links.length === 0 ? "SIN_PAGOS_PPD" : failures.length === 0 ? "COMPLETA" : "PENDIENTE",
     evidenciaCompleta: failures.length === 0,
@@ -306,5 +298,6 @@ export async function GET(req: Request) {
     alcance: "RELACIONES_PPD_CON_FECHA_PAGO_EN_EL_MES",
     usadaEnCalculoAutomatico: false,
     limitaciones: LIMITACIONES,
-  });
+  };
+  return NextResponse.json(response);
 }
