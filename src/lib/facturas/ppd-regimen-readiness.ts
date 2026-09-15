@@ -25,6 +25,8 @@ export function ppdReadinessSummaryParts(
     summary.transicionesRegimen > 0 ? `${summary.transicionesRegimen} por cambio de régimen` : "",
     summary.monedaExtranjera > 0 ? `${summary.monedaExtranjera} en moneda extranjera` : "",
     summary.sinImporte > 0 ? `${summary.sinImporte} sin importe válido` : "",
+    summary.historialPagoIncompleto > 0 ? `${summary.historialPagoIncompleto} con historial de pagos incompleto` : "",
+    summary.sobrepagoAcumulado > 0 ? `${summary.sobrepagoAcumulado} con pagos que exceden el total` : "",
     summary.otros > 0 ? `${summary.otros} para revisión` : "",
   ].filter(Boolean);
 }

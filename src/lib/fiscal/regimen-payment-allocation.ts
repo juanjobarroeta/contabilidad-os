@@ -26,7 +26,9 @@ export type PpdRegimenReadinessFailureCode =
   | "PARENT_UUID_AMBIGUOUS"
   | "PARENT_INVOICE_NOT_ELIGIBLE"
   | "FOREIGN_CURRENCY_REQUIRES_REVIEW"
-  | "PAYMENT_AMOUNT_UNAVAILABLE";
+  | "PAYMENT_AMOUNT_UNAVAILABLE"
+  | "PAYMENT_HISTORY_AMOUNT_UNAVAILABLE"
+  | "CUMULATIVE_PAYMENT_EXCEEDS_PARENT_TOTAL";
 
 export interface PpdRegimenReadinessPendingItem {
   id: string;
@@ -67,6 +69,8 @@ export interface PpdRegimenReadinessApiResponse {
     monedaExtranjera: number;
     sinAsignacion: number;
     transicionesRegimen: number;
+    historialPagoIncompleto: number;
+    sobrepagoAcumulado: number;
     otros: number;
   };
   pagosPendientes: PpdRegimenReadinessPendingItem[];
@@ -78,6 +82,14 @@ export interface PpdRegimenReadinessApiResponse {
 export type IntegerProrationResult =
   | { ok: true; amount: number }
   | { ok: false; code: RegimenPaymentProjectionCode; error: string };
+
+export type PpdPaymentHistoryIntegrityResult =
+  | { ok: true; totalPaidMicropesos: number }
+  | {
+      ok: false;
+      code: "PAYMENT_HISTORY_AMOUNT_UNAVAILABLE" | "CUMULATIVE_PAYMENT_EXCEEDS_PARENT_TOTAL";
+      error: string;
+    };
 
 export interface RegimenAmountAllocation {
   regimenCode: string;
@@ -111,6 +123,52 @@ function normalizedCodes(values: ReadonlyArray<string | null | undefined>): stri
     if (code) codes.add(code);
   }
   return [...codes].sort();
+}
+
+/**
+ * Verifies every stamped REP amount known for one MXN parent before a current
+ * relation can be projected. The endpoint deliberately reads all periods: a
+ * single monthly slice cannot prove that cumulative payments stay within the
+ * parent total.
+ */
+export function validatePpdPaymentHistory(params: {
+  parentTotalMicropesos: number;
+  paymentAmountsMicropesos: ReadonlyArray<number | null>;
+}): PpdPaymentHistoryIntegrityResult {
+  if (!isPositiveSafeInteger(params.parentTotalMicropesos)) {
+    return {
+      ok: false,
+      code: "PAYMENT_HISTORY_AMOUNT_UNAVAILABLE",
+      error: "El total del CFDI padre no permite validar el historial completo de pagos.",
+    };
+  }
+  if (params.paymentAmountsMicropesos.length === 0) {
+    return {
+      ok: false,
+      code: "PAYMENT_HISTORY_AMOUNT_UNAVAILABLE",
+      error: "El historial de REP del CFDI padre tiene importes faltantes o inválidos.",
+    };
+  }
+
+  let totalPaid = BigInt(0);
+  for (const amount of params.paymentAmountsMicropesos) {
+    if (amount === null || !isPositiveSafeInteger(amount)) {
+      return {
+        ok: false,
+        code: "PAYMENT_HISTORY_AMOUNT_UNAVAILABLE",
+        error: "El historial de REP del CFDI padre tiene importes faltantes o inválidos.",
+      };
+    }
+    totalPaid += BigInt(amount);
+  }
+  if (totalPaid > BigInt(params.parentTotalMicropesos)) {
+    return {
+      ok: false,
+      code: "CUMULATIVE_PAYMENT_EXCEEDS_PARENT_TOTAL",
+      error: "Los REP timbrados vinculados exceden en conjunto el total del CFDI padre.",
+    };
+  }
+  return { ok: true, totalPaidMicropesos: Number(totalPaid) };
 }
 
 /**

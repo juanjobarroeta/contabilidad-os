@@ -140,6 +140,23 @@ describe("GET /api/impuestos/asignaciones-regimen/ppd", () => {
     });
   });
 
+  it("reads every stamped REP period for each current parent before projecting", async () => {
+    mocks.paymentFindMany
+      .mockResolvedValueOnce([link()])
+      .mockResolvedValueOnce([link()]);
+    mocks.invoiceFindMany.mockResolvedValue([parent()]);
+
+    await GET(request());
+
+    expect(mocks.paymentFindMany).toHaveBeenNthCalledWith(2, {
+      where: {
+        parentUuid: { in: expect.arrayContaining(["PARENT-UUID", "parent-uuid"]) },
+        pagoInvoice: { companyId: "company-1", tipo: "PAGO", status: "STAMPED" },
+      },
+      select: { id: true, parentUuid: true, impPagado: true },
+    });
+  });
+
   it("requires reviewed evidence for a multi-regime parent month", async () => {
     mocks.companyFindUnique.mockResolvedValue({
       regimenFiscal: "612",
@@ -203,6 +220,54 @@ describe("GET /api/impuestos/asignaciones-regimen/ppd", () => {
       estado: "PENDIENTE",
       resumen: { pendientes: 1, monedaExtranjera: 1, otros: 0 },
       pagosPendientes: [{ code: "FOREIGN_CURRENCY_REQUIRES_REVIEW", parent: { moneda: "USD" } }],
+    });
+  });
+
+  it("fails closed when prior stamped REP amounts are incomplete", async () => {
+    mocks.paymentFindMany
+      .mockResolvedValueOnce([link()])
+      .mockResolvedValueOnce([{ id: "link-1", parentUuid: "parent-uuid", impPagado: null }]);
+    mocks.invoiceFindMany.mockResolvedValue([parent()]);
+
+    const response = await GET(request());
+
+    await expect(response.json()).resolves.toMatchObject({
+      estado: "PENDIENTE",
+      resumen: { pendientes: 1, historialPagoIncompleto: 1, sobrepagoAcumulado: 0, otros: 0 },
+      pagosPendientes: [{ code: "PAYMENT_HISTORY_AMOUNT_UNAVAILABLE", parent: { invoiceId: "parent-1" } }],
+    });
+  });
+
+  it("fails closed when the current relation is absent from the all-period history snapshot", async () => {
+    mocks.paymentFindMany
+      .mockResolvedValueOnce([link()])
+      .mockResolvedValueOnce([{ id: "prior-link", parentUuid: "parent-uuid", impPagado: 580 }]);
+    mocks.invoiceFindMany.mockResolvedValue([parent()]);
+
+    const response = await GET(request());
+
+    await expect(response.json()).resolves.toMatchObject({
+      estado: "PENDIENTE",
+      resumen: { pendientes: 1, historialPagoIncompleto: 1 },
+      pagosPendientes: [{ code: "PAYMENT_HISTORY_AMOUNT_UNAVAILABLE" }],
+    });
+  });
+
+  it("blocks all current projections for a parent whose stamped REP total is excessive", async () => {
+    mocks.paymentFindMany
+      .mockResolvedValueOnce([link()])
+      .mockResolvedValueOnce([
+        { id: "prior-link", parentUuid: "parent-uuid", impPagado: 700 },
+        { id: "link-1", parentUuid: "PARENT-UUID", impPagado: 580 },
+      ]);
+    mocks.invoiceFindMany.mockResolvedValue([parent()]);
+
+    const response = await GET(request());
+
+    await expect(response.json()).resolves.toMatchObject({
+      estado: "PENDIENTE",
+      resumen: { pendientes: 1, historialPagoIncompleto: 0, sobrepagoAcumulado: 1, otros: 0 },
+      pagosPendientes: [{ code: "CUMULATIVE_PAYMENT_EXCEEDS_PARENT_TOTAL", parent: { invoiceId: "parent-1" } }],
     });
   });
 

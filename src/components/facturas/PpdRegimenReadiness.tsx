@@ -147,7 +147,7 @@ export function PpdRegimenReadiness({
       )}
 
       <p className="mt-2 text-[11.5px] text-cos-ink-faint">
-        Esta cola sigue la FechaPago del REP. Es evidencia de preparación: no separa IVA ni cambia cálculos, declaraciones o cierres.
+        Esta cola sigue la FechaPago y valida el historial acumulado de REP. Es evidencia de preparación: no separa IVA ni cambia cálculos, declaraciones o cierres.
       </p>
     </section>
   );
