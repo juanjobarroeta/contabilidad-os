@@ -39,6 +39,8 @@ Calculation callers resolve the legacy primary `Company.regimenFiscal` together 
 
 CSF refresh recognizes the same canonical 19-code catalog. It validates the complete replacement before writing, retains a still-current primary or requires an explicit choice, marks missing regime rows inactive with an end timestamp, and reactivates returning codes instead of deleting them. Calculation, declaration-coverage, obligation, and credit consumers read only active rows. This preserves the latest known lifecycle state without treating the first CSF table row as a legal primary designation.
 
+When a newer CSF contains several regimes but no longer contains the prior primary, both CSF upload surfaces pause before writing and ask the accountant to choose the ContabilidadOS reference regime. Every listed regime remains active; the choice exists only for legacy screens that still require one scalar code.
+
 ## Current coverage audit
 
 There are 19 current product catalog codes and 20 calculation tracks because code 626 must be split into PF and PM. `REGIMEN_MAP` currently contains only 16 codes: 607, 615, and 625 are recognized by the canonical CSF parser but remain absent from the default obligation-template map.

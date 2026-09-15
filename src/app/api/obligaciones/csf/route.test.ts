@@ -138,7 +138,13 @@ describe("POST /api/obligaciones/csf regime sync", () => {
     const response = await POST(request());
 
     expect(response.status).toBe(422);
-    await expect(response.json()).resolves.toMatchObject({ code: "PRIMARY_REQUIRED" });
+    await expect(response.json()).resolves.toMatchObject({
+      code: "PRIMARY_REQUIRED",
+      regimenes: [
+        { codigo: "605", nombre: "Sueldos", desde: "" },
+        { codigo: "612", nombre: "Actividad empresarial", desde: "" },
+      ],
+    });
     expect(mocks.transaction).not.toHaveBeenCalled();
     expect(mocks.obligationFindUnique).not.toHaveBeenCalled();
     expect(mocks.obligationUpsert).not.toHaveBeenCalled();
