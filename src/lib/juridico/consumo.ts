@@ -11,12 +11,15 @@
 // `ai.juridico*`), desglosado por función, y un tope propio del asiento.
 // El tope es generoso a propósito —es una herramienta de trabajo, no un
 // juguete— y lo que hace es avisar y frenar el abuso, no racionar el día.
+// Medido con uso real (sept-2026): una abogada trabajando llega a ~37 USD al
+// mes y una jornada intensa de redacción a ~64, así que 60 frenaba a quien
+// estaba trabajando bien. El operador no tiene tope: no es un asiento.
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "@/lib/prisma";
 import { reportError } from "@/lib/observability";
 
 /** Tope mensual por asiento, en USD. `JURIDICO_USD_MENSUAL` lo sube o lo baja. */
-export const TOPE_MENSUAL_USD = Number(process.env.JURIDICO_USD_MENSUAL ?? "60") || 60;
+export const TOPE_MENSUAL_USD = Number(process.env.JURIDICO_USD_MENSUAL ?? "120") || 120;
 /** A partir de aquí la UI avisa (fracción del tope). */
 export const UMBRAL_AVISO = 0.8;
 
@@ -107,6 +110,13 @@ export async function asegurarConsumoJuridico(userId: string): Promise<DecisionC
   try {
     const consumo = await consumoDelMes(userId);
     if (!consumo.excedido) return { permitido: true, consumo };
+    // El tope es de un ASIENTO: protege a un plan de que un usuario se lo
+    // coma. El operador no es un asiento —es quien opera el producto— y el
+    // tope lo dejó fuera de su propio copiloto a media redacción (14-sep-2026).
+    // (se consulta el flag directo, sin pasar por authz: eso arrastra next-auth
+    // y este módulo lo usan pruebas puras)
+    const quien = await prisma.user.findUnique({ where: { id: userId }, select: { esOperador: true } });
+    if (quien?.esOperador === true) return { permitido: true, consumo };
     return {
       permitido: false,
       consumo,
