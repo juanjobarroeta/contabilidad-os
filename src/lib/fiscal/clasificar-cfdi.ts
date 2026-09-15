@@ -39,6 +39,8 @@ export type SubtipoInversion =
 export interface ClasificacionItem {
   claveProdServ: string;
   importe: number;
+  /** Para nombrar el activo cuando la factura trae varios conceptos. */
+  descripcion?: string | null;
 }
 
 export interface ClasificacionCfdi {
@@ -208,4 +210,130 @@ export function clasificarCfdi(input: ClasificarInput): ClasificacionCfdi {
   // cualquier otro → gasto por defecto, sin bandera (casos atípicos en CFDI de
   // empresa; el contador ajusta si aplica).
   return { naturaleza: "GASTO", fuente: "usoCfdi", fundamento: "Art. 25/27 LISR (gasto deducible)", requiereRevision: false };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UNA FACTURA, VARIOS ACTIVOS.
+//
+// El registro automático tomaba el subtotal COMPLETO del CFDI y el nombre del
+// primer renglón: una factura con laptop, licencia y memoria quedaba como UN
+// activo llamado «Laptop» por el total, depreciándose todo al 30 %. La licencia
+// se amortiza al 15 % y en otra cuenta, y la memoria probablemente ni es activo.
+//
+// Se parte por TRATAMIENTO, no por renglón. Partir por renglón llenaría el
+// registro de basura —«Flete», «Instalación», «Garantía extendida» como activos
+// sueltos— cuando esos costos son parte del MOI del bien que acompañan
+// (Art. 31 LISR: el monto original incluye fletes, seguros, instalación).
+//
+// Entonces: los renglones cuya clave dice de qué bien se trata forman un grupo
+// por tipo; los que no lo dicen se suman al grupo más grande, que es donde
+// contablemente pertenecen. Con un solo tipo, sale un activo por el subtotal
+// entero — exactamente lo de antes.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface GrupoInversion {
+  subtipo: SubtipoInversion;
+  /** MOI del grupo: sus renglones más la parte proporcional de lo accesorio. */
+  importe: number;
+  descripcion: string;
+  requiereRevision: boolean;
+  motivoRevision?: string;
+}
+
+/** El tipo de bien que declara la clave del renglón, o null si no lo dice. */
+function subtipoDeClave(clave: string | null | undefined): SubtipoInversion | null {
+  const c = (clave ?? "").trim();
+  if (!c) return null;
+  if (CLAVE_INTANGIBLE_PREFIJOS.some((p) => c.startsWith(p))) return "intangible";
+  if (c.startsWith("251")) return "transporte";
+  if (c.startsWith("4321")) return "computo";
+  if (c.startsWith("24") || c.startsWith("23")) return "maquinaria";
+  return null;
+}
+
+/**
+ * Los activos que salen de un CFDI de inversión. Vacío si no es inversión.
+ * `subtipoDeclarado` es el del usoCfdi: manda cuando las claves no dicen nada.
+ */
+export function partirInversionPorConcepto(
+  subtipoDeclarado: SubtipoInversion,
+  items: ClasificacionItem[],
+  subtotal: number,
+): GrupoInversion[] {
+  const conTipo = items
+    .map((it) => ({ ...it, subtipo: subtipoDeClave(it.claveProdServ), importe: Number(it.importe) || 0 }))
+    .filter((it) => it.importe > 0);
+
+  const tipos = new Set(conTipo.map((it) => it.subtipo).filter((t): t is SubtipoInversion => t !== null));
+
+  // Ningún renglón dice qué es, o todos dicen lo mismo: un activo por el
+  // subtotal entero (con lo accesorio dentro, que es donde va).
+  if (tipos.size <= 1) {
+    const subtipo = [...tipos][0] ?? subtipoDeclarado;
+    return [
+      {
+        subtipo,
+        importe: subtotal,
+        descripcion: nombreDelGrupo(conTipo) || "Inversión (CFDI)",
+        ...banderas(subtipo, subtotal),
+      },
+    ];
+  }
+
+  // Varios tratamientos en la misma factura. Lo accesorio —fletes, instalación,
+  // lo que la clave no identifica— se va con el grupo más grande: es parte de
+  // su monto original, no un activo aparte.
+  const porTipo = new Map<SubtipoInversion, typeof conTipo>();
+  let accesorio = 0;
+  for (const it of conTipo) {
+    if (!it.subtipo) { accesorio += it.importe; continue; }
+    porTipo.set(it.subtipo, [...(porTipo.get(it.subtipo) ?? []), it]);
+  }
+
+  const grupos = [...porTipo.entries()].map(([subtipo, renglones]) => ({
+    subtipo,
+    importe: renglones.reduce((s, it) => s + it.importe, 0),
+    renglones,
+  }));
+  grupos.sort((a, b) => b.importe - a.importe);
+  if (accesorio > 0 && grupos.length > 0) grupos[0].importe += accesorio;
+
+  // El redondeo no puede perder ni inventar dinero: el mayor absorbe la
+  // diferencia contra el subtotal del CFDI (descuentos, centavos).
+  const suma = grupos.reduce((s, g) => s + g.importe, 0);
+  const dif = Math.round((subtotal - suma) * 100) / 100;
+  if (dif !== 0 && grupos.length > 0) grupos[0].importe = Math.round((grupos[0].importe + dif) * 100) / 100;
+
+  return grupos.map((g) => ({
+    subtipo: g.subtipo,
+    importe: Math.round(g.importe * 100) / 100,
+    descripcion: nombreDelGrupo(g.renglones) || "Inversión (CFDI)",
+    ...banderas(g.subtipo, g.importe),
+  }));
+}
+
+/** El renglón más grande da el nombre; si hay más, se dice cuántos. */
+function nombreDelGrupo(renglones: Array<{ importe: number; descripcion?: string | null }>): string {
+  if (renglones.length === 0) return "";
+  const mayor = renglones.reduce((a, b) => (b.importe > a.importe ? b : a));
+  const base = (mayor.descripcion ?? "").trim();
+  if (!base) return "";
+  return renglones.length > 1 ? `${base} y ${renglones.length - 1} concepto(s) más` : base;
+}
+
+function banderas(subtipo: SubtipoInversion, importe: number): { requiereRevision: boolean; motivoRevision?: string } {
+  if (subtipo === "intangible") {
+    return {
+      requiereRevision: true,
+      motivoRevision:
+        "La clave de producto dice software o licencia: eso se AMORTIZA (Art. 33), no se deprecia. Confirma si es licencia perpetua (cargo diferido 5 %), gasto diferido (15 %) o una suscripción del periodo, que no es activo.",
+    };
+  }
+  if (importe > 0 && importe < MONTO_REVISION_INVERSION) {
+    return {
+      requiereRevision: true,
+      motivoRevision: `El uso dice inversión pero el importe es de $${importe.toFixed(2)}: confirma que sea un activo y no un consumible del periodo.`,
+    };
+  }
+  return { requiereRevision: false };
 }

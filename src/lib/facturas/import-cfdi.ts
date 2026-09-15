@@ -106,7 +106,7 @@ export async function importCfdiFromXml(opts: {
     tipo,
     usoCfdi: cfdi.usoCfdi ?? null,
     usoEsDefault: !cfdi.usoCfdi,
-    items: cfdi.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe })),
+    items: cfdi.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe, descripcion: it.descripcion })),
   });
 
   const invoice = await prisma.invoice.create({
@@ -181,7 +181,7 @@ export async function importCfdiFromXml(opts: {
       tipo,
       usoCfdi: cfdi.usoCfdi ?? null,
       usoEsDefault: !cfdi.usoCfdi,
-      items: cfdi.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe })),
+      items: cfdi.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe, descripcion: it.descripcion })),
     },
   });
 
