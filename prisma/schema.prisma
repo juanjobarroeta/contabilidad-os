@@ -1151,6 +1151,10 @@ model ActivoFijo {
   // Baja / enajenación
   fechaBaja  DateTime?
   motivoBaja String?
+  /// Lo que se cobró por el activo al enajenarlo, sin IVA. Contra el saldo
+  /// pendiente ACTUALIZADO sale la ganancia o la pérdida del Art. 19 LISR.
+  /// Null = dado de baja sin venta (desecho): el saldo se deduce completo.
+  precioVenta Decimal? @db.Decimal(18, 6)
 
   // True cuando lo creó el sync automáticamente desde un CFDI INVERSION (vs alta
   // manual). El contador debe revisar tipo/tasa/tope — sobre todo transporte

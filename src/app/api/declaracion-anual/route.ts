@@ -206,7 +206,9 @@ export async function GET(req: Request) {
   const ajusteAuto = await (async () => {
     try {
       const { resultado, mesesSinPostear } = await cargarAjusteInflacion(companyId, ejercicio);
-      return ajusteParaDeclaracionAnual({ tipoPersona, resultado, mesesSinPostear });
+      // Un RFC que no dice si es PM o PF no puede proponer ajuste: el Art. 44
+      // es de personas morales, y a ciegas se queda en cero con su motivo.
+      return ajusteParaDeclaracionAnual({ tipoPersona: tipoPersona ?? "PF", resultado, mesesSinPostear });
     } catch {
       return { acumulable: 0, deducible: 0, motivo: "No se pudo leer el libro para calcularlo." };
     }
@@ -229,6 +231,14 @@ export async function GET(req: Request) {
       ? parseFloat(searchParams.get("depreciacion") ?? "0")
       : depreciacionRegistro,
     otrasDeduccionesAutorizadas: parseFloat(searchParams.get("otrasDeduccionesAutorizadas") ?? "0"),
+    // Enajenación de activo fijo (Art. 19), del registro: la ganancia acumula y
+    // la pérdida deduce. Sobreescribibles como la depreciación.
+    gananciaEnajenacion: searchParams.has("gananciaEnajenacion")
+      ? parseFloat(searchParams.get("gananciaEnajenacion") ?? "0")
+      : registroDepreciacion.totalGananciaEnajenacion,
+    perdidaEnajenacion: searchParams.has("perdidaEnajenacion")
+      ? parseFloat(searchParams.get("perdidaEnajenacion") ?? "0")
+      : registroDepreciacion.totalPerdidaEnajenacion,
     ptuPagado,
     // Default: el ajuste anual por inflación CALCULADO del libro (Art. 44-46),
     // como la depreciación y las pérdidas. Antes el default era CERO y la cifra
@@ -272,6 +282,11 @@ export async function GET(req: Request) {
         sobreescritoManual: searchParams.has("depreciacion"),
       },
       inversionesExcluidas: { count: "CFDI de inversión (se deducen vía depreciación)", monto: inversionesExcluidas },
+      enajenacionActivos: {
+        count: `${registroDepreciacion.activos.filter((a) => a.enajenacion).length} activo(s) enajenado(s) en el ejercicio (Art. 19)`,
+        monto: registroDepreciacion.totalGananciaEnajenacion - registroDepreciacion.totalPerdidaEnajenacion,
+        sobreescritoManual: searchParams.has("gananciaEnajenacion") || searchParams.has("perdidaEnajenacion"),
+      },
       ajusteInflacion: {
         count: ajusteAuto.motivo ?? "Calculado del libro (Art. 44-46)",
         monto: ajusteAuto.acumulable > 0 ? ajusteAuto.acumulable : -ajusteAuto.deducible,

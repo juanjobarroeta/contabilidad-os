@@ -17,6 +17,8 @@ export type DeclaracionAnualInput = {
   // ── Ingresos ──
   ingresosPorCfdis: number;         // Sum of CFDI ingresos (subtotal)
   otrosIngresos: number;            // Manual: intereses, ganancia cambiaria, etc.
+  /** Ganancia en enajenación de activo fijo (Art. 19): ingreso acumulable. */
+  gananciaEnajenacion?: number;
   ingresosAsimilados?: number;      // Asimilados a salarios recibidos (Art. 94) — acumulable PF
 
   // ── Deducciones ──
@@ -26,6 +28,8 @@ export type DeclaracionAnualInput = {
   aportacionesInfonavitSar: number; // Employer Infonavit/SAR contributions
   depreciacion: number;             // Manual input (fixed assets)
   otrasDeduccionesAutorizadas: number; // Manual input
+  /** Pérdida en enajenación de activo fijo (Art. 19): deducción autorizada. */
+  perdidaEnajenacion?: number;
   ptuPagado: number;                // PTU distributed to employees
 
   // ── Ajustes ──
@@ -108,7 +112,11 @@ export function calcularDeclaracionAnual(input: DeclaracionAnualInput): Declarac
   const otrosIngresos = input.otrosIngresos;
   const ingresosAsimilados = input.ingresosAsimilados ?? 0;
   const ajusteInflAcum = input.ajusteInflacionAcumulable;
-  const totalIngresos = r2(ingresoCfdis + otrosIngresos + ingresosAsimilados + ajusteInflAcum);
+  // La ganancia en enajenación de activo fijo es ingreso acumulable (Art. 19):
+  // se acumula aparte de los CFDIs, porque la venta de un activo no siempre
+  // viaja en una factura de ingreso del ejercicio.
+  const gananciaEnajenacion = input.gananciaEnajenacion ?? 0;
+  const totalIngresos = r2(ingresoCfdis + otrosIngresos + ingresosAsimilados + ajusteInflAcum + gananciaEnajenacion);
 
   // ── Deducciones autorizadas ──
   const compras = input.comprasPorCfdis;
@@ -119,7 +127,11 @@ export function calcularDeclaracionAnual(input: DeclaracionAnualInput): Declarac
   const ptu = input.ptuPagado;
   const ajusteInflDed = input.ajusteInflacionDeducible;
   const otras = input.otrasDeduccionesAutorizadas;
-  const totalDeducciones = r2(compras + sueldos + imss + infonavit + depreciacion + ptu + ajusteInflDed + otras);
+  // Y la pérdida, deducción autorizada del mismo artículo.
+  const perdidaEnajenacion = input.perdidaEnajenacion ?? 0;
+  const totalDeducciones = r2(
+    compras + sueldos + imss + infonavit + depreciacion + ptu + ajusteInflDed + otras + perdidaEnajenacion,
+  );
 
   // ── Utilidad / Pérdida fiscal ──
   const utilidadOPerdida = r2(totalIngresos - totalDeducciones);
