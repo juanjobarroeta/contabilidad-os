@@ -26,6 +26,9 @@ const TIPO_LABEL: Record<string, string> = {
   herramental: "Dados, troqueles, moldes (35%)",
   comunicaciones: "Comunicaciones (10%)",
   maquinaria: "Maquinaria y equipo (10%)",
+  // No es activo FIJO: se amortiza (Art. 33), no se deprecia. Una licencia de
+  // software facturada con uso I04 entraba como equipo de cómputo al 30 %.
+  intangible: "Intangible · software y licencias (15%)",
   otro: "Otro (10%)",
 };
 
@@ -62,6 +65,7 @@ export function ActivoFijoView() {
   const [data, setData] = useState<{ activos: ActivoRow[]; totalDepreciacionEjercicio: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
+  const [guardando, setGuardando] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!activeCompany) return;
@@ -75,6 +79,29 @@ export function ActivoFijoView() {
   }, [activeCompany, ejercicio]);
 
   useEffect(() => { load(); }, [load]);
+
+  // CORREGIR EL TIPO ES LA ACCIÓN QUE FALTABA. La ficha decía «auto — revisa
+  // tipo/tasa» y al lado sólo había un bote de basura: la única forma de
+  // arreglar un activo mal clasificado era borrarlo, así que la bandera de
+  // auto-creado no se limpiaba nunca. El endpoint existía desde el principio.
+  async function cambiarTipo(id: string, tipo: string) {
+    setGuardando(id);
+    try {
+      const res = await fetch(`/api/activos/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tipo }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => null);
+        alert(d?.error ?? "No se pudo cambiar el tipo");
+        return;
+      }
+      await load();
+    } finally {
+      setGuardando(null);
+    }
+  }
 
   async function eliminar(id: string) {
     if (!confirm("¿Eliminar este activo del registro?")) return;
@@ -172,10 +199,23 @@ export function ActivoFijoView() {
                       )}
                     </td>
                     <td className="px-3 py-3 text-right font-mono text-cos-ink-soft"><Money value={a.depreciacion.saldoPendiente} /></td>
-                    <td className="px-3 py-3 text-right">
-                      <button onClick={() => eliminar(a.id)} className="text-cos-ink-faint hover:text-cos-red-ink" title="Eliminar">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                    <td className="px-3 py-3">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <select
+                          value={a.tipo}
+                          disabled={guardando === a.id}
+                          onChange={(e) => cambiarTipo(a.id, e.target.value)}
+                          title="Corregir el tipo: cambia la tasa y la cuenta"
+                          className="max-w-[190px] rounded-control border border-cos-line bg-cos-card px-2 py-1 text-[12px] text-cos-ink disabled:opacity-50"
+                        >
+                          {Object.entries(TIPO_LABEL).map(([id, label]) => (
+                            <option key={id} value={id}>{label}</option>
+                          ))}
+                        </select>
+                        <button onClick={() => eliminar(a.id)} className="text-cos-ink-faint hover:text-cos-red-ink" title="Eliminar">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

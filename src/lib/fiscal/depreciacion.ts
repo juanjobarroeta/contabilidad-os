@@ -19,6 +19,11 @@ export type TipoActivo =
   | "herramental"
   | "comunicaciones"
   | "maquinaria"
+  // LO QUE NO SE TOCA: licencias de software, marcas, gastos preoperativos.
+  // No se deprecian (Art. 34, bienes tangibles) sino que se AMORTIZAN (Art. 33),
+  // en otra cuenta y a otra tasa. Sin esta cubeta, una licencia facturada con
+  // I04 entraba como equipo de cómputo al 30 %.
+  | "intangible"
   | "otro";
 
 /** Por ciento máximo anual de deducción por tipo de activo (Art. 34 LISR). */
@@ -30,6 +35,11 @@ export const TASA_DEPRECIACION: Record<TipoActivo, { tasa: number; fundamento: s
   herramental:    { tasa: 0.35, fundamento: "Art. 34-XII LISR (dados, troqueles, moldes)" },
   comunicaciones: { tasa: 0.10, fundamento: "Art. 34-XIII/XIV LISR (aprox.)", aprox: true },
   maquinaria:     { tasa: 0.10, fundamento: "Art. 35 LISR (10% general; varía por actividad)", aprox: true },
+  // 15 % de gastos diferidos (Art. 33-III). Una licencia PERPETUA puede ser
+  // cargo diferido al 5 % (Art. 33-I) y una suscripción mensual no es activo
+  // sino gasto del periodo: por eso va marcada como aproximada, para que el
+  // contador la confirme.
+  intangible:     { tasa: 0.15, fundamento: "Art. 33-III LISR (gastos diferidos: regalías, asistencia técnica y otros)", aprox: true },
   otro:           { tasa: 0.10, fundamento: "Art. 34/35 LISR (default conservador)", aprox: true },
 };
 
@@ -182,6 +192,7 @@ export function tipoActivoDesdeSubtipo(subtipo: string | null | undefined): Tipo
     case "herramental": return "herramental";
     case "comunicaciones": return "comunicaciones";
     case "maquinaria": return "maquinaria";
+    case "intangible": return "intangible";
     default: return "otro";
   }
 }
