@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { computeTaxPosition } from "@/lib/impuestos";
+import { calculationForApi } from "@/lib/fiscal/regimen-capability-api";
 import { getAsimiladosResumen } from "@/lib/fiscal/asimilados";
 import type { TaxDeclarationType } from "@prisma/client";
 
@@ -51,7 +52,11 @@ export async function GET(req: Request) {
   // computeTaxPosition is THE source of truth for the tax math (régimen-aware
   // ISR + base-REP IVA, flujo de efectivo). This route only adds presentation
   // extras: the invoices table, nómina figures and saved-declaration state.
-  const pos = await computeTaxPosition(companyId, year, month, isPreliminar ? to : undefined);
+  const posOrResponse = await calculationForApi(
+    computeTaxPosition(companyId, year, month, isPreliminar ? to : undefined),
+  );
+  if (posOrResponse instanceof NextResponse) return posOrResponse;
+  const pos = posOrResponse;
 
   // ── Presentation extras (not duplicated in the engine) ────────────────────
   const [

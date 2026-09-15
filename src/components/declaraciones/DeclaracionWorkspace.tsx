@@ -17,6 +17,7 @@ import { IvaPanel, IsrPanel, RetencionesPanel } from "@/components/papeles/panel
 import { FaltantesUploader } from "@/components/declaraciones/FaltantesUploader";
 import { ListoParaPresentar } from "@/components/declaraciones/ListoParaPresentar";
 import { periodoMensualPorDefecto } from "@/lib/fiscal/periodo-operativo";
+import type { RegimenCalculationErrorPayload } from "@/lib/fiscal/regimen-capabilities";
 
 // ── Types (mirror /api/impuestos/cierre and /api/papeles/iva) ──────────────────
 type Estado = "FILED" | "PENDING" | "OVERDUE" | "UPCOMING";
@@ -124,6 +125,7 @@ export function DeclaracionWorkspace() {
   const [data, setData] = useState<CierreData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [calculationUnavailable, setCalculationUnavailable] = useState<RegimenCalculationErrorPayload | null>(null);
 
   // Presentar
   const [fecha, setFecha] = useState("");
@@ -186,20 +188,29 @@ export function DeclaracionWorkspace() {
 
   const load = useCallback(async () => {
     if (!activeCompany) return;
-    setLoading(true); setError("");
+    setLoading(true); setError(""); setCalculationUnavailable(null);
     try {
       const res = await fetch(`/api/impuestos/cierre?companyId=${activeCompany.id}&month=${month}&year=${year}`);
-      if (!res.ok) throw new Error();
-      const d: CierreData = await res.json();
-      setData(d);
-      setFecha(d.federal.fechaPresentacion ? d.federal.fechaPresentacion.substring(0, 10) : "");
-      setDiotAcuse(d.diot?.acuseUrl ?? "");
+      const d = await res.json();
+      if (!res.ok) {
+        if (d?.code === "NOT_SUPPORTED") {
+          setData(null);
+          setCalculationUnavailable(d as RegimenCalculationErrorPayload);
+          return;
+        }
+        throw new Error(typeof d?.error === "string" ? d.error : "");
+      }
+      setCalculationUnavailable(null);
+      const cierre = d as CierreData;
+      setData(cierre);
+      setFecha(cierre.federal.fechaPresentacion ? cierre.federal.fechaPresentacion.substring(0, 10) : "");
+      setDiotAcuse(cierre.diot?.acuseUrl ?? "");
       setAcuseParsed(null); setAcuseError("");
-    } catch {
+    } catch (e) {
       // Limpia data para que el error sea excluyente: nunca cifras de otro mes
       // bajo el encabezado del mes nuevo en la pantalla donde se presenta.
       setData(null);
-      setError("No se pudo cargar la declaración del mes");
+      setError(e instanceof Error && e.message ? e.message : "No se pudo cargar la declaración del mes");
     } finally { setLoading(false); }
   }, [activeCompany, month, year]);
 
@@ -324,15 +335,17 @@ export function DeclaracionWorkspace() {
         </div>
       </div>
 
-      <FaltantesBanner
-        faltantes={faltantes}
-        empresa={{ companyId: activeCompany.id, rfc: activeCompany.rfc, razonSocial: activeCompany.razonSocial }}
-        onUploaded={() => { loadFaltantes(); load(); }}
-      />
+      {!calculationUnavailable && (
+        <FaltantesBanner
+          faltantes={faltantes}
+          empresa={{ companyId: activeCompany.id, rfc: activeCompany.rfc, razonSocial: activeCompany.razonSocial }}
+          onUploaded={() => { loadFaltantes(); load(); }}
+        />
+      )}
 
       {/* Tabs */}
-      {activeCompany && <ListoParaPresentar companyId={activeCompany.id} month={month} year={year} />}
-      <div role="tablist" aria-label="Secciones de la declaración" className="mt-3 flex gap-1 border-b border-cos-line">
+      {!calculationUnavailable && activeCompany && <ListoParaPresentar companyId={activeCompany.id} month={month} year={year} />}
+      {!calculationUnavailable && <div role="tablist" aria-label="Secciones de la declaración" className="mt-3 flex gap-1 border-b border-cos-line">
         {TABS.map((t, i) => (
           <button
             key={t.id}
@@ -365,9 +378,28 @@ export function DeclaracionWorkspace() {
             )}
           </button>
         ))}
-      </div>
+      </div>}
 
-      {error && !data ? (
+      {calculationUnavailable ? (
+        <section className="mt-6 rounded-card border border-cos-amber bg-cos-amber-tint p-5 text-cos-amber-ink">
+          <div className="flex items-start gap-3">
+            <Scale className="mt-0.5 h-5 w-5 flex-none" />
+            <div>
+              <h2 className="text-[16px] font-semibold">{calculationUnavailable.title}</h2>
+              <p className="mt-1 text-[14px] leading-6">{calculationUnavailable.error}</p>
+              {calculationUnavailable.regimen.code && (
+                <p className="mt-2 text-[13px] font-medium">
+                  Régimen {calculationUnavailable.regimen.code}
+                  {calculationUnavailable.regimen.label ? ` · ${calculationUnavailable.regimen.label}` : ""}
+                </p>
+              )}
+              <p className="mt-3 text-[13px] leading-5">
+                Tus CFDI, documentos y declaraciones presentadas siguen disponibles; sólo se desactiva el cálculo automático para evitar mostrar una fórmula de otro régimen.
+              </p>
+            </div>
+          </div>
+        </section>
+      ) : error && !data ? (
         // Falla de carga: rama excluyente con salida. Antes el gate `!data`
         // dejaba el spinner girando para siempre sobre la pantalla de presentar.
         <Alert tone="danger" className="mt-5" action={<RetryButton onClick={load} />}>

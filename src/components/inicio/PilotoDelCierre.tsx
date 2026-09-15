@@ -43,10 +43,15 @@ interface DashboardData {
     periodosTotales?: number;
   };
   taxThisMonth: {
-    iva: number;
+    iva: number | null;
     isr: number | null;
-    total: number;
-    saldoAFavor: number;
+    total: number | null;
+    saldoAFavor: number | null;
+    calculationUnavailable: {
+      title: string;
+      error: string;
+      regimen: { code: string | null; label: string | null };
+    } | null;
     periodoFmt: string;
     modo: "por_presentar" | "en_curso";
     venceFmt: string;
@@ -165,6 +170,7 @@ export function PilotoDelCierre() {
   const algunoEstimado = conMonto.some((o) => o.montoEstimado);
   const declaraEstado: EstadoPaso = vencidas.length > 0 ? "bloquea" : "atencion";
   const tax = dash.taxThisMonth;
+  const calculoAsistido = tax.calculationUnavailable;
 
   // ── Paso 5 · Cierre ──
   const posteo = check(readiness, "posteo");
@@ -261,6 +267,8 @@ export function PilotoDelCierre() {
       sub:
         vencidas.length > 0
           ? `${vencidas.length} obligación${vencidas.length === 1 ? "" : "es"} vencida${vencidas.length === 1 ? "" : "s"}`
+          : calculoAsistido
+            ? calculoAsistido.title
           : `Declaración de ${tax.periodoFmt}`,
       estado: declaraEstado,
       cuerpo:
@@ -314,9 +322,14 @@ export function PilotoDelCierre() {
               Corren actualización y recargos (CFF 17-A y 21).
             </p>
           </div>
+        ) : calculoAsistido ? (
+          <div className="rounded-control bg-cos-amber-tint px-3 py-2.5 text-[13px] text-cos-amber-ink">
+            <p className="font-semibold">{calculoAsistido.title}</p>
+            <p className="mt-1 leading-5">{calculoAsistido.error}</p>
+          </div>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Cifra label="IVA" valor={<Money value={tax.iva} weight={700} />} />
+            <Cifra label="IVA" valor={<Money value={tax.iva!} weight={700} />} />
             <Cifra label="ISR" valor={tax.isr !== null ? <Money value={tax.isr} weight={700} /> : "—"} />
             <Cifra
               label={tax.modo === "por_presentar" ? "Vence" : "Corte al día"}
@@ -325,13 +338,13 @@ export function PilotoDelCierre() {
             />
             <Cifra
               label="Saldo a favor"
-              valor={<Money value={tax.saldoAFavor} weight={700} />}
-              tono={tax.saldoAFavor > 0 ? "jade" : undefined}
+              valor={<Money value={tax.saldoAFavor!} weight={700} />}
+              tono={(tax.saldoAFavor ?? 0) > 0 ? "jade" : undefined}
             />
           </div>
         ),
       cta: {
-        label: vencidas.length > 0 ? "Presentar ahora" : "Preparar presentación",
+        label: vencidas.length > 0 ? "Presentar ahora" : calculoAsistido ? "Revisar con contador" : "Preparar presentación",
         // Con vencidas, aterrizar en el PERIODO VENCIDO (el mes cerrado
         // anterior — obligacion-proxima sólo evalúa ése), no en el mes en
         // curso: «Presentar ahora» debe llevar a lo que venció (pág. 11).

@@ -36,6 +36,7 @@ import { NOMBRES_EXPEDIENTE } from "@/lib/expediente/tools";
 import { ejecutarHerramientaExpediente } from "@/lib/expediente/ejecutar";
 import { NOMBRES_SOLICITUDES } from "@/lib/solicitudes/tools";
 import { ejecutarHerramientaSolicitud } from "@/lib/solicitudes/ejecutar";
+import { isRegimenCalculationNotSupportedError } from "@/lib/fiscal/regimen-capabilities";
 
 type ToolInput = Record<string, unknown>;
 
@@ -60,6 +61,15 @@ export type ToolContext = {
 };
 
 const MXN = (n: number) => n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
+
+function unsupportedCalculationToolResult(error: unknown): string | null {
+  if (!isRegimenCalculationNotSupportedError(error)) return null;
+  return JSON.stringify({
+    ...error.toPayload(),
+    instruccion_para_el_asistente:
+      "Explica que ContabilidadOS no generó importes para evitar aplicar la fórmula de otro régimen. No estimes ni sustituyas el cálculo; indica que requiere revisión del contador.",
+  });
+}
 
 export async function executeToolCall(
   toolName: string,
@@ -179,12 +189,18 @@ export async function executeToolCall(
       const defaultPeriod = periodoMensualPorDefecto();
       const year = typeof input.year === "number" ? input.year : defaultPeriod.year;
       const month = typeof input.month === "number" ? input.month : defaultPeriod.month;
-      const checklist = await checklistDeclaracion(companyId, year, month);
-      return JSON.stringify({
-        ...checklist,
-        instruccion_para_el_asistente:
-          "Presenta el checklist en el orden dado: primero los puntos en 'atencion' y 'pendiente' con su 'detalle' textual, y después confirma brevemente lo que está 'listo' (omite los 'no-aplica'). Menciona siempre la fecha límite y los días restantes, o que ya venció. No inventes montos ni conteos: usa los del checklist.",
-      });
+      try {
+        const checklist = await checklistDeclaracion(companyId, year, month);
+        return JSON.stringify({
+          ...checklist,
+          instruccion_para_el_asistente:
+            "Presenta el checklist en el orden dado: primero los puntos en 'atencion' y 'pendiente' con su 'detalle' textual, y después confirma brevemente lo que está 'listo' (omite los 'no-aplica'). Menciona siempre la fecha límite y los días restantes, o que ya venció. No inventes montos ni conteos: usa los del checklist.",
+        });
+      } catch (error) {
+        const unsupported = unsupportedCalculationToolResult(error);
+        if (unsupported) return unsupported;
+        throw error;
+      }
     }
     case "query_despacho_panorama":
       return queryDespachoPanorama(context);
@@ -223,14 +239,24 @@ export async function executeToolCall(
         year = presentado ? current.year : prev.year;
         month = presentado ? current.month : prev.month;
       }
-      const [pos, renglonesIeps, empresaIeps] = await Promise.all([
-        computeTaxPosition(companyId, year, month),
-        // `computeTaxPosition` calcula IVA e ISR y NO toca IEPS. Sin esto el
-        // copiloto contestaba «no tengo el IEPS» de un impuesto que la app ya
-        // calcula en el cierre: cada «no puedo» suyo es una tool que falta.
-        leerRenglonesIeps(prisma, companyId, year, month),
-        prisma.company.findUnique({ where: { id: companyId }, select: { iepsAcredita: true } }),
-      ]);
+      let calculation: Awaited<ReturnType<typeof computeTaxPosition>>;
+      let renglonesIeps: Awaited<ReturnType<typeof leerRenglonesIeps>>;
+      let empresaIeps: { iepsAcredita: boolean | null } | null;
+      try {
+        [calculation, renglonesIeps, empresaIeps] = await Promise.all([
+          computeTaxPosition(companyId, year, month),
+          // `computeTaxPosition` calcula IVA e ISR y NO toca IEPS. Sin esto el
+          // copiloto contestaba «no tengo el IEPS» de un impuesto que la app ya
+          // calcula en el cierre: cada «no puedo» suyo es una tool que falta.
+          leerRenglonesIeps(prisma, companyId, year, month),
+          prisma.company.findUnique({ where: { id: companyId }, select: { iepsAcredita: true } }),
+        ]);
+      } catch (error) {
+        const unsupported = unsupportedCalculationToolResult(error);
+        if (unsupported) return unsupported;
+        throw error;
+      }
+      const pos = calculation;
       const pIeps = periodoIeps(year, month, renglonesIeps);
       const decisionIeps: DecisionAcreditamiento =
         empresaIeps?.iepsAcredita == null ? "sin_decidir" : empresaIeps.iepsAcredita ? "acredita" : "no_acredita";
@@ -633,7 +659,14 @@ async function proponerFijarCoeficiente(input: ToolInput, companyId: string, con
   const anio = typeof input.anio === "number" ? input.anio : year;
 
   const { checklistDeclaracion } = await import("../fiscal/checklist-declaracion");
-  const checklist = await checklistDeclaracion(companyId, year, month);
+  let checklist: Awaited<ReturnType<typeof checklistDeclaracion>>;
+  try {
+    checklist = await checklistDeclaracion(companyId, year, month);
+  } catch (error) {
+    const unsupported = unsupportedCalculationToolResult(error);
+    if (unsupported) return unsupported;
+    throw error;
+  }
   const isr = checklist.posicion.isr;
 
   const valor = typeof input.valor === "number" ? input.valor : (isr.coeficienteSugerido ?? null);

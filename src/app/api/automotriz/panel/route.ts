@@ -15,6 +15,7 @@ import { absorcionPorMes, calcularResultados } from "@/lib/automotriz/resultados
 import { computeTaxPosition } from "@/lib/impuestos";
 import { retencionesDelPeriodo } from "@/lib/fiscal/retenciones";
 import { isanDelPeriodo } from "@/lib/automotriz/isan-periodo";
+import { calculationForApi } from "@/lib/fiscal/regimen-capability-api";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const DIA_MS = 24 * 60 * 60 * 1000;
@@ -43,11 +44,7 @@ export const GET = withAuthz(async (req: Request) => {
   // pasado, y eso es lo que decide si alguien hace algo hoy.
   const inicioPrevio = new Date(year, month - 2, 1);
 
-  const [
-    enPiso, ordenesAbiertas, promesasVencidas, prospectosAbiertos, seguimientosVencidos,
-    resultados, serieAbsorcion, ordenesFacturadas, refaccionesMostrador, fiscal, retenciones,
-    isan, timbrado, interesMes, interesPrevio, vendidasPrevio, resultadosPrevio, sinCfdiCompra,
-  ] = await Promise.all([
+  const calculation = await calculationForApi(Promise.all([
     prisma.vehiculo.findMany({
       where: { companyId, estado: { in: ["DISPONIBLE", "APARTADO"] } },
       select: {
@@ -145,7 +142,13 @@ export const GET = withAuthz(async (req: Request) => {
         costoCompra: { gt: 0 },
       },
     }),
-  ]);
+  ]));
+  if (calculation instanceof NextResponse) return calculation;
+  const [
+    enPiso, ordenesAbiertas, promesasVencidas, prospectosAbiertos, seguimientosVencidos,
+    resultados, serieAbsorcion, ordenesFacturadas, refaccionesMostrador, fiscal, retenciones,
+    isan, timbrado, interesMes, interesPrevio, vendidasPrevio, resultadosPrevio, sinCfdiCompra,
+  ] = calculation;
 
   const dias = (v: { fechaCompra: Date | null }) =>
     v.fechaCompra ? Math.floor((hoy.getTime() - v.fechaCompra.getTime()) / DIA_MS) : null;

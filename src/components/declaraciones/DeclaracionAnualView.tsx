@@ -6,9 +6,10 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import { Money } from "@/components/ui";
 import { AjusteInflacionPanel } from "./AjusteInflacionPanel";
 import type { EvidenciaPresentacion } from "@/lib/fiscal/presentacion";
+import type { RegimenCalculationErrorPayload } from "@/lib/fiscal/regimen-capabilities";
 import {
   Calculator, Loader2, CheckCircle2, AlertCircle, Save,
-  FileText, TrendingUp, TrendingDown, Pencil, X, Download,
+  FileText, TrendingUp, TrendingDown, Pencil, X, Download, Scale,
 } from "lucide-react";
 
 type DecResult = {
@@ -48,6 +49,7 @@ export function DeclaracionAnualView() {
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<DecResult | null>(null);
   const [error, setError] = useState("");
+  const [calculationUnavailable, setCalculationUnavailable] = useState<RegimenCalculationErrorPayload | null>(null);
   const [editMode, setEditMode] = useState(false);
 
   // Manual overrides. `depreciacion` arranca vacío: cuando está vacío, la API
@@ -68,6 +70,8 @@ export function DeclaracionAnualView() {
     if (!activeCompany) return;
     setLoading(true);
     setError("");
+    setResult(null);
+    setCalculationUnavailable(null);
     try {
       // Omitir overrides vacíos (p.ej. depreciacion) para que la API aplique su
       // default calculado en vez de un 0 que pisaría el registro.
@@ -81,7 +85,13 @@ export function DeclaracionAnualView() {
       });
       const res = await fetch(`/api/declaracion-anual?${params}`);
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Error");
+      if (!res.ok) {
+        if (data?.code === "NOT_SUPPORTED") {
+          setCalculationUnavailable(data as RegimenCalculationErrorPayload);
+          return;
+        }
+        throw new Error(data.error ?? "Error");
+      }
       setResult(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
@@ -148,7 +158,26 @@ export function DeclaracionAnualView() {
         </div>
       )}
 
-      {loading ? (
+      {calculationUnavailable ? (
+        <section className="rounded-card border border-cos-amber bg-cos-amber-tint p-5 text-cos-amber-ink">
+          <div className="flex items-start gap-3">
+            <Scale className="mt-0.5 h-5 w-5 flex-none" />
+            <div>
+              <h2 className="font-semibold">{calculationUnavailable.title}</h2>
+              <p className="mt-1 text-sm leading-6">{calculationUnavailable.error}</p>
+              {calculationUnavailable.regimen.code && (
+                <p className="mt-2 text-xs font-medium">
+                  Régimen {calculationUnavailable.regimen.code}
+                  {calculationUnavailable.regimen.label ? ` · ${calculationUnavailable.regimen.label}` : ""}
+                </p>
+              )}
+              <p className="mt-3 text-xs leading-5">
+                Las declaraciones importadas del SAT permanecen en el historial. El cálculo automático queda desactivado para no sustituirlo con una fórmula de otro régimen.
+              </p>
+            </div>
+          </div>
+        </section>
+      ) : loading ? (
         <div className="flex items-center justify-center gap-2 py-12 text-sm text-cos-ink-soft">
           <Loader2 className="h-5 w-5 animate-spin" /> Calculando declaración anual...
         </div>

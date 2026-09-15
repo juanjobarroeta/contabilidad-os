@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { calcularDeclaracionAnual, type DeclaracionAnualInput } from "./declaracion-anual";
+import { RegimenCalculationNotSupportedError } from "./fiscal/regimen-capabilities";
 
 // ─── Golden tests: ISR anual PF (Art. 152 LISR) por ejercicio ────────────────
 // La tarifa del Art. 152 se actualiza por inflación (Art. 152, último párrafo,
@@ -84,18 +85,19 @@ describe("ISR anual PF Art. 152 — tarifa seleccionada por ejercicio", () => {
   });
 });
 
-describe("RESICO PF (Art. 113-E) — tabla estatutaria, no versionada", () => {
-  it("aplica la tasa de ley sobre ingresos cobrados en cualquier ejercicio", () => {
-    // Art. 113-E LISR: hasta 300,000 → 1.00%. Tasas fijadas en ley (reforma
-    // DOF 12-nov-2021), sin actualización anual por Anexo 8.
-    for (const ejercicio of [2024, 2026]) {
-      const r = calcularDeclaracionAnual({
-        ...inputPF(ejercicio, 250_000),
-        regimenFiscal: "626",
-        resicoPfIngresos: 250_000,
-      });
-      expect(r.tasaIsr).toBe(0.01);
-      expect(r.isrDelEjercicio).toBe(2_500);
-    }
+describe("annual regimen capability gate", () => {
+  it("does not invent an annual RESICO PF amount", () => {
+    expect(() => calcularDeclaracionAnual({
+      ...inputPF(2026, 250_000),
+      regimenFiscal: "626",
+    })).toThrowError(RegimenCalculationNotSupportedError);
+  });
+
+  it("does not apply the 30% PM formula to an unsupported PM regimen", () => {
+    expect(() => calcularDeclaracionAnual({
+      ...inputPF(2026, 250_000),
+      tipoPersona: "PM",
+      regimenFiscal: "626",
+    })).toThrowError(RegimenCalculationNotSupportedError);
   });
 });

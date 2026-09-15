@@ -3,6 +3,7 @@ import { normalizarUuid, variantesUuid } from "./fiscal/uuid";
 import { registrarYNotificar } from "./notificaciones";
 import { empresasAccesiblesIds } from "./authz";
 import { computeTaxPosition } from "./impuestos";
+import { isRegimenCalculationNotSupportedError } from "./fiscal/regimen-capabilities";
 import {
   diasParaVencimientoMensual,
   debeEnviarProyeccion,
@@ -127,6 +128,7 @@ export async function notifyProyeccionDeclaracion(
         cuerpo,
       });
     } catch (e) {
+      if (isRegimenCalculationNotSupportedError(e)) continue;
       console.error(`[notify-proyeccion] empresa ${c.id} falló:`, e);
     }
   }

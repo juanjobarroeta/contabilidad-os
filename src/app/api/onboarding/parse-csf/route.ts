@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { AuthzError, requireUser } from "@/lib/authz";
 import { meteredCreate } from "@/lib/costos/anthropic";
 import { asegurarUsoIA, respuestaTopeIA } from "@/lib/ai/guardia";
+import { VALID_REGIMENES } from "@/lib/fiscal/regimen-capabilities";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/onboarding/parse-csf
@@ -29,12 +30,6 @@ export const runtime = "nodejs";
 export const maxDuration = 120;
 
 const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY
-
-// SAT régimen catalog — subset we support + validation
-const VALID_REGIMENES = new Set([
-  "601", "603", "605", "606", "607", "608", "610", "611", "612", "614",
-  "615", "616", "620", "621", "622", "623", "624", "625", "626",
-]);
 
 // Prompt engineered for maximum structured output. Claude is told EXACTLY
 // what schema to produce, and to leave fields null rather than guess.

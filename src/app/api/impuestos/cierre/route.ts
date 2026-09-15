@@ -17,6 +17,7 @@ import { construirContexto } from "@/lib/fiscal/rules";
 import { registrarBitacora } from "@/lib/audit";
 import { leerRenglonesIeps } from "@/lib/fiscal/ieps/leer";
 import { aPagarIeps, periodoIeps, type DecisionAcreditamiento } from "@/lib/fiscal/ieps/periodo";
+import { calculationForApi } from "@/lib/fiscal/regimen-capability-api";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Cierre mensual — the "ready to file" workspace for a single period.
@@ -105,7 +106,7 @@ export async function GET(req: Request) {
           iepsAcredita: true, iepsAcreditaAt: true, iepsAcreditaNota: true,
         },
       }),
-      computeTaxPosition(companyId, year, month),
+      calculationForApi(computeTaxPosition(companyId, year, month)),
       detectComplementosPendientes(companyId),
       prisma.companyObligation.findMany({ where: { companyId, activa: true } }),
       prisma.taxDeclaration.findMany({
@@ -128,6 +129,8 @@ export async function GET(req: Request) {
       }),
       getAsimiladosResumen(companyId, year, month),
     ]);
+
+  if (pos instanceof NextResponse) return pos;
 
   const has = (tipo: string) => obligaciones.some((o) => o.tipo === tipo);
   const declOf = (tipo: string) => declaraciones.find((d) => d.tipo === tipo);
@@ -491,7 +494,9 @@ export async function POST(req: Request) {
 
   if (action === "file-federal" || action === "unfile-federal") {
     const filing = action === "file-federal";
-    const pos = await computeTaxPosition(companyId, year, month);
+    const posOrResponse = await calculationForApi(computeTaxPosition(companyId, year, month));
+    if (posOrResponse instanceof NextResponse) return posOrResponse;
+    const pos = posOrResponse;
     const nominaRet = await nominaRetencionesMes(companyId, from, to);
     const status = filing ? "FILED" : "CALCULATED";
 

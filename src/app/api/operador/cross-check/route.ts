@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isOperador } from "@/lib/authz";
 import { computeTaxPosition } from "@/lib/impuestos";
+import { calculationForApi } from "@/lib/fiscal/regimen-capability-api";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -57,7 +58,7 @@ export async function GET(req: Request) {
   const from = new Date(Date.UTC(year, month - 1, 1));
   const to = new Date(Date.UTC(year, month, 1));
 
-  const [pos, emitidas, recibidas, priorDecls] = await Promise.all([
+  const calculation = await calculationForApi(Promise.all([
     computeTaxPosition(company.id, year, month),
     prisma.invoice.count({ where: { companyId: company.id, tipo: "INGRESO", status: "STAMPED", fecha: { gte: from, lt: to } } }),
     prisma.invoice.count({ where: { companyId: company.id, tipo: "EGRESO", status: "STAMPED", fecha: { gte: from, lt: to } } }),
@@ -72,7 +73,9 @@ export async function GET(req: Request) {
       select: { tipo: true, periodo: true, isrPagar: true, ivaSaldoFavor: true, status: true },
       orderBy: { periodo: "asc" },
     }),
-  ]);
+  ]));
+  if (calculation instanceof NextResponse) return calculation;
+  const [pos, emitidas, recibidas, priorDecls] = calculation;
 
   // Which prior months (Jan..month-1) are missing each declaration tipo?
   const expectedMonths: string[] = [];

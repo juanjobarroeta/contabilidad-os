@@ -39,6 +39,7 @@ import {
 import { identidadCompleta } from "@/lib/hospital/episodio";
 import { DESVIACION_ALERTA_PCT, desviacionPct } from "@/lib/hospital/plan";
 import { horaLocal } from "@/lib/hospital/tz";
+import { calculationForApi } from "@/lib/fiscal/regimen-capability-api";
 
 const DIA_MS = 24 * 60 * 60 * 1000;
 const MAX_MOVIMIENTOS = 8;
@@ -109,11 +110,7 @@ export const GET = withAuthz(async (req: Request) => {
     conciliacionDetalles: { select: { montoAsignado: true } },
   } as const;
 
-  const [
-    config, camas, cirugias, porCobrarDb, porPagarDb, saldosBanco,
-    fiscal, retenciones, medicos, activos, altasRecientes, lotesDb,
-    insumosConMinimo, existencias, pagadoresPorVencer, altasP1, planesPendientes,
-  ] = await Promise.all([
+  const calculation = await calculationForApi(Promise.all([
     prisma.hospConfig.findUnique({
       where: { companyId },
       select: { diasAlertaCaducidad: true, topeAutorizacion: true },
@@ -213,7 +210,13 @@ export const GET = withAuthz(async (req: Request) => {
       },
       orderBy: { fechaProgramada: "asc" },
     }),
-  ]);
+  ]));
+  if (calculation instanceof NextResponse) return calculation;
+  const [
+    config, camas, cirugias, porCobrarDb, porPagarDb, saldosBanco,
+    fiscal, retenciones, medicos, activos, altasRecientes, lotesDb,
+    insumosConMinimo, existencias, pagadoresPorVencer, altasP1, planesPendientes,
+  ] = calculation;
 
   // ── Ocupación y cirugías ──
   const camasTotal = camas.reduce((s, c) => s + c._count._all, 0);
