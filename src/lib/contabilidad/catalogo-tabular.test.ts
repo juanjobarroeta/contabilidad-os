@@ -143,3 +143,58 @@ describe("agrupadorDeCelda()", () => {
     expect(agrupadorDeCelda("")).toBe("");
   });
 });
+
+// El dialecto de un sistema hospitalario, tal como llegó: preámbulo de reporte
+// con un bloque de filtros que repite los encabezados, códigos con separador de
+// millares, «Nombre de cuenta», la naturaleza escondida en la columna Tipo y el
+// agrupador con letras. Ninguna de las cinco cosas es exótica; juntas dejaban el
+// catálogo en cero.
+const HOSPITAL = [
+  ["Hoja:     1", "", "", "", "", ""],
+  ["Listado de Cuentas", "", "", "", "", "Fecha 11/09/2026"],
+  ["Columna", "Filtro", "", "", "", ""],
+  ["Cuenta", "Todos", "", "", "", ""],
+  ["Agrupador del SAT", "Todos", "", "", "", ""],
+  ["", "", "", "", "", ""],
+  ["Cuenta", "Nombre de cuenta", "Tipo", "Cuenta de mayor", "Moneda", "Agrupador del SAT"],
+  ["100,000,000", "Activo", "Activo Deudora", "No", "Peso Mexicano", ""],
+  ["400,000,000", "Ingresos", "Resultados Acreedora", "No", "Peso Mexicano", ""],
+  ["115,001,006", "Almacen Farmacia\n\nIntrahospitalaria", "Activo Deudora", "No", "Peso Mexicano", "Inventario"],
+  ["153,001,064", "Ecografo gabinete r700", "Activo Deudora", "No", "Peso Mexicano", "Maquinaria y equipo"],
+];
+
+describe("parseCatalogoTabular() — el listado de un hospital", () => {
+  const hoja = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(hoja, XLSX.utils.aoa_to_sheet(HOSPITAL), "Hoja1");
+  const buf = XLSX.write(hoja, { type: "array", bookType: "xlsx" }) as Uint8Array;
+  const r = parseCatalogoTabular(buf);
+
+  it("encuentra los encabezados de verdad, no los del bloque de filtros", () => {
+    expect(r.columnas.codigo).toBe("Cuenta");
+    expect(r.columnas.nombre).toBe("Nombre de cuenta");
+    expect(r.columnas.agrupador).toBe("Agrupador del SAT");
+  });
+
+  it("lee las cuatro cuentas: ninguna se cae por naturaleza ni por el código con comas", () => {
+    expect(r.cuentas.map((c) => c.numCta)).toEqual(["100000000", "400000000", "115001006", "153001064"]);
+    // «Resultados Acreedora» no empieza por PASIVO/CAPITAL/INGRESO, pero lo dice.
+    expect(r.cuentas.find((c) => c.numCta === "400000000")?.natur).toBe("A");
+  });
+
+  it("traduce el agrupador escrito con letras y deja el nombre en un renglón", () => {
+    const farmacia = r.cuentas.find((c) => c.numCta === "115001006")!;
+    expect(farmacia.codAgrup).toBe("115.01");
+    expect(farmacia.desc).toBe("Almacen Farmacia Intrahospitalaria");
+    expect(r.cuentas.find((c) => c.numCta === "153001064")?.codAgrup).toBe("153.01");
+  });
+
+  it("los títulos sin agrupador quedan sin código, y el aviso lo dice", () => {
+    expect(r.cuentas.find((c) => c.numCta === "100000000")?.codAgrup).toBe("");
+    expect(r.advertencias.join(" ")).toContain("se tradujeron");
+  });
+
+  it("el nivel sale del código de nueve dígitos, sin columna de nivel", () => {
+    expect(r.cuentas.find((c) => c.numCta === "100000000")?.nivel).toBe(1);
+    expect(r.cuentas.find((c) => c.numCta === "115001006")?.nivel).toBe(3);
+  });
+});
