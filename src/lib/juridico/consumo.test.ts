@@ -51,3 +51,14 @@ describe("alta de asientos", () => {
     expect(emailValido("sin arroba.mx")).toBe(false);
   });
 });
+
+describe("el tope por default", () => {
+  it("son 120 USD: con uso real, 60 frenaba a quien estaba trabajando", async () => {
+    const { TOPE_MENSUAL_USD } = await import("./consumo");
+    expect(TOPE_MENSUAL_USD).toBe(120);
+    // Una abogada trabajando (37 USD medidos) no se acerca al aviso.
+    expect(evaluarConsumo(37, 180, [], new Date("2026-09-14T12:00:00Z"), TOPE_MENSUAL_USD)).toMatchObject({ avisar: false, excedido: false });
+    // Una jornada intensa de redacción (64 USD medidos) tampoco.
+    expect(evaluarConsumo(64, 200, [], new Date("2026-09-14T12:00:00Z"), TOPE_MENSUAL_USD)).toMatchObject({ avisar: false, excedido: false });
+  });
+});

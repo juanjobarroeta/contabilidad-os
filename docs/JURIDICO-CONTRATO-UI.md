@@ -203,7 +203,11 @@ el bloque `puedo` que devuelve el GET, no re-implementar la tabla.
 un despacho nuevo desde fuera; para sumar a alguien a un despacho existente, la
 ruta es la del socio.
 
-El chat y la subida de documentos responden **429 con `codigo: "JURIDICO_TOPE_MES"`** y el `consumo` cuando el asiento llegó a su tope (`JURIDICO_USD_MENSUAL`, 60 USD por default). La UI debería enseñar el consumo en el pie y avisar al 80 %.
+El chat y la subida de documentos responden **429 con `codigo: "JURIDICO_TOPE_MES"`** y el `consumo` cuando el asiento llegó a su tope (`JURIDICO_USD_MENSUAL`, **120 USD** por default). La UI debería enseñar el consumo en el pie y avisar al 80 %.
+
+Medido con uso real (sept-2026): una abogada trabajando llega a ~37 USD al mes y
+una jornada intensa de redacción a ~64. Con el tope en 60 se frenaba a quien
+estaba trabajando bien. **El operador no tiene tope**: no es un asiento.
 
 ### El copiloto
 
