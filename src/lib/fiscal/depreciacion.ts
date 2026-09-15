@@ -112,9 +112,13 @@ export function mesesUsoEnEjercicio(
 ): number {
   const adq = toDate(fechaAdquisicion);
   const inicioEjercicio = new Date(ejercicio, 0, 1);
-  const finEjercicio = new Date(ejercicio, 11, 31);
+  // Límite SUPERIOR EXCLUSIVO: el 1 de enero siguiente. Antes era «31 de
+  // diciembre», que es la MEDIANOCHE del 31: un activo comprado ese día a
+  // cualquier hora quedaba «adquirido en un ejercicio futuro» y no deducía el
+  // mes. Lo mismo con una baja del 31 de diciembre, que dejaba de acotar.
+  const finExclusivo = new Date(ejercicio + 1, 0, 1);
 
-  if (adq > finEjercicio) return 0; // adquirido en un ejercicio futuro
+  if (adq >= finExclusivo) return 0; // adquirido en un ejercicio futuro
   const baja = fechaBaja ? toDate(fechaBaja) : null;
   if (baja && baja < inicioEjercicio) return 0; // dado de baja antes del ejercicio
 
@@ -123,7 +127,7 @@ export function mesesUsoEnEjercicio(
   // Último mes de uso dentro del ejercicio (al dar de baja se deduce hasta el
   // mes inmediato anterior; si no hay baja, hasta diciembre). Acotado por hastaMes.
   let ultimoMes = 11;
-  if (baja && baja <= finEjercicio) {
+  if (baja && baja < finExclusivo) {
     ultimoMes = baja.getMonth() - 1;
     if (baja.getFullYear() < ejercicio) ultimoMes = -1;
   }
