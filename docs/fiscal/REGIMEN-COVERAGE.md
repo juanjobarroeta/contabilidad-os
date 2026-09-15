@@ -37,9 +37,11 @@ All other tracks, unknown codes, unknown taxpayer types, and incompatible code/t
 
 Calculation callers resolve the legacy primary `Company.regimenFiscal` together with every current `CompanyRegimen` row. Monthly planning may select one implemented track only when every other track is explicitly `NOT_APPLICABLE` monthly, such as business/professional activity (`612`) alongside salary, dividends, or interest (`605`, `611`, `614`); those sources do not share the monthly invoice basket. Two runnable monthly tracks, any assisted/unknown/incompatible track, and every mixed annual fail before fiscal reads with `422 NOT_SUPPORTED` and reason `MULTI_REGIME_COMPOSITION_REQUIRED`. This prevents the primary engine from absorbing another regime's income; it is a safety boundary, not completed multi-regime composition. Explicit invoice/deduction/credit allocation and CSF-obligation-driven execution remain required.
 
+CSF refresh recognizes the same canonical 19-code catalog. It validates the complete replacement before writing, retains a still-current primary or requires an explicit choice, marks missing regime rows inactive with an end timestamp, and reactivates returning codes instead of deleting them. Calculation, declaration-coverage, obligation, and credit consumers read only active rows. This preserves the latest known lifecycle state without treating the first CSF table row as a legal primary designation.
+
 ## Current coverage audit
 
-There are 19 current product catalog codes and 20 calculation tracks because code 626 must be split into PF and PM. `REGIMEN_MAP` currently contains only 16 codes: 607, 615, and 625 are recognized by parsers but absent from the default obligation map.
+There are 19 current product catalog codes and 20 calculation tracks because code 626 must be split into PF and PM. `REGIMEN_MAP` currently contains only 16 codes: 607, 615, and 625 are recognized by the canonical CSF parser but remain absent from the default obligation-template map.
 
 | Code / track | Taxpayer | Current state | Required target | Phase | Main missing work |
 |---|---|---|---|---|---|

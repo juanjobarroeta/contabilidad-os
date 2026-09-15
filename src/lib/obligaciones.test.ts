@@ -5,6 +5,7 @@ import {
   esDiaInhabilCff,
   fechaCalendarioIso,
   nextBusinessDay,
+  parsearTextoCsf,
   type ObligacionConfig,
 } from "./obligaciones";
 
@@ -66,5 +67,42 @@ describe("calcularVencimiento", () => {
 
   it("rejects malformed RFCs for deadline extensions", () => {
     expect(diasHabilesExtraPorRfc("not-an-rfc")).toBeNull();
+  });
+});
+
+describe("CSF regime parser", () => {
+  it("recognizes every catalog code even without a default obligation template", () => {
+    const parsed = parsearTextoCsf(`
+      RFC: AAAA010101AAA
+      REGÍMENES FISCALES
+      607 Régimen de Enajenación o Adquisición de Bienes 01/01/2024
+      615 Régimen de los ingresos por obtención de premios 02/02/2024
+      625 Régimen de las Actividades Empresariales con ingresos a través de Plataformas Tecnológicas 03/03/2024
+      OBLIGACIONES
+    `);
+
+    expect(parsed.regimenFiscal).toBeUndefined();
+    expect(parsed.regimenes).toEqual([
+      expect.objectContaining({ codigo: "607", desde: "01/01/2024" }),
+      expect.objectContaining({ codigo: "615", desde: "02/02/2024" }),
+      expect.objectContaining({ codigo: "625", desde: "03/03/2024" }),
+    ]);
+  });
+
+  it("sets a primary only when the CSF contains one regime", () => {
+    const parsed = parsearTextoCsf(`
+      RÉGIMEN FISCAL
+      625 Plataformas Tecnológicas 03/03/2024
+      OBLIGACIONES
+    `);
+
+    expect(parsed.regimenFiscal).toBe("625");
+  });
+
+  it("does not mistake a postal-code prefix for a regime in fallback parsing", () => {
+    const parsed = parsearTextoCsf("Código Postal: 62500");
+
+    expect(parsed.regimenes).toEqual([]);
+    expect(parsed.regimenFiscal).toBeUndefined();
   });
 });

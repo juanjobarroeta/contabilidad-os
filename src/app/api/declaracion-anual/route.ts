@@ -43,7 +43,7 @@ export async function GET(req: Request) {
       rfc: true,
       razonSocial: true,
       regimenFiscal: true,
-      regimenes: { select: { code: true } },
+      regimenes: { where: { active: true }, select: { code: true } },
     },
   });
   if (!company) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
@@ -353,7 +353,7 @@ export async function POST(req: Request) {
     select: {
       rfc: true,
       regimenFiscal: true,
-      regimenes: { select: { code: true } },
+      regimenes: { where: { active: true }, select: { code: true } },
     },
   });
   if (!company) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });

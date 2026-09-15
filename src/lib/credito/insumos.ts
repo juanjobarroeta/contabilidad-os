@@ -35,7 +35,11 @@ export const SIN_TRASPASOS_INTERNOS: Prisma.BankTransactionWhereInput = {
 export async function cargarInsumosCredito(companyId: string): Promise<InsumosCredito> {
   const empresa = await prisma.company.findUnique({
     where: { id: companyId },
-    select: { rfc: true, regimenFiscal: true, regimenes: { select: { code: true } } },
+    select: {
+      rfc: true,
+      regimenFiscal: true,
+      regimenes: { where: { active: true }, select: { code: true } },
+    },
   });
   const [decls, faltantes, opinion, efosAbiertos] = await Promise.all([
     prisma.taxDeclaration
