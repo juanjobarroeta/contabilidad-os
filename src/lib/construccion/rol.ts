@@ -467,3 +467,21 @@ export function enforceConstruccionRol(
     "Tu rol en construcción no permite esta operación"
   );
 }
+
+/**
+ * ¿Este rol sólo ve LAS CAJAS CHICAS QUE ÉL ABRIÓ?
+ *
+ * El residente es usuario de campo: lleva su propia caja (varias por obra si
+ * hace falta) y no tiene por qué ver ni abrir la de sus compañeros — la lista
+ * y el detalle de /reembolsos se filtran por creadaPorId. Admin/OWNER y los
+ * roles de supervisión (contabilidad, tesorería, que además sólo llegan a la
+ * página por un permiso extra de la matriz) siguen viendo todas para revisar
+ * y cerrar.
+ *
+ * El candado de ESCRITURA es aparte y más amplio: ninguna caja ajena se edita
+ * sin ser su dueño o admin (guard de dueño en las rutas). Esto sólo decide
+ * qué se ve.
+ */
+export function soloVeSusCajas(rol: ConstruccionRol | null | undefined): boolean {
+  return rol === "RESIDENTE";
+}

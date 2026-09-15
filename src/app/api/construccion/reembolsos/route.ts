@@ -10,6 +10,7 @@
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import type { ConstruccionRol } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   AuthzError,
@@ -18,6 +19,7 @@ import {
   requireWriter,
   withAuthz,
 } from "@/lib/authz";
+import { soloVeSusCajas } from "@/lib/construccion/rol";
 
 const createSchema = z.object({
   proyectoId: z.string().min(1),
@@ -41,12 +43,19 @@ export const GET = withAuthz(async (req: Request) => {
   if (!companyId) {
     return NextResponse.json({ error: "companyId requerido" }, { status: 400 });
   }
-  await requireMembership(companyId, undefined, req);
+  const { user, membership } = await requireMembership(companyId, undefined, req);
   await requireModule(companyId, "CONSTRUCCION");
+
+  // Cada quien su caja (regla en construccion/rol.ts): el residente sólo ve
+  // las que él abrió; admin y los roles de supervisión ven todas.
+  const soloPropias = soloVeSusCajas(
+    (membership as { construccionRol?: ConstruccionRol | null }).construccionRol
+  );
 
   const rows = await prisma.reembolsoSemanal.findMany({
     where: {
       companyId,
+      ...(soloPropias ? { creadaPorId: user.id } : {}),
       ...(proyectoId ? { proyectoId } : {}),
       ...(estado
         ? {
