@@ -4051,9 +4051,9 @@ model CompanyRegimen {
   label     String // human label, e.g. "Arrendamiento"
   since     DateTime? // "Fecha Inicio" from the CSF régimenes table
   isPrimary Boolean   @default(false)
-  // Current CSF membership is versioned instead of deleting old rows. Fiscal
-  // calculations read only active rows; endedAt preserves when a regime left
-  // the taxpayer's latest confirmed CSF.
+  // Current CSF membership is versioned instead of deleting old rows. Current
+  // operational views read active rows; period calculations use since/endedAt
+  // to retain the latest known historical boundary.
   active    Boolean   @default(true)
   endedAt   DateTime?
 

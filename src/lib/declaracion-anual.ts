@@ -13,7 +13,7 @@ export type DeclaracionAnualInput = {
   ejercicio: number;
   tipoPersona: "PM" | "PF";
   regimenFiscal: string; // "601", "612", "626", etc.
-  /** Full current CSF regime set. Omitted only by legacy/internal callers. */
+  /** Full CSF regime set effective for `ejercicio`. Omitted by legacy/internal callers. */
   regimenes?: string[];
 
   // ── Ingresos ──

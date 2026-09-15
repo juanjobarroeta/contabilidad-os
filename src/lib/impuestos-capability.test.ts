@@ -62,7 +62,10 @@ describe("computeTaxPosition regimen gate", () => {
       perdidaFiscalPendiente: null,
       perdidaFiscalAnio: null,
       regimenFiscal: "612",
-      regimenes: [{ code: "606" }, { code: "612" }],
+      regimenes: [
+        { code: "606", since: null, endedAt: null, active: true },
+        { code: "612", since: null, endedAt: null, active: true },
+      ],
       rfc: "AAAA010101AAA",
       plataformaActividad: null,
     });
@@ -71,6 +74,38 @@ describe("computeTaxPosition regimen gate", () => {
       code: "NOT_SUPPORTED",
       status: 422,
       reason: "MULTI_REGIME_COMPOSITION_REQUIRED",
+    });
+    expect(mocks.invoiceFindMany).not.toHaveBeenCalled();
+  });
+
+  it("gates a historical month with its old regime instead of today's scalar", async () => {
+    mocks.companyFindUnique.mockResolvedValue({
+      coeficienteUtilidad: null,
+      coeficienteAnio: null,
+      perdidaFiscalPendiente: null,
+      perdidaFiscalAnio: null,
+      regimenFiscal: "612",
+      regimenes: [
+        {
+          code: "608",
+          since: new Date("2024-01-01T00:00:00.000Z"),
+          endedAt: new Date("2026-09-15T00:00:00.000Z"),
+          active: false,
+        },
+        {
+          code: "612",
+          since: new Date("2026-01-01T00:00:00.000Z"),
+          endedAt: null,
+          active: true,
+        },
+      ],
+      rfc: "AAAA010101AAA",
+      plataformaActividad: null,
+    });
+
+    await expect(computeTaxPosition("company-1", 2025, 8)).rejects.toMatchObject({
+      reason: "ASSISTED_ONLY",
+      regimen: { code: "608", trackId: "608" },
     });
     expect(mocks.invoiceFindMany).not.toHaveBeenCalled();
   });
