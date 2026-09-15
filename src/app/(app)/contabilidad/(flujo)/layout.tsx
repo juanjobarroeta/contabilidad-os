@@ -19,7 +19,7 @@
 import { ReactNode, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { PeriodProvider, PeriodSelector } from "@/components/contabilidad/PeriodProvider";
+import { PeriodSelector } from "@/components/contabilidad/PeriodProvider";
 import { PasosDelFlujo } from "@/components/contabilidad/PasosDelFlujo";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { cn } from "@/lib/utils";
@@ -60,66 +60,64 @@ export default function FlujoLayout({ children }: { children: ReactNode }) {
   const enReporte = REPORTES.some((r) => pathname.startsWith(r.href));
 
   return (
-    <PeriodProvider>
-      <div className="print-report mx-auto max-w-[1100px] px-6 py-7 print:max-w-none print:p-0">
-        {/* Los PASOS mandan y van en su propia fila: cada uno carga el número
-            que importa (ce-readiness), no sólo su ordinal. Reportes y tareas
-            —que no son parte del flujo— bajan a una fila secundaria junto al
-            selector de período. */}
-        <div className="mb-3 print:hidden">
-          <PasosDelFlujo />
-        </div>
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 print:hidden">
-          <nav aria-label="Reportes y tareas" className="flex flex-wrap items-center gap-1">
-            {/* `enReporte` sólo PINTA el summary; forzar `open` desplegaba el
-                panel sobre el contenido en cada página de reporte (revisión de
-                pantallas). El menú se cierra al elegir: el layout persiste
-                entre navegaciones client-side y <details> retiene su estado. */}
-            <details ref={menuReportes} className="relative">
-              <summary
-                className={cn(
-                  "inline-flex cursor-pointer list-none items-center gap-1 rounded-full px-3 py-1.5 text-[13px] font-medium [&::-webkit-details-marker]:hidden",
-                  enReporte
-                    ? "bg-cos-slate-tint text-cos-ink"
-                    : "text-cos-ink-soft hover:bg-cos-paper hover:text-cos-ink"
-                )}
-              >
-                Reportes ▾
-              </summary>
-              <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-card border border-cos-line bg-cos-card p-1 shadow-card">
-                {REPORTES.map(({ href, label }) => (
-                  <Link
-                    key={href}
-                    href={href}
-                    onClick={cerrarMenu}
-                    className={cn(
-                      "block rounded-md px-3 py-1.5 text-[13px]",
-                      pathname.startsWith(href)
-                        ? "bg-cos-brand-tint text-cos-brand-ink font-medium"
-                        : "text-cos-ink-soft hover:bg-cos-paper hover:text-cos-ink"
-                    )}
-                  >
-                    {label}
-                  </Link>
-                ))}
-                <div className="my-1 border-t border-cos-line-soft" role="presentation" />
-                {TAREAS.map(({ href, label }) => (
-                  <Link
-                    key={href}
-                    href={href}
-                    onClick={cerrarMenu}
-                    className="block rounded-md px-3 py-1.5 text-[13px] text-cos-ink-soft hover:bg-cos-paper hover:text-cos-ink"
-                  >
-                    {label}
-                  </Link>
-                ))}
-              </div>
-            </details>
-          </nav>
-          <PeriodSelector />
-        </div>
-        {children}
+    <div className="print-report mx-auto max-w-[1100px] px-6 py-7 print:max-w-none print:p-0">
+      {/* Los PASOS mandan y van en su propia fila: cada uno carga el número
+          que importa (ce-readiness), no sólo su ordinal. Reportes y tareas
+          —que no son parte del flujo— bajan a una fila secundaria junto al
+          selector de período. */}
+      <div className="mb-3 print:hidden">
+        <PasosDelFlujo />
       </div>
-    </PeriodProvider>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 print:hidden">
+        <nav aria-label="Reportes y tareas" className="flex flex-wrap items-center gap-1">
+          {/* `enReporte` sólo PINTA el summary; forzar `open` desplegaba el
+              panel sobre el contenido en cada página de reporte (revisión de
+              pantallas). El menú se cierra al elegir: el layout persiste
+              entre navegaciones client-side y <details> retiene su estado. */}
+          <details ref={menuReportes} className="relative">
+            <summary
+              className={cn(
+                "inline-flex cursor-pointer list-none items-center gap-1 rounded-full px-3 py-1.5 text-[13px] font-medium [&::-webkit-details-marker]:hidden",
+                enReporte
+                  ? "bg-cos-slate-tint text-cos-ink"
+                  : "text-cos-ink-soft hover:bg-cos-paper hover:text-cos-ink"
+              )}
+            >
+              Reportes ▾
+            </summary>
+            <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-card border border-cos-line bg-cos-card p-1 shadow-card">
+              {REPORTES.map(({ href, label }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={cerrarMenu}
+                  className={cn(
+                    "block rounded-md px-3 py-1.5 text-[13px]",
+                    pathname.startsWith(href)
+                      ? "bg-cos-brand-tint text-cos-brand-ink font-medium"
+                      : "text-cos-ink-soft hover:bg-cos-paper hover:text-cos-ink"
+                  )}
+                >
+                  {label}
+                </Link>
+              ))}
+              <div className="my-1 border-t border-cos-line-soft" role="presentation" />
+              {TAREAS.map(({ href, label }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={cerrarMenu}
+                  className="block rounded-md px-3 py-1.5 text-[13px] text-cos-ink-soft hover:bg-cos-paper hover:text-cos-ink"
+                >
+                  {label}
+                </Link>
+              ))}
+            </div>
+          </details>
+        </nav>
+        <PeriodSelector />
+      </div>
+      {children}
+    </div>
   );
 }

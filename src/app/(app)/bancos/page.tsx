@@ -27,9 +27,10 @@
 // ?year=&month=&tx= abre la mesa en ese mes con ese movimiento elegido.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
+import { usePeriod } from "@/components/contabilidad/PeriodProvider";
 import { Loading } from "@/components/ui/feedback";
 import { ConciliacionWorkbench } from "@/components/contabilidad/ConciliacionWorkbench";
 import { GestionBancos, type VistaBancos } from "@/components/bancos/GestionBancos";
@@ -57,9 +58,9 @@ function tabInicial(): Tab {
 /** `?year=&month=&tx=` — el archivo (tab Movimientos) entrega un movimiento a
  *  la mesa: su mes en el encabezado y él seleccionado. Se lee UNA vez al
  *  montar, igual que el tab; después el período vive en estado. */
-function periodoInicial(): { year: number; month: number; tx: string | null } {
+function periodoInicial(): { year: number; month: number; tx: string | null; explicito: boolean } {
   const hoy = new Date();
-  const base = { year: hoy.getFullYear(), month: hoy.getMonth() + 1, tx: null as string | null };
+  const base = { year: hoy.getFullYear(), month: hoy.getMonth() + 1, tx: null as string | null, explicito: false };
   if (typeof window === "undefined") return base;
   const q = new URLSearchParams(window.location.search);
   const y = Number(q.get("year"));
@@ -67,16 +68,24 @@ function periodoInicial(): { year: number; month: number; tx: string | null } {
   // Sin un período válido y completo se ignora: medio parámetro llevaría a un
   // mes que nadie pidió.
   if (!Number.isInteger(y) || y < 2000 || y > 2100 || !Number.isInteger(m) || m < 1 || m > 12) return base;
-  return { year: y, month: m, tx: q.get("tx") };
+  return { year: y, month: m, tx: q.get("tx"), explicito: true };
 }
 
 export default function BancosPage() {
   const { activeCompany, loading: companyLoading } = useCompany();
   const [tab, setTab] = useState<Tab>(tabInicial);
-  // Período de la mesa (el archivo trae su propio corte por mes).
+  // EL PERÍODO ES EL DE LA APP, no uno propio: se elige una vez y sigue igual
+  // al saltar entre Bancos y el cierre. Antes cada pantalla arrancaba en el mes
+  // corriente y había que volver a agosto en cada pestaña.
+  const { year, month, setPeriod } = usePeriod();
   const [inicial] = useState(periodoInicial);
-  const [year, setYear] = useState(inicial.year);
-  const [month, setMonth] = useState(inicial.month);
+  // `?year=&month=` (el deep link del archivo y de los CTAs) manda una vez al
+  // montar: es una petición explícita de ir a ESE mes.
+  useEffect(() => {
+    if (inicial.explicito) setPeriod(inicial.year, inicial.month);
+    // Sólo al montar: después el período vive en el proveedor.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // El movimiento que llegó por `?tx=`: la mesa lo selecciona al montar y
   // luego se suelta, para que navegar no lo reviva.
   const [txInicial, setTxInicial] = useState<string | null>(inicial.tx);
@@ -90,8 +99,7 @@ export default function BancosPage() {
     window.history.replaceState(null, "", url);
   }
   function irAlPeriodo(y: number, m: number) {
-    setYear(y);
-    setMonth(m);
+    setPeriod(y, m);
     // Cambiar de mes deja atrás el movimiento entregado: su `?tx=` en la barra
     // de direcciones prometería una selección que ya no existe.
     if (txInicial) { setTxInicial(null); window.history.replaceState(null, "", "/bancos"); }
@@ -105,8 +113,7 @@ export default function BancosPage() {
   function resolverEnLaMesa(tx: { id: string; fecha: string }) {
     const [y, m] = tx.fecha.slice(0, 7).split("-").map(Number);
     if (!Number.isInteger(y) || !Number.isInteger(m)) return;
-    setYear(y);
-    setMonth(m);
+    setPeriod(y, m);
     setTxInicial(tx.id);
     setTab("conciliacion");
     window.history.replaceState(null, "", `/bancos?year=${y}&month=${m}&tx=${tx.id}`);
