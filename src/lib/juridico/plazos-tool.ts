@@ -7,6 +7,7 @@
 // modelo que cuenta días saltándose festivos se equivoca sin avisar.
 import type Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
+import { reportError } from "@/lib/observability";
 import { despachoDe } from "./despacho";
 import { crearPlazo, esFuero, esSurte, esTipoDias, listarPlazos, simular } from "./plazos-datos";
 import { explicacion } from "./plazos";
@@ -101,6 +102,11 @@ export async function ejecutarHerramientaPlazos(nombre: string, input: Record<st
       aviso: "Queda PROPUESTO. Dile al abogado que lo confirme en el caso, y que el calendario no incluye suspensiones de labores del órgano.",
     });
   } catch (e) {
-    return JSON.stringify({ error: e instanceof Error ? e.message : "No se pudo computar el plazo." });
+    // El error se le devuelve AL MODELO, que se lo dirá al abogado. Tiene que
+    // ser una frase que sirva, no un volcado de Prisma.
+    const msg = e instanceof Error ? e.message : "";
+    const conocido = msg && msg.length < 200 && !msg.includes("\n");
+    reportError(e, { ruta: "juridico/plazos-tool", casoId });
+    return JSON.stringify({ error: conocido ? msg : "No se pudo registrar el plazo. Dile al abogado que lo capture a mano en el caso y que el cómputo quedó pendiente." });
   }
 }
