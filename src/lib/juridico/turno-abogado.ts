@@ -20,6 +20,7 @@ import { ejecutarRedactar, toolRedactar } from "@/lib/juridico/redaccion";
 import { asuntoDeConversacion, bloqueAsuntoParaPrompt, ejecutarHerramientaAsunto, toolsAsunto, type Asunto } from "@/lib/juridico/asuntos";
 import { NOMBRES_REDACCION_ESTRUCTURADA, ejecutarRedaccionEstructurada, toolsRedaccionEstructurada } from "@/lib/juridico/redaccion-estructurada";
 import { NOMBRES_TAREAS, ejecutarHerramientaTareas, toolsTareas } from "@/lib/juridico/tareas-tool";
+import { NOMBRES_PLAZOS, ejecutarHerramientaPlazos, toolsPlazos } from "@/lib/juridico/plazos-tool";
 import { reportError } from "@/lib/observability";
 import { mensajeDeErrorParaAbogado } from "@/lib/juridico/errores";
 import { indiceOrdenamientos } from "@/lib/juridico/indice-ordenamientos";
@@ -82,7 +83,7 @@ export async function cargarContextoConversacion(convId: string, userId: string)
     { type: "text", text: bloqueAsuntoParaPrompt(asunto) },
   ];
   // Redactar y el asunto siempre están; leer/buscar sólo cuando hay documentos.
-  const tools = [...toolsAbogado, toolRedactar, ...toolsRedaccionEstructurada, ...toolsAsunto, ...toolsTareas, ...(documentos.length > 0 ? toolsDocumentos : [])];
+  const tools = [...toolsAbogado, toolRedactar, ...toolsRedaccionEstructurada, ...toolsAsunto, ...toolsTareas, ...toolsPlazos, ...(documentos.length > 0 ? toolsDocumentos : [])];
   // Un expediente se lee por secciones: hacen falta más rondas de herramientas.
   const maxRondas = documentos.length > 0 ? MAX_TOOL_ROUNDS_CON_DOCUMENTOS : MAX_TOOL_ROUNDS;
   return { documentos, asunto, system, tools, maxRondas };
@@ -298,6 +299,9 @@ export async function correrTurnoAbogado(args: TurnoAbogadoArgs, emitir: (e: Eve
               if (block.name !== "consultar_asunto") emitir({ type: "asunto", asunto });
             }
             return { block, result: r.salida, ms: Date.now() - t0 };
+          }
+          if (NOMBRES_PLAZOS.has(block.name)) {
+            return { block, result: await ejecutarHerramientaPlazos(block.name, block.input as Record<string, unknown>, { userId, conversacionId: convId }), ms: Date.now() - t0 };
           }
           if (NOMBRES_TAREAS.has(block.name)) {
             return { block, result: await ejecutarHerramientaTareas(block.name, block.input as Record<string, unknown>, { userId, conversacionId: convId }), ms: Date.now() - t0 };

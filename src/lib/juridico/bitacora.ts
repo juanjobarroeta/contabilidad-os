@@ -35,6 +35,12 @@ export type AccionBitacora =
   | "tarea.movida"
   | "tarea.asignada"
   | "tarea.eliminada"
+  | "plazo.propuesto"
+  | "plazo.confirmado"
+  | "plazo.recomputado"
+  | "plazo.cumplido"
+  | "plazo.descartado"
+  | "inhabil.cargado"
   | "acceso.compartido"
   | "comentario.cliente";
 

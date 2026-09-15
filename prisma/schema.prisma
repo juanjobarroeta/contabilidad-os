@@ -4209,6 +4209,7 @@ model JuridicoCaso {
   partes         JuridicoParte[]
   documentos     JuridicoDocumento[]
   tareas         JuridicoTarea[]
+  plazos         JuridicoPlazo[]
   bitacora       JuridicoBitacora[]
 
   @@index([userId, updatedAt])
@@ -4420,6 +4421,73 @@ model JuridicoTarea {
   @@index([casoId, estado])
   @@index([asignadoUserId, estado, vence])
   @@index([casoId, vence])
+}
+
+// El plazo procesal. Es lo único del producto que, si se equivoca, cuesta el
+// caso, así que se guarda TODO lo que lo produjo: el artículo que lo funda, la
+// fecha de notificación, el calendario que se usó y el día a día del cómputo.
+// Si mañana cambia el calendario del órgano, se puede ver qué se calculó con
+// qué, en vez de tener sólo una fecha sin respaldo.
+model JuridicoPlazo {
+  id              String @id @default(cuid())
+  casoId          String
+  creadoPorUserId String
+  titulo          String
+
+  // El fundamento. Sin esto es un recordatorio de agenda, no un plazo.
+  fundamento   String? // "Art. 17 de la Ley de Amparo"
+  ordenamiento String? // clave en el catálogo, para abrir el texto
+  articulo     String?
+
+  // Con qué se computó.
+  fuero        String // amparo | laboral | federal | local
+  entidad      String? // clave de la entidad cuando el fuero es local
+  notificacion DateTime @db.Date
+  dias         Int
+  tipo         String   @default("habiles") // habiles | naturales
+  surteEfectos String   @default("mismo_dia") // mismo_dia | dia_siguiente_habil
+
+  // El resultado, congelado con su rastro: [{ fecha, clase, motivo, dia? }].
+  vence        DateTime @db.Date
+  traza        Json
+  advertencias Json?
+
+  // Nadie debe confiar en un plazo que ningún abogado revisó. Nace propuesto.
+  estado              String    @default("propuesto") // propuesto | confirmado | cumplido | descartado
+  confirmadoPorUserId String?
+  confirmadoAt        DateTime?
+  cumplidoAt          DateTime?
+  nota                String?   @db.Text
+
+  origen    String   @default("manual") // manual | copiloto
+  tareaId   String? // la tarea que lo persigue, si se generó
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  caso JuridicoCaso @relation(fields: [casoId], references: [id], onDelete: Cascade)
+
+  @@index([casoId, estado])
+  @@index([casoId, vence])
+  @@index([estado, vence])
+}
+
+// Los inhábiles que NINGUNA ley lista: suspensión de labores del juzgado,
+// periodos de vacaciones, festivos locales. Sin esto el cómputo es optimista y
+// el plazo se vence antes de lo que dice la pantalla.
+model JuridicoInhabil {
+  id String @id @default(cuid())
+  // null = lo cargó el operador y aplica a todos los despachos.
+  despachoId String?
+  // null = aplica a cualquier fuero.
+  fuero      String?
+  entidad    String?
+  fecha      DateTime @db.Date
+  motivo     String
+  fuente     String? // "Acuerdo 12/2026 del CJF", "circular del juzgado"
+  createdAt  DateTime @default(now())
+
+  @@index([despachoId, fecha])
+  @@index([fecha])
 }
 
 // Cada versión de un documento con SU AUTOR. Antes vivían en
