@@ -42,6 +42,14 @@ interface ActivoRow {
   esElectricoHibrido: boolean;
   fechaBaja: string | null;
   autoCreado: boolean;
+  precioVenta: number | null;
+  /** Ganancia o pérdida del Art. 19, sólo en el ejercicio de la baja. */
+  enajenacion: {
+    saldoPendienteActualizado: number;
+    ganancia: number;
+    perdida: number;
+    sinActualizar: boolean;
+  } | null;
   invoice: { uuid: string | null; serie: string | null; folio: string | null } | null;
   depreciacion: {
     moiDeducible: number;
@@ -66,6 +74,7 @@ export function ActivoFijoView() {
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
   const [guardando, setGuardando] = useState<string | null>(null);
+  const [dandoBaja, setDandoBaja] = useState<ActivoRow | null>(null);
 
   const load = useCallback(async () => {
     if (!activeCompany) return;
@@ -174,6 +183,16 @@ export function ActivoFijoView() {
                         {a.esAutomovil && " · automóvil"}
                         {a.depreciacion.topeAplicado && <span className="text-cos-amber-ink"> · tope Art. 36-II</span>}
                         {a.fechaBaja && <span className="text-cos-red-ink"> · baja {formatDate(a.fechaBaja)}</span>}
+                        {a.enajenacion && (
+                          <span className={a.enajenacion.ganancia > 0 ? " text-cos-jade-ink" : " text-cos-amber-ink"}>
+                            {" · "}
+                            {a.enajenacion.ganancia > 0
+                              ? `ganancia ${formatCurrency(a.enajenacion.ganancia)}`
+                              : `pérdida ${formatCurrency(a.enajenacion.perdida)}`}{" "}
+                            (Art. 19, saldo actualizado {formatCurrency(a.enajenacion.saldoPendienteActualizado)}
+                            {a.enajenacion.sinActualizar ? ", nominal" : ""})
+                          </span>
+                        )}
                         {a.autoCreado && (
                           <span className="text-cos-amber-ink"> · auto — revisa tipo/tasa{a.tipo === "transporte" ? "/tope auto-vs-carga" : ""}</span>
                         )}
@@ -212,6 +231,13 @@ export function ActivoFijoView() {
                             <option key={id} value={id}>{label}</option>
                           ))}
                         </select>
+                        <button
+                          onClick={() => setDandoBaja(a)}
+                          className="rounded-control border border-cos-line px-2 py-1 text-[12px] text-cos-ink hover:bg-cos-paper"
+                          title="Dar de baja o registrar su venta (Art. 19)"
+                        >
+                          {a.fechaBaja ? "Baja…" : "Dar de baja"}
+                        </button>
                         <button onClick={() => eliminar(a.id)} className="text-cos-ink-faint hover:text-cos-red-ink" title="Eliminar">
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -236,6 +262,14 @@ export function ActivoFijoView() {
             </span>
           </div>
         </>
+      )}
+
+      {dandoBaja && (
+        <BajaActivoModal
+          activo={dandoBaja}
+          onClose={() => setDandoBaja(null)}
+          onHecho={() => { setDandoBaja(null); load(); }}
+        />
       )}
 
       {showNew && (
@@ -338,6 +372,101 @@ function NuevoActivoModal({ companyId, onClose, onCreated }: { companyId: string
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+/**
+ * Baja o venta de un activo (Art. 19 LISR).
+ *
+ * El precio de venta era el dato que faltaba: sin él, un activo vendido dejaba
+ * su saldo por deducir colgado para siempre —ni se deducía ni aparecía— y no
+ * había ganancia ni pérdida que llevar a la declaración. Vacío = desecho, que
+ * es venta en cero: el saldo actualizado se deduce completo.
+ */
+function BajaActivoModal({
+  activo,
+  onClose,
+  onHecho,
+}: {
+  activo: { id: string; descripcion: string; fechaBaja: string | null; precioVenta: number | null };
+  onClose: () => void;
+  onHecho: () => void;
+}) {
+  const [fecha, setFecha] = useState(activo.fechaBaja?.slice(0, 10) ?? new Date().toISOString().slice(0, 10));
+  const [precio, setPrecio] = useState(activo.precioVenta == null ? "" : String(activo.precioVenta));
+  const [motivo, setMotivo] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function guardar(quitar = false) {
+    setSaving(true); setErr("");
+    try {
+      const res = await fetch(`/api/activos/${activo.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          quitar
+            ? { fechaBaja: null }
+            : {
+                fechaBaja: fecha,
+                motivoBaja: motivo.trim() || undefined,
+                precioVenta: precio.trim() === "" ? null : Number(precio),
+              },
+        ),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok) { setErr(d?.error ?? "No se pudo guardar la baja"); return; }
+      onHecho();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-card bg-cos-card p-6 shadow-card">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-[18px] font-semibold text-cos-ink">Baja o venta del activo</h2>
+          <button type="button" onClick={onClose}><X className="h-5 w-5 text-cos-ink-soft" /></button>
+        </div>
+        <p className="mb-3 text-[13px] text-cos-ink-soft">{activo.descripcion}</p>
+        <div className="space-y-3 text-[14px]">
+          <label className="block">
+            <span className="text-[12.5px] text-cos-ink-soft">Fecha de la baja</span>
+            <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)}
+              className="mt-1 w-full rounded-control border border-cos-line px-3 py-2" />
+          </label>
+          <label className="block">
+            <span className="text-[12.5px] text-cos-ink-soft">Precio de venta sin IVA (vacío = se desechó)</span>
+            <input type="number" step="0.01" min="0" value={precio} onChange={(e) => setPrecio(e.target.value)}
+              className="mt-1 w-full rounded-control border border-cos-line px-3 py-2" />
+          </label>
+          <label className="block">
+            <span className="text-[12.5px] text-cos-ink-soft">Motivo (opcional)</span>
+            <input value={motivo} onChange={(e) => setMotivo(e.target.value)}
+              className="mt-1 w-full rounded-control border border-cos-line px-3 py-2" />
+          </label>
+          <p className="rounded-control bg-cos-paper px-3 py-2 text-[12.5px] text-cos-ink-soft">
+            Lo que quede por deducir se actualiza por INPC hasta el mes de la venta y se compara con el precio:
+            la diferencia es ganancia acumulable o pérdida deducible (Art. 19 LISR). Se deprecia hasta el mes
+            inmediato anterior a la baja.
+          </p>
+          {err && <p className="text-[13px] text-cos-red-ink">{err}</p>}
+        </div>
+        <div className="mt-5 flex items-center justify-between gap-2">
+          {activo.fechaBaja ? (
+            <button type="button" disabled={saving} onClick={() => guardar(true)}
+              className="rounded-control border border-cos-line px-3 py-2 text-[13px] text-cos-ink hover:bg-cos-paper disabled:opacity-50">
+              Quitar la baja
+            </button>
+          ) : <span />}
+          <button type="button" disabled={saving} onClick={() => guardar(false)}
+            className="rounded-control bg-cos-brand px-4 py-2 text-[13px] font-semibold text-white hover:bg-cos-brand-deep disabled:opacity-50">
+            {saving ? "Guardando…" : "Guardar la baja"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

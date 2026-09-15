@@ -15,6 +15,7 @@ import {
   type DepreciacionResult,
 } from "./depreciacion";
 import { factorActualizacionDepreciacion, type FactorActualizacion } from "./inpc";
+import { calcularEnajenacion, type EnajenacionResult } from "./enajenacion";
 
 export interface ActivoConDepreciacion {
   id: string;
@@ -31,11 +32,19 @@ export interface ActivoConDepreciacion {
     depreciacionAcumuladaPrevia: number;
     actualizacion: FactorActualizacion;
   };
+  /** Lo que se cobró al enajenarlo (null = baja sin venta). */
+  precioVenta: number | null;
+  /** Ganancia o pérdida del Art. 19, sólo en el ejercicio de la baja. */
+  enajenacion: EnajenacionResult | null;
 }
 
 export interface RegistroDepreciacion {
   activos: ActivoConDepreciacion[];
   totalDepreciacionEjercicio: number;
+  /** Suma de ganancias por enajenación del ejercicio (ingreso acumulable). */
+  totalGananciaEnajenacion: number;
+  /** Suma de pérdidas por enajenación del ejercicio (deducción autorizada). */
+  totalPerdidaEnajenacion: number;
 }
 
 /** Depreciación del registro para un ejercicio (con acumulada previa + INPC). */
@@ -50,6 +59,8 @@ export async function calcularDepreciacionRegistro(
   }).then((rows) => rows.map((a) => ({ ...a, moi: Number(a.moi), tasaAnual: Number(a.tasaAnual) })));
 
   let totalDepreciacionEjercicio = 0;
+  let totalGananciaEnajenacion = 0;
+  let totalPerdidaEnajenacion = 0;
   const rows = activos.map((a): ActivoConDepreciacion => {
     // Acumulada nominal de ejercicios ANTERIORES (para topar al MOI).
     const adqYear = a.fechaAdquisicion.getFullYear();
@@ -75,15 +86,41 @@ export async function calcularDepreciacionRegistro(
     });
     totalDepreciacionEjercicio += dep.depreciacionEjercicio;
 
+    // ENAJENACIÓN (Art. 19): sólo en el ejercicio de la baja. Lo que quedó sin
+    // deducir se deduce actualizado, y contra eso se compara el precio. Antes
+    // el saldo se quedaba colgado para siempre: ni se deducía ni se veía.
+    const precioVenta = a.precioVenta == null ? null : Number(a.precioVenta);
+    const enajenacion =
+      a.fechaBaja && a.fechaBaja.getFullYear() === ejercicio
+        ? calcularEnajenacion({
+            moiDeducible: dep.moiDeducible,
+            depreciacionAcumulada: acumPrevia + dep.depreciacionNominalEjercicio,
+            fechaAdquisicion: a.fechaAdquisicion,
+            fechaVenta: a.fechaBaja,
+            precioVenta: precioVenta ?? 0,
+          })
+        : null;
+    if (enajenacion) {
+      totalGananciaEnajenacion += enajenacion.ganancia;
+      totalPerdidaEnajenacion += enajenacion.perdida;
+    }
+
     return {
       id: a.id, descripcion: a.descripcion, tipo: a.tipo, moi: a.moi,
       fechaAdquisicion: a.fechaAdquisicion, esAutomovil: a.esAutomovil,
       esElectricoHibrido: a.esElectricoHibrido, fechaBaja: a.fechaBaja, autoCreado: a.autoCreado, invoice: a.invoice,
       depreciacion: { ...dep, depreciacionAcumuladaPrevia: Math.round(acumPrevia * 100) / 100, actualizacion: fa },
+      precioVenta,
+      enajenacion,
     };
   });
 
-  return { activos: rows, totalDepreciacionEjercicio: Math.round(totalDepreciacionEjercicio * 100) / 100 };
+  return {
+    activos: rows,
+    totalDepreciacionEjercicio: Math.round(totalDepreciacionEjercicio * 100) / 100,
+    totalGananciaEnajenacion: Math.round(totalGananciaEnajenacion * 100) / 100,
+    totalPerdidaEnajenacion: Math.round(totalPerdidaEnajenacion * 100) / 100,
+  };
 }
 
 /**

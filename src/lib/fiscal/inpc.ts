@@ -126,3 +126,32 @@ export function factorActualizacionDepreciacion(args: {
     denominador: { year: adqYear, month: adqMonth, inpc: den },
   };
 }
+
+/**
+ * Factor de actualización para la ENAJENACIÓN de un activo (Art. 19 LISR):
+ *   INPC(mes en que se enajena) ÷ INPC(mes de adquisición)
+ *
+ * Es otro factor que el de la depreciación anual (Art. 31), que mira la primera
+ * mitad del periodo de uso del ejercicio. Aquí el periodo va de punta a punta:
+ * lo que se actualiza es el saldo que quedó por deducir, hasta el mes de la
+ * venta. Devuelve factor 1 / completo=false si falta algún INPC — nunca una
+ * cifra inventada.
+ */
+export function factorActualizacionEnajenacion(args: {
+  adqYear: number;
+  /** 1-12 */
+  adqMonth: number;
+  ventaYear: number;
+  /** 1-12 */
+  ventaMonth: number;
+}): FactorActualizacion {
+  const den = inpc(args.adqYear, args.adqMonth);
+  const num = inpc(args.ventaYear, args.ventaMonth);
+  if (num == null || den == null || den === 0) return { factor: 1, completo: false };
+  return {
+    factor: r4(num / den),
+    completo: true,
+    numerador: { year: args.ventaYear, month: args.ventaMonth, inpc: num },
+    denominador: { year: args.adqYear, month: args.adqMonth, inpc: den },
+  };
+}

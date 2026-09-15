@@ -32,6 +32,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if ("fechaBaja" in body) {
     data.fechaBaja = body.fechaBaja ? new Date(body.fechaBaja) : null;
     if ("motivoBaja" in body) data.motivoBaja = body.motivoBaja?.trim() || null;
+    // Al quitar la baja se limpia el precio: un activo vivo no tiene venta.
+    if (!data.fechaBaja) data.precioVenta = null;
+  }
+  // Precio de venta (sin IVA). Null/ausente = desecho: el saldo se deduce
+  // completo contra cero. Ver lib/fiscal/enajenacion.ts (Art. 19 LISR).
+  if ("precioVenta" in body) {
+    const v = body.precioVenta;
+    if (v === null || v === "") data.precioVenta = null;
+    else if (typeof v === "number" && v >= 0) data.precioVenta = v;
+    else return NextResponse.json({ error: "precioVenta inválido" }, { status: 400 });
   }
   if (Object.keys(data).length === 0) return NextResponse.json({ error: "No hay cambios" }, { status: 400 });
 
