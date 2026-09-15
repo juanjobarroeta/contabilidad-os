@@ -159,6 +159,29 @@ async function leerBaseEstadoCierre(companyId: string, year: number, month: numb
 }
 
 /** Reúne los hechos del periodo. Una fuente por cifra, para que el hash no oscile. */
+/**
+ * ¿El recibo cubre ESE mes? Vale si se pagó dentro del mes, o si el PERIODO
+ * TRABAJADO lo toca: la quincena «2026-08-16/2026-08-31» se paga el 1 de
+ * septiembre, y mirando sólo la fecha de pago agosto salía sin recibo mientras
+ * septiembre contaba dos. Un periodo con formato raro no descarta nada: manda
+ * la fecha de pago, que siempre está.
+ */
+export function reciboCubreElMes(
+  run: { periodo: string; fechaPago: Date },
+  from: Date,
+  to: Date,
+): boolean {
+  if (run.fechaPago >= from && run.fechaPago < to) return true;
+  const dia = (t: string | undefined) => {
+    const d = t?.trim() ? new Date(`${t.trim()}T12:00:00Z`) : null;
+    return d && !Number.isNaN(d.getTime()) ? d : null;
+  };
+  const [ini, fin] = (run.periodo ?? "").split("/");
+  const desde = dia(ini);
+  const hasta = dia(fin) ?? desde;
+  return !!desde && !!hasta && desde < to && hasta >= from;
+}
+
 export async function cargarHechosCierre(
   companyId: string,
   year: number,
@@ -204,13 +227,31 @@ export async function cargarHechosCierre(
       _count: { _all: true },
     }),
     prisma.conciliacionBancaria.count({ where: { companyId, year, month, conciliadoAt: { not: null } } }),
-    prisma.employee.findMany({ where: { companyId, isActive: true }, select: { id: true } }),
+    // QUIÉN ESTABA EN NÓMINA ESE MES, no quién está activo hoy. La baja manda
+    // sobre la bandera: un finiquito pagado cuya fila nunca se apagó salía
+    // «sin recibo» todos los meses siguientes, para siempre. Y quien entró
+    // después del mes no tenía por qué tener recibo en él.
+    prisma.employee.findMany({
+      where: {
+        companyId,
+        fechaIngreso: { lt: to },
+        OR: [{ fechaBaja: { gte: from } }, { fechaBaja: null, isActive: true }],
+      },
+      select: { id: true, nombre: true, apellidoPaterno: true, tipoRegimen: true },
+    }),
+    // El recibo se busca con una ventana ANCHA de fecha de pago y luego se
+    // decide por el PERIODO TRABAJADO: la quincena del 16 al 31 de agosto se
+    // paga el 1 de septiembre, y contra `fechaPago` sola agosto salía sin
+    // recibo mientras septiembre contaba dos.
     prisma.payrollItem.findMany({
       where: {
-        payrollRun: { companyId, status: { in: ["STAMPED", "PAID"] }, fechaPago: { gte: from, lt: to } },
+        payrollRun: {
+          companyId,
+          status: { in: ["STAMPED", "PAID"] },
+          fechaPago: { gte: new Date(from.getTime() - 45 * 86400000), lt: new Date(to.getTime() + 45 * 86400000) },
+        },
       },
-      select: { employeeId: true },
-      distinct: ["employeeId"],
+      select: { employeeId: true, payrollRun: { select: { periodo: true, fechaPago: true } } },
     }),
     prisma.imssMovimiento.count({ where: { companyId, status: "PENDING" } }),
     prisma.fiscalHallazgo.count({
@@ -251,14 +292,18 @@ export async function cargarHechosCierre(
 
   const conMovimientos = new Set(movimientosPorCuenta.map((m) => m.bankAccountId));
   const cuentasSinEstado = cuentas.filter((c) => !conMovimientos.has(c.id)).length;
-  const conRecibo = new Set(empleadosConRecibo.map((p) => p.employeeId));
-  // Empleados activos sin recibo: se cuenta sobre los activos de hoy; si un
-  // empleado entró después del mes, el checklist de nómina ya lo contempla.
-  // (La lista de activos ya viene de la pasada paralela: antes se pedía dos
-  // veces, una para contar y otra para restar, y la segunda iba en serie.)
+  const conRecibo = new Set(
+    empleadosConRecibo.filter((p) => reciboCubreElMes(p.payrollRun, from, to)).map((p) => p.employeeId),
+  );
   const empleadosActivos = activos.length;
-  const empleadosSinRecibo =
-    empleadosActivos === 0 ? 0 : activos.filter((e) => !conRecibo.has(e.id)).length;
+  const sinRecibo = empleadosActivos === 0 ? [] : activos.filter((e) => !conRecibo.has(e.id));
+  const empleadosSinRecibo = sinRecibo.length;
+  // Con nombre y apellido: «1 empleado sin recibo» obliga a ir a buscar quién,
+  // y el nombre suele contestar solo por qué (un alta de fin de mes, un
+  // asimilado que se paga por fuera).
+  const empleadosSinReciboNombres = sinRecibo
+    .slice(0, 3)
+    .map((e) => `${e.nombre} ${e.apellidoPaterno ?? ""}`.trim());
 
   const regimenFiscal = company?.regimenFiscal ?? "";
   const ctx: ContextoEmpresa = {
@@ -280,6 +325,7 @@ export async function cargarHechosCierre(
       movimientosPorCuenta.length === 0 && cierreBanco?.sinActividadBancariaAt != null,
     empleadosActivos,
     empleadosSinRecibo,
+    empleadosSinReciboNombres,
     idsePendientes,
     hallazgosCriticos,
     hallazgosEfos,

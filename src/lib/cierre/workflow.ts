@@ -351,9 +351,11 @@ export interface ExtrasCierre {
   cuentasFirmadas: number;
   /** El contador confirmó que todo el periodo careció de actividad bancaria. */
   sinActividadBancariaConfirmada: boolean;
-  /** Empleados activos sin recibo timbrado en el mes. */
+  /** Empleados que estuvieron en nómina ese mes, y los que no tienen recibo. */
   empleadosActivos: number;
   empleadosSinRecibo: number;
+  /** Los primeros tres, por nombre: el aviso dice QUIÉN, no sólo cuántos. */
+  empleadosSinReciboNombres?: string[];
   /** Movimientos IMSS (IDSE) pendientes de presentar. */
   idsePendientes: number;
   /** Hallazgos ABIERTOS del auditor con severidad error (sin snooze vigente). */
@@ -548,14 +550,19 @@ function senalExtra(clave: string, x: ExtrasCierre, ctx: ContextoEmpresa): Senal
         : { clave, estado: "ok", resumen: "Sin CFDI faltantes frente al censo del SAT" };
     case "x:empleados_sin_recibo":
       if (x.empleadosActivos === 0) return null;
-      return x.empleadosSinRecibo > 0
-        ? {
-            clave,
-            estado: "warn",
-            resumen: `${plural(x.empleadosSinRecibo, "empleado activo sin recibo timbrado en el mes", "empleados activos sin recibo timbrado en el mes")}`,
-            cta: { label: "Ver nómina", href: "/nomina?tab=corridas" },
-          }
-        : { clave, estado: "ok", resumen: `${plural(x.empleadosActivos, "empleado con recibo del mes", "empleados con recibo del mes")}` };
+      if (x.empleadosSinRecibo > 0) {
+        const nombres = (x.empleadosSinReciboNombres ?? []).filter((n) => n.trim().length > 0);
+        const quienes = nombres.length > 0
+          ? `: ${nombres.join(", ")}${x.empleadosSinRecibo > nombres.length ? ` y ${x.empleadosSinRecibo - nombres.length} más` : ""}`
+          : "";
+        return {
+          clave,
+          estado: "warn" as const,
+          resumen: `${plural(x.empleadosSinRecibo, "empleado sin recibo timbrado en el mes", "empleados sin recibo timbrado en el mes")}${quienes}`,
+          cta: { label: "Ver nómina", href: "/nomina?tab=corridas" },
+        };
+      }
+      return { clave, estado: "ok", resumen: `${plural(x.empleadosActivos, "empleado con recibo del mes", "empleados con recibo del mes")}` };
     case "x:idse_pendientes":
       return x.idsePendientes > 0
         ? {
