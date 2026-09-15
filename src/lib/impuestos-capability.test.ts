@@ -62,7 +62,7 @@ describe("computeTaxPosition regimen gate", () => {
       perdidaFiscalPendiente: null,
       perdidaFiscalAnio: null,
       regimenFiscal: "612",
-      regimenes: [{ code: "605" }, { code: "612" }],
+      regimenes: [{ code: "606" }, { code: "612" }],
       rfc: "AAAA010101AAA",
       plataformaActividad: null,
     });
