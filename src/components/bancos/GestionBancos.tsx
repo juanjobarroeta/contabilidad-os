@@ -32,6 +32,7 @@ import {
 import Link from "next/link";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { usePeriod } from "@/components/contabilidad/PeriodProvider";
+import { VisorDocumento } from "@/components/ui/VisorDocumento";
 import { RepresentacionImpresa } from "@/components/facturas/RepresentacionImpresa";
 import { Card, Money, Chip } from "@/components/ui";
 import { Alert, RetryButton } from "@/components/ui/feedback";
@@ -174,6 +175,7 @@ export function GestionBancos({
 }) {
   const { activeCompany } = useCompany();
   const { year, month } = usePeriod();
+  const [pdfAbierto, setPdfAbierto] = useState<{ url: string; titulo: string } | null>(null);
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [txs, setTxs] = useState<BankTx[]>([]);
@@ -576,8 +578,13 @@ export function GestionBancos({
 
   if (!activeCompany) return <div className="p-8 text-sm text-cos-ink-faint">Selecciona una empresa.</div>;
 
+  const visor = pdfAbierto ? (
+    <VisorDocumento url={pdfAbierto.url} titulo={pdfAbierto.titulo} onClose={() => setPdfAbierto(null)} />
+  ) : null;
+
   return (
     <div>
+      {visor}
       {errorCuentas && accounts.length === 0 ? (
         /* Rama de ERROR, excluyente del vacío: si el fetch cayó no se afirma
            "Sin cuentas bancarias" — las cuentas pueden existir. */
@@ -758,8 +765,15 @@ export function GestionBancos({
                         </td>
                         <td className="px-3 py-2.5 text-right">
                           {l.tienePdf ? (
-                            <a href={`/api/bancos/import-batches/${l.id}/pdf`} target="_blank" rel="noreferrer"
-                              className="font-semibold text-cos-brand-ink hover:underline">Ver PDF</a>
+                            // Dentro de la app: instalada en el teléfono no hay
+                            // flecha de regreso, y abrir el PDF dejaba al usuario
+                            // encerrado en el visor del sistema.
+                            <button
+                              onClick={() => setPdfAbierto({ url: `/api/bancos/import-batches/${l.id}/pdf`, titulo: `Estado de cuenta · ${l.cuentaEtiqueta} · ${l.periodo ?? "sin periodo"}` })}
+                              className="font-semibold text-cos-brand-ink hover:underline"
+                            >
+                              Ver PDF
+                            </button>
                           ) : (
                             <span className="text-cos-ink-faint">—</span>
                           )}
