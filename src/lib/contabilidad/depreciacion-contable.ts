@@ -6,8 +6,12 @@
 // declaración. El LIBRO lleva la depreciación CONTABLE: nominal (sin INPC —
 // la actualización es extracontable) y SIN tope de automóvil (el tope Art.
 // 36-II es fiscal). Deliberadamente reutiliza el mismo motor de meses-de-uso
-// para que contable y fiscal difieran sólo por tope/INPC — esa delta se
-// muestra en el activo fijo como conciliación contable-fiscal.
+// para que contable y fiscal difieran sólo por tope/INPC.
+//
+// Esa delta TODAVÍA NO SE MUESTRA en ningún lado: la pantalla de activo fijo
+// pinta las columnas fiscales y no hay conciliación contable-fiscal. El
+// encabezado decía que sí, y no era cierto; queda escrito como pendiente para
+// que nadie lo dé por hecho al armar la anual.
 //
 // Módulo PURO (sin Prisma): postMonth lo cablea con los ActivoFijo del mes.
 // Los asientos generados llevan fuente DEPRECIACION (regenerable: postMonth

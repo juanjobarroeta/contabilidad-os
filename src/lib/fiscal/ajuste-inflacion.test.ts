@@ -4,8 +4,7 @@ import {
   clasificacionPorDefecto,
   factorAjusteAnual,
   saldoPromedioAnual,
-  type CuentaSaldos,
-} from "./ajuste-inflacion";
+  type CuentaSaldos, ajusteParaDeclaracionAnual } from "./ajuste-inflacion";
 import { inpc } from "./inpc";
 
 /** Cuenta con el mismo saldo los 12 meses — el caso fácil de verificar a mano. */
@@ -289,5 +288,50 @@ describe("calcularAjusteInflacion (Art. 44)", () => {
     // acumulable que hoy simplemente no se declaran.
     expect(r.acumulable).toBeGreaterThan(20_000);
     expect(r.acumulable).toBeLessThan(60_000);
+  });
+});
+
+// El default de la anual era CERO: la cifra sólo entraba si alguien abría el
+// panel y pulsaba «aplicar». Una anual presentada sin ese clic salía sin
+// ajuste, en silencio. Pero proponerlo a ciegas es peor que no proponerlo.
+describe("ajusteParaDeclaracionAnual()", () => {
+  const calculado = { acumulable: 120000, deducible: 0, calculable: true };
+
+  it("persona moral con el libro completo: se propone la cifra calculada", () => {
+    const r = ajusteParaDeclaracionAnual({ tipoPersona: "PM", resultado: calculado, mesesSinPostear: [] });
+    expect(r).toEqual({ acumulable: 120000, deducible: 0, motivo: null });
+  });
+
+  it("persona física: no aplica, y lo dice", () => {
+    const r = ajusteParaDeclaracionAnual({ tipoPersona: "PF", resultado: calculado, mesesSinPostear: [] });
+    expect(r.acumulable).toBe(0);
+    expect(r.motivo).toContain("persona física");
+  });
+
+  it("sin INPC no hay factor: cero con motivo, no una cifra inventada", () => {
+    const r = ajusteParaDeclaracionAnual({
+      tipoPersona: "PM",
+      resultado: { acumulable: 0, deducible: 0, calculable: false },
+      mesesSinPostear: [],
+    });
+    expect(r.acumulable).toBe(0);
+    expect(r.motivo).toContain("INPC");
+  });
+
+  // El promedio del Art. 44 es sobre los saldos de CADA mes: con meses sin
+  // contabilizar, el promedio miente y la cifra saldría baja.
+  it("meses sin contabilizar: no se propone, y se nombran", () => {
+    const r = ajusteParaDeclaracionAnual({ tipoPersona: "PM", resultado: calculado, mesesSinPostear: [11, 12] });
+    expect(r.acumulable).toBe(0);
+    expect(r.motivo).toContain("11, 12");
+  });
+
+  it("el deducible viaja igual que el acumulable", () => {
+    const r = ajusteParaDeclaracionAnual({
+      tipoPersona: "PM",
+      resultado: { acumulable: 0, deducible: 45000, calculable: true },
+      mesesSinPostear: [],
+    });
+    expect(r).toEqual({ acumulable: 0, deducible: 45000, motivo: null });
   });
 });

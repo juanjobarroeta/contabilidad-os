@@ -228,9 +228,11 @@ export function ActivoFijoView() {
             <span>
               Actualización por <b>INPC</b> (Art. 31) aplicada cuando el índice del periodo está cargado
               (ene–ago 2016–2026; incluye junio, el numerador anual) — <b>INPC aún sin cotejar</b> contra la
-              fuente oficial. Donde falta el índice, la cifra queda nominal. La depreciación <b>aún no se resta
-              del ISR</b>: este registro prepara el dato para conectarlo a la declaración (excluyendo la inversión
-              de las deducciones inmediatas en el mismo cambio). <code>*</code> = tasa aproximada.
+              fuente oficial. Donde falta el índice, la cifra queda nominal y no aparece el factor.
+              Esta deducción <b>ya entra a la declaración anual</b> como default, y los CFDIs de inversión
+              quedan fuera de las deducciones inmediatas para no deducirlos dos veces. Las cifras de arriba son
+              FISCALES: la póliza mensual usa la depreciación contable, sin actualizar y sin el tope de
+              automóvil. <code>*</code> = tasa aproximada.
             </span>
           </div>
         </>

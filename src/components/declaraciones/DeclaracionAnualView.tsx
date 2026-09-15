@@ -225,8 +225,8 @@ export function DeclaracionAnualView() {
                   ["depreciacion", "Depreciación de activos fijos"],
                   ["otrasDeduccionesAutorizadas", "Otras deducciones autorizadas"],
                   ["aportacionesInfonavitSar", "Aportaciones Infonavit / SAR patronal"],
-                  ["ajusteInflacionAcumulable", "Ajuste anual por inflación acumulable (lo llena el panel de arriba)"],
-                  ["ajusteInflacionDeducible", "Ajuste anual por inflación deducible (lo llena el panel de arriba)"],
+                  ["ajusteInflacionAcumulable", "Ajuste anual por inflación acumulable (sale del libro; escríbelo para sobreescribirlo)"],
+                  ["ajusteInflacionDeducible", "Ajuste anual por inflación deducible (sale del libro; escríbelo para sobreescribirlo)"],
                   ["perdidasAnteriores", "Pérdidas de ejercicios anteriores"],
                   ["isrRetenidoPorTerceros", "ISR retenido por terceros (clientes)"],
                 ] as const).map(([key, label]) => (

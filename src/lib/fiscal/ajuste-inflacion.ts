@@ -322,3 +322,33 @@ export function calcularAjusteInflacion(entrada: EntradaAjuste): ResultadoAjuste
     calculable,
   };
 }
+
+/**
+ * La cifra del ajuste que se le PROPONE a la declaración anual, o cero con el
+ * porqué. Puro, para poder probarlo.
+ *
+ * El default era cero y la cifra sólo entraba si alguien abría el panel y
+ * pulsaba «aplicar»: una anual presentada sin ese clic salía sin ajuste, en
+ * silencio. Pero proponerlo a ciegas es peor: sin INPC no hay factor, y con
+ * meses sin contabilizar el promedio de saldos del Art. 44 está incompleto.
+ * Así que se propone sólo cuando el libro lo sostiene, y cuando no, se dice.
+ */
+export function ajusteParaDeclaracionAnual(args: {
+  tipoPersona: "PM" | "PF";
+  resultado: Pick<ResultadoAjuste, "acumulable" | "deducible" | "calculable">;
+  mesesSinPostear: number[];
+}): { acumulable: number; deducible: number; motivo: string | null } {
+  const cero = (motivo: string) => ({ acumulable: 0, deducible: 0, motivo });
+  if (args.tipoPersona !== "PM") {
+    return cero("No aplica a persona física (Art. 44 es de personas morales).");
+  }
+  if (!args.resultado.calculable) {
+    return cero("Falta el INPC de algún mes del ejercicio: sin factor no hay cifra que proponer.");
+  }
+  if (args.mesesSinPostear.length > 0) {
+    return cero(
+      `Hay ${args.mesesSinPostear.length} mes(es) sin contabilizar (${args.mesesSinPostear.join(", ")}): el promedio de saldos estaría incompleto.`,
+    );
+  }
+  return { acumulable: args.resultado.acumulable, deducible: args.resultado.deducible, motivo: null };
+}

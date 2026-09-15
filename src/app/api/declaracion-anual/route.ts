@@ -6,6 +6,8 @@ import { calcularDeclaracionAnual, type DeclaracionAnualInput } from "@/lib/decl
 import { REGIMENES_ASIMILADOS } from "@/lib/nomina/regimen";
 import { sumIsrPagar } from "@/lib/isr-provisional";
 import { calcularDepreciacionRegistro } from "@/lib/fiscal/activos-registro";
+import { cargarAjusteInflacion } from "@/lib/fiscal/ajuste-inflacion-ledger";
+import { ajusteParaDeclaracionAnual } from "@/lib/fiscal/ajuste-inflacion";
 import { efosRfcsBloqueados } from "@/lib/fiscal/efos/service";
 import { perdidasDisponibles, aplicarPerdidas, primeraActualizacion } from "@/lib/fiscal/perdidas";
 import { evidenciaPresentacion } from "@/lib/fiscal/presentacion";
@@ -182,6 +184,21 @@ export async function GET(req: Request) {
   const tipoPersona = company.rfc.length === 12 ? "PM" : "PF";
 
   // ── Build input with DB data + manual overrides from query params ──
+  // ── Ajuste anual por inflación (Art. 44-46), como default ────────────────
+  //
+  // Sólo PERSONA MORAL: el ajuste no aplica a personas físicas. Y sólo si el
+  // libro lo sostiene — sin INPC no hay factor, y con meses sin contabilizar el
+  // promedio de saldos está incompleto, así que proponer una cifra sería peor
+  // que proponer nada. En esos casos queda en cero y se dice por qué.
+  const ajusteAuto = await (async () => {
+    try {
+      const { resultado, mesesSinPostear } = await cargarAjusteInflacion(companyId, ejercicio);
+      return ajusteParaDeclaracionAnual({ tipoPersona, resultado, mesesSinPostear });
+    } catch {
+      return { acumulable: 0, deducible: 0, motivo: "No se pudo leer el libro para calcularlo." };
+    }
+  })();
+
   const input: DeclaracionAnualInput = {
     ejercicio,
     tipoPersona: tipoPersona as "PM" | "PF",
@@ -200,8 +217,17 @@ export async function GET(req: Request) {
       : depreciacionRegistro,
     otrasDeduccionesAutorizadas: parseFloat(searchParams.get("otrasDeduccionesAutorizadas") ?? "0"),
     ptuPagado,
-    ajusteInflacionAcumulable: parseFloat(searchParams.get("ajusteInflacionAcumulable") ?? "0"),
-    ajusteInflacionDeducible: parseFloat(searchParams.get("ajusteInflacionDeducible") ?? "0"),
+    // Default: el ajuste anual por inflación CALCULADO del libro (Art. 44-46),
+    // como la depreciación y las pérdidas. Antes el default era CERO y la cifra
+    // sólo entraba si alguien abría el panel y pulsaba «aplicar»: una anual
+    // presentada sin ese clic salía sin ajuste, en silencio y sin que nada lo
+    // dijera. Se propone sólo cuando el libro lo sostiene (ver ajusteAuto).
+    ajusteInflacionAcumulable: searchParams.has("ajusteInflacionAcumulable")
+      ? parseFloat(searchParams.get("ajusteInflacionAcumulable") ?? "0")
+      : ajusteAuto.acumulable,
+    ajusteInflacionDeducible: searchParams.has("ajusteInflacionDeducible")
+      ? parseFloat(searchParams.get("ajusteInflacionDeducible") ?? "0")
+      : ajusteAuto.deducible,
     // Default: pérdidas pendientes actualizadas del ledger (Art. 57); overridable.
     perdidasEjerciciosAnteriores: searchParams.has("perdidasAnteriores")
       ? parseFloat(searchParams.get("perdidasAnteriores") ?? "0")
@@ -233,6 +259,12 @@ export async function GET(req: Request) {
         sobreescritoManual: searchParams.has("depreciacion"),
       },
       inversionesExcluidas: { count: "CFDI de inversión (se deducen vía depreciación)", monto: inversionesExcluidas },
+      ajusteInflacion: {
+        count: ajusteAuto.motivo ?? "Calculado del libro (Art. 44-46)",
+        monto: ajusteAuto.acumulable > 0 ? ajusteAuto.acumulable : -ajusteAuto.deducible,
+        sobreescritoManual:
+          searchParams.has("ajusteInflacionAcumulable") || searchParams.has("ajusteInflacionDeducible"),
+      },
       sinEfectosExcluidos: { count: "CFDI sin efectos fiscales (no deducible)", monto: sinEfectosExcluidos },
       efosExcluidos: efosExcluidos
         ? { count: `${efosExcluidos._count.id} CFDI(s) de proveedor 69-B definitivo (no deducible, Art. 69-B)`, monto: efosExcluidos._sum.subtotal ?? 0 }
