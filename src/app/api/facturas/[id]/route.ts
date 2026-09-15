@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getPacProvider } from "@/lib/pac";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { registrarBitacora } from "@/lib/audit";
+import { retirarActivosPorReclasificacion } from "@/lib/fiscal/auto-activo";
 
 const VALID_MOTIVOS = ["01", "02", "03", "04"] as const;
 
@@ -303,5 +304,36 @@ export async function PATCH(
     where: { id },
     data,
   });
-  return NextResponse.json(updated);
+
+  // DEJAR DE SER INVERSIÓN TIENE QUE LLEVARSE EL ACTIVO.
+  //
+  // Un CFDI con usoCfdi I01–I08 crea un ActivoFijo solo (auto-activo.ts). Si el
+  // contador lo reclasifica a GASTO, el CFDI pasa a deducirse completo... y el
+  // activo huérfano seguía depreciándose mes con mes: LA MISMA COMPRA DEDUCIDA
+  // DOS VECES, una en el gasto y otra en la depreciación. Nadie lo veía, porque
+  // el activo vive en otra pantalla.
+  //
+  // Sólo se retira el que creó el sistema (`autoCreado`): uno que el contador
+  // capturó o ya revisó es suyo, y borrárselo por editar la factura sería
+  // peor que el problema.
+  let activosRetirados = 0;
+  if (data.naturaleza) {
+    activosRetirados = await retirarActivosPorReclasificacion(prisma, {
+      companyId: invoice.companyId,
+      invoiceId: id,
+      naturaleza: data.naturaleza,
+    });
+    if (activosRetirados > 0) {
+      registrarBitacora({
+        accion: "activo.retirar-por-reclasificacion",
+        userId: session.user.id,
+        companyId: invoice.companyId,
+        entidad: "ActivoFijo",
+        entidadId: id,
+        detalle: { invoiceId: id, naturaleza: data.naturaleza, retirados: activosRetirados },
+      });
+    }
+  }
+
+  return NextResponse.json({ ...updated, activosRetirados });
 }

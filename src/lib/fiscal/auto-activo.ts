@@ -63,3 +63,28 @@ export async function crearActivoDesdeCfdiSiAplica(
   });
   return creado.id;
 }
+
+/**
+ * Retira el activo que el sistema creó solo cuando el CFDI deja de ser
+ * INVERSIÓN. Devuelve cuántos retiró.
+ *
+ * Reclasificar a GASTO deduce el CFDI completo; si el activo se queda, sigue
+ * depreciándose mes con mes y LA MISMA COMPRA SE DEDUCE DOS VECES. No se veía
+ * porque el activo vive en otra pantalla que la factura.
+ *
+ * Sólo se va el `autoCreado`: uno capturado a mano, o ya revisado por el
+ * contador (editarlo limpia la bandera), es suyo — borrárselo por editar la
+ * factura sería peor que el problema. Y no hay camino de vuelta automático: de
+ * GASTO a INVERSIÓN el activo se registra desde la factura, con su botón, para
+ * que el importe y la fecha los ponga quien sabe.
+ */
+export async function retirarActivosPorReclasificacion(
+  db: Db,
+  args: { companyId: string; invoiceId: string; naturaleza: string },
+): Promise<number> {
+  if (args.naturaleza === "INVERSION") return 0;
+  const { count } = await db.activoFijo.deleteMany({
+    where: { companyId: args.companyId, invoiceId: args.invoiceId, autoCreado: true },
+  });
+  return count;
+}
