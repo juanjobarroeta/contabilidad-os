@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Alert, Loading, Money, RetryButton } from "@/components/ui";
@@ -13,6 +13,11 @@ import {
 import { errorRegistroPatronal } from "@/lib/nomina/registro-patronal";
 import { MandatoEfirmaExistente } from "@/components/legal/MandatoEfirmaExistente";
 import { PuntoDePartida } from "@/components/empresa/PuntoDePartida";
+import { CsfPrimaryChoice } from "@/components/empresa/CsfPrimaryChoice";
+import {
+  refreshCompanyFromCsf,
+  type CsfRegimenOption,
+} from "@/lib/fiscal/csf-refresh-client";
 
 type DocType = "CSF" | "TARJETA_IMSS" | "ACUSE_ANUAL" | "ACUSE_MENSUAL" | "OTRO";
 type ImportDoc = {
@@ -69,6 +74,12 @@ interface CompanyDetail {
   plataformaActividad?: string | null;
 }
 
+interface PendingCsfRefresh {
+  companyId: string;
+  csfBase64: string;
+  regimenes: CsfRegimenOption[];
+}
+
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -91,7 +102,16 @@ export default function EmpresaPage() {
   const [csfSubiendo, setCsfSubiendo] = useState(false);
   const [csfResultado, setCsfResultado] = useState("");
   const [csfError, setCsfError] = useState("");
+  const [pendingCsfRefresh, setPendingCsfRefresh] = useState<PendingCsfRefresh | null>(null);
+  const activeCompanyIdRef = useRef(activeCompany?.id);
   const router = useRouter();
+
+  useEffect(() => {
+    activeCompanyIdRef.current = activeCompany?.id;
+    setPendingCsfRefresh(null);
+    setCsfResultado("");
+    setCsfError("");
+  }, [activeCompany?.id]);
 
   // Add company form
   const [showAddForm, setShowAddForm] = useState(false);
@@ -642,31 +662,52 @@ export default function EmpresaPage() {
           ? { clase: "bg-cos-jade-tint text-cos-jade-ink", texto: fielVigenciaFmt ? `Vigente hasta ${fielVigenciaFmt}` : "✓ Configurada" }
           : { clase: "bg-cos-amber-tint text-cos-amber-ink", texto: "Sin configurar" };
 
+  async function submitCsfRefresh(
+    pending: Omit<PendingCsfRefresh, "regimenes">,
+    regimenFiscalPrincipal?: string,
+  ) {
+    const outcome = await refreshCompanyFromCsf({
+      companyId: pending.companyId,
+      csfBase64: pending.csfBase64,
+      ...(regimenFiscalPrincipal ? { regimenFiscalPrincipal } : {}),
+    });
+    if (activeCompanyIdRef.current !== pending.companyId) return;
+    if (outcome.kind === "PRIMARY_REQUIRED") {
+      setPendingCsfRefresh({ ...pending, regimenes: outcome.regimenes });
+      return;
+    }
+    if (outcome.kind === "ERROR") throw new Error(outcome.message);
+
+    setPendingCsfRefresh(null);
+    setCsfResultado(outcome.message);
+    await fetchCompanyDetail();
+  }
+
   async function subirCsf(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !activeCompany) return;
-    setCsfSubiendo(true); setCsfResultado(""); setCsfError("");
+    const input = e.currentTarget;
+    setCsfSubiendo(true); setCsfResultado(""); setPendingCsfRefresh(null); setCsfError("");
     try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
-        reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
-        reader.readAsDataURL(file);
-      });
-      const res = await fetch("/api/obligaciones/csf", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId: activeCompany.id, csfBase64: base64 }),
-      });
-      const d = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(d?.error ?? "No se pudo procesar la constancia");
-      setCsfResultado(d.message ?? "Constancia procesada.");
-      fetchCompanyDetail();
+      const base64 = await fileToBase64(file);
+      await submitCsfRefresh({ companyId: activeCompany.id, csfBase64: base64 });
     } catch (err) {
       setCsfError(err instanceof Error ? err.message : "Error al procesar la CSF");
     } finally {
       setCsfSubiendo(false);
-      e.target.value = "";
+      input.value = "";
+    }
+  }
+
+  async function confirmCsfPrimary(code: string) {
+    if (!pendingCsfRefresh) return;
+    setCsfSubiendo(true); setCsfError("");
+    try {
+      await submitCsfRefresh(pendingCsfRefresh, code);
+    } catch (err) {
+      setCsfError(err instanceof Error ? err.message : "Error al procesar la CSF");
+    } finally {
+      setCsfSubiendo(false);
     }
   }
 
@@ -861,6 +902,14 @@ export default function EmpresaPage() {
           </label>
           {csfResultado && <p className="mt-2 text-xs text-cos-jade-ink">{csfResultado}</p>}
           {csfError && <p className="mt-2 text-xs text-cos-red-ink">{csfError}</p>}
+          {pendingCsfRefresh?.companyId === activeCompany.id && (
+            <CsfPrimaryChoice
+              regimenes={pendingCsfRefresh.regimenes}
+              busy={csfSubiendo}
+              onConfirm={confirmCsfPrimary}
+              onCancel={() => setPendingCsfRefresh(null)}
+            />
+          )}
         </div>
       )}
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle, Clock,
@@ -9,12 +9,18 @@ import {
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { CumplimientoTabs } from "@/components/layout/CumplimientoTabs";
 import { Card, Chip, type ChipStatus } from "@/components/ui";
+import { CsfPrimaryChoice } from "@/components/empresa/CsfPrimaryChoice";
+import {
+  refreshCompanyFromCsf,
+  type CsfRegimenOption,
+} from "@/lib/fiscal/csf-refresh-client";
 
 // ── Types (mirrors /api/obligaciones) ─────────────────────────────────────────
 type Estado = "FILED" | "PENDING" | "OVERDUE" | "UPCOMING" | "NOT_APPLICABLE";
 interface PeriodoItem { periodo: string; label: string; vencimiento: string; estado: Estado; declaracionStatus: string | null }
 interface ObligacionCalendar { tipo: string; descripcion: string; periodicidad: string; fuente: string; periodos: PeriodoItem[] }
 interface CalendarData { year: number; obligaciones: ObligacionCalendar[] }
+interface PendingCsfRefresh { companyId: string; csfBase64: string; regimenes: CsfRegimenOption[] }
 
 // Estado → shared status vocabulary + cos cell styling.
 const ESTADO: Record<Estado, { chip: ChipStatus | null; cell: string; text: string; icon: typeof CheckCircle2 | null }> = {
@@ -54,6 +60,8 @@ export default function CumplimientoPage() {
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
   const [csfResult, setCsfResult] = useState<string | null>(null);
+  const [pendingCsfRefresh, setPendingCsfRefresh] = useState<PendingCsfRefresh | null>(null);
+  const activeCompanyIdRef = useRef(activeCompany?.id);
 
   const load = useCallback(async () => {
     if (!activeCompany) return;
@@ -71,26 +79,59 @@ export default function CumplimientoPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    activeCompanyIdRef.current = activeCompany?.id;
+    setPendingCsfRefresh(null);
+    setCsfResult(null);
+    setError("");
+  }, [activeCompany?.id]);
+
+  async function submitCsfRefresh(
+    pending: Omit<PendingCsfRefresh, "regimenes">,
+    regimenFiscalPrincipal?: string,
+  ) {
+    const outcome = await refreshCompanyFromCsf({
+      companyId: pending.companyId,
+      csfBase64: pending.csfBase64,
+      ...(regimenFiscalPrincipal ? { regimenFiscalPrincipal } : {}),
+    });
+    if (activeCompanyIdRef.current !== pending.companyId) return;
+    if (outcome.kind === "PRIMARY_REQUIRED") {
+      setPendingCsfRefresh({ ...pending, regimenes: outcome.regimenes });
+      return;
+    }
+    if (outcome.kind === "ERROR") throw new Error(outcome.message);
+
+    setPendingCsfRefresh(null);
+    setCsfResult(outcome.message);
+    await load();
+  }
+
   async function handleCsfUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !activeCompany) return;
-    setUploading(true); setCsfResult(null); setError("");
+    const input = e.currentTarget;
+    setUploading(true); setCsfResult(null); setPendingCsfRefresh(null); setError("");
     try {
       const base64 = await fileToBase64(file);
-      const res = await fetch("/api/obligaciones/csf", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId: activeCompany.id, csfBase64: base64 }),
-      });
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error ?? "Error al procesar CSF");
-      setCsfResult(result.message);
-      load();
+      await submitCsfRefresh({ companyId: activeCompany.id, csfBase64: base64 });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al procesar la CSF");
     } finally {
       setUploading(false);
-      e.target.value = "";
+      input.value = "";
+    }
+  }
+
+  async function confirmCsfPrimary(code: string) {
+    if (!pendingCsfRefresh) return;
+    setUploading(true); setError("");
+    try {
+      await submitCsfRefresh(pendingCsfRefresh, code);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al procesar la CSF");
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -151,6 +192,14 @@ export default function CumplimientoPage() {
 
       {error && <div className="mt-4 flex items-center gap-2 rounded-control bg-cos-red-tint px-4 py-3 text-sm text-cos-red-ink"><AlertTriangle className="h-4 w-4 shrink-0" />{error}</div>}
       {csfResult && <div className="mt-4 flex items-start gap-2 rounded-control bg-cos-jade-tint px-4 py-3 text-sm text-cos-jade-ink"><FileCheck className="mt-0.5 h-4 w-4 shrink-0" />{csfResult}</div>}
+      {pendingCsfRefresh?.companyId === activeCompany.id && (
+        <CsfPrimaryChoice
+          regimenes={pendingCsfRefresh.regimenes}
+          busy={uploading}
+          onConfirm={confirmCsfPrimary}
+          onCancel={() => setPendingCsfRefresh(null)}
+        />
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center gap-2 py-16 text-sm text-cos-ink-faint"><Loader2 className="h-5 w-5 animate-spin" /> Cargando calendario…</div>
