@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
+  acreditarSaldoFavorAnterior,
+  elegirRemanentePerdida,
   aplicarPerdidaFiscalPM,
   ptuDisminuiblePM,
   coeficienteDesdeAnual,
@@ -385,5 +387,74 @@ describe("advertenciasCadenaDeclaraciones", () => {
     expect(r).toHaveLength(1);
     expect(r[0]).toContain("enero de 2026");
     expect(r[0]).toContain("febrero de 2026");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Art. 6 LIVA: el saldo a favor de meses anteriores sólo se acredita CONTRA EL
+// IMPUESTO A CARGO. Caso medido: agosto 2026 de SOLUCIONES DE MOVILIDAD POBLANA
+// cerró en favor y el acuse del SAT reporta 2,411 — el motor devolvía 3,171.80
+// porque se había tragado los 898 de julio.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("acreditarSaldoFavorAnterior", () => {
+  it("(a) mes que cierra EN FAVOR no consume el saldo previo: queda vivo", () => {
+    const r = acreditarSaldoFavorAnterior({ cargoDelMes: -2273.8, saldoFavorAnterior: 898 });
+    expect(r.aplicado).toBe(0);
+    expect(r.pagar).toBe(0);
+    expect(r.saldoAFavor).toBe(2273.8); // la línea de la declaración: sólo el mes
+    expect(r.pendiente).toBe(3171.8); // el acarreo: 898 intactos + 2,273.80
+  });
+
+  it("(b) mes con cargo mayor al saldo previo: se agota el previo", () => {
+    const r = acreditarSaldoFavorAnterior({ cargoDelMes: 5000, saldoFavorAnterior: 898 });
+    expect(r.aplicado).toBe(898);
+    expect(r.pagar).toBe(4102);
+    expect(r.saldoAFavor).toBe(0);
+    expect(r.pendiente).toBe(0);
+  });
+
+  it("(c) el acreditamiento NO excede la cantidad a cargo (tope del SAT)", () => {
+    const r = acreditarSaldoFavorAnterior({ cargoDelMes: 300, saldoFavorAnterior: 898 });
+    expect(r.aplicado).toBe(300);
+    expect(r.pagar).toBe(0);
+    expect(r.saldoAFavor).toBe(0);
+    expect(r.pendiente).toBe(598); // el resto sigue disponible
+  });
+
+  it("(d) sin saldo previo se comporta como siempre", () => {
+    expect(acreditarSaldoFavorAnterior({ cargoDelMes: 2652.8, saldoFavorAnterior: 0 })).toEqual({
+      aplicado: 0,
+      pagar: 2652.8,
+      saldoAFavor: 0,
+      pendiente: 0,
+    });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// El remanente de pérdidas no puede salir SÓLO de la anual del año anterior: si
+// esa fila está sin el dato, el cero silencioso cobra ISR inexistente. Medido en
+// agosto 2026: REYES HUERTA CHOLULA tenía 5,881,078 en la anual 2024 y la 2025
+// vacía, y el motor calculaba como si no hubiera pérdidas.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("elegirRemanentePerdida", () => {
+  const anuales = [
+    { periodo: "2025", isrPerdidaPendiente: null },
+    { periodo: "2024", isrPerdidaPendiente: 5_881_078 },
+    { periodo: "2023", isrPerdidaPendiente: 4_859_224 },
+  ];
+
+  it("(a) prefiere la anual del ejercicio inmediato anterior cuando trae el dato", () => {
+    const con2025 = [{ periodo: "2025", isrPerdidaPendiente: 450_415 }, ...anuales.slice(1)];
+    expect(elegirRemanentePerdida(con2025, 2025)).toEqual({ valor: 450_415, ejercicio: 2025 });
+  });
+
+  it("(b) cae a la más reciente CON dato cuando la del año anterior está vacía", () => {
+    expect(elegirRemanentePerdida(anuales, 2025)).toEqual({ valor: 5_881_078, ejercicio: 2024 });
+  });
+
+  it("(c) sin ninguna anual con remanente devuelve null (no inventa un cero)", () => {
+    expect(elegirRemanentePerdida([{ periodo: "2025", isrPerdidaPendiente: null }], 2025)).toBeNull();
+    expect(elegirRemanentePerdida([], 2025)).toBeNull();
   });
 });

@@ -217,8 +217,22 @@ export interface TaxPosition {
     actosGravados: number;
     actosExentos: number;
     saldoFavorAnterior: number;
+    /**
+     * Cuánto del saldo a favor anterior se ACREDITÓ este mes. El Art. 6 LIVA
+     * sólo permite acreditarlo «contra el impuesto a su cargo», y la propia
+     * forma del SAT rotula la línea «SIN EXCEDER DE LA CANTIDAD A CARGO»: un
+     * mes que cierra en favor no consume nada del saldo previo, lo deja vivo.
+     */
+    saldoFavorAplicado: number;
+    /**
+     * El saldo a favor que sigue disponible para meses siguientes: lo que no se
+     * alcanzó a acreditar del anterior MÁS el favor que generó este mes. Es el
+     * acarreo, NO la cifra de la declaración — ésa es `saldoAFavor`.
+     */
+    saldoFavorPendiente: number;
     /** Net IVA a pagar this period (>=0); excess becomes saldoAFavor. */
     pagar: number;
+    /** El saldo a favor GENERADO por este mes — la línea que va en la forma. */
     saldoAFavor: number;
     devengado: { trasladado: number; acreditable: number };
     /** Cómo se acreditó el PUE (Art. 5-I): FLUJO por conciliación bancaria, o
@@ -319,6 +333,60 @@ const ISR_TASA_PM = 0.3;
  *
  * Función pura (sin DB) para poder probar la matemática de forma aislada.
  */
+/**
+ * Acreditamiento del SALDO A FAVOR DE MESES ANTERIORES (Art. 6 LIVA). PURA.
+ *
+ * El saldo a favor sólo se acredita «contra el impuesto a su cargo» de los meses
+ * siguientes; la forma del SAT rotula la línea «SIN EXCEDER DE LA CANTIDAD A
+ * CARGO». Un mes que ya cierra en favor no consume nada del saldo previo: lo
+ * deja vivo para el siguiente mes con cargo.
+ *
+ * Devuelve las TRES cifras que antes se confundían en una sola:
+ *   · `aplicado`    lo que se acreditó este mes (la línea tope del SAT).
+ *   · `saldoAFavor` el favor que GENERÓ el mes → es lo que va en la declaración.
+ *   · `pendiente`   lo que queda disponible hacia adelante (acarreo).
+ */
+export function acreditarSaldoFavorAnterior(params: {
+  cargoDelMes: number;
+  saldoFavorAnterior: number;
+}): { aplicado: number; pagar: number; saldoAFavor: number; pendiente: number } {
+  const cargo = round2(params.cargoDelMes);
+  const previo = Math.max(0, round2(params.saldoFavorAnterior));
+  const aplicado = Math.max(0, Math.min(previo, cargo));
+  const neto = round2(cargo - aplicado);
+  const saldoAFavor = neto < 0 ? round2(-neto) : 0;
+  return {
+    aplicado: round2(aplicado),
+    pagar: Math.max(0, neto),
+    saldoAFavor,
+    pendiente: round2(previo - aplicado + saldoAFavor),
+  };
+}
+
+/**
+ * De qué declaración anual sale el REMANENTE DE PÉRDIDAS para los provisionales
+ * de `year`. PURA.
+ *
+ * La anual de `year - 1` es la mejor fuente (su remanente ya viene actualizado a
+ * este ejercicio), pero una pérdida se amortiza diez años (Art. 57 LISR) y no
+ * desaparece porque falte capturar una anual. Buscar SÓLO en `year - 1` convertía
+ * un hueco de datos en un cero silencioso, y el cero cobra ISR que no se debe.
+ * Por eso se cae a la anual más reciente que sí traiga remanente, diciendo de
+ * qué ejercicio salió para que quien revisa sepa que es una aproximación.
+ */
+export function elegirRemanentePerdida(
+  anuales: { periodo: string; isrPerdidaPendiente: number | null }[],
+  prevYear: number,
+): { valor: number; ejercicio: number } | null {
+  const conDato = anuales.filter((a) => a.isrPerdidaPendiente != null);
+  const elegida =
+    conDato.find((a) => a.periodo.startsWith(String(prevYear))) ??
+    [...conDato].sort((a, b) => b.periodo.localeCompare(a.periodo))[0] ??
+    null;
+  if (!elegida) return null;
+  return { valor: elegida.isrPerdidaPendiente!, ejercicio: Number(elegida.periodo.slice(0, 4)) };
+}
+
 export function aplicarPerdidaFiscalPM(params: {
   utilidadFiscal: number;
   perdidaPendiente: number | null;
@@ -828,10 +896,28 @@ export async function computeTaxPosition(
   const actos = calcularActosDelPeriodo(facturasEmitidas);
   const ivaAcreditable = round2(ivaAcreditableBruto * actos.proporcion);
 
+  // SALDO A FAVOR DE MESES ANTERIORES (Art. 6 LIVA). Sólo se acredita «contra el
+  // impuesto a su cargo» de los meses siguientes: la forma del SAT lo rotula
+  // literal —«ACREDITAMIENTO DEL SALDO A FAVOR DE PERIODOS ANTERIORES (SIN
+  // EXCEDER DE LA CANTIDAD A CARGO)»— y en un mes que ya cierra en favor esa
+  // línea sale en cero, con el saldo previo intacto para después.
+  //
+  // Antes se restaba sin tope, así que un mes en favor se lo tragaba y lo
+  // reportaba como favor PROPIO del mes: contra el acuse de agosto de Soluciones
+  // (a favor 2,411) el motor devolvía 3,171.80, porque le había sumado los 898
+  // de julio. Son dos cifras distintas y ahora se separan:
+  //   · `saldoAFavor`          el favor que GENERÓ el mes → va en la declaración.
+  //   · `saldoFavorPendiente`  lo que queda disponible → acarreo a meses siguientes.
   const saldoFavorAnterior = Number(prevDeclaracion?.ivaSaldoFavor ?? 0);
-  const ivaNeto = ivaTrasladadoTotal - ivaAcreditable - ivaRetenidoPorClientes - saldoFavorAnterior;
-  const ivaPagar = Math.max(0, round2(ivaNeto));
-  const ivaSaldoAFavor = ivaNeto < 0 ? round2(-ivaNeto) : 0;
+  const {
+    aplicado: saldoFavorAplicado,
+    pagar: ivaPagar,
+    saldoAFavor: ivaSaldoAFavor,
+    pendiente: saldoFavorPendiente,
+  } = acreditarSaldoFavorAnterior({
+    cargoDelMes: ivaTrasladadoTotal - ivaAcreditable - ivaRetenidoPorClientes,
+    saldoFavorAnterior,
+  });
 
   // ── ISR provisional — régimen-aware ──────────────────────────────────────
   const ingresosDelMes = round2(facturasEmitidas.reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * inv.subtotal, 0));
@@ -839,6 +925,10 @@ export async function computeTaxPosition(
   const ingresosAcumulados =
     Number(ingresosAcumuladosAgg._sum.subtotal ?? 0) - 2 * Number(acumuladosE._sum.subtotal ?? 0);
   const isrPagadoAnterior = sumIsrPagar(declaracionesPrevias);
+
+  // Avisos que nacen dentro del cálculo de ISR (origen del remanente de
+  // pérdidas); se unen a los de la cadena de declaraciones al final.
+  const advertenciasPerdida: string[] = [];
 
   let isr: TaxPosition["isr"];
 
@@ -1107,17 +1197,42 @@ export async function computeTaxPosition(
     // valor manual de la empresa gana; si no hay, se usa el remanente extraído de
     // la declaración anual del ejercicio anterior (isrPerdidaPendiente), que
     // corresponde justo al año de los provisionales en curso.
-    // El remanente de pérdidas viene EXCLUSIVAMENTE de la anual del ejercicio
-    // inmediato anterior (es el saldo actualizado que aplica a este año) — no
-    // de las anuales más viejas que el lookback del coeficiente sí considera.
-    const annualDeclPrev = annualDecls.find((r) => r.periodo.startsWith(String(prevYear))) ?? null;
+    // La anual del ejercicio inmediato anterior es la MEJOR fuente (su remanente
+    // ya viene actualizado a este año), pero no es la única: una pérdida se
+    // amortiza diez ejercicios (Art. 57 LISR) y no desaparece porque falte
+    // capturar una anual. Buscar sólo en prevYear convertía un HUECO DE DATOS en
+    // un cero silencioso y cobraba ISR que no se debe: medido en agosto 2026,
+    // BAOBAB (13,351.80), ZIONX (11,601.67) y REYES HUERTA CHOLULA declararon
+    // cero al SAT amortizando pérdidas de 182,251 / 203,412 / 6,103,540, y el
+    // motor no veía ninguna porque la anual 2025 estaba sin el dato — teniendo
+    // 2024 cargado con el remanente.
+    //
+    // Ahora se cae a la anual MÁS RECIENTE que sí traiga remanente. Es una
+    // APROXIMACIÓN y se avisa: un remanente de hace dos ejercicios no trae la
+    // actualización por INPC ni lo que el año intermedio ya haya amortizado, así
+    // que puede sobrar. Sobra-pero-avisado es mejor que un cero silencioso que
+    // cobra ISR inexistente, y el campo manual de la empresa siempre gana.
+    const remanente = elegirRemanentePerdida(annualDecls, prevYear);
+    const anioDeLaAnual = remanente?.ejercicio ?? null;
     const usaPerdidaManual = company?.perdidaFiscalPendiente != null;
     const perdidaFiscalPendiente = usaPerdidaManual
       ? Number(company!.perdidaFiscalPendiente)
-      : (annualDeclPrev?.isrPerdidaPendiente ?? null);
+      : (remanente?.valor ?? null);
     const perdidaFiscalAnio = usaPerdidaManual
       ? (company?.perdidaFiscalAnio ?? null)
-      : (annualDeclPrev?.isrPerdidaPendiente != null ? prevYear : null);
+      : anioDeLaAnual;
+    // Hay anuales cargadas pero ninguna trae remanente: puede ser verdad (no hay
+    // pérdidas) o puede ser que falte capturarlo. Se avisa, porque la diferencia
+    // vale el 30% de la utilidad estimada.
+    if (!usaPerdidaManual && perdidaFiscalPendiente == null && annualDecls.length > 0) {
+      advertenciasPerdida.push(
+        `Ninguna declaración anual cargada (${annualDecls.map((r) => r.periodo.slice(0, 4)).join(", ")}) trae remanente de pérdidas fiscales. Si la empresa sí tiene pérdidas por amortizar, el ISR provisional sale más alto de lo que debe.`
+      );
+    } else if (!usaPerdidaManual && perdidaFiscalPendiente != null && anioDeLaAnual !== prevYear) {
+      advertenciasPerdida.push(
+        `El remanente de pérdidas (${perdidaFiscalPendiente.toLocaleString("es-MX")}) viene de la anual ${anioDeLaAnual}, no de ${prevYear}: falta cargar la anual del ejercicio anterior. La cifra no trae actualización por INPC ni lo amortizado en el año intermedio.`
+      );
+    }
 
     let utilidadFiscal: number | null = null;
     let baseGravable: number | null = null;
@@ -1233,7 +1348,10 @@ export async function computeTaxPosition(
   // consultadas arriba) más el mes anterior cuando cruza de ejercicio (enero).
   const mesesConDeclaracion = new Set(declaracionesPrevias.map((d) => d.periodo));
   if (prevDeclaracion || prevIsrDeclaracion) mesesConDeclaracion.add(prevPeriodo);
-  const advertencias = advertenciasCadenaDeclaraciones({ year, month, mesesConActividad, mesesConDeclaracion });
+  const advertencias = [
+    ...advertenciasCadenaDeclaraciones({ year, month, mesesConActividad, mesesConDeclaracion }),
+    ...advertenciasPerdida,
+  ];
 
   isr.retenidoAProveedoresEnterar = round2(Math.max(0, isrRetenidoAProveedores));
 
@@ -1255,6 +1373,8 @@ export async function computeTaxPosition(
       actosGravados: actos.gravados,
       actosExentos: actos.exentos,
       saldoFavorAnterior: round2(saldoFavorAnterior),
+      saldoFavorAplicado: round2(saldoFavorAplicado),
+      saldoFavorPendiente,
       pagar: ivaPagar,
       saldoAFavor: ivaSaldoAFavor,
       devengado: {
