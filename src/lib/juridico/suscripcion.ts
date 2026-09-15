@@ -11,17 +11,28 @@
 // abogado PREGUNTE antes de actuar. Ponerle contador a la pregunta hace que
 // dude, y la duda mata el hábito que sostiene la renovación.
 //
-// La prueba es de verdad: catorce días y cinco documentos, sin tarjeta. Quien
-// prueba tiene que poder llevar un asunto real de principio a fin, porque eso
-// es lo que se está comprando.
+// La prueba: siete días, cinco documentos y un TOPE DE GASTO. Alcanza para
+// llevar un asunto real de principio a fin, que es lo que se está comprando,
+// sin que una cuenta de prueba nos cueste más de lo que jamás va a pagar —una
+// semana de consultas sin freno son miles de pesos de API—.
+//
+// Con tarjeta desde el principio. No es un obstáculo: es lo que convierte la
+// prueba en suscripción sola al séptimo día, en vez de pedirle al abogado que
+// vuelva a decidir cuando ya se le pasó el entusiasmo.
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "@/lib/prisma";
 import { reportError } from "@/lib/observability";
 
 export type PlanDespacho = "prueba" | "activo" | "suspendido" | "cancelado";
 
-export const DIAS_DE_PRUEBA = 14;
+export const DIAS_DE_PRUEBA = 7;
 export const DOCUMENTOS_DE_PRUEBA = 5;
+/**
+ * Lo que puede costarnos en API una cuenta de prueba antes de que pague. Es el
+ * tercer corte, junto con los días y los documentos: sin él, una semana de
+ * consultas sin freno vale más que el primer mes de suscripción.
+ */
+export const TOPE_USD_PRUEBA = Number(process.env.JURIDICO_TOPE_USD_PRUEBA ?? "20") || 20;
 /** Documentos de fondo incluidos por asiento y mes en el plan de paga. */
 export const DOCUMENTOS_INCLUIDOS = Number(process.env.JURIDICO_DOCUMENTOS_INCLUIDOS ?? "10") || 10;
 
@@ -34,6 +45,9 @@ export interface EstadoSuscripcion {
   asientos: number;
   /** En prueba: días que quedan (0 si ya venció). */
   diasRestantes: number | null;
+  /** En prueba: gasto de API acumulado y su tope, en USD. */
+  gastoUsd?: number;
+  topeUsd?: number;
   documentosUsados: number;
   documentosIncluidos: number;
   periodoFin: Date | null;
@@ -55,18 +69,27 @@ export function diasHasta(fecha: Date | null, ahora: Date = new Date()): number 
 /**
  * La decisión, sobre datos ya leídos. Puro: es lo que se prueba.
  *
- * En prueba se corta por lo que pase primero, días o documentos. En plan de
- * paga, pasarse de los documentos incluidos NO corta el servicio: se avisa y
+ * En prueba se corta por lo que pase primero: días, documentos o gasto. En plan
+ * de paga, pasarse de los documentos incluidos NO corta el servicio: se avisa y
  * se cobra el excedente, porque dejar a un abogado a medias de un escrito por
  * una cuota es peor negocio que facturarle un paquete.
  */
 export function decidirSuscripcion(
-  d: { plan: PlanDespacho; pruebaHasta: Date | null; asientos: number; periodoFin: Date | null; documentosDelMes: number },
+  d: { plan: PlanDespacho; pruebaHasta: Date | null; asientos: number; periodoFin: Date | null; documentosDelMes: number; gastoUsd?: number },
   ahora: Date = new Date()
 ): EstadoSuscripcion {
   const dias = diasHasta(d.pruebaHasta, ahora);
   const incluidos = d.plan === "prueba" ? DOCUMENTOS_DE_PRUEBA : DOCUMENTOS_INCLUIDOS * Math.max(1, d.asientos);
-  const base = { plan: d.plan, asientos: d.asientos, diasRestantes: d.plan === "prueba" ? (dias ?? 0) : null, documentosUsados: d.documentosDelMes, documentosIncluidos: incluidos, periodoFin: d.periodoFin };
+  const gasto = Math.round((d.gastoUsd ?? 0) * 100) / 100;
+  const base = {
+    plan: d.plan,
+    asientos: d.asientos,
+    diasRestantes: d.plan === "prueba" ? (dias ?? 0) : null,
+    documentosUsados: d.documentosDelMes,
+    documentosIncluidos: incluidos,
+    periodoFin: d.periodoFin,
+    ...(d.plan === "prueba" ? { gastoUsd: gasto, topeUsd: TOPE_USD_PRUEBA } : {}),
+  };
 
   if (d.plan === "activo") {
     // Un periodo vencido no corta: Stripe reintenta el cobro y el webhook
@@ -81,12 +104,19 @@ export function decidirSuscripcion(
   }
   // Prueba.
   if (dias !== null && dias <= 0) {
-    return { ...base, activo: false, avisar: true, motivo: `Se terminaron los ${DIAS_DE_PRUEBA} días de prueba. Elige un plan para seguir; tus casos y documentos están intactos.` };
+    return { ...base, activo: false, avisar: true, motivo: `Se acabaron los ${DIAS_DE_PRUEBA} días de prueba. Activa el plan para seguir; tus casos y documentos quedan como están.` };
   }
   if (d.documentosDelMes >= DOCUMENTOS_DE_PRUEBA) {
-    return { ...base, activo: false, avisar: true, motivo: `La prueba incluye ${DOCUMENTOS_DE_PRUEBA} documentos y ya los usaste. Elige un plan para seguir; lo redactado es tuyo y ahí está.` };
+    return { ...base, activo: false, avisar: true, motivo: `La prueba incluye ${DOCUMENTOS_DE_PRUEBA} documentos y ya los usaste. Activa el plan para seguir; lo redactado es tuyo y ahí está.` };
   }
-  return { ...base, activo: true, avisar: (dias ?? 99) <= 3 || d.documentosDelMes >= DOCUMENTOS_DE_PRUEBA - 1 };
+  if (gasto >= TOPE_USD_PRUEBA) {
+    return { ...base, activo: false, avisar: true, motivo: "Le sacaste a la prueba todo lo que trae. Activa el plan para seguir hoy mismo; tus casos y tus borradores quedan como están." };
+  }
+  return {
+    ...base,
+    activo: true,
+    avisar: (dias ?? 99) <= 2 || d.documentosDelMes >= DOCUMENTOS_DE_PRUEBA - 1 || gasto >= TOPE_USD_PRUEBA * 0.8,
+  };
 }
 
 /** Documentos de fondo (redactados, no subidos) del despacho en el mes. */
@@ -96,13 +126,37 @@ export async function documentosDelMes(despachoId: string, desde: Date): Promise
   });
 }
 
+/**
+ * Lo que la prueba nos ha costado en API, sumando a TODOS los miembros del
+ * despacho. El `despachoId` de CostEvent apunta al despacho contable, no al
+ * jurídico, así que se resuelve por los usuarios del despacho.
+ */
+export async function gastoDePruebaUsd(despachoId: string, desde: Date): Promise<number> {
+  const miembros = await prisma.juridicoMiembro.findMany({ where: { despachoId }, select: { userId: true } });
+  if (miembros.length === 0) return 0;
+  const r = await prisma.costEvent.aggregate({
+    _sum: { costoMicroUsd: true },
+    where: { userId: { in: miembros.map((m) => m.userId) }, occurredAt: { gte: desde }, subtipo: { startsWith: "ai.juridico" } },
+  });
+  return (r._sum.costoMicroUsd ?? 0) / 1_000_000;
+}
+
 export async function estadoSuscripcion(despachoId: string, ahora: Date = new Date()): Promise<EstadoSuscripcion | null> {
   const d = await prisma.juridicoDespacho.findUnique({ where: { id: despachoId }, select: { plan: true, pruebaHasta: true, asientos: true, periodoFin: true, createdAt: true } });
   if (!d) return null;
   const inicioMes = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), 1));
   const desde = d.plan === "prueba" ? d.createdAt : inicioMes;
+  const enPrueba = d.plan === "prueba";
   return decidirSuscripcion(
-    { plan: (esPlan(d.plan) ? d.plan : "prueba") as PlanDespacho, pruebaHasta: d.pruebaHasta, asientos: d.asientos, periodoFin: d.periodoFin, documentosDelMes: await documentosDelMes(despachoId, desde) },
+    {
+      plan: (esPlan(d.plan) ? d.plan : "prueba") as PlanDespacho,
+      pruebaHasta: d.pruebaHasta,
+      asientos: d.asientos,
+      periodoFin: d.periodoFin,
+      documentosDelMes: await documentosDelMes(despachoId, desde),
+      // El gasto sólo importa mientras la prueba corre: quien ya paga no tiene tope aquí.
+      gastoUsd: enPrueba ? await gastoDePruebaUsd(despachoId, d.createdAt) : 0,
+    },
     ahora
   );
 }
