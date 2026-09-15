@@ -165,6 +165,9 @@ conversación se archive.
 | `PATCH /api/juridico/casos/[id]` | `estado`, `responsableUserId`, `clienteId`, o `moverConversacionId` para traer una conversación al caso. |
 | `GET/POST /api/juridico/casos/[id]/tareas` | Pendientes del caso; POST acepta una o varias. |
 | `PATCH/DELETE /api/juridico/tareas/[id]` | Mover, asignar, reprogramar o quitar. |
+| `GET/POST /api/juridico/casos/[id]/plazos` | Plazos del caso, el que vence antes primero. `POST ?simular=1` computa y devuelve la traza **sin guardar**: es la vista previa. |
+| `PATCH /api/juridico/plazos/[id]` | `{estado:"confirmado"\|"cumplido"\|"descartado", nota?}` o `{recomputar:true}`. |
+| `GET /api/juridico/plazos?dias=30` | Lo que vence pronto en TODOS los casos que alcanza la persona. La pantalla de la mañana. |
 | `GET /api/juridico/casos/[id]/bitacora` | Append-only, lo nuevo primero, con `frase` ya redactada y el nombre del actor resuelto. Paginación con `antesDe`. |
 | `GET/POST /api/juridico/clientes` | Directorio y alta. El alta responde **409 con `candidatos`** si detecta un posible duplicado; `forzar: true` la fuerza y `comprobar: true` sólo consulta. |
 | `GET/PATCH /api/juridico/clientes/[id]` | Ficha, en qué casos aparece y con qué papel. |
@@ -251,10 +254,62 @@ Medido con uso real (sept-2026): una abogada trabajando llega a ~37 USD al mes y
 una jornada intensa de redacción a ~64. Con el tope en 60 se frenaba a quien
 estaba trabajando bien. **El operador no tiene tope**: no es un asiento.
 
+### Plazos procesales (nuevo, 27-sep-2026)
+
+El cómputo lo hace el hub, es **código puro y probado**, y **enseña su trabajo**.
+La UI nunca calcula días.
+
+Un plazo llega así:
+
+```json
+{
+  "id": "…", "titulo": "Contestar la demanda",
+  "fundamento": "Art. 17 de la Ley de Amparo", "articulo": "17",
+  "fuero": "amparo", "entidad": null,
+  "notificacion": "2026-10-01", "dias": 15,
+  "tipo": "habiles", "surteEfectos": "dia_siguiente_habil",
+  "vence": "2026-10-26",
+  "diasHabilesRestantes": 12,
+  "explicacion": "15 días hábiles desde el 2026-10-05; vence el 2026-10-26, saltando 9 días inhábiles.",
+  "traza": [
+    {"fecha":"2026-10-01","clase":"notificacion","motivo":"se practicó la notificación"},
+    {"fecha":"2026-10-02","clase":"surte","motivo":"surte efectos la notificación"},
+    {"fecha":"2026-10-03","clase":"salta","motivo":"sábado"},
+    {"fecha":"2026-10-05","clase":"cuenta","dia":1,"motivo":"hábil"},
+    {"fecha":"2026-10-12","clase":"salta","motivo":"inhábil por el Art. 19 de la Ley de Amparo"}
+  ],
+  "advertencias": ["…"],
+  "estado": "propuesto", "confirmadoPorUserId": null, "origen": "copiloto"
+}
+```
+
+Tres cosas que la pantalla **tiene** que respetar:
+
+1. **`estado: "propuesto"` no es un plazo, es una propuesta.** Se distingue a
+   simple vista de uno `confirmado` y lleva el botón de confirmar. Un plazo sin
+   confirmar no se pinta como si el despacho ya respondiera por él.
+2. **`traza` es el argumento, no un detalle.** El abogado tiene que poder abrir
+   el día a día y ver por qué se saltó cada día. `clase` es
+   `notificacion | surte | cuenta | salta | recorre`; `dia` sólo viene en
+   `cuenta`. Es lo que distingue esto de un recordatorio de calendario.
+3. **`advertencias` se enseñan siempre**, no se esconden tras un icono. Siempre
+   trae al menos una: el calendario no incluye las suspensiones de labores del
+   órgano, que no están en ninguna ley.
+
+`fuero` es `amparo | laboral | federal | local` y **no es cosmético**: el amparo
+usa las fechas fijas del Art. 19 de la Ley de Amparo y el laboral los días de
+descanso obligatorio del Art. 74 de la LFT, que se conmemoran en lunes. En 2026
+divergen en ocho días. El selector de fuero es obligatorio al crear.
+
+Para la urgencia usa `diasHabilesRestantes` (se calcula al leer, no está
+guardado), no restes fechas del calendario.
+
 ### El copiloto
 
-Dos herramientas nuevas: `proponer_tareas` (nacen con `origen: "copiloto"` y
-sin responsable — propone, no manda) y `consultar_tareas`. Cuando el copiloto
+Cuatro herramientas nuevas: `proponer_tareas` (nacen con `origen: "copiloto"` y
+sin responsable — propone, no manda), `consultar_tareas`, `proponer_plazo` y
+`consultar_plazos`. El copiloto **no cuenta días**: aporta la fecha de
+notificación y el artículo, y el cómputo lo hace el código. Cuando el copiloto
 redacta o sube un documento, éste hereda el caso y queda apuntado en la
 bitácora; al sobrescribir un borrador, la versión anterior se congela con autor
 `copiloto` y el motivo del cambio.
