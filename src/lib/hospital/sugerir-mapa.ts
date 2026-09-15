@@ -91,9 +91,9 @@ const PISTAS: Record<ClaveMotor, Pistas> = {
   INVENTARIO_FARMACIA: { dice: ["farmacia"], prefiere: ["intrahospitalaria", "interna"], evita: ["externa", "carro rojo"] },
   ANTICIPOS_PACIENTES: { dice: ["anticipo", "deposito", "paciente"], tope: "PARECIDA" },
   CAJA: { dice: ["caja general", "caja admisiones", "caja", "tesoreria"], evita: ["cafeteria"], tope: "PARECIDA" },
-  // Ningún nombre dice a qué banco entra el depósito del hospital, ni cuál de
-  // los auxiliares de clientes es el del paciente: se enseñan y se eligen.
-  BANCOS: { dice: [] },
+  // Ningún nombre dice cuál de los auxiliares de clientes es el del paciente:
+  // se enseñan y se elige. (El banco ya no se pregunta: BANCOS salió de las
+  // claves porque el módulo no postea contra bancos.)
   CLIENTES: { dice: [] },
   FONDOS_EN_TRANSITO: { dice: ["transito", "fondos"], tope: "PARECIDA" },
   COMISION_TERMINAL: { dice: ["comisiones bancarias", "comision"], evita: ["ventas"], tope: "PARECIDA" },

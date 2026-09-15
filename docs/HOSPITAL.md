@@ -624,7 +624,9 @@ GET  /api/hospital/contabilidad/mapa?companyId= → { claves: [{ clave, descripc
      · claves del motor: INGRESO_HOSPITALIZACION (401.01), INGRESO_QUIROFANO (401.01), INGRESO_URGENCIAS, INGRESO_ESTUDIOS, INGRESO_FARMACIA_16, INGRESO_FARMACIA_0 (401.02),
        INGRESO_MATERIAL, INGRESO_OTROS, HONORARIOS_POR_CUENTA_DE_TERCEROS (205.06 acreedores diversos: médicos), RETENCION_ISR_HONORARIOS (216.04),
        (INGRESO_FARMACIA_0 usa 401.04 «gravados al 0 %»; 401.02 es «tasa general de contado»)
-       RETENCION_IVA_HONORARIOS (216.10), COSTO_FARMACIA_16 y COSTO_FARMACIA_0 (501.01: el costo sigue a la tasa del ingreso), INVENTARIO_FARMACIA (115.01), ANTICIPOS_PACIENTES (206.01), CAJA (101.01), BANCOS (102.01), FONDOS_EN_TRANSITO (107.05), CLIENTES (105.01),
+       RETENCION_IVA_HONORARIOS (216.10), COSTO_FARMACIA_16 y COSTO_FARMACIA_0 (501.01: el costo sigue a la tasa del ingreso), INVENTARIO_FARMACIA (115.01), ANTICIPOS_PACIENTES (206.01), CAJA (101.01), FONDOS_EN_TRANSITO (107.05), CLIENTES (105.01),
+       (NO hay clave BANCOS: el módulo no postea contra la cuenta de bancos — el efectivo entra a CAJA, la tarjeta a FONDOS_EN_TRANSITO,
+        y el depósito lo concilia el hub contra el estado de cuenta. Preguntarlo era pedir que se eligiera una de las 11 cuentas del catálogo para nada)
        COMISION_TERMINAL (701.10), IVA_ACREDITABLE (118.01)
 PUT  /api/hospital/contabilidad/mapa { cuentas: { <clave>: { cuentaSAT?, subcuenta? } | null }, activa?, aplicarSugerencias? } → guarda en HospConfig.cuentasContables
        (subcuenta = cuenta concreta del plan → también PostingCuentaOverride hospital:<clave>); `activa` enciende/apaga contabilidadActiva;

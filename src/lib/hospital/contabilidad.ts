@@ -41,6 +41,16 @@ import { HospitalError } from "./errores";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
+/**
+ * BANCOS NO ESTÁ EN ESTA LISTA, y es a propósito. El módulo nunca postea
+ * contra la cuenta de bancos: el efectivo entra a CAJA, lo cobrado con tarjeta
+ * o transferencia a FONDOS_EN_TRANSITO, y el depósito que el banco acaba
+ * haciendo lo concilia el hub en su mesa, con el estado de cuenta enfrente.
+ * Mientras estuvo en la lista, el mapa pedía elegir UNA de las once cuentas
+ * bancarias del catálogo para una clave que ningún asiento usa — y la propia
+ * cola del hub decía, dos bloques más abajo, que 102.01 se resuelve por
+ * contraparte. Si algún día el módulo postea al banco, vuelve aquí.
+ */
 export const CLAVES_MOTOR = [
   "INGRESO_HOSPITALIZACION",
   "INGRESO_QUIROFANO",
@@ -58,7 +68,6 @@ export const CLAVES_MOTOR = [
   "INVENTARIO_FARMACIA",
   "ANTICIPOS_PACIENTES",
   "CAJA",
-  "BANCOS",
   "FONDOS_EN_TRANSITO",
   "CLIENTES",
   "COMISION_TERMINAL",
@@ -97,7 +106,6 @@ export const MAPA_DEFAULT: Record<ClaveMotor, DefinicionClave> = {
   INVENTARIO_FARMACIA: { clave: "INVENTARIO_FARMACIA", descripcion: "Inventario de farmacia", cuentaSAT: "115.01", tipo: "ACTIVO" },
   ANTICIPOS_PACIENTES: { clave: "ANTICIPOS_PACIENTES", descripcion: "Depósitos y anticipos de pacientes", cuentaSAT: "206.01", tipo: "PASIVO" },
   CAJA: { clave: "CAJA", descripcion: "Caja (depósitos en efectivo)", cuentaSAT: "101.01", tipo: "ACTIVO" },
-  BANCOS: { clave: "BANCOS", descripcion: "Bancos", cuentaSAT: "102.01", tipo: "ACTIVO" },
   FONDOS_EN_TRANSITO: { clave: "FONDOS_EN_TRANSITO", descripcion: "Cobros en tránsito (tarjeta, transferencia o cheque que el banco todavía no deposita)", cuentaSAT: "107.05", tipo: "ACTIVO" },
   CLIENTES: { clave: "CLIENTES", descripcion: "Clientes (cuenta por cobrar del paciente o pagador)", cuentaSAT: "105.01", tipo: "ACTIVO" },
   COMISION_TERMINAL: { clave: "COMISION_TERMINAL", descripcion: "Comisión del adquirente por cobros con terminal", cuentaSAT: "701.10", tipo: "GASTO" },

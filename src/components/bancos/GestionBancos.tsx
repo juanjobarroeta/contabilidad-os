@@ -124,6 +124,7 @@ const TAG_LABEL: Record<string, string> = {
   ANTICIPO_CLIENTE: "Anticipo · falta CFDI", ANTICIPO_PROVEEDOR: "Anticipo a proveedor · falta CFDI",
   CAPITAL_CONTRIBUTION: "Capital", NON_DEDUCTIBLE: "No deducible", INTERNAL_TRANSFER: "Transferencia",
   BANK_NOISE: "Ruido bancario",
+  POR_ACLARAR: "Por aclarar",
 };
 // Chips de "Más filtros": tag de filtro → etiqueta + clave de conteo.
 const TIPO_CHIPS: { f: Filter; t: string; k: keyof Counts }[] = [
