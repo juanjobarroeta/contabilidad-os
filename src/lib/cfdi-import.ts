@@ -301,6 +301,7 @@ export async function importarCfdiXml(args: ImportarCfdiArgs): Promise<Resultado
     descripcion: cfdi.items?.[0]?.descripcion,
     clasifInput: {
       tipo: invoiceType,
+      tipoSat: cfdi.tipo ?? null,
       usoCfdi: cfdi.usoCfdi ?? null,
       usoEsDefault: !cfdi.usoCfdi,
       items: (cfdi.items ?? []).map((it) => ({ claveProdServ: it.claveProdServ, importe: it.importe, descripcion: it.descripcion })),

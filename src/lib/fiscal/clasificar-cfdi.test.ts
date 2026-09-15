@@ -105,3 +105,34 @@ describe("partirInversionPorConcepto()", () => {
     expect(g[0].descripcion).toBe("Laptop Dell y 1 concepto(s) más");
   });
 });
+
+// El esquema de anticipos del SAT (Anexo 20, apéndice 6) son TRES CFDIs: el
+// anticipo, el de la operación total, y una NOTA DE CRÉDITO que aplica el
+// anticipo. Los tres llevan el mismo usoCfdi. Visto en producción, CENTRO: una
+// compra de $26,650.87 quedó como tres activos de ~$26,650 depreciándose en
+// paralelo, y uno se llamaba «APLICACION ANTICIPO» — el que debía RESTAR.
+describe("nota de crédito (CFDI de egreso, tipoSat E)", () => {
+  const conTipo = (tipoSat: string | null) =>
+    clasificarCfdi({
+      tipo: "EGRESO",
+      tipoSat,
+      usoCfdi: "I04",
+      items: [{ claveProdServ: "43211500", importe: 26650.86 }],
+    });
+
+  it("nunca es inversión, aunque el uso diga I04", () => {
+    const c = conTipo("E");
+    expect(c.naturaleza).toBe("GASTO");
+    expect(c.subtipoInversion).toBeUndefined();
+    expect(c.fundamento).toContain("Nota de crédito");
+  });
+
+  it("minúscula o con espacios, igual", () => {
+    expect(conTipo(" e ").naturaleza).toBe("GASTO");
+  });
+
+  it("el CFDI de ingreso normal sigue creando inversión", () => {
+    expect(conTipo("I").naturaleza).toBe("INVERSION");
+    expect(conTipo(null).naturaleza).toBe("INVERSION");
+  });
+});
