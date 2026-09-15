@@ -123,6 +123,8 @@ function detectarTopeAutomovil(items: ClasificacionItem[]): boolean | undefined 
 export interface ClasificarInput {
   /** Sólo se clasifican EGRESO (recibidos deducibles); el resto es no_aplica. */
   tipo: string;
+  /** Tipo de comprobante del SAT: «E» es NOTA DE CRÉDITO — resta, no suma. */
+  tipoSat?: string | null;
   usoCfdi: string | null;
   /** Default G03 del import: cuando true y el uso es G03, no se confía a ciegas. */
   usoEsDefault?: boolean;
@@ -141,6 +143,23 @@ export function clasificarCfdi(input: ClasificarInput): ClasificacionCfdi {
 
   const uso = (input.usoCfdi ?? "").trim().toUpperCase();
   const items = input.items ?? [];
+
+  // UNA NOTA DE CRÉDITO NO ES UNA INVERSIÓN, AUNQUE DIGA I04.
+  //
+  // El esquema de anticipos del SAT (Anexo 20, apéndice 6) son TRES CFDIs: el
+  // anticipo, el de la operación total, y una nota de crédito (tipo «E») que
+  // aplica el anticipo para que no se cobre dos veces. Los tres llevan el mismo
+  // usoCfdi, así que los tres creaban activo. Visto en CENTRO: una compra de
+  // $26,650.87 quedó como tres activos de ~$26,650 depreciándose en paralelo,
+  // uno de ellos llamado «APLICACION ANTICIPO» — el que debía RESTAR.
+  if ((input.tipoSat ?? "").trim().toUpperCase() === "E") {
+    return {
+      naturaleza: "GASTO",
+      fuente: "usoCfdi",
+      fundamento: "Nota de crédito (CFDI de egreso): disminuye la operación, no la crea",
+      requiereRevision: false,
+    };
+  }
 
   // S01 — sin efectos fiscales → no deducible.
   if (uso === "S01") {

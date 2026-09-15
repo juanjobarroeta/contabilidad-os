@@ -51,7 +51,7 @@ async function handle(req: Request) {
     const page = await prisma.invoice.findMany({
       where: { ...where, ...(lastId ? { id: { gt: lastId } } : {}) },
       select: {
-        id: true, companyId: true, tipo: true, usoCfdi: true, subtotal: true, fecha: true,
+        id: true, companyId: true, tipo: true, tipoSat: true, usoCfdi: true, subtotal: true, fecha: true,
         items: { select: { claveProdServ: true, importe: true, descripcion: true } },
       },
       orderBy: { id: "asc" },
@@ -69,6 +69,7 @@ async function handle(req: Request) {
         descripcion: inv.items[0]?.descripcion,
         clasifInput: {
           tipo: inv.tipo,
+          tipoSat: inv.tipoSat ?? null,
           usoCfdi: inv.usoCfdi ?? null,
           items: inv.items.map((it) => ({ claveProdServ: it.claveProdServ, importe: Number(it.importe), descripcion: it.descripcion })),
         },
