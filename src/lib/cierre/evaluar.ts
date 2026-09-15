@@ -182,6 +182,34 @@ export function reciboCubreElMes(
   return !!desde && !!hasta && desde < to && hasta >= from;
 }
 
+/**
+ * Quién YA SE FUE según sus propios recibos: el último timbrado antes del corte
+ * es un FINIQUITO.
+ *
+ * La baja capturada no alcanza. Visto en CENTRO: una empleada con finiquito
+ * timbrado en julio de 2025 traía `fechaBaja` de septiembre de 2026 —la fecha en
+ * que alguien actualizó la ficha, no la del fin de la relación— así que salía
+ * «sin recibo» en todos los meses de en medio. El finiquito es el hecho legal:
+ * después de él no hay recibo que falte.
+ *
+ * Un recontratado tiene recibos DESPUÉS del finiquito, así que vuelve a contar
+ * solo — por eso se mira el último y no «si alguna vez tuvo finiquito».
+ */
+export function empleadosConFiniquitoCerrado(
+  recibos: Array<{ employeeId: string; tipo: string; fechaPago: Date }>,
+  corte: Date,
+): Set<string> {
+  const ultimo = new Map<string, { tipo: string; fechaPago: Date }>();
+  for (const r of recibos) {
+    if (r.fechaPago >= corte) continue;
+    const prev = ultimo.get(r.employeeId);
+    if (!prev || r.fechaPago > prev.fechaPago) ultimo.set(r.employeeId, { tipo: r.tipo, fechaPago: r.fechaPago });
+  }
+  const fuera = new Set<string>();
+  for (const [id, r] of ultimo) if (r.tipo === "FINIQUITO") fuera.add(id);
+  return fuera;
+}
+
 export async function cargarHechosCierre(
   companyId: string,
   year: number,
@@ -202,6 +230,7 @@ export async function cargarHechosCierre(
     firmas,
     activos,
     empleadosConRecibo,
+    recibosDeFiniquitados,
     idsePendientes,
     hallazgosCriticos,
     hallazgosEfos,
@@ -253,6 +282,18 @@ export async function cargarHechosCierre(
       },
       select: { employeeId: true, payrollRun: { select: { periodo: true, fechaPago: true } } },
     }),
+    // Los recibos de QUIEN ALGUNA VEZ TUVO FINIQUITO, para ver si es el último.
+    // Se acota a esa gente: traer la nómina entera de la empresa para esto sería
+    // caro y aquí sólo importa quién ya se fue.
+    prisma.payrollItem.findMany({
+      where: {
+        payrollRun: { companyId, status: { in: ["STAMPED", "PAID"] } },
+        employee: {
+          payrollItems: { some: { payrollRun: { companyId, tipo: "FINIQUITO", status: { in: ["STAMPED", "PAID"] } } } },
+        },
+      },
+      select: { employeeId: true, payrollRun: { select: { tipo: true, fechaPago: true } } },
+    }),
     prisma.imssMovimiento.count({ where: { companyId, status: "PENDING" } }),
     prisma.fiscalHallazgo.count({
       where: {
@@ -295,8 +336,16 @@ export async function cargarHechosCierre(
   const conRecibo = new Set(
     empleadosConRecibo.filter((p) => reciboCubreElMes(p.payrollRun, from, to)).map((p) => p.employeeId),
   );
-  const empleadosActivos = activos.length;
-  const sinRecibo = empleadosActivos === 0 ? [] : activos.filter((e) => !conRecibo.has(e.id));
+  // Quien ya se fue no tiene recibo pendiente: su último timbrado es el
+  // finiquito. La baja capturada no alcanza — puede traer la fecha en que
+  // alguien actualizó la ficha, no la del fin de la relación.
+  const yaSeFueron = empleadosConFiniquitoCerrado(
+    recibosDeFiniquitados.map((r) => ({ employeeId: r.employeeId, tipo: r.payrollRun.tipo, fechaPago: r.payrollRun.fechaPago })),
+    from,
+  );
+  const enNomina = activos.filter((e) => !yaSeFueron.has(e.id));
+  const empleadosActivos = enNomina.length;
+  const sinRecibo = empleadosActivos === 0 ? [] : enNomina.filter((e) => !conRecibo.has(e.id));
   const empleadosSinRecibo = sinRecibo.length;
   // Con nombre y apellido: «1 empleado sin recibo» obliga a ir a buscar quién,
   // y el nombre suele contestar solo por qué (un alta de fin de mes, un
