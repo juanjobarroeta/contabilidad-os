@@ -167,6 +167,9 @@ export async function correrPasadaEmpresa(companyId: string, hoy = new Date()): 
       : `Pasada del ${salud.dia}: ${resumen.renglones.length} ${resumen.renglones.length === 1 ? "punto" : "puntos"}`,
     cuerpo: resumenEnTexto(resumen),
     refs: resumen.renglones.flatMap((r) => r.evidencia),
+    // El cuerpo es para que lo lea una persona; esto es lo que pinta el rail.
+    // Sin ello el rail tendría que parsear prosa para saber qué se atendió.
+    datos: resumen as unknown as Parameters<typeof anotar>[0]["datos"],
   });
 
   return { companyId, corrio: true, resumen, rondas, notaId: nota.id };

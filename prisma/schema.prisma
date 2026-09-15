@@ -9744,6 +9744,12 @@ model ExpedienteNota {
   cuerpo String   @db.Text
   refs   String[]
 
+  /// La forma estructurada de la nota, cuando la tiene. Hoy la usa el resumen
+  /// de la pasada del contador: `cuerpo` es lo que lee una persona y esto es lo
+  /// que pinta el rail. Sin ello el rail tendría que parsear prosa para saber
+  /// qué se atendió y qué se escaló, que es justo lo que el esquema evita.
+  datos Json?
+
   /// "abierta" | "resuelta". Sólo los pendientes se resuelven.
   estado            String    @default("abierta")
   resueltaAt        DateTime?

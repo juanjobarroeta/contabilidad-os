@@ -26,6 +26,8 @@ export interface NotaExpediente {
   titulo: string;
   cuerpo: string;
   refs: string[];
+  /** La forma estructurada, cuando la nota la tiene (el resumen de la pasada). */
+  datos: unknown;
   estado: "abierta" | "resuelta";
   resueltaAt: Date | null;
   resueltaPorNotaId: string | null;
@@ -50,6 +52,7 @@ const SELECT_NOTA = {
   titulo: true,
   cuerpo: true,
   refs: true,
+  datos: true,
   estado: true,
   resueltaAt: true,
   resueltaPorNotaId: true,
@@ -76,6 +79,8 @@ export interface EntradaNota {
   titulo: string;
   cuerpo: string;
   refs?: string[];
+  /** La forma estructurada, para lo que la tenga. Sólo metadatos, nunca secretos. */
+  datos?: Prisma.InputJsonValue | null;
 }
 
 /** Escribe una nota. Devuelve la nota: quien anota suele querer su id. */
@@ -90,6 +95,7 @@ export async function anotar(e: EntradaNota): Promise<NotaExpediente> {
       titulo: e.titulo.slice(0, 200),
       cuerpo: e.cuerpo.length > MAX_CUERPO ? `${e.cuerpo.slice(0, MAX_CUERPO - 1)}…` : e.cuerpo,
       refs: (e.refs ?? []).slice(0, MAX_REFS_NOTA),
+      datos: e.datos ?? undefined,
       // Sólo un pendiente tiene algo que cerrar; lo demás nace ya cerrado para
       // que la lista de abiertos sea exactamente la lista de compromisos.
       estado: e.tipo === "pendiente" ? "abierta" : "resuelta",

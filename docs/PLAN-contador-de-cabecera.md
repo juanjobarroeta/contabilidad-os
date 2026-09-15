@@ -1,6 +1,6 @@
 # Contador de cabecera — plan de construcción por fases
 
-> Estado: **F0–F4 construidas; F5 y F6, diseño.** Este documento fija el orden de construcción
+> Estado: **F0–F5 construidas; F6, diseño.** Este documento fija el orden de construcción
 > y el contrato entre fases. Cada fase es un PR que entrega valor por sí solo y
 > deja la base de la siguiente. Nada aquí exige Managed Agents ni un runtime
 > nuevo: todo corre en la app, con el loop de agente, el medidor de costos y
@@ -415,7 +415,31 @@ El mismo mecanismo cubre estados de cuenta bancarios faltantes, comprobantes
 de gastos sin CFDI, decisiones del cierre y documentos fiscales que pide el
 auditor.
 
-### F5 — Rail derecho v3: trabajo, no problemas
+### F5 — Rail derecho v3: trabajo, no problemas — **construida**
+
+> **Lo que quedó.** `src/lib/rail/armar.ts` PURO (todo el criterio; el
+> componente sólo pinta), `GET /api/rail`, `CopilotoRail.tsx` reescrito en tres
+> bloques, y una columna `datos Json?` en `ExpedienteNota` (migración
+> `20260927_nota_datos`) porque el resumen de la pasada se guardaba sólo como
+> texto y el rail no puede parsear prosa para saber qué se atendió.
+>
+> **La regla dura, implementada.** `UMBRAL_REVISION = 50`. Por debajo, el
+> contador puede recorrer los casos y el conteo le sirve de plan, así que el
+> grupo entra como trabajo. Por encima, recorrerlos es imposible y el número ya
+> no informa: informa que el check está marcando un patrón normal del negocio.
+> Ese grupo sale como UNA revisión, con muestra y un triage que lo dice —
+> «revisa si la regla está marcando un patrón normal antes de trabajarlos».
+> Los 13,778 duplicados dejan de ser una cifra que paraliza y pasan a ser lo
+> que son: una pregunta sobre la heurística.
+>
+> **El globo cuenta lo que necesito de TI, no los problemas que hay.** Un
+> número que el usuario no puede bajar sólo enseña a ignorar el globo.
+>
+> **Lo que falta.** Los renglones de «lo que hice» no enlazan todavía a la
+> entidad que tocaron (`href` va en null): el resumen guarda ids en
+> `evidencia`, falta el mapa de entidad a ruta. Y el resumen de cartera
+> (varias empresas) salió del rail al reescribirlo; vive en `/despacho`.
+
 
 **Qué.** El rail deja de ser una lista de hallazgos y pasa a tres bloques,
 alimentados por F1–F4:
@@ -448,9 +472,9 @@ F0 rastro ─┬─► F1 expediente ─┬─► F3 agente ─► F5 rail ─�
 F4 solicitudes: motor puro desde F2; el agente las usa desde F3.
 ```
 
-F0, F1, F2, F3 y F4 ya están. F1 dependía de F0 para tener evidencia que
+F0–F5 ya están. F1 dependía de F0 para tener evidencia que
 citar; F4 se adelantó como motor puro (terminal) en cuanto F2 existió y F3
-ya lo usa. Faltan F5 (rail) y F6 (digests), que leen de lo construido.
+ya lo usa. Falta F6 (digests), que lee de lo construido.
 
 Cada fase es un PR con migración, tests de la parte pura y, cuando toca UI,
 la ficha o página correspondiente. Ninguna fase rompe lo que hoy corre: los
