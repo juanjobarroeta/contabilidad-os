@@ -1,6 +1,7 @@
 import { prisma } from "./prisma";
 import { fechaCalendarioIso } from "./obligaciones";
 import { normalizarUuid, variantesUuid } from "./fiscal/uuid";
+import { amparadoPorReps } from "./facturas/reps-amparados";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Complemento de Pago (REP) detection.
@@ -106,7 +107,7 @@ export async function detectComplementosPendientes(
 
   const ppdIds = ppdInvoices.map((i) => i.id);
 
-  const [matchedPayments, detalleAsignaciones, existingReps] = await Promise.all([
+  const [matchedPayments, detalleAsignaciones, amparado] = await Promise.all([
     prisma.bankTransaction.findMany({
       where: { companyId, invoiceId: { in: ppdIds }, status: "MATCHED", monto: { gt: 0 } },
       select: { invoiceId: true, fecha: true, monto: true },
@@ -120,10 +121,10 @@ export async function detectComplementosPendientes(
       },
       select: { invoiceId: true, montoAsignado: true, bankTransaction: { select: { fecha: true } } },
     }),
-    prisma.invoice.findMany({
-      where: { companyId, tipo: "PAGO", status: "STAMPED", notas: { in: ppdIds } },
-      select: { notas: true, total: true },
-    }),
+    // Por UUID, no por la convención `notas = <id del padre>`: un REP timbrado
+    // fuera de esta app llega con «SAT — emitidos» y dejaba a su factura como
+    // pendiente para siempre. Ver lib/facturas/reps-amparados.ts.
+    amparadoPorReps(prisma, companyId, ppdInvoices.map((i) => i.uuid)),
   ]);
 
   // Pagos unificados por factura: movimientos legados 1:1 + porciones asignadas.
@@ -140,18 +141,13 @@ export async function detectComplementosPendientes(
     pagosPorFactura.set(d.invoiceId, arr);
   }
 
-  const repTotalByParent = new Map<string, number>();
-  for (const rep of existingReps) {
-    repTotalByParent.set(rep.notas ?? "", (repTotalByParent.get(rep.notas ?? "") ?? 0) + Number(rep.total));
-  }
-
   const pendientes: ComplementoPendiente[] = [];
   for (const inv of ppdInvoices) {
     const payments = pagosPorFactura.get(inv.id) ?? [];
     if (payments.length === 0) continue;
 
     const totalPagado = payments.reduce((s, p) => s + p.monto, 0);
-    const totalComplementado = repTotalByParent.get(inv.id) ?? 0;
+    const totalComplementado = inv.uuid ? amparado.get(normalizarUuid(inv.uuid)) ?? 0 : 0;
     const montoPendiente = Math.round((totalPagado - totalComplementado) * 100) / 100;
     if (montoPendiente <= 0.01) continue; // fully complemented
 

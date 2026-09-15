@@ -12,6 +12,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { prisma } from "@/lib/prisma";
+import { repsPorFactura } from "@/lib/facturas/reps-amparados";
+import { normalizarUuid } from "@/lib/fiscal/uuid";
 import { getFacturapiClient } from "@/lib/facturapi";
 import { recordTimbrado } from "@/lib/costos/record";
 import { checkStampReadiness } from "@/lib/facturas/stamp";
@@ -256,15 +258,17 @@ async function cargarContexto(input: EmitirRepInput): Promise<Contexto> {
     return { ok: false, status: readiness.status, error: readiness.error };
   }
 
-  // Parcialidades previas: sumamos los REP ya emitidos para este padre (misma
-  // convención que el detector: Invoice tipo PAGO con notas = id del padre).
-  const prev = await prisma.invoice.aggregate({
-    where: { companyId: input.companyId, tipo: "PAGO", status: "STAMPED", notas: parentInv.id },
-    _sum: { total: true },
-    _count: { _all: true },
-  });
-  const priorImpPagado = Number(prev._sum.total ?? 0);
-  const priorCount = prev._count._all;
+  // PARCIALIDADES PREVIAS, POR UUID. Antes se sumaban los REP con `notas = id
+  // del padre`, que sólo escribe esta app: si una parcialidad anterior se
+  // timbró en el portal del SAT o con otro PAC, este complemento salía como
+  // «parcialidad 1» con el saldo anterior completo. Eso no es una cuenta que
+  // sobra en una pantalla: va DENTRO del CFDI, y contradice al que ya está
+  // timbrado. Ver lib/facturas/reps-amparados.ts.
+  const previos = (await repsPorFactura(prisma, input.companyId, [parentInv.uuid])).get(
+    parentInv.uuid ? normalizarUuid(parentInv.uuid) : "",
+  ) ?? [];
+  const priorImpPagado = round2(previos.reduce((acc, r) => acc + r.total, 0));
+  const priorCount = previos.length;
   const saldoPendiente = round2(parentInv.total - priorImpPagado);
 
   // Monto y fecha del pago.
