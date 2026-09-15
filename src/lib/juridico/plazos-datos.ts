@@ -10,7 +10,7 @@
 import { prisma } from "@/lib/prisma";
 import { apuntar, type Actor } from "./bitacora";
 import { alcance, despachoDe } from "./despacho";
-import { noEncontrado, conflicto } from "./errores-api";
+import { noEncontrado, conflicto, invalido } from "./errores-api";
 import {
   type Calendario,
   type Computo,
@@ -150,9 +150,9 @@ function aPlazo(f: Record<string, unknown>, hoy: string, inhabilesExtra: string[
 
 export async function crearPlazo(casoId: string, userId: string, nuevo: NuevoPlazo, actor: Actor, despachoId?: string | null): Promise<Plazo> {
   const titulo = (nuevo.titulo ?? "").trim().slice(0, 300);
-  if (titulo.length < 3) throw conflicto("El plazo necesita un título que diga qué hay que presentar.");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(nuevo.notificacion)) throw conflicto("La fecha de notificación va en formato AAAA-MM-DD.");
-  if (!Number.isFinite(nuevo.dias) || nuevo.dias < 1 || nuevo.dias > 1825) throw conflicto("El número de días no es válido.");
+  if (titulo.length < 3) throw invalido("El plazo necesita un título que diga qué hay que presentar.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(nuevo.notificacion)) throw invalido("La fecha de notificación va en formato AAAA-MM-DD.");
+  if (!Number.isFinite(nuevo.dias) || nuevo.dias < 1 || nuevo.dias > 1825) throw invalido("El número de días no es válido.");
 
   const c = await simular({ ...nuevo, despachoId });
   const f = await prisma.juridicoPlazo.create({
