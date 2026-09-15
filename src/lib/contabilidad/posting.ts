@@ -179,6 +179,15 @@ function monthRange(year: number, month: number): { start: Date; end: Date } {
  * categoría—, así que sin esto el mes no cerraba: «2 ignorados sin categoría»
  * justo después de haber resuelto bien el rebote. Ver lib/bancos/devoluciones.ts.
  */
+/**
+ * ¿El PAGO ORIGINAL del par salió del banco? Con `devolucionDeId` puesto, la
+ * fila es el rebote y el original tenía el signo contrario. Decide la cuenta
+ * puente del par —una sola para las dos patas, o no se cancelaría— y con ella
+ * de qué lado del balance queda el saldo cuando el rebote cae en otro mes.
+ */
+export const originalDeParSalio = (t: { devolucionDeId: string | null; monto: number }) =>
+  t.devolucionDeId ? t.monto > 0 : t.monto < 0;
+
 export const esParDevolucion = (t: { devolucionDeId: string | null; devolucionPor?: { id: string } | null }) =>
   t.devolucionDeId !== null || (t.devolucionPor ?? null) !== null;
 
@@ -1186,12 +1195,25 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     // en el mes siguiente, lo que queda al cierre es exactamente lo que es:
     // una cuenta por cobrar al banco. Ver lib/bancos/devoluciones.ts.
     if (esParDevolucion(tx)) {
+      // LAS DOS PATAS MUEVEN BANCOS, cada una con su signo: el dinero salió y
+      // volvió de verdad, y el saldo tiene que atar con el estado de cuenta en
+      // los dos días. Lo que se netea es la CUENTA PUENTE, no Bancos.
+      //
+      // Y el puente es UNO SOLO para el par —si cada pata eligiera cuenta por
+      // su propio signo, el par se repartiría entre deudores y acreedores y no
+      // se cancelaría nunca—. Lo elige el sentido del PAGO ORIGINAL: un pago
+      // que salió y volvió es algo por cobrar mientras está afuera; un depósito
+      // que se recibió y se devolvió es algo que se debía mientras se tuvo.
+      // Con el par dentro del mismo mes da igual (cierra en cero); con el
+      // rebote en el mes siguiente, el saldo que queda al corte cae del lado
+      // correcto del balance.
+      const puente = originalDeParSalio(tx) ? accDeudoresDiv : accAcreedoresDiv;
       if (isCredit) {
-        drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,    monto: absAmount, tipo: "CARGO" });
-        drafts.push({ ...base, chartAccountId: accDeudoresDiv.id, monto: absAmount, tipo: "ABONO" });
+        drafts.push({ ...base, chartAccountId: ctaBanco(tx).id, monto: absAmount, tipo: "CARGO" });
+        drafts.push({ ...base, chartAccountId: puente.id,       monto: absAmount, tipo: "ABONO" });
       } else {
-        drafts.push({ ...base, chartAccountId: accDeudoresDiv.id, monto: absAmount, tipo: "CARGO" });
-        drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,    monto: absAmount, tipo: "ABONO" });
+        drafts.push({ ...base, chartAccountId: puente.id,       monto: absAmount, tipo: "CARGO" });
+        drafts.push({ ...base, chartAccountId: ctaBanco(tx).id, monto: absAmount, tipo: "ABONO" });
       }
       continue;
     }

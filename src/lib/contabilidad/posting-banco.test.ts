@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planearTraspasos, subcuentaBancoSpec, IGNORED_TAGS_VALIDOS, esParDevolucion } from "./posting";
+import { planearTraspasos, subcuentaBancoSpec, IGNORED_TAGS_VALIDOS, esParDevolucion, originalDeParSalio } from "./posting";
 
 const CLABE_X = "012180001111111111";
 const CLABE_Y = "014180002222222222";
@@ -228,5 +228,22 @@ describe("esParDevolucion() — el par ES la categoría", () => {
     expect(esParDevolucion({ devolucionDeId: null, devolucionPor: { id: "rebote" } })).toBe(true);
     expect(esParDevolucion({ devolucionDeId: null, devolucionPor: null })).toBe(false);
     expect(esParDevolucion({ devolucionDeId: null })).toBe(false);
+  });
+});
+
+// Las dos patas mueven Bancos; lo que se netea es la cuenta puente, y tiene que
+// ser LA MISMA para las dos o el par se reparte entre deudores y acreedores y
+// no se cancela nunca. La elige el sentido del pago original.
+describe("originalDeParSalio() — un puente para el par", () => {
+  it("un pago que salió y volvió: por cobrar mientras estuvo afuera", () => {
+    // El pago (la fila sin devolucionDeId) salió: monto negativo.
+    expect(originalDeParSalio({ devolucionDeId: null, monto: -22732.5 })).toBe(true);
+    // Su rebote entró, y apunta al original: mismo puente.
+    expect(originalDeParSalio({ devolucionDeId: "pago", monto: 22732.5 })).toBe(true);
+  });
+
+  it("un depósito recibido y devuelto: se debía mientras se tuvo", () => {
+    expect(originalDeParSalio({ devolucionDeId: null, monto: 5000 })).toBe(false);
+    expect(originalDeParSalio({ devolucionDeId: "deposito", monto: -5000 })).toBe(false);
   });
 });
