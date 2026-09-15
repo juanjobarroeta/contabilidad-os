@@ -34,7 +34,7 @@ const ACCION: Record<string, string> = {
   "sincronizacion-sat": "Completa la descarga de CFDI del periodo antes de calcular.",
   cfdi_faltantes: "Revisa los folios que el SAT reporta y que no tienen XML.",
   nomina: "Registra y timbra las corridas del mes para enterar las retenciones.",
-  empleados_sin_recibo: "Verifica los empleados activos sin recibo timbrado en el mes.",
+  empleados_sin_recibo: "Verifica a quien estuvo en nómina ese mes y no tiene recibo timbrado.",
   "cuotas-imss": "Registra el pago de las cuotas con la línea de captura SIPARE.",
   idse_pendientes: "Presenta los movimientos afiliatorios en IDSE.",
   "cadena-declaraciones": "Guarda la declaración de los meses anteriores con actividad para que el arrastre sea íntegro.",

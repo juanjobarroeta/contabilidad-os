@@ -259,11 +259,26 @@ describe("decidirPasos — el número que importa y la propagación", () => {
     expect(r.cta.href).toContain("/hallazgos");
   });
 
-  it("empleado activo sin recibo → nómina en atención, IMSS sigue evaluándose", () => {
+  it("empleado sin recibo → nómina en atención, IMSS sigue evaluándose", () => {
     const h = hechos({ extras: extras({ empleadosSinRecibo: 1 }) });
     expect(estadoDe(h, "nomina").estadoCalculado).toBe("atencion");
-    expect(estadoDe(h, "nomina").detalle).toBe("1 empleado activo sin recibo timbrado en el mes");
+    expect(estadoDe(h, "nomina").detalle).toBe("1 empleado sin recibo timbrado en el mes");
     expect(estadoDe(h, "imss").estadoCalculado).toBe("listo");
+  });
+
+  // «1 empleado sin recibo» obliga a ir a buscar quién. Con el nombre, el aviso
+  // suele contestarse solo: un alta de fin de mes, un asimilado que se paga por
+  // fuera, un finiquito que nadie dio de baja.
+  it("el aviso dice QUIÉN, y resume el resto cuando son muchos", () => {
+    const uno = hechos({ extras: extras({ empleadosSinRecibo: 1, empleadosSinReciboNombres: ["Ana Ruiz"] }) });
+    expect(estadoDe(uno, "nomina").detalle).toBe("1 empleado sin recibo timbrado en el mes: Ana Ruiz");
+
+    const varios = hechos({
+      extras: extras({ empleadosSinRecibo: 5, empleadosSinReciboNombres: ["Ana Ruiz", "Luis Paz", "Sara Gil"] }),
+    });
+    expect(estadoDe(varios, "nomina").detalle).toBe(
+      "5 empleados sin recibo timbrado en el mes: Ana Ruiz, Luis Paz, Sara Gil y 2 más",
+    );
   });
 
   it("declaración vencida sin presentar → atención con la primera oración del checklist", () => {

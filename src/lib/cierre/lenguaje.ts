@@ -149,7 +149,7 @@ export const LLANO: Record<string, TextoLlano> = {
   },
   "x:empleados_sin_recibo": {
     hacer: "Timbrar los recibos que faltan",
-    que: "Hay empleados activos sin recibo de nómina del mes.",
+    que: "Alguien que estuvo en nómina ese mes no tiene recibo timbrado.",
   },
   "x:idse_pendientes": {
     hacer: "Presentar los movimientos en el IMSS",
