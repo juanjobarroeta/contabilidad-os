@@ -85,7 +85,9 @@ export type ColumnaBalanza = "codigo" | "nombre" | "saldoIni" | "debe" | "haber"
 
 const SINONIMOS_CATALOGO: Record<ColumnaCatalogo, RegExp> = {
   codigo: /^(c[oó]digo|cuenta|num ?cta|n[uú]mero( de)? cuenta|no\.? ?(de )?cuenta|clave|cta)$/i,
-  nombre: /^(nombre|descripci[oó]n|desc|concepto|nombre( de la)? cuenta)$/i,
+  // «Nombre de cuenta» es como lo escribe más de un sistema hospitalario, y no
+  // entraba: el catálogo se importaba entero con el código por nombre.
+  nombre: /^(nombre|descripci[oó]n|desc|concepto|nombre( de( la)?)? cuenta)$/i,
   agrupador: /agrupador|cod ?agrup|c[oó]digo ?sat|cuenta ?sat|sat$/i,
   nivel: /^nivel$/i,
   naturaleza: /^(naturaleza|natur|nat)$/i,
@@ -156,6 +158,14 @@ function naturalezaDe(v: string): Naturaleza | null {
 
 function naturalezaPorTipoTexto(v: string): Naturaleza | null {
   const s = normalizar(v).toUpperCase();
+  // La columna «Tipo» de más de un sistema trae las DOS cosas: «Activo
+  // Deudora», «Resultados Acreedora», «Orden Deudora». Cuando lo dice, se le
+  // cree — es el dato, no una inferencia por el nombre del tipo. Sin esto,
+  // «Resultados Deudora» no empezaba por ACTIVO/GASTO/COSTO y la cuenta se
+  // omitía: cinco cuentas de título del catálogo de un hospital, entre ellas
+  // Ingresos, Costos y Gastos.
+  if (/\bDEUDORA\b/.test(s)) return "D";
+  if (/\bACREEDORA\b/.test(s)) return "A";
   if (/^ACTIVO|^GASTO|^COSTO/.test(s)) return "D";
   if (/^PASIVO|^CAPITAL|^INGRESO/.test(s)) return "A";
   return null;
@@ -192,7 +202,11 @@ export function parseCatalogoTabular(contenido: string | Uint8Array): CatalogoTa
   for (let i = fila + 1; i < filas.length; i++) {
     const f = filas[i];
     if (f.every((c) => !c)) continue;
-    const codigo = celda(f, "codigo").replace(/\s+/g, "");
+    // Sin separadores de millares: Excel guarda 100000000 con formato y la hoja
+    // lo entrega como «100,000,000». Con las comas, el código deja de ser el
+    // número de la cuenta, la jerarquía no se puede inferir (todo queda en
+    // nivel 1) y el XML sale con un NumCta que no es.
+    const codigo = celda(f, "codigo").replace(/[\s,]/g, "");
     if (!codigo) { sinCodigo++; continue; }
     const nivelTxt = celda(f, "nivel");
     const nivelNum = nivelTxt ? parseInt(nivelTxt, 10) : NaN;
@@ -201,11 +215,14 @@ export function parseCatalogoTabular(contenido: string | Uint8Array): CatalogoTa
     if (agrupador && agrupador !== agrupadorCrudo.replace(/\s+/g, "")) traducidasPorNombre++;
     parciales.push({
       codigo,
-      nombre: celda(f, "nombre"),
+      // Un solo renglón: el sistema del hospital parte el nombre con saltos de
+      // línea dentro de la celda («Ecografo …\n\nnoidentificado»), y un Desc con
+      // saltos no es un nombre de cuenta en el XML del catálogo.
+      nombre: celda(f, "nombre").replace(/\s+/g, " ").trim(),
       agrupador,
       nivel: Number.isFinite(nivelNum) && nivelNum > 0 ? nivelNum : null,
       natur: naturalezaDe(celda(f, "naturaleza")),
-      padre: celda(f, "padre").replace(/\s+/g, "") || null,
+      padre: celda(f, "padre").replace(/[\s,]/g, "") || null,
       tipo: celda(f, "tipo"),
     });
   }
