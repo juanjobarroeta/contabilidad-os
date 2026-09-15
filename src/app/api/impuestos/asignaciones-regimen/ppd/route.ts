@@ -8,6 +8,7 @@ import { invoiceRegimenPeriodContext } from "@/lib/fiscal/regimen-allocation";
 import {
   projectPpdRegimenAllocation,
   proratePpdBaseCentavos,
+  validatePpdPaymentHistory,
   type PpdRegimenReadinessApiResponse,
   type PpdRegimenReadinessFailureCode,
 } from "@/lib/fiscal/regimen-payment-allocation";
@@ -17,6 +18,7 @@ const PENDING_PREVIEW_LIMIT = 25;
 
 const LIMITACIONES = [
   "La proyección usa la asignación del CFDI padre y la FechaPago del REP.",
+  "Cada relación exige un historial completo de REP timbrados que no exceda el total del CFDI padre.",
   "Un cambio de régimen entre emisión y pago requiere revisión del contador.",
   "No separa IVA ni modifica cálculos, declaraciones o cierres.",
 ];
@@ -127,6 +129,32 @@ export async function GET(req: Request) {
         },
       })
     : [];
+  const historicalLinks = parentUuidVariants.length > 0
+    ? await prisma.pagoDoctoRelacionado.findMany({
+        where: {
+          parentUuid: { in: parentUuidVariants },
+          pagoInvoice: { companyId, tipo: "PAGO", status: "STAMPED" },
+        },
+        select: {
+          id: true,
+          parentUuid: true,
+          impPagado: true,
+        },
+      })
+    : [];
+
+  const paymentHistoryByParentUuid = new Map<string, Array<{ id: string; amountMicropesos: number | null }>>();
+  for (const historicalLink of historicalLinks) {
+    const key = normalizarUuid(historicalLink.parentUuid);
+    const history = paymentHistoryByParentUuid.get(key) ?? [];
+    history.push({
+      id: historicalLink.id,
+      amountMicropesos: toMicropesos(
+        historicalLink.impPagado === null ? null : Number(historicalLink.impPagado),
+      ),
+    });
+    paymentHistoryByParentUuid.set(key, history);
+  }
 
   const parentsByUuid = new Map<string, typeof parents>();
   for (const parent of parents) {
@@ -233,6 +261,23 @@ export async function GET(req: Request) {
       };
     }
 
+    const paymentHistory = paymentHistoryByParentUuid.get(normalizarUuid(link.parentUuid)) ?? [];
+    const historyIntegrity = validatePpdPaymentHistory({
+      parentTotalMicropesos,
+      paymentAmountsMicropesos: paymentHistory.some((historicalLink) => historicalLink.id === link.id)
+        ? paymentHistory.map((historicalLink) => historicalLink.amountMicropesos)
+        : [],
+    });
+    if (!historyIntegrity.ok) {
+      return {
+        ...base,
+        ok: false as const,
+        code: historyIntegrity.code,
+        error: historyIntegrity.error,
+        parent: parentSummary,
+      };
+    }
+
     const parentContext = invoiceRegimenPeriodContext({
       fecha: parent.fecha,
       regimenFiscal: company.regimenFiscal,
@@ -277,6 +322,8 @@ export async function GET(req: Request) {
     || row.code === "FOREIGN_CURRENCY_REQUIRES_REVIEW"
     || row.code === "ASSIGNMENT_REQUIRED"
     || row.code === "REGIME_TRANSITION_REVIEW"
+    || row.code === "PAYMENT_HISTORY_AMOUNT_UNAVAILABLE"
+    || row.code === "CUMULATIVE_PAYMENT_EXCEEDS_PARENT_TOTAL"
   ).length;
 
   const response: PpdRegimenReadinessApiResponse = {
@@ -292,6 +339,8 @@ export async function GET(req: Request) {
       monedaExtranjera: countCode("FOREIGN_CURRENCY_REQUIRES_REVIEW"),
       sinAsignacion: countCode("ASSIGNMENT_REQUIRED"),
       transicionesRegimen: countCode("REGIME_TRANSITION_REVIEW"),
+      historialPagoIncompleto: countCode("PAYMENT_HISTORY_AMOUNT_UNAVAILABLE"),
+      sobrepagoAcumulado: countCode("CUMULATIVE_PAYMENT_EXCEEDS_PARENT_TOTAL"),
       otros: failures.length - assignedBuckets,
     },
     pagosPendientes: failures.slice(0, PENDING_PREVIEW_LIMIT),

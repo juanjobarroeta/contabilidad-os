@@ -3,7 +3,36 @@ import {
   allocateCentavosByBasisPoints,
   projectPpdRegimenAllocation,
   proratePpdBaseCentavos,
+  validatePpdPaymentHistory,
 } from "./regimen-payment-allocation";
+
+describe("validatePpdPaymentHistory", () => {
+  it("accepts a complete stamped REP history up to the exact parent total", () => {
+    expect(validatePpdPaymentHistory({
+      parentTotalMicropesos: 1_160_000_000,
+      paymentAmountsMicropesos: [580_000_000, 580_000_000],
+    })).toEqual({ ok: true, totalPaidMicropesos: 1_160_000_000 });
+  });
+
+  it.each([
+    { paymentAmountsMicropesos: [] },
+    { paymentAmountsMicropesos: [580_000_000, null] },
+    { paymentAmountsMicropesos: [580_000_000, 0] },
+    { paymentAmountsMicropesos: [580_000_000, 1.5] },
+  ])("fails closed when the payment history is incomplete or invalid", ({ paymentAmountsMicropesos }) => {
+    expect(validatePpdPaymentHistory({
+      parentTotalMicropesos: 1_160_000_000,
+      paymentAmountsMicropesos,
+    })).toMatchObject({ ok: false, code: "PAYMENT_HISTORY_AMOUNT_UNAVAILABLE" });
+  });
+
+  it("blocks cumulative stamped payments above the parent total", () => {
+    expect(validatePpdPaymentHistory({
+      parentTotalMicropesos: 1_160_000_000,
+      paymentAmountsMicropesos: [700_000_000, 580_000_000],
+    })).toMatchObject({ ok: false, code: "CUMULATIVE_PAYMENT_EXCEEDS_PARENT_TOTAL" });
+  });
+});
 
 describe("proratePpdBaseCentavos", () => {
   it("derives the subtotal-equivalent base using integer arithmetic", () => {

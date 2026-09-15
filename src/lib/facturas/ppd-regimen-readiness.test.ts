@@ -23,6 +23,8 @@ function response(estado: PpdRegimenReadinessApiResponse["estado"]): PpdRegimenR
       monedaExtranjera: 0,
       sinAsignacion: 0,
       transicionesRegimen: 0,
+      historialPagoIncompleto: 0,
+      sobrepagoAcumulado: 0,
       otros: 0,
     },
     pagosPendientes: [],
@@ -87,6 +89,8 @@ describe("PPD regime readiness view model", () => {
       monedaExtranjera: 3,
       sinAsignacion: 1,
       transicionesRegimen: 2,
+      historialPagoIncompleto: 4,
+      sobrepagoAcumulado: 2,
       otros: 1,
     })).toEqual([
       "1 con problema en el CFDI padre",
@@ -94,6 +98,8 @@ describe("PPD regime readiness view model", () => {
       "2 por cambio de régimen",
       "3 en moneda extranjera",
       "2 sin importe válido",
+      "4 con historial de pagos incompleto",
+      "2 con pagos que exceden el total",
       "1 para revisión",
     ]);
   });
