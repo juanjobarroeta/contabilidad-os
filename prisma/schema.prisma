@@ -1049,6 +1049,7 @@ model Invoice {
   customer             Customer?              @relation(fields: [customerId], references: [id])
   items                InvoiceItem[]
   taxes                InvoiceTax[]
+  regimenAssignment    InvoiceRegimenAssignment?
   bankTransactions     BankTransaction[]
   // Conciliación uno-a-varios: porciones de movimientos asignadas a esta factura.
   conciliacionDetalles ConciliacionDetalle[]
@@ -1107,6 +1108,43 @@ model Invoice {
   // sin este índice cada subconsulta correlacionada por Customer barre la
   // tabla entera — con 13k CFDIs, GET /api/clientes tardaba 7–25 s.
   @@index([customerId])
+}
+
+// Accountant-reviewed attribution of one income/expense CFDI across the tax
+// regimes effective in its fiscal month. The current calculation engines do
+// not consume this data yet: it is the explicit contract required before a
+// mixed-regime engine may stop failing closed.
+model InvoiceRegimenAssignment {
+  id        String @id @default(cuid())
+  invoiceId String @unique
+  revision  Int    @default(1)
+
+  // Flat reviewer identity is intentional: the current assignment remains
+  // understandable even if the user account is later removed. AuditLog keeps
+  // the append-only history of each replacement/removal.
+  reviewedById    String
+  reviewedByEmail String?
+  reviewedAt      DateTime @default(now())
+  note            String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invoice     Invoice                     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  allocations InvoiceRegimenAllocation[]
+}
+
+model InvoiceRegimenAllocation {
+  id           String @id @default(cuid())
+  assignmentId String
+  regimenCode  String
+  // 10,000 = 100.00%. Integers avoid floating-point drift and let future cash-
+  // basis engines apply the same attribution proportionally to each payment.
+  basisPoints  Int
+
+  assignment InvoiceRegimenAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, regimenCode])
 }
 
 // Vínculo operativo de un CFDI con su requisición / gasto / estimación, más el
