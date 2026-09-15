@@ -31,6 +31,12 @@ export const RUTAS_PUBLICAS: EntradaAllowlist[] = [
     razon: "Alta pública de cuenta; rate limit por IP y por email en el propio handler.",
   },
   {
+    ruta: "api/juridico/registro/route.ts",
+    razon:
+      "Alta pública de un despacho en Libra: nadie puede autenticarse todavía. Rate limit por IP en el handler, " +
+      "aceptación expresa de Términos y Aviso con evidencia en LegalAcceptance, y una cuenta que ya tiene contraseña NUNCA se sobrescribe.",
+  },
+  {
     ruta: "api/auth/token/route.ts",
     razon:
       "Canje de credenciales por bearer para satélites; las credenciales SON la autenticación, con rate limit propio.",
