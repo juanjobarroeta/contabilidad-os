@@ -20,3 +20,4 @@ export {
 } from "./Table";
 export { Skeleton, SkeletonText, SkeletonCard, SkeletonRows } from "./Skeleton";
 export { StatTile, StatStrip } from "./StatTile";
+export { VisorPdf, type VisorPdfProps } from "./VisorPdf";
