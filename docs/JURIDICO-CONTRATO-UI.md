@@ -172,6 +172,19 @@ conversación se archive.
 
 Todas cuelgan de `/api/juridico/:path*`, que ya está en el matcher de CORS.
 
+### Notas de voz
+
+`POST /api/juridico/transcribir` — multipart con el campo `audio`; devuelve
+`{ texto, segundos, aviso? }`. Hasta 25 MB. El costo entra al asiento como
+`ai.juridico.voz` y respeta el tope (429 `JURIDICO_TOPE_MES`).
+
+**Regla de producto: la nota NO dispara un turno.** El texto cae en el cuadro
+de escribir para que el abogado lo corrija antes de enviarlo; lo que dicta
+lleva nombres, cifras y plazos, y un dictado mal entendido que se manda solo
+es peor que teclear. La app ya trae el botón (`components/BotonDictar.tsx`):
+graba hasta 5 minutos con reloj, toma el formato que soporte el navegador
+(Safari mp4, Chrome webm) y agrega el texto al final de lo ya escrito.
+
 ### Consumo y asientos
 
 | Ruta | Qué hace |
