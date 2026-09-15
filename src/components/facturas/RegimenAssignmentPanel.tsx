@@ -16,7 +16,13 @@ import {
   type RegimenPercentageDraft,
 } from "@/lib/fiscal/regimen-allocation-client";
 
-export function RegimenAssignmentPanel({ invoiceId }: { invoiceId: string }) {
+export function RegimenAssignmentPanel({
+  invoiceId,
+  onChanged,
+}: {
+  invoiceId: string;
+  onChanged?: () => void;
+}) {
   const [data, setData] = useState<InvoiceRegimenAssignmentApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -110,12 +116,14 @@ export function RegimenAssignmentPanel({ invoiceId }: { invoiceId: string }) {
         setEditing(false);
         setNotice("Otra persona actualizó la asignación. Cargamos la versión más reciente; revísala antes de volver a guardar.");
         await load();
+        onChanged?.();
         return;
       }
       if (!response.ok) throw new Error(body?.error ?? "No se pudo guardar la asignación.");
       setData(body as InvoiceRegimenAssignmentApiResponse);
       setEditing(false);
       setNotice("Asignación revisada y guardada.");
+      onChanged?.();
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "No se pudo guardar la asignación.");
     } finally {
@@ -139,12 +147,14 @@ export function RegimenAssignmentPanel({ invoiceId }: { invoiceId: string }) {
       if (response.status === 409) {
         setNotice("Otra persona cambió la asignación. Cargamos la versión más reciente.");
         await load();
+        onChanged?.();
         return;
       }
       if (!response.ok) throw new Error(body?.error ?? "No se pudo quitar la asignación.");
       setData(body as InvoiceRegimenAssignmentApiResponse);
       setEditing(false);
       setNotice("Asignación eliminada; la factura está pendiente de revisión.");
+      onChanged?.();
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "No se pudo quitar la asignación.");
     } finally {
