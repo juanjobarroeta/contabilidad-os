@@ -1,6 +1,6 @@
 import { prisma } from "./prisma";
 import { sumIsrPagar } from "./isr-provisional";
-import { detectResicoKind, calcularIsrResicoPf } from "./resico";
+import { calcularIsrResicoPf } from "./resico";
 import { calcularIsrProvisionalPf } from "./fiscal/isr-pf";
 import { calcularIsrArrendamientoMensual, esErogacionPredial } from "./fiscal/isr-arrendamiento";
 import { calcularIsrPlataformas, normalizarActividadPlataforma, TASAS_PLATAFORMA } from "./fiscal/isr-plataformas";
@@ -14,6 +14,7 @@ import { ivaRetenidoAProveedoresEnPeriodo } from "./fiscal/iva-retenciones-db";
 import { aplicarFlujoPue, pagosPueDelPeriodo, puesAnterioresPagadosEnPeriodo, type ModoPue } from "./fiscal/iva-pue-flujo";
 import { reconciliacionActiva } from "./fiscal/conciliacion-pue";
 import { normalizarUuid, variantesUuid } from "./fiscal/uuid";
+import { assertMonthlyCalculationSupported, tipoPersonaFromRfc } from "./fiscal/regimen-capabilities";
 
 /**
  * Prisma `where` que EXCLUYE los CFDIs de egreso emitidos por un proveedor 69-B
@@ -558,6 +559,27 @@ export async function computeTaxPosition(
   const prevPeriodo =
     month === 1 ? `${year - 1}-12` : `${year}-${String(month - 1).padStart(2, "0")}`;
 
+  // Fail closed before reading invoices or carrying balances. Recognition of a
+  // regimen does not mean its tax formula exists; PF/PM generic fallbacks can
+  // silently calculate a different legal regime.
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: {
+      coeficienteUtilidad: true,
+      coeficienteAnio: true,
+      perdidaFiscalPendiente: true,
+      perdidaFiscalAnio: true,
+      regimenFiscal: true,
+      rfc: true,
+      plataformaActividad: true,
+    },
+  });
+  if (!company) throw new Error(`Empresa no encontrada: ${companyId}`);
+  const regimenTrack = assertMonthlyCalculationSupported(
+    company.regimenFiscal,
+    tipoPersonaFromRfc(company.rfc),
+  );
+
   const invoiceInclude = {
     taxes: true,
   } as const;
@@ -576,7 +598,6 @@ export async function computeTaxPosition(
     declaracionesPrevias,
     prevDeclaracion,
     prevIsrDeclaracion,
-    company,
     repCobrosDelMes,
     annualDecls,
     perdidasRecords,
@@ -632,10 +653,6 @@ export async function computeTaxPosition(
         status: { in: ["CALCULATED", "FILED", "PAID"] },
       },
       select: { isrSaldoFavor: true },
-    }),
-    prisma.company.findUnique({
-      where: { id: companyId },
-      select: { coeficienteUtilidad: true, coeficienteAnio: true, perdidaFiscalPendiente: true, perdidaFiscalAnio: true, regimenFiscal: true, rfc: true, plataformaActividad: true },
     }),
     // PPD IVA is on a REP (complemento de pago) basis: every payment whose
     // FechaPago falls in this month, across all REPs of this company. Direction
@@ -809,21 +826,15 @@ export async function computeTaxPosition(
     Number(ingresosAcumuladosAgg._sum.subtotal ?? 0) - 2 * Number(acumuladosE._sum.subtotal ?? 0);
   const isrPagadoAnterior = sumIsrPagar(declaracionesPrevias);
 
-  const resicoKind = detectResicoKind(company?.regimenFiscal ?? null, company?.rfc ?? null);
-  const esPf = (company?.rfc?.trim().length ?? 0) === 13;
-  const esPfActEmpresarial = company?.regimenFiscal === "612" && esPf;
-  const esPfArrendamiento = company?.regimenFiscal === "606" && esPf;
-  const esPfPlataformas = company?.regimenFiscal === "625" && esPf;
-
   let isr: TaxPosition["isr"];
 
-  if (esPfPlataformas) {
+  if (regimenTrack.trackId === "625") {
     // PF plataformas tecnológicas (625, Art. 113-A): tasa fija por actividad
     // sobre ingresos cobrados del mes (flujo, base-REP) − retenciones que las
     // plataformas efectuaron (del desglose del CFDI). Pago definitivo.
     const mesFlujo = await flujoEfectivoAcum(companyId, from, to, efosBloqueados);
-    const asumida = !company?.plataformaActividad;
-    const actividad = normalizarActividadPlataforma(company?.plataformaActividad);
+    const asumida = !company.plataformaActividad;
+    const actividad = normalizarActividadPlataforma(company.plataformaActividad);
     const r = calcularIsrPlataformas({
       ingresosCobradosMes: mesFlujo.ingresosCobrados,
       retencionesMes: mesFlujo.isrRetenidoCobrado,
@@ -850,7 +861,7 @@ export async function computeTaxPosition(
       tarifaVerificada: true, // tasas fijas Art. 113-A (sin actualización anual)
       plataformaActividad: { kind: actividad, label: TASAS_PLATAFORMA[actividad].label, asumida },
     };
-  } else if (resicoKind === "pf") {
+  } else if (regimenTrack.trackId === "626-PF") {
     // RESICO PF (Art. 113-E): tarifa mensual sobre ingresos del mes (cobrado
     // approximado por ingresos stamped del mes — igual que el cálculo actual).
     const res = calcularIsrResicoPf(ingresosDelMes);
@@ -892,7 +903,7 @@ export async function computeTaxPosition(
       saldoAFavor: Math.max(0, round2(acreditableIsr - res.isr)),
       tarifaVerificada: true,
     };
-  } else if (esPfArrendamiento) {
+  } else if (regimenTrack.trackId === "606") {
     // PF arrendamiento (606, Arts. 114-116): pago provisional MENSUAL
     // standalone (no acumulativo) sobre flujo — ingresos del mes efectivamente
     // cobrados (base-REP) − deducción ciega 35% (Art. 115) → tarifa mensual
@@ -940,14 +951,9 @@ export async function computeTaxPosition(
       tarifaVerificada: r ? r.tarifaVerificada : false,
       predialPagado: r ? r.predialPagado : predialPagadoMes,
     };
-  } else if (esPfActEmpresarial || esPf) {
+  } else if (regimenTrack.trackId === "612") {
     // PF con actividad empresarial (Art. 106): base en FLUJO DE EFECTIVO
     // (ingresos cobrados − deducciones pagadas, acumulado) × tarifa Art. 96.
-    //
-    // También es el cálculo POR DEFECTO de cualquier persona física que no caiga
-    // en un régimen más específico (plataformas/RESICO/arrendamiento): una PF NUNCA
-    // usa coeficiente de utilidad (eso es exclusivo de PM, Art. 14), así que jamás
-    // debe terminar en la rama PM_ART14 — usa la tarifa progresiva del Art. 106.
     const { ingresosCobrados, deduccionesPagadas, isrRetenidoCobrado } = await flujoEfectivoAcum(companyId, yearFrom, to, efosBloqueados);
     // Deducción de inversiones del periodo (Art. 106): depreciación proporcional
     // ene→mes del registro de activo fijo. Los CFDIs de inversión ya quedaron
@@ -1002,9 +1008,8 @@ export async function computeTaxPosition(
       tarifaVerificada: r ? r.tarifaVerificada : false,
     };
   } else {
-    // Persona MORAL general / RESICO PM / otros: Art. 14 (coeficiente × 30%
-    // sobre ingresos nominales acumulados). Sólo personas morales llegan aquí —
-    // cualquier persona física se resuelve arriba con tarifa/tasa (sin coeficiente).
+    // The capability gate narrows this final branch to 601 PM only. RESICO PM
+    // and every other PM regimen fail before any fiscal data is queried.
     const prevIngresosTotal =
       Number(prevYearIngresos._sum.subtotal ?? 0) - 2 * Number(prevYearIngresosE._sum.subtotal ?? 0);
     const prevGastosTotal =

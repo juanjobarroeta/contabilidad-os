@@ -6,6 +6,7 @@ import { retencionesDelPeriodo } from "@/lib/fiscal/retenciones";
 import { isanDelPeriodo } from "@/lib/automotriz/isan-periodo";
 import { prisma } from "@/lib/prisma";
 import { periodoMensualPorDefecto } from "@/lib/fiscal/periodo-operativo";
+import { calculationForApi } from "@/lib/fiscal/regimen-capability-api";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/automotriz/fiscal?companyId=…&year=2026&month=7
@@ -39,7 +40,7 @@ export const GET = withAuthz(async (req: Request) => {
 
   // El checklist ya corre el motor por dentro para sus banderas; la corrida
   // extra trae el desglose completo. Paralelo para no sumar latencia.
-  const [pos, checklist, retenciones, isan] = await Promise.all([
+  const calculation = await calculationForApi(Promise.all([
     computeTaxPosition(companyId, year, month),
     checklistDeclaracion(companyId, year, month, hoy),
     retencionesDelPeriodo(companyId, year, month),
@@ -47,7 +48,9 @@ export const GET = withAuthz(async (req: Request) => {
     // provisionales el día 17 (Art. 4 LFISAN) — el mismo día que el IVA y el
     // ISR, así que se calcula aquí y no en una pantalla aparte.
     isanDelPeriodo(prisma, companyId, year, month),
-  ]);
+  ]));
+  if (calculation instanceof NextResponse) return calculation;
+  const [pos, checklist, retenciones, isan] = calculation;
 
   // Lo que realmente sale del banco el día 17: impuesto propio (IVA + ISR
   // provisional) MÁS las retenciones, que no son de la empresa pero las entera

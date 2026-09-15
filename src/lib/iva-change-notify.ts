@@ -3,6 +3,7 @@ import { computeTaxPosition } from "./impuestos";
 import { sendWhatsappMessage, sendWhatsappTemplate } from "./whatsapp/twilio";
 import { formatCurrency } from "./utils";
 import { periodoMensualActual } from "./fiscal/periodo-operativo";
+import { isRegimenCalculationNotSupportedError } from "./fiscal/regimen-capabilities";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Post-sync IVA-change notice.
@@ -109,7 +110,17 @@ export async function notifyIvaChanges(
 
   for (const p of candidates) {
     checked++;
-    const pos = await computeTaxPosition(companyId, p.year, p.month);
+    let pos: Awaited<ReturnType<typeof computeTaxPosition>>;
+    try {
+      pos = await computeTaxPosition(companyId, p.year, p.month);
+    } catch (error) {
+      // This company cannot produce an automatic amount in any candidate month.
+      // Do not abort the SAT sync cron and never establish a fake zero baseline.
+      if (isRegimenCalculationNotSupportedError(error)) {
+        return { checked: 0, notified: 0 };
+      }
+      throw error;
+    }
     const current = Math.round(pos.iva.trasladado * 100) / 100;
 
     const existing = await prisma.ivaPeriodNotice.findUnique({

@@ -6,6 +6,7 @@ import { retencionesDelPeriodo } from "@/lib/fiscal/retenciones";
 import { isrRetenidoMedicosDelPeriodo } from "@/lib/hospital/isr-medicos";
 import { prisma } from "@/lib/prisma";
 import { periodoMensualPorDefecto } from "@/lib/fiscal/periodo-operativo";
+import { calculationForApi } from "@/lib/fiscal/regimen-capability-api";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/hospital/fiscal?companyId=…&year=2026&month=8
@@ -40,12 +41,14 @@ export const GET = withAuthz(async (req: Request) => {
 
   // El checklist ya corre el motor por dentro para sus banderas; la corrida
   // extra trae el desglose completo. Paralelo para no sumar latencia.
-  const [pos, checklist, retenciones, medicos] = await Promise.all([
+  const calculation = await calculationForApi(Promise.all([
     computeTaxPosition(companyId, year, month),
     checklistDeclaracion(companyId, year, month, hoy),
     retencionesDelPeriodo(companyId, year, month),
     isrRetenidoMedicosDelPeriodo(prisma, companyId, year, month),
-  ]);
+  ]));
+  if (calculation instanceof NextResponse) return calculation;
+  const [pos, checklist, retenciones, medicos] = calculation;
 
   // Lo que realmente sale del banco el día 17: impuesto propio (IVA + ISR
   // provisional) MÁS las retenciones, que no son de la empresa pero las entera

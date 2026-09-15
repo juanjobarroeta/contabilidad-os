@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getEffectiveCompanyMembership, isOperador } from "@/lib/authz";
 import { verificarContraSat } from "@/lib/fiscal/verificacion-sat";
+import { isRegimenCalculationNotSupportedError } from "@/lib/fiscal/regimen-capabilities";
+import { regimenCalculationErrorResponse } from "@/lib/fiscal/regimen-capability-api";
 
 // GET /api/papeles/verificacion?companyId=xxx&year=2026&month=5
 //
@@ -36,6 +38,9 @@ export async function GET(req: Request) {
     const result = await verificarContraSat(companyId, periodo);
     return NextResponse.json(result);
   } catch (e) {
+    if (isRegimenCalculationNotSupportedError(e)) {
+      return regimenCalculationErrorResponse(e);
+    }
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Error en la verificación" },
       { status: 500 }

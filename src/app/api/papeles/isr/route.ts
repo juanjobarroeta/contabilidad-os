@@ -9,6 +9,7 @@ import { sumIsrPagar } from "@/lib/isr-provisional";
 import { normalizarUuid, variantesUuid } from "@/lib/fiscal/uuid";
 import { computeTaxPosition } from "@/lib/impuestos";
 import { nombreContraparte, rfcContraparte } from "@/lib/facturas/contraparte";
+import { calculationForApi } from "@/lib/fiscal/regimen-capability-api";
 
 // GET /api/papeles/isr?companyId=xxx&year=2026&month=3[&format=csv]
 //
@@ -165,7 +166,9 @@ export async function GET(req: Request) {
   const esPfActEmpresarial = company?.regimenFiscal === "612" && esPf;
   const esPfArrendamiento = company?.regimenFiscal === "606" && esPf;
   const esPfPlataformas = company?.regimenFiscal === "625" && esPf;
-  const enginePos = await computeTaxPosition(companyId, year, month);
+  const enginePosOrResponse = await calculationForApi(computeTaxPosition(companyId, year, month));
+  if (enginePosOrResponse instanceof NextResponse) return enginePosOrResponse;
+  const enginePos = enginePosOrResponse;
 
   // Coeficiente aplicado + sugerido tomados del motor (única fuente de verdad).
   const coeficiente = enginePos.isr.coeficiente ?? null;

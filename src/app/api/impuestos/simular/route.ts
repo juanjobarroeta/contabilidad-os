@@ -6,6 +6,7 @@ import { tarifaPeriodoPF, aplicarTarifa } from "@/lib/fiscal/tarifas";
 import { calcularIsrResicoPf } from "@/lib/resico";
 import { calcularIsrArrendamientoMensual } from "@/lib/fiscal/isr-arrendamiento";
 import { calcularIsrPlataformas, normalizarActividadPlataforma } from "@/lib/fiscal/isr-plataformas";
+import { calculationForApi } from "@/lib/fiscal/regimen-capability-api";
 
 const IVA = 0.16;
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -34,7 +35,9 @@ export async function GET(req: Request) {
   const addIngreso = Math.max(0, parseFloat(searchParams.get("addIngreso") ?? "0") || 0);
   const addGasto = Math.max(0, parseFloat(searchParams.get("addGasto") ?? "0") || 0);
 
-  const pos = await computeTaxPosition(companyId, year, month);
+  const posOrResponse = await calculationForApi(computeTaxPosition(companyId, year, month));
+  if (posOrResponse instanceof NextResponse) return posOrResponse;
+  const pos = posOrResponse;
 
   // ── IVA (flujo, base-REP): trasladado/acreditable move linearly with 16% ──
   // El gasto hipotético se prorratea con la proporción de acreditamiento del

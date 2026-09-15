@@ -7,6 +7,7 @@ import { leerRenglonesIeps } from "@/lib/fiscal/ieps/leer";
 import { aPagarIeps, periodoIeps, type DecisionAcreditamiento } from "@/lib/fiscal/ieps/periodo";
 import { prisma } from "@/lib/prisma";
 import { periodoMensualPorDefecto } from "@/lib/fiscal/periodo-operativo";
+import { calculationForApi } from "@/lib/fiscal/regimen-capability-api";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/salameria/fiscal?companyId=…&year=2026&month=8
@@ -51,7 +52,7 @@ export const GET = withAuthz(async (req: Request) => {
 
   // El checklist ya corre el motor por dentro para sus banderas; la corrida
   // extra trae el desglose completo. Paralelo para no sumar latencia.
-  const [pos, checklist, retenciones, renglonesIeps, empresaIeps] = await Promise.all([
+  const calculation = await calculationForApi(Promise.all([
     computeTaxPosition(companyId, year, month),
     checklistDeclaracion(companyId, year, month, hoy),
     retencionesDelPeriodo(companyId, year, month),
@@ -60,7 +61,9 @@ export const GET = withAuthz(async (req: Request) => {
     // exactamente la falla que ya nos costó una vez (350 cuentas contra 4).
     leerRenglonesIeps(prisma, companyId, year, month),
     prisma.company.findUnique({ where: { id: companyId }, select: { iepsAcredita: true } }),
-  ]);
+  ]));
+  if (calculation instanceof NextResponse) return calculation;
+  const [pos, checklist, retenciones, renglonesIeps, empresaIeps] = calculation;
 
   const p = periodoIeps(year, month, renglonesIeps);
   const decisionIeps: DecisionAcreditamiento =

@@ -11,6 +11,12 @@ import { ajusteParaDeclaracionAnual } from "@/lib/fiscal/ajuste-inflacion";
 import { efosRfcsBloqueados } from "@/lib/fiscal/efos/service";
 import { perdidasDisponibles, aplicarPerdidas, primeraActualizacion } from "@/lib/fiscal/perdidas";
 import { evidenciaPresentacion } from "@/lib/fiscal/presentacion";
+import {
+  assertAnnualCalculationSupported,
+  isRegimenCalculationNotSupportedError,
+  tipoPersonaFromRfc,
+} from "@/lib/fiscal/regimen-capabilities";
+import { regimenCalculationErrorResponse } from "@/lib/fiscal/regimen-capability-api";
 
 // GET /api/declaracion-anual?companyId=xxx&ejercicio=2025
 // Aggregates all data for the annual declaration and calculates the result.
@@ -36,6 +42,16 @@ export async function GET(req: Request) {
     select: { rfc: true, razonSocial: true, regimenFiscal: true },
   });
   if (!company) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
+
+  const tipoPersona = tipoPersonaFromRfc(company.rfc);
+  try {
+    assertAnnualCalculationSupported(company.regimenFiscal, tipoPersona);
+  } catch (error) {
+    if (isRegimenCalculationNotSupportedError(error)) {
+      return regimenCalculationErrorResponse(error);
+    }
+    throw error;
+  }
 
   const yearStart = new Date(ejercicio, 0, 1);
   const yearEnd = new Date(ejercicio, 11, 31, 23, 59, 59);
@@ -180,9 +196,6 @@ export async function GET(req: Request) {
   // legacy folded IVA_MENSUAL row, so imported and live-saved ISR are each counted once.
   const isrProvTotal = sumIsrPagar(isrProvisionalesAgg);
 
-  // Tipo persona from RFC length
-  const tipoPersona = company.rfc.length === 12 ? "PM" : "PF";
-
   // ── Build input with DB data + manual overrides from query params ──
   // ── Ajuste anual por inflación (Art. 44-46), como default ────────────────
   //
@@ -201,7 +214,7 @@ export async function GET(req: Request) {
 
   const input: DeclaracionAnualInput = {
     ejercicio,
-    tipoPersona: tipoPersona as "PM" | "PF",
+    tipoPersona: tipoPersona!,
     regimenFiscal: company.regimenFiscal,
     ingresosPorCfdis: ingresosCfdis,
     otrosIngresos: parseFloat(searchParams.get("otrosIngresos") ?? "0"),
@@ -306,6 +319,22 @@ export async function POST(req: Request) {
   const member = await getEffectiveCompanyMembership(session.user.id, companyId);
   if (!member || member.role === "VIEWER") {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
+  }
+
+  // Saving this endpoint means persisting an in-app calculated result. Imported
+  // SAT acuses use a separate path and remain available for assisted regimes.
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { rfc: true, regimenFiscal: true },
+  });
+  if (!company) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
+  try {
+    assertAnnualCalculationSupported(company.regimenFiscal, tipoPersonaFromRfc(company.rfc));
+  } catch (error) {
+    if (isRegimenCalculationNotSupportedError(error)) {
+      return regimenCalculationErrorResponse(error);
+    }
+    throw error;
   }
 
   const periodo = String(ejercicio);

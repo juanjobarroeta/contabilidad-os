@@ -11,7 +11,11 @@ import {
 import { conCalculoEnVivo, montoDeObligacion } from "@/lib/obligaciones-monto";
 import { detectComplementosPendientes } from "@/lib/complementos";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
-import { computeTaxPosition } from "@/lib/impuestos";
+import { computeTaxPosition, type TaxPosition } from "@/lib/impuestos";
+import {
+  isRegimenCalculationNotSupportedError,
+  type RegimenCalculationErrorPayload,
+} from "@/lib/fiscal/regimen-capabilities";
 import { getAsimiladosResumen } from "@/lib/fiscal/asimilados";
 import { fielStatus } from "@/lib/fiel";
 import { computeEstadoDatos } from "@/lib/estado-datos";
@@ -177,7 +181,14 @@ export async function GET(req: Request) {
   const fiscalMonth   = fiscalEnCurso ? month : prevMonth;
   // Source of truth for "¿Cuánto debo?" (IVA flujo + ISR por régimen), not the
   // rough ivaEstimado below.
-  const taxPosition = await computeTaxPosition(companyId, fiscalYear, fiscalMonth);
+  let taxPosition: TaxPosition | null = null;
+  let taxCalculationUnavailable: RegimenCalculationErrorPayload | null = null;
+  try {
+    taxPosition = await computeTaxPosition(companyId, fiscalYear, fiscalMonth);
+  } catch (error) {
+    if (!isRegimenCalculationNotSupportedError(error)) throw error;
+    taxCalculationUnavailable = error.toPayload();
+  }
   // Misma llave que usan las obligaciones (`periodoKey`), para poder cruzarlas.
   const periodoFiscalKey = `${fiscalYear}-${String(fiscalMonth).padStart(2, "0")}`;
 
@@ -380,7 +391,9 @@ export async function GET(req: Request) {
       const { monto, motivo, estimado } = conCalculoEnVivo(
         montoDeObligacion(ob.tipo, decl),
         ob.tipo,
-        esPeriodoCalculado ? { iva: taxPosition.iva.pagar, isr: taxPosition.isr.isrPagar } : null,
+        esPeriodoCalculado && taxPosition
+          ? { iva: taxPosition.iva.pagar, isr: taxPosition.isr.isrPagar }
+          : null,
       );
       return {
         ...ob,
@@ -480,8 +493,10 @@ export async function GET(req: Request) {
     },
     periodoFiscalKey,
   );
-  const isrPagarMes = taxPosition.isr.isrPagar;
-  const totalPagarMes = taxPosition.iva.pagar + (isrPagarMes ?? 0);
+  const isrPagarMes = taxPosition?.isr.isrPagar ?? null;
+  const totalPagarMes = taxPosition
+    ? taxPosition.iva.pagar + (isrPagarMes ?? 0)
+    : null;
   const MES_LARGO = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
   // ── Estado de datos ("¿por qué está vacío mi tablero?") ───────────────────
@@ -511,10 +526,11 @@ export async function GET(req: Request) {
     estadoDatos,
     apertura,
     taxThisMonth: {
-      iva: taxPosition.iva.pagar,
+      iva: taxPosition?.iva.pagar ?? null,
       isr: isrPagarMes,
       total: totalPagarMes,
-      saldoAFavor: taxPosition.iva.saldoAFavor,
+      saldoAFavor: taxPosition?.iva.saldoAFavor ?? null,
+      calculationUnavailable: taxCalculationUnavailable,
       // Período fiscal en juego (puede diferir del mes calendario) + modo:
       // "por_presentar" = mes anterior aún sin declarar; "en_curso" = avance
       // del mes corriente (el anterior ya se presentó).
@@ -524,11 +540,11 @@ export async function GET(req: Request) {
       vence: fechaCalendarioIso(taxDue),
       venceFmt: `${taxDue.getDate()} ${MES_ABBR[taxDue.getMonth()]} ${taxDue.getFullYear()}`,
       diasRestantes: Math.round((taxDue.getTime() - today.getTime()) / 86400000),
-      tarifaVerificada: taxPosition.isr.tarifaVerificada,
+      tarifaVerificada: taxPosition?.isr.tarifaVerificada ?? null,
       // Coeficiente aplicado + sugerido (para avisar de un ajuste desactualizado).
-      coeficiente: taxPosition.isr.coeficiente,
-      coeficienteSugerido: taxPosition.isr.coeficienteSugerido ?? null,
-      coeficienteSugeridoFuente: taxPosition.isr.coeficienteSugeridoFuente ?? null,
+      coeficiente: taxPosition?.isr.coeficiente ?? null,
+      coeficienteSugerido: taxPosition?.isr.coeficienteSugerido ?? null,
+      coeficienteSugeridoFuente: taxPosition?.isr.coeficienteSugeridoFuente ?? null,
     },
     // Asimilados a salarios recibidos (Art. 94): ingreso + ISR retenido del mes y
     // acumulado del año. null si la empresa no recibe asimilados.

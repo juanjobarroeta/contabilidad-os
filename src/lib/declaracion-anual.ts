@@ -2,11 +2,12 @@
 // Art. 9 LISR — Calcula la utilidad fiscal, ISR del ejercicio, y coeficiente
 // de utilidad para el ejercicio siguiente.
 //
-// Also supports PF RESICO (Art. 113-E) and PF Actividad Empresarial.
+// Supports only the annual engines explicitly enabled in the regimen registry.
 //
 // This is a pure calculation module — no DB calls. The API route feeds it data.
 
 import { tarifaAnualPF, aplicarTarifa } from "@/lib/fiscal/tarifas";
+import { assertAnnualCalculationSupported } from "@/lib/fiscal/regimen-capabilities";
 
 export type DeclaracionAnualInput = {
   ejercicio: number;
@@ -39,8 +40,6 @@ export type DeclaracionAnualInput = {
   isrRetenidoPorTerceros: number;      // ISR retained by clients (Art. 106)
   isrRetenidoAsimilados?: number;      // ISR retained by the asimilados payer (Art. 94) — acreditable
 
-  // ── RESICO PF specific ──
-  resicoPfIngresos?: number;           // For RESICO: total cobrado (not devengado)
 };
 
 export type DeclaracionAnualResult = {
@@ -88,20 +87,6 @@ export type DeclaracionAnualResult = {
   };
 };
 
-// ── RESICO PF tarifa anual (Art. 113-E) ──────────────────────────────────────
-// Las tasas y los rangos de esta tabla están fijados en la propia LISR (Art.
-// 113-E, reforma DOF 12-nov-2021, vigente desde 2022) y NO se actualizan por
-// inflación vía Anexo 8 RMF, así que no requieren versionado por ejercicio
-// (a diferencia de las tarifas de los Arts. 96/152).
-const RESICO_PF_TASA = [
-  { hasta: 300000,   tasa: 0.01 },
-  { hasta: 600000,   tasa: 0.011 },
-  { hasta: 1000000,  tasa: 0.015 },
-  { hasta: 2500000,  tasa: 0.02 },
-  { hasta: 3500000,  tasa: 0.025 },
-  { hasta: Infinity, tasa: 0.025 }, // tope
-];
-
 // ── PF General tarifa anual (Art. 152 LISR) ──────────────────────────────────
 // La tarifa vive versionada por ejercicio en src/lib/fiscal/tarifas.ts (fuente
 // única, con vigencia y bandera `verificado`); aquí sólo se selecciona la del
@@ -116,6 +101,7 @@ function r2(n: number): number {
 
 export function calcularDeclaracionAnual(input: DeclaracionAnualInput): DeclaracionAnualResult {
   const { ejercicio, tipoPersona, regimenFiscal } = input;
+  const regimenTrack = assertAnnualCalculationSupported(regimenFiscal, tipoPersona);
 
   // ── Ingresos acumulables ──
   const ingresoCfdis = input.ingresosPorCfdis;
@@ -148,18 +134,12 @@ export function calcularDeclaracionAnual(input: DeclaracionAnualInput): Declarac
   let tasaIsr: number;
   let isrDelEjercicio: number;
 
-  if (tipoPersona === "PM") {
+  if (regimenTrack.trackId === "601") {
     // PM: flat 30% (Art. 9 LISR)
     tasaIsr = 0.30;
     isrDelEjercicio = r2(resultadoFiscal * 0.30);
-  } else if (regimenFiscal === "626") {
-    // RESICO PF: progressive table on total income (Art. 113-E)
-    const ingresos = input.resicoPfIngresos ?? totalIngresos;
-    const bracket = RESICO_PF_TASA.find(b => ingresos <= b.hasta) ?? RESICO_PF_TASA[RESICO_PF_TASA.length - 1];
-    tasaIsr = bracket.tasa;
-    isrDelEjercicio = r2(ingresos * bracket.tasa);
   } else {
-    // PF General: tarifa progresiva del ejercicio declarado (Art. 152 LISR),
+    // Only 612 PF reaches this branch: tarifa progresiva del ejercicio (Art. 152 LISR),
     // tomada del módulo versionado de tarifas. tarifaAnualPF resuelve el
     // ejercicio exacto o, en su defecto, la tabla más reciente anterior
     // (roll-forward: la tarifa sigue vigente hasta que el SAT publica la

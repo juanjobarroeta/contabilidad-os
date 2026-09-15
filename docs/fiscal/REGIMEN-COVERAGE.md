@@ -1,6 +1,6 @@
 # Mexican tax-regime coverage tracker
 
-Status date: 2026-09-08
+Status date: 2026-09-15
 Product scope: current CFDI 4.0 regime codes accepted by ContabilidadOS
 Legal baseline: SAT/RMF 2026; taxpayer-specific CSF obligations remain authoritative
 
@@ -21,8 +21,19 @@ Status values:
 - `FULL`: all promised scenarios pass the seven dimensions.
 - `PARTIAL`: usable components exist, but the track is not safe to advertise as complete.
 - `ASSISTED`: calendar, documents, and accounting may be used; calculation requires accountant-entered figures.
-- `BLOCK`: the current generic fallback can produce a wrong result and must be disabled.
+- `BLOCK`: the baseline generic fallback could produce a wrong result and had to be disabled.
 - `NO-CALC`: deliberately no calculation for this code/scenario.
+
+## Runtime calculation boundary (FISC-001)
+
+`src/lib/fiscal/regimen-capabilities.ts` is the canonical product registry: 19 SAT codes and 20 tracks, with independent `626-PF` and `626-PM` entries. Every track has explicit `CAT`, `CAL`, `MON`, `ANN`, `ACC`, `FILE`, and `QA` capability flags.
+
+Automatic calculation is currently enabled only for:
+
+- Monthly: `601 PM`, `606 PF`, `612 PF`, `625 PF`, and `626 PF`.
+- Annual: `601 PM` and `612 PF`.
+
+All other tracks, unknown codes, unknown taxpayer types, and incompatible code/type combinations fail before invoice or balance queries with HTTP `422` and stable code `NOT_SUPPORTED`. The declarations UI says `Cálculo asistido por tu contador` (or `Cálculo no aplicable`) and renders no amount. Catalog recognition, CFDI/document storage, and imported SAT declaration history remain available.
 
 ## Current coverage audit
 
@@ -31,25 +42,25 @@ There are 19 current product catalog codes and 20 calculation tracks because cod
 | Code / track | Taxpayer | Current state | Required target | Phase | Main missing work |
 |---|---|---|---|---|---|
 | 601 General de Ley | PM | PARTIAL | FULL | 1 | Validate Art. 14, coefficient history, PTU/losses, annual adjustments, DIOT, and cross-screen reconciliation |
-| 603 Fines no Lucrativos | PM | BLOCK | ASSISTED → FULL | 5 | Remove Art. 14/30% fallback; remanente distribuible, donataria/non-donataria rules, retentions, IVA, informatives, and February annual deadline |
-| 605 Sueldos/Asimilados | PF | BLOCK | NO-CALC + ANN composition | 1/5 | A 605 taxpayer is not automatically a payroll withholding employer; remove phantom monthly retention and PF-business fallback; model conditional annual filing |
+| 603 Fines no Lucrativos | PM | ASSISTED (guarded) | ASSISTED → FULL | 5 | Build remanente distribuible, donataria/non-donataria rules, retentions, IVA, informatives, and February annual deadline |
+| 605 Sueldos/Asimilados | PF | NO-CALC monthly; ANN assisted | NO-CALC + ANN composition | 1/5 | A 605 taxpayer is not automatically a payroll withholding employer; model facts-driven employer obligations and conditional annual filing |
 | 606 Arrendamiento | PF | PARTIAL | FULL | 1 | Proven deductions vs 35% option, per-property data, quarterly option where applicable, annual composition, mixed regimes |
-| 607 Enajenación/Adquisición | PF | BLOCK | ASSISTED → FULL | 5 | Missing obligation map; event-specific provisional/final payments, notarial retentions, acquisition vs disposition, annual composition |
-| 608 Demás Ingresos | PF | BLOCK | ASSISTED → FULL | 5 | Chapter-specific event/provisional rules and annual composition; generic Art. 106 formula is unsafe |
-| 610 Extranjero sin EP | PF/PM foreign | BLOCK | ASSISTED | 5 | Source-of-income and treaty/withholding scenarios; foreign identity; payer vs recipient role; no generic domestic formula |
-| 611 Dividendos | PF | BLOCK | ANN composition | 5 | Corporate gross-up/credit, 10% additional withholding where applicable, foreign dividends, CUFIN evidence |
+| 607 Enajenación/Adquisición | PF | ASSISTED (guarded) | ASSISTED → FULL | 5 | Missing obligation map; event-specific provisional/final payments, notarial retentions, acquisition vs disposition, annual composition |
+| 608 Demás Ingresos | PF | ASSISTED (guarded) | ASSISTED → FULL | 5 | Build chapter-specific event/provisional rules and annual composition |
+| 610 Extranjero sin EP | PF/PM foreign | ASSISTED (guarded) | ASSISTED | 5 | Source-of-income and treaty/withholding scenarios; foreign identity; payer vs recipient role |
+| 611 Dividendos | PF | NO-CALC monthly; ANN assisted | ANN composition | 5 | Corporate gross-up/credit, 10% additional withholding where applicable, foreign dividends, CUFIN evidence |
 | 612 Actividad Empresarial/Profesional | PF | PARTIAL | FULL | 1 | Finish cash-basis evidence, investments, losses, retentions, annual composition, mixed regimes, golden cases |
-| 614 Intereses | PF | BLOCK | ANN composition | 5 | Real vs nominal interest, withholding, losses and annual aggregation; generic PF-business formula is unsafe |
-| 615 Premios | PF | BLOCK | ANN/event composition | 5 | Missing obligation map; federal/state withholding and annual information treatment |
-| 616 Sin Obligaciones | PF | BLOCK | NO-CALC | 0 | Taxes must show “not applicable”; never run the PF-business fallback |
-| 620 Cooperativas de Producción | PM | BLOCK | ASSISTED/partner → FULL | 5 | Member-level profit, annual-only option, deferral until distribution, CUFIN-equivalent records; current Art. 14 fallback is unsafe |
-| 621 RIF | PF legacy | BLOCK | ASSISTED → FULL if demand | 5 | Calendar exists, but no bimonthly ISR/IVA engine, transition-year reductions, IEPS/IVA stimuli, or remaining-tenure validation |
-| 622 AGAPES | PM and qualifying structures | PARTIAL components, unsafe integration | ASSISTED → FULL | 5 | Existing exemption/reduction/facility helpers are not integrated; member rules, thresholds, provisional/annual mechanics, IVA/DIOT |
-| 623 Grupos de Sociedades | PM group | BLOCK | Partner-assisted | 5 | Integrator/integrated entities, authorization, integrated result factor, deferred ISR ledger, incorporations/desincorporations |
-| 624 Coordinados | PM/member structure | PARTIAL components, unsafe integration | Partner-assisted → FULL if demand | 5 | Member-level obligations, settlements, transport facilities, deductions, retentions; generic PM formula is unsafe |
+| 614 Intereses | PF | NO-CALC monthly; ANN assisted | ANN composition | 5 | Real vs nominal interest, withholding, losses and annual aggregation |
+| 615 Premios | PF | ASSISTED (guarded) | ANN/event composition | 5 | Missing obligation map; federal/state withholding and annual information treatment |
+| 616 Sin Obligaciones | PF | NO-CALC (guarded) | NO-CALC | 0 | Keep “not applicable” semantics across every tax surface |
+| 620 Cooperativas de Producción | PM | ASSISTED (guarded) | ASSISTED/partner → FULL | 5 | Member-level profit, annual-only option, deferral until distribution, CUFIN-equivalent records |
+| 621 RIF | PF legacy | ASSISTED (guarded) | ASSISTED → FULL if demand | 5 | Calendar exists, but no bimonthly ISR/IVA engine, transition-year reductions, IEPS/IVA stimuli, or remaining-tenure validation |
+| 622 AGAPES | PM and qualifying structures | ASSISTED (components not integrated) | ASSISTED → FULL | 5 | Existing exemption/reduction/facility helpers are not integrated; member rules, thresholds, provisional/annual mechanics, IVA/DIOT |
+| 623 Grupos de Sociedades | PM group | ASSISTED (guarded) | Partner-assisted | 5 | Integrator/integrated entities, authorization, integrated result factor, deferred ISR ledger, incorporations/desincorporations |
+| 624 Coordinados | PM/member structure | ASSISTED (components not integrated) | Partner-assisted → FULL if demand | 5 | Member-level obligations, settlements, transport facilities, deductions, and retentions |
 | 625 Plataformas Tecnológicas | PF | PARTIAL | FULL | 1 | Missing obligation map; definitive vs provisional election, MXN300k condition, direct collections, mixed activities, IVA and DIOT relief |
-| 626 RESICO | PF | PARTIAL | FULL | 1 | True collected-income basis for PUE/PPD/REP, mixed-income annual rules, eligibility/exit, 1.25% retention, annual/DIOT/CE relief by effective rule |
-| 626 RESICO | PM | BLOCK | FULL | 1 | Build a separate cumulative cash-basis income-minus-paid-deductions engine; current Art. 14 coefficient fallback is incorrect for this track |
+| 626 RESICO | PF | PARTIAL monthly; NO-CALC annual | FULL | 1 | True collected-income basis for PUE/PPD/REP, mixed-income handling, eligibility/exit, 1.25% retention, and DIOT/CE relief by effective rule |
+| 626 RESICO | PM | NOT_SUPPORTED (guarded) | FULL | 1 | Build a separate cumulative cash-basis income-minus-paid-deductions engine |
 
 ## Launch boundary
 

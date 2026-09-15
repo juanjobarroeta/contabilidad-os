@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { checklistDeclaracion } from "@/lib/fiscal/checklist-declaracion";
+import { calculationForApi } from "@/lib/fiscal/regimen-capability-api";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/declaraciones/checklist?companyId=&year=&month=
@@ -28,6 +29,8 @@ export async function GET(req: Request) {
   const member = await getEffectiveCompanyMembership(session.user.id, companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
 
-  const checklist = await checklistDeclaracion(companyId, year, month);
-  return NextResponse.json(checklist);
+  const checklistOrResponse = await calculationForApi(checklistDeclaracion(companyId, year, month));
+  return checklistOrResponse instanceof NextResponse
+    ? checklistOrResponse
+    : NextResponse.json(checklistOrResponse);
 }
