@@ -103,3 +103,29 @@ describe("puntuarParDevolucion / elegirOrigenDevolucion", () => {
     expect(elegirOrigenDevolucion(devolucion, [cuentaAjena])).toBeNull();
   });
 });
+
+// El par se vincula desde cualquiera de los dos lados: quien concilia resuelve
+// el renglón que tiene enfrente. El criterio no cambia al mirar hacia adelante
+// —`buscarRebotePosterior` puntúa con los papeles en su sitio: el candidato es
+// la devolución y el movimiento abierto, el origen—.
+describe("el par visto desde el pago", () => {
+  const pago = { id: "pago", bankAccountId: "ba1", fecha: new Date("2026-09-01"), monto: -22732.5, descripcion: "SPEI ENVIADO", referencia: "CLAVE123" };
+  const rebote = { id: "rebote", bankAccountId: "ba1", fecha: new Date("2026-09-03"), monto: 22732.5, descripcion: "SPEI DEVUELTO", referencia: "CLAVE123" };
+
+  it("puntúa igual se mire desde donde se mire, y el orden del par importa", () => {
+    expect(validarParDevolucion(rebote, pago)).toBeNull();
+    expect(puntuarParDevolucion(rebote, pago)).toBeGreaterThanOrEqual(2);
+    // Al revés NO es un par: la devolución nunca es anterior a su pago (con
+    // los dos el mismo día sí valdría en ambos sentidos, y está bien: un SPEI
+    // rebota el mismo día).
+    expect(validarParDevolucion(pago, rebote)).not.toBeNull();
+  });
+
+  it("sin la palabra del banco, la referencia idéntica sola alcanza el umbral", () => {
+    const mudo = { ...rebote, descripcion: "DEPOSITO" };
+    expect(validarParDevolucion(mudo, pago)).toBeNull();
+    expect(puntuarParDevolucion(mudo, pago)).toBeGreaterThanOrEqual(2);
+    // Y sin referencia ni palabra, no llega: no se propone nada.
+    expect(puntuarParDevolucion({ ...mudo, referencia: null }, { ...pago, referencia: null })).toBeLessThan(2);
+  });
+});

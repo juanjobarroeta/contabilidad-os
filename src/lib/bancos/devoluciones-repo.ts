@@ -10,7 +10,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { prisma } from "../prisma";
-import { DEVOLUCION_VENTANA_DIAS, elegirOrigenDevolucion, esDescripcionDevolucion, type MovimientoPar } from "./devoluciones";
+import {
+  DEVOLUCION_VENTANA_DIAS,
+  elegirOrigenDevolucion,
+  esDescripcionDevolucion,
+  puntuarParDevolucion,
+  validarParDevolucion,
+  type MovimientoPar,
+} from "./devoluciones";
 
 /** El pago original que se propone para una devolución. */
 export interface OrigenPropuesto {
@@ -86,4 +93,52 @@ export async function sugerenciasDevolucion(
     if (origen) out[dev.id] = origen;
   }
   return out;
+}
+
+/**
+ * Al revés: el REBOTE POSTERIOR de este pago, o null.
+ *
+ * Buscar sólo hacia atrás dejaba el par a medias en la pantalla. Quien
+ * concilia ve los dos renglones y resuelve el que tiene enfrente: si abre el
+ * pago (el que salió primero) no había nada que ofrecerle, y el movimiento
+ * «se quedaba en la mesa» aunque su rebote ya estuviera resuelto. El par se
+ * vincula desde cualquiera de los dos lados; quien manda sigue siendo el
+ * rebote, que es donde vive `devolucionDeId`.
+ *
+ * Mismo criterio y mismo score, con los papeles cambiados: el candidato es la
+ * devolución y este movimiento el origen.
+ */
+export async function buscarRebotePosterior(origen: CandidataDevolucion): Promise<OrigenPropuesto | null> {
+  const hasta = new Date(origen.fecha.getTime() + DEVOLUCION_VENTANA_DIAS * 86400000);
+  const posibles = (
+    await prisma.bankTransaction.findMany({
+      where: {
+        bankAccountId: origen.bankAccountId,
+        id: { not: origen.id },
+        fecha: { gte: origen.fecha, lte: hasta },
+        monto: -origen.monto,
+        devolucionDeId: null,
+        devolucionPor: { is: null },
+        // Un rebote ya conciliado con su factura no es un rebote.
+        status: { not: "MATCHED" },
+      },
+      select: { id: true, bankAccountId: true, fecha: true, monto: true, descripcion: true, referencia: true },
+      take: 20,
+    })
+  ).map((p) => ({ ...p, monto: Number(p.monto) }));
+
+  let mejor: (MovimientoPar & { descripcion: string }) | null = null;
+  let mejorScore = 0;
+  for (const c of posibles) {
+    if (validarParDevolucion(c, origen) !== null) continue;
+    const score = puntuarParDevolucion(c, origen);
+    if (score > mejorScore) {
+      mejor = c;
+      mejorScore = score;
+    }
+  }
+  // El mismo umbral que elegirOrigenDevolucion: sin señal fuerte no se propone.
+  return mejorScore >= 2 && mejor
+    ? { origenId: mejor.id, descripcion: mejor.descripcion, fecha: mejor.fecha, monto: mejor.monto }
+    : null;
 }

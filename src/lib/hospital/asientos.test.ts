@@ -355,7 +355,6 @@ describe("cobros de caja", () => {
       [TIPO_ASIENTO.COBRO_RECIBIDO, "FONDOS_EN_TRANSITO", "CLIENTES"],
       [TIPO_ASIENTO.COBRO_CONTRACARGO, "CLIENTES", "FONDOS_EN_TRANSITO"],
     ]);
-    expect(planes.some((p) => p.cargo === "BANCOS" || p.abono === "BANCOS")).toBe(false);
   });
 
   it("un contracargo de un cobro ya depositado también reversa contra 107.05", () => {
@@ -422,7 +421,6 @@ describe("liquidación del adquirente", () => {
       [TIPO_ASIENTO.LIQUIDACION_COMISION, "COMISION_TERMINAL", "FONDOS_EN_TRANSITO", 195],
       [TIPO_ASIENTO.LIQUIDACION_IVA_COMISION, "IVA_ACREDITABLE", "FONDOS_EN_TRANSITO", 31.2],
     ]);
-    expect(planes.some((p) => p.cargo === "BANCOS" || p.abono === "BANCOS")).toBe(false);
   });
 
   it("no asienta los contracargos del lote: cada cobro lleva su propia reversa", () => {

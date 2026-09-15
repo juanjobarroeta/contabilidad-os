@@ -64,9 +64,13 @@ describe("el catálogo real de un hospital", () => {
   });
 
   it("lo que el nombre no puede decir se queda sin propuesta", () => {
-    // 11 cuentas bancarias por departamento: a cuál entra el depósito no está escrito.
-    expect(proponer("BANCOS")).toBeNull();
+    // 23 auxiliares de clientes —pacientes, aseguradoras, la cafetería—: cuál
+    // recibe la cuenta por cobrar del paciente no lo dice ningún nombre.
+    expect(proponer("CLIENTES")).toBeNull();
+    // Y las 11 cuentas bancarias del catálogo ya ni se preguntan: BANCOS salió
+    // de las claves porque el módulo no postea contra bancos.
     expect(CATALOGO_REAL["102.01"].length).toBeGreaterThan(1);
+    expect((CLAVES_MOTOR as readonly string[]).includes("BANCOS")).toBe(false);
   });
 });
 
@@ -75,7 +79,8 @@ describe("sugerirCuenta()", () => {
 
   it("sin candidatas, con una sola, o sin pistas: no propone", () => {
     expect(sugerirCuenta("INGRESO_QUIROFANO", [], "401.01")).toBeNull();
-    expect(sugerirCuenta("BANCOS", [cta("1", "Bancomer"), cta("2", "Banorte")], "102.01")).toBeNull();
+    // CLIENTES no tiene pistas: ningún nombre dice cuál auxiliar es el paciente.
+    expect(sugerirCuenta("CLIENTES", [cta("1", "Plan Seguro"), cta("2", "Vitamedica")], "105.01")).toBeNull();
   });
 
   it("empate = el nombre no distingue: mejor ninguna propuesta que una al azar", () => {

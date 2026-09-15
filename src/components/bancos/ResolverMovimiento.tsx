@@ -64,6 +64,10 @@ const CATEGORIAS: { tag: string | null; label: string; icon: typeof Banknote }[]
   // un ignorado sin categoría BLOQUEA el cierre. Postea contra otros ingresos,
   // que es lo que ya hacía postMonth con este tag.
   { tag: "BANK_NOISE",           label: "Centavos del banco (ruido)", icon: Banknote },
+  // La salida honesta para lo que todavía no se puede explicar —una devolución
+  // sin el pago que la originó, un depósito de nadie—: cuenta puente, visible
+  // en la balanza. Antes había que mentir («intereses ganados») para cerrar.
+  { tag: "POR_ACLARAR",          label: "Por aclarar (ni ingreso ni gasto)", icon: Ban },
   { tag: null,                   label: "Ignorar",                  icon: X },
 ];
 
@@ -285,10 +289,17 @@ export function ResolverMovimiento({
     if (!devolucion) return;
     setOcupado(true);
     try {
-      const res = await fetch(`/api/bancos/transactions/${tx.id}`, {
+      // `devolucionDeId` vive en el REBOTE y apunta al pago. Si el movimiento
+      // abierto es el pago, el PATCH va sobre su rebote, con éste de origen:
+      // el par se vincula desde cualquiera de los dos lados.
+      const esRebote = devolucion.rol === "rebote";
+      const objetivo = accion === "vincular-devolucion" && !esRebote ? devolucion.par.id : tx.id;
+      const res = await fetch(`/api/bancos/transactions/${objetivo}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
-          accion === "vincular-devolucion" ? { action: accion, origenId: devolucion.par.id } : { action: accion },
+          accion === "vincular-devolucion"
+            ? { action: accion, origenId: esRebote ? devolucion.par.id : tx.id }
+            : { action: accion },
         ),
       });
       const data = await res.json().catch(() => ({}));
@@ -469,7 +480,9 @@ export function ResolverMovimiento({
               ? devolucion.rol === "rebote"
                 ? "Devolución de este pago"
                 : "Este pago se devolvió"
-              : "¿Es la devolución de este pago?"}
+              : devolucion.rol === "rebote"
+                ? "¿Es la devolución de este pago?"
+                : "¿Este pago se devolvió aquí?"}
           </p>
           <p className="mt-1 text-[13px] text-cos-ink">
             {devolucion.par.fecha} · {fmt(Math.abs(devolucion.par.monto))}
@@ -478,7 +491,7 @@ export function ResolverMovimiento({
           <p className="mt-1 text-[11.5px] text-cos-ink-faint">
             {devolucion.estado === "vinculada"
               ? "Los dos se netean: no son ingreso ni gasto, y el pago no cuenta como pagado."
-              : "Vincularlos deshace la conciliación del pago —la factura vuelve a no-pagada— y neta el par en el libro."}
+              : "Vincularlos resuelve LOS DOS renglones: deshace la conciliación del pago —la factura vuelve a no-pagada— y neta el par en el libro."}
           </p>
           <button
             onClick={() => resolverDevolucion(devolucion.estado === "vinculada" ? "desvincular-devolucion" : "vincular-devolucion")}

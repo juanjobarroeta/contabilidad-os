@@ -33,3 +33,4 @@ describe("pareceDevolucionSuelta()", () => {
     expect(pareceDevolucionSuelta(mov({ descripcion: "X", devolucionDeId: "p" }), { exigirDescripcion: false })).toBe(false);
   });
 });
+

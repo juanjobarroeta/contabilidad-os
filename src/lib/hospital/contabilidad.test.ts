@@ -27,6 +27,14 @@ describe("mapa de claves del motor", () => {
     }
   });
 
+  // El mapa pedía elegir UNA de las once cuentas bancarias del catálogo para
+  // una clave que ningún asiento usa: el efectivo entra a CAJA, la tarjeta a
+  // FONDOS_EN_TRANSITO, y el depósito lo concilia el hub contra el estado de
+  // cuenta. Preguntarlo era pedirle al contador que inventara una respuesta.
+  it("BANCOS no es una clave: el módulo no postea contra la cuenta de bancos", () => {
+    expect((CLAVES_MOTOR as readonly string[]).includes("BANCOS")).toBe(false);
+  });
+
   it("los honorarios son pasivo, no ingreso", () => {
     expect(MAPA_DEFAULT.HONORARIOS_POR_CUENTA_DE_TERCEROS.tipo).toBe("PASIVO");
     expect(MAPA_DEFAULT.HONORARIOS_POR_CUENTA_DE_TERCEROS.cuentaSAT).toBe("205.06");
@@ -164,7 +172,7 @@ describe("mapaCuentas()", () => {
     const db = new DbFalsa().sembrar(["401.01", "101.01"]);
     db.configRow = { contabilidadActiva: false, cuentasContables: { INGRESO_QUIROFANO: { cuentaSAT: "401.03" } } };
     db.cuentas.push({ id: "elegida", companyId: "c1", cuentaSAT: "1020-0001-0000", subcuenta: null, nombre: "BANCOMER", tipo: "ACTIVO", nivel: 3, naturaleza: null, codAgrup: null, isActive: true, createdAt: new Date() });
-    db.overrides.push({ id: "o1", companyId: "c1", codigoMotor: codigoMotorDe("BANCOS"), chartAccountId: "elegida" });
+    db.overrides.push({ id: "o1", companyId: "c1", codigoMotor: codigoMotorDe("CAJA"), chartAccountId: "elegida" });
 
     const mapa = await mapaCuentas(comoDb(db), "c1");
     expect(mapa.activa).toBe(false);
@@ -172,7 +180,7 @@ describe("mapaCuentas()", () => {
     const por = Object.fromEntries(mapa.claves.map((r) => [r.clave, r]));
     expect(por.INGRESO_HOSPITALIZACION).toMatchObject({ origen: "DEFAULT", cuentaSAT: "401.01", cuenta: { codigo: "401.01" } });
     expect(por.INGRESO_QUIROFANO).toMatchObject({ origen: "CONFIG", cuentaSAT: "401.03", cuenta: null });
-    expect(por.BANCOS).toMatchObject({ origen: "OVERRIDE", subcuenta: "1020-0001-0000", cuenta: { id: "elegida", nombre: "BANCOMER" } });
+    expect(por.CAJA).toMatchObject({ origen: "OVERRIDE", subcuenta: "1020-0001-0000", cuenta: { id: "elegida", nombre: "BANCOMER" } });
     expect(por.HONORARIOS_POR_CUENTA_DE_TERCEROS.cuenta).toBeNull();
     // Mirar no crea nada.
     expect(db.cuentaPorCodigo("205.06")).toBeNull();

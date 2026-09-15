@@ -112,7 +112,7 @@ describe("subcuentaBancoSpec", () => {
 });
 
 describe("IGNORED_TAGS_VALIDOS", () => {
-  it("los quince tags del contrato, y nada más", () => {
+  it("los dieciséis tags del contrato, y nada más", () => {
     // RENT y FINANCIAL_INCOME entraron cuando el flujo de Movimientos ya podía
     // etiquetarlas pero el cierre las rechazaba como "sin categoría".
     // BANK_NOISE, por lo mismo: el importador la etiqueta desde
@@ -131,6 +131,9 @@ describe("IGNORED_TAGS_VALIDOS", () => {
       "PAYROLL_DISPERSED",
       "PAYROLL_NO_CFDI",
       "PENDING_MONTHLY_CFDI",
+      // Lo que no se puede explicar todavía: a una cuenta puente, visible en la
+      // balanza, en vez de disfrazarlo de ingreso o de gasto para poder cerrar.
+      "POR_ACLARAR",
       "RENT",
       "TAX_PAYMENT",
     ]);

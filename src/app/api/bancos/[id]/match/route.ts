@@ -13,7 +13,7 @@ import {
   tokenIdentificante,
 } from "@/lib/bancos/auto-conciliar";
 import { sugerirPagoJunto } from "@/lib/bancos/pago-junto";
-import { buscarOrigenDevolucion, pareceDevolucionSuelta } from "@/lib/bancos/devoluciones-repo";
+import { buscarOrigenDevolucion, buscarRebotePosterior, pareceDevolucionSuelta } from "@/lib/bancos/devoluciones-repo";
 import { signoDeMonto, sugerirCategoriaConcepto, type CompanyRule } from "@/lib/bancos/categorizar-concepto";
 import { sugerirCategoriaConceptoLLM } from "@/lib/bancos/categorizar-llm";
 import {
@@ -713,14 +713,26 @@ export async function GET(req: Request, { params }: Params) {
         };
         // Sin exigir que el banco diga «devuelto»: aquí es una sola consulta y
         // un depósito equivocado que regresa no lo dice. La referencia manda.
-        const origen = pareceDevolucionSuelta(candidata, { exigirDescripcion: false })
-          ? await buscarOrigenDevolucion(candidata)
-          : null;
-        return origen
+        if (!pareceDevolucionSuelta(candidata, { exigirDescripcion: false })) return null;
+
+        // Los DOS lados: hacia atrás, el pago que este movimiento devuelve;
+        // hacia adelante, el rebote que devolvió a este pago. Sin el segundo,
+        // resolver el rebote dejaba a su pago solo en la mesa, sin nada que
+        // ofrecerle — el par a medias en pantalla.
+        const origen = await buscarOrigenDevolucion(candidata);
+        if (origen) {
+          return {
+            estado: "sugerida" as const,
+            rol: "rebote" as const,
+            par: { id: origen.origenId, fecha: origen.fecha.toISOString().slice(0, 10), monto: origen.monto, descripcion: origen.descripcion },
+          };
+        }
+        const rebote = await buscarRebotePosterior(candidata);
+        return rebote
           ? {
               estado: "sugerida" as const,
-              rol: "rebote" as const,
-              par: { id: origen.origenId, fecha: origen.fecha.toISOString().slice(0, 10), monto: origen.monto, descripcion: origen.descripcion },
+              rol: "pago" as const,
+              par: { id: rebote.origenId, fecha: rebote.fecha.toISOString().slice(0, 10), monto: rebote.monto, descripcion: rebote.descripcion },
             }
           : null;
       })();

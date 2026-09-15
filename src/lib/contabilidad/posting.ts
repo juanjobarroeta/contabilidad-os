@@ -208,6 +208,13 @@ export const IGNORED_TAGS_VALIDOS = new Set([
   // —$0.50 en total— no podía contabilizar agosto: «4 ignorados sin
   // categoría». Lo que el importador etiqueta, el cierre lo tiene que aceptar.
   "BANK_NOISE",
+  // La partida QUE NADIE PUEDE EXPLICAR TODAVÍA. Visto en la mesa: una
+  // devolución que llegó sin el pago que la originó —fuera de la ventana, en
+  // otra cuenta, o nunca importado—. Sin una salida honesta, la única forma de
+  // cerrar era meterla a «intereses ganados» o «no deducible», que es mentir
+  // en la balanza. Va a una cuenta puente y ahí se ve hasta que alguien la
+  // aclare: el saldo ES el pendiente.
+  "POR_ACLARAR",
 ]);
 
 /** Una pata del asiento de cobro, sin fecha ni descripción todavía. */
@@ -1540,6 +1547,25 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
           drafts.push({ ...base, chartAccountId: accOtrosIngresos.id, monto: absAmount, tipo: "CARGO" });
           drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,      monto: absAmount, tipo: "ABONO" });
         }
+        continue;
+      }
+
+      if (tag === "POR_ACLARAR") {
+        // Ni ingreso ni gasto: una partida en tránsito mientras se aclara. El
+        // dinero que ENTRÓ y no es nuestro todavía es un pasivo (acreedores
+        // diversos); el que SALIÓ sin explicación es algo por cobrar (deudores
+        // diversos). Bancos ata con el estado de cuenta y el pendiente queda a
+        // la vista en la balanza, que es donde alguien lo va a ver.
+        if (isCredit) {
+          drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,      monto: absAmount, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: accAcreedoresDiv.id, monto: absAmount, tipo: "ABONO" });
+        } else {
+          drafts.push({ ...base, chartAccountId: accDeudoresDiv.id, monto: absAmount, tipo: "CARGO" });
+          drafts.push({ ...base, chartAccountId: ctaBanco(tx).id,    monto: absAmount, tipo: "ABONO" });
+        }
+        warnings.push(
+          `Partida por aclarar: ${tx.fecha.toISOString().slice(0, 10)} ${tx.descripcion.slice(0, 40)} $${absAmount.toFixed(2)} — queda en cuenta puente hasta que se identifique.`,
+        );
         continue;
       }
 
