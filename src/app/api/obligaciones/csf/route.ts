@@ -4,16 +4,21 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parsearTextoCsf, mapCsfObligacion, REGIMEN_MAP } from "@/lib/obligaciones";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import {
+  CompanyRegimenSyncError,
+  planCompanyRegimenSync,
+  type CompanyRegimenSyncPlan,
+} from "@/lib/fiscal/company-regimen-sync";
 
 // POST /api/obligaciones/csf
-// Body: { companyId, csfBase64 }
+// Body: { companyId, csfBase64, regimenFiscalPrincipal? }
 // Parses a SAT Constancia de Situación Fiscal PDF and upserts obligations.
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { companyId, csfBase64 } = body;
+  const { companyId, csfBase64, regimenFiscalPrincipal } = body;
 
   if (!companyId || !csfBase64) {
     return NextResponse.json({ error: "companyId y csfBase64 son requeridos" }, { status: 400 });
@@ -49,7 +54,20 @@ export async function POST(req: Request) {
   // Verify RFC matches company
   const company = await prisma.company.findUnique({
     where: { id: companyId },
-    select: { rfc: true, regimenFiscal: true, codigoPostal: true },
+    select: {
+      rfc: true,
+      regimenFiscal: true,
+      codigoPostal: true,
+      regimenes: {
+        select: {
+          code: true,
+          label: true,
+          since: true,
+          isPrimary: true,
+          active: true,
+        },
+      },
+    },
   });
   if (!company) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
 
@@ -57,6 +75,35 @@ export async function POST(req: Request) {
     return NextResponse.json({
       error: `El RFC en la CSF (${csf.rfc}) no coincide con el RFC de la empresa (${company.rfc}).`,
     }, { status: 422 });
+  }
+
+  // Validate the complete replacement plan before writing obligations or
+  // company data. With multiple regimes, the first PDF row is not treated as a
+  // primary: preserve the current primary when it is still active, or require
+  // an explicit regimenFiscalPrincipal from the user.
+  let regimenPlan: CompanyRegimenSyncPlan;
+  try {
+    regimenPlan = planCompanyRegimenSync({
+      companyPrimary: company.regimenFiscal,
+      parsedPrimary: typeof regimenFiscalPrincipal === "string"
+        ? regimenFiscalPrincipal
+        : csf.regimenFiscal,
+      parsedRegimenes: csf.regimenes.map((regimen) => ({
+        code: regimen.codigo,
+        label: regimen.nombre,
+        since: regimen.desde,
+      })),
+      existingRegimenes: company.regimenes,
+    });
+  } catch (error) {
+    if (error instanceof CompanyRegimenSyncError) {
+      return NextResponse.json({
+        code: error.code,
+        error: error.message,
+        regimenes: csf.regimenes,
+      }, { status: 422 });
+    }
+    throw error;
   }
 
   const results = { updated: 0, created: 0, regimenes: csf.regimenes, obligaciones: [] as string[] };
@@ -121,27 +168,67 @@ export async function POST(req: Request) {
     results.created++;
   }
 
-  // La CSF es el registro del SAT: refresca los datos fiscales de la empresa.
-  // regimenFiscal guarda UN código — los consumidores (impuestos, balance,
-  // facturación) lo tratan como escalar; con varios regímenes en la constancia
-  // se toma el principal (el primero). Las obligaciones de TODOS los regímenes
-  // ya se upsertaron arriba. Antes se escribía "605,612" ahí, y eso rompía a
-  // todo consumidor escalar del campo.
+  // La CSF es el registro del SAT: refresca el conjunto vigente sin borrar su
+  // historia. Company.regimenFiscal remains the explicitly selected primary;
+  // CompanyRegimen carries the current state and latest end date of each regime.
   const cambios: string[] = [];
-  if (csf.regimenFiscal && csf.regimenFiscal !== company.regimenFiscal) {
-    await prisma.company.update({
-      where: { id: companyId },
-      data: { regimenFiscal: csf.regimenFiscal },
-    });
-    cambios.push(`régimen ${company.regimenFiscal} → ${csf.regimenFiscal}`);
+  if (regimenPlan.primaryCode !== company.regimenFiscal) {
+    cambios.push(`régimen principal ${company.regimenFiscal} → ${regimenPlan.primaryCode}`);
   }
-  if (csf.codigoPostal && /^\d{5}$/.test(csf.codigoPostal) && csf.codigoPostal !== company.codigoPostal) {
-    await prisma.company.update({
-      where: { id: companyId },
-      data: { codigoPostal: csf.codigoPostal },
-    });
+  if (regimenPlan.activatedCodes.length > 0) {
+    cambios.push(`regímenes activados: ${regimenPlan.activatedCodes.join(", ")}`);
+  }
+  if (regimenPlan.deactivatedCodes.length > 0) {
+    cambios.push(`regímenes terminados: ${regimenPlan.deactivatedCodes.join(", ")}`);
+  }
+  const codigoPostalCsf = csf.codigoPostal && /^\d{5}$/.test(csf.codigoPostal)
+    ? csf.codigoPostal
+    : null;
+  if (codigoPostalCsf && codigoPostalCsf !== company.codigoPostal) {
     cambios.push(`CP ${company.codigoPostal || "—"} → ${csf.codigoPostal}`);
   }
+
+  const endedAt = new Date();
+  await prisma.$transaction(async (tx) => {
+    // Clear every old marker first so exactly one active row mirrors the scalar.
+    await tx.companyRegimen.updateMany({
+      where: { companyId },
+      data: { isPrimary: false },
+    });
+    if (regimenPlan.deactivatedCodes.length > 0) {
+      await tx.companyRegimen.updateMany({
+        where: { companyId, code: { in: regimenPlan.deactivatedCodes }, active: true },
+        data: { active: false, endedAt },
+      });
+    }
+    for (const regimen of regimenPlan.upserts) {
+      await tx.companyRegimen.upsert({
+        where: { companyId_code: { companyId, code: regimen.code } },
+        update: {
+          label: regimen.label,
+          since: regimen.since,
+          isPrimary: regimen.isPrimary,
+          active: true,
+          endedAt: null,
+        },
+        create: {
+          companyId,
+          code: regimen.code,
+          label: regimen.label,
+          since: regimen.since,
+          isPrimary: regimen.isPrimary,
+          active: true,
+        },
+      });
+    }
+    await tx.company.update({
+      where: { id: companyId },
+      data: {
+        regimenFiscal: regimenPlan.primaryCode,
+        ...(codigoPostalCsf ? { codigoPostal: codigoPostalCsf } : {}),
+      },
+    });
+  });
 
   return NextResponse.json({
     ok: true,

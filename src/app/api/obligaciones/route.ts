@@ -33,7 +33,10 @@ export async function GET(req: Request) {
 
   const company = await prisma.company.findUnique({
     where: { id: companyId },
-    select: { regimenFiscal: true, regimenes: { select: { code: true } } },
+    select: {
+      regimenFiscal: true,
+      regimenes: { where: { active: true }, select: { code: true } },
+    },
   });
   if (!company) return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
 
@@ -173,7 +176,10 @@ export async function POST(req: Request) {
     await prisma.companyObligation.deleteMany({ where: { companyId, fuente: "REGIMEN" } });
     const company = await prisma.company.findUnique({
       where: { id: companyId },
-      select: { regimenFiscal: true, regimenes: { select: { code: true } } },
+      select: {
+        regimenFiscal: true,
+        regimenes: { where: { active: true }, select: { code: true } },
+      },
     });
     if (company) {
       const codes =

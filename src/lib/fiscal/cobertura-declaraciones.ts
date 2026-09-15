@@ -90,7 +90,7 @@ export async function declaracionesFaltantesEmpresa(companyId: string): Promise<
       fechaInicioOperaciones: true,
       isActive: true,
       obligations: { where: { activa: true }, select: { tipo: true } },
-      regimenes: { select: { code: true } },
+      regimenes: { where: { active: true }, select: { code: true } },
     },
   });
   if (!company || !company.isActive) return [];

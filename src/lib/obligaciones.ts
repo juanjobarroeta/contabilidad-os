@@ -5,6 +5,8 @@
 // components too. The DB seeding lives in obligaciones-seed.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { REGIMEN_CODES, REGIMEN_LABELS } from "./fiscal/regimen-capabilities";
+
 export interface ObligacionConfig {
   tipo: string;
   descripcion: string;
@@ -292,7 +294,7 @@ export interface CsfData {
   rfc?: string;
   razonSocial?: string;
   codigoPostal?: string;
-  regimenFiscal?: string;   // primary (first one found)
+  regimenFiscal?: string;   // primary only when the CSF set is unambiguous
   regimenes: Array<{ codigo: string; nombre: string; desde: string }>;
   obligaciones: Array<{
     descripcion: string;
@@ -332,8 +334,15 @@ export function parsearTextoCsf(text: string): CsfData {
 
   // ── Regímenes ────────────────────────────────────────────────────────────
   // The CSF lists regimes in a table; we look for lines that match a known regime code
-  const regimenCodes = Object.keys(REGIMEN_MAP);
-  const regimenSection = text.match(/RÉGIMENES?\s*FISCALES?([\s\S]*?)(?:ACTIVIDADES|OBLIGACIONES|$)/i);
+  // Recognition comes from the canonical SAT catalog, not the smaller
+  // obligation-template map. Codes without a default calendar still belong in
+  // the taxpayer's CSF set and must not disappear (notably 607, 615, and 625).
+  const regimenCodes = REGIMEN_CODES;
+  // Singular is "RÉGIMEN" (accent on E); plural is "REGÍMENES" (accent
+  // moves to I). Accept accented and OCR-normalized variants of both.
+  const regimenSection = text.match(
+    /R(?:É|E)G(?:Í|I)MEN(?:ES)?\s*FISCALES?([\s\S]*?)(?:\n\s*(?:ACTIVIDADES|OBLIGACIONES)\b|$)/i,
+  );
   if (regimenSection) {
     const block = regimenSection[1];
     for (const code of regimenCodes) {
@@ -341,11 +350,10 @@ export function parsearTextoCsf(text: string): CsfData {
       const re = new RegExp(`\\b${code}\\b([^\\n]+)?`, "i");
       const m = block.match(re);
       if (m) {
-        const nombre = REGIMEN_MAP[code]?.nombre ?? m[1]?.trim() ?? code;
+        const nombre = REGIMEN_MAP[code]?.nombre ?? REGIMEN_LABELS[code] ?? m[1]?.trim() ?? code;
         // Try to find a date near the code match
         const dateMatch = m[0].match(/\d{2}\/\d{2}\/\d{4}/);
         result.regimenes.push({ codigo: code, nombre, desde: dateMatch?.[0] ?? "" });
-        if (!result.regimenFiscal) result.regimenFiscal = code;
       }
     }
   }
@@ -353,11 +361,21 @@ export function parsearTextoCsf(text: string): CsfData {
   // Fallback: look for standalone regime code pattern anywhere
   if (result.regimenes.length === 0) {
     for (const code of regimenCodes) {
-      if (text.includes(code)) {
-        result.regimenes.push({ codigo: code, nombre: REGIMEN_MAP[code]?.nombre ?? code, desde: "" });
-        if (!result.regimenFiscal) result.regimenFiscal = code;
+      if (new RegExp(`\\b${code}\\b`).test(text)) {
+        result.regimenes.push({
+          codigo: code,
+          nombre: REGIMEN_MAP[code]?.nombre ?? REGIMEN_LABELS[code] ?? code,
+          desde: "",
+        });
       }
     }
+  }
+
+  // A table's first row is not a legal declaration of primacy. Preserve the
+  // scalar only when there is one possible choice; multi-regime updates keep a
+  // still-current company primary or require an explicit user selection.
+  if (result.regimenes.length === 1) {
+    result.regimenFiscal = result.regimenes[0].codigo;
   }
 
   // ── Obligaciones section ─────────────────────────────────────────────────

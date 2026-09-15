@@ -4030,11 +4030,12 @@ enum WhatsappRole {
 }
 
 // One SAT régimen a company/PF is registered under. The `isPrimary` row mirrors
-// Company.regimenFiscal (kept in sync at create time). A taxpayer often has
-// several (e.g. Sueldos y Salarios + Arrendamiento + Dividendos).
+// Company.regimenFiscal (kept in sync at creation and CSF refresh). A taxpayer
+// often has several (e.g. Sueldos y Salarios + Arrendamiento + Dividendos).
 model CompanyRegimen {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -4043,9 +4044,15 @@ model CompanyRegimen {
   label     String // human label, e.g. "Arrendamiento"
   since     DateTime? // "Fecha Inicio" from the CSF régimenes table
   isPrimary Boolean   @default(false)
+  // Current CSF membership is versioned instead of deleting old rows. Fiscal
+  // calculations read only active rows; endedAt preserves when a regime left
+  // the taxpayer's latest confirmed CSF.
+  active    Boolean   @default(true)
+  endedAt   DateTime?
 
   @@unique([companyId, code])
   @@index([companyId])
+  @@index([companyId, active])
 }
 
 model WhatsappMessage {

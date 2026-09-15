@@ -570,7 +570,7 @@ export async function computeTaxPosition(
       perdidaFiscalPendiente: true,
       perdidaFiscalAnio: true,
       regimenFiscal: true,
-      regimenes: { select: { code: true } },
+      regimenes: { where: { active: true }, select: { code: true } },
       rfc: true,
       plataformaActividad: true,
     },
