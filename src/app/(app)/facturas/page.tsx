@@ -26,6 +26,7 @@ import { RecurrentesView } from "@/components/facturas/RecurrentesView";
 import { submenusFacturas, type VistaFacturas } from "@/lib/facturas/submenus";
 import { estadoRepFactura } from "@/lib/facturas/complementos-vista";
 import { RegimenAssignmentPanel } from "@/components/facturas/RegimenAssignmentPanel";
+import { RegimenAllocationReadiness } from "@/components/facturas/RegimenAllocationReadiness";
 
 // ── Types (mirrors /api/facturas) ─────────────────────────────────────────────
 interface Invoice {
@@ -278,6 +279,7 @@ export default function FacturasPage() {
   const [periodos, setPeriodos] = useState<ConteoPeriodo[]>([]);
   const [hayMas, setHayMas] = useState(false);
   const [cargandoMas, setCargandoMas] = useState(false);
+  const [regimenReadinessRevision, setRegimenReadinessRevision] = useState(0);
 
   // REP por emitir. El submenú mostraba `conteos.pago` — TODOS los REP que
   // existen, o sea el archivo. Quien entra a Facturas no pregunta "¿cuántos
@@ -431,6 +433,28 @@ export default function FacturasPage() {
   function showToast(m: string) {
     setToast(m);
     setTimeout(() => setToast(""), 4500);
+  }
+
+  async function abrirFacturaParaAsignar(invoiceId: string) {
+    const loaded = invoices.find((invoice) => invoice.id === invoiceId);
+    if (loaded) {
+      setSel(loaded);
+      return;
+    }
+    try {
+      const response = await fetch(`/api/facturas/${invoiceId}`);
+      const body = await response.json().catch(() => null);
+      if (!response.ok || !body) throw new Error(body?.error ?? "No se pudo abrir el CFDI.");
+      setSel({
+        ...body,
+        subtotal: Number(body.subtotal),
+        total: Number(body.total),
+        totalImpuestos: Number(body.totalImpuestos),
+        isrRetenidoNomina: body.isrRetenidoNomina == null ? null : Number(body.isrRetenidoNomina),
+      } as Invoice);
+    } catch (cause) {
+      showToast(cause instanceof Error ? cause.message : "No se pudo abrir el CFDI.");
+    }
   }
 
   // ── Acciones sobre prefacturas ──
@@ -685,6 +709,13 @@ export default function FacturasPage() {
         </div>
       </div>
 
+      <RegimenAllocationReadiness
+        companyId={activeCompany.id}
+        periodo={periodo}
+        refreshKey={regimenReadinessRevision}
+        onReview={abrirFacturaParaAsignar}
+      />
+
       {/* filter chips */}
       <div className="mt-3 flex flex-wrap gap-2">
         {FILTERS.map((f) => (
@@ -814,6 +845,7 @@ export default function FacturasPage() {
           onClose={() => setSel(null)}
           onVer={(otra) => setSel(otra)}
           onCancelled={() => { setSel(null); fetchData(); showToast("Factura cancelada"); }}
+          onRegimenAssignmentChanged={() => setRegimenReadinessRevision((current) => current + 1)}
         />
       )}
 
@@ -919,7 +951,7 @@ function NaturalezaRow({ inv }: { inv: Invoice }) {
 }
 
 // ── Detail modal (+ Cancelar CFDI, preserved from the old screen) ─────────────
-function FacturaModal({ inv, onClose, onVer, onCancelled }: { inv: Invoice; onClose: () => void; onVer?: (otra: Invoice) => void; onCancelled: () => void }) {
+function FacturaModal({ inv, onClose, onVer, onCancelled, onRegimenAssignmentChanged }: { inv: Invoice; onClose: () => void; onVer?: (otra: Invoice) => void; onCancelled: () => void; onRegimenAssignmentChanged?: () => void }) {
   const k = keyOf(inv);
   const meta = TIPO_META[k];
 
@@ -1138,7 +1170,7 @@ function FacturaModal({ inv, onClose, onVer, onCancelled }: { inv: Invoice; onCl
         )}
 
         {(inv.tipo === "INGRESO" || inv.tipo === "EGRESO") && (
-          <RegimenAssignmentPanel invoiceId={inv.id} />
+          <RegimenAssignmentPanel invoiceId={inv.id} onChanged={onRegimenAssignmentChanged} />
         )}
 
         <button
