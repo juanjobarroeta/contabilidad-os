@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cotejarControles, leerControles } from "./controles-estado";
+import { cotejarControles, leerControles, leerSaldos } from "./controles-estado";
 
 // Renglones REALES de los tres estados de agosto 2026 que destaparon el bug.
 const BBVA_CHEQUES = `
@@ -96,5 +96,49 @@ describe("cotejarControles", () => {
     const r = cotejarControles(leerControles("nada"), completos);
     expect(r.cuadra).toBeNull();
     expect(r.advertencias).toEqual([]);
+  });
+});
+
+// El estado de Santander imprime las ETIQUETAS en un bloque y los IMPORTES en
+// otro. Con `\s` —que incluye el salto de línea— «= Saldo final» se ataba al
+// primer número del bloque de importes, que es el saldo INICIAL. Resultado en
+// CENTRO, agosto 2026: el candado acusó un descuadre de $65,412.95 sobre una
+// extracción correcta, y proponía guardar el saldo equivocado como ancla del mes.
+describe("leerSaldos() — etiquetas y números en bloques distintos", () => {
+  const SANTANDER = [
+    "Resumen saldos.",
+    "Saldo promedio",
+    "No requiere saldo promedio mínimo",
+    "Saldo inicial",
+    "+Depósitos",
+    "- Retiros",
+    "= Saldo final",
+    "71,372.36",
+    "17,695.87",
+    "65,412.95",
+    "5,959.41",
+    "Saldo inicial de $71,372.36",
+    "Saldo final $5,959.41",
+    "SALDO FINAL DEL PERIODO ANTERIOR: $71,372.36",
+  ].join("\n");
+
+  it("toma los saldos de su propio renglón, no del bloque de al lado", () => {
+    expect(leerSaldos(SANTANDER)).toEqual({ inicial: 71372.36, final: 5959.41 });
+  });
+
+  it("«saldo final del periodo anterior» no es el saldo final", () => {
+    expect(leerSaldos("SALDO FINAL DEL PERIODO ANTERIOR: $71,372.36").final).toBeNull();
+  });
+
+  // Los formatos que ya funcionaban siguen igual.
+  it("BBVA y Banorte no se rompen", () => {
+    expect(leerSaldos("Saldo de Liquidación Inicial 322,417.91\nSaldo Final (+) 77,635.71")).toEqual({
+      inicial: 322417.91,
+      final: 77635.71,
+    });
+    expect(leerSaldos("Saldo inicial del periodo \t$ 395,814.44\nSaldo actual \t$ 9,766.31")).toEqual({
+      inicial: 395814.44,
+      final: 9766.31,
+    });
   });
 });

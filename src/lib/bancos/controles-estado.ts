@@ -47,14 +47,24 @@ export function leerSaldos(texto: string): SaldosEstado {
   // Cada banco lo dice a su manera y el extractor mete tabuladores y «$»:
   //   BBVA:    «Saldo de Liquidación Inicial 322,417.91» … «Saldo Final (+) 77,635.71»
   //   Banorte: «Saldo inicial del periodo \t$ 395,814.44» … «Saldo actual \t$ 9,766.31»
-  const SEP = "[\\s\\t]*\\$?[\\s\\t]*";
+  // EN EL MISMO RENGLÓN. `\s` incluye el salto de línea, y el estado de cuenta
+  // de Santander imprime las etiquetas en un bloque y los importes en otro:
+  //
+  //     Saldo inicial | +Depósitos | - Retiros | = Saldo final
+  //     71,372.36     | 17,695.87  | 65,412.95 | 5,959.41
+  //
+  // Con el salto permitido, «= Saldo final» se ataba al PRIMER número del
+  // bloque de importes —el saldo INICIAL— y el candado acusaba un descuadre de
+  // $65,412.95 sobre una extracción correcta, proponiendo además guardar el
+  // saldo equivocado como ancla del mes. Visto en CENTRO, agosto 2026.
+  const SEP = "[^\\S\\r\\n]*\\$?[^\\S\\r\\n]*";
   return {
-    inicial: buscar(new RegExp(`Saldo[^\\n]{0,40}?Inicial(?:\\s*del\\s*periodo)?\\s*\\(?\\+?\\)?${SEP}([\\d,]+\\.\\d{2})`, "i")),
+    inicial: buscar(new RegExp(`Saldo[^\\n]{0,40}?Inicial(?:[^\\S\\r\\n]*del[^\\S\\r\\n]*periodo)?[^\\S\\r\\n]*(?:de[^\\S\\r\\n]+)?\\(?\\+?\\)?${SEP}([\\d,]+\\.\\d{2})`, "i")),
     final:
-      buscar(new RegExp(`Saldo\\s*(?:de\\s*Liquidaci[oó]n\\s*)?Final\\s*\\(?\\+?\\)?${SEP}([\\d,]+\\.\\d{2})`, "i")) ??
+      buscar(new RegExp(`Saldo[^\\S\\r\\n]*(?:de[^\\S\\r\\n]*Liquidaci[oó]n[^\\S\\r\\n]*)?Final[^\\S\\r\\n]*(?:de[^\\S\\r\\n]+)?\\(?\\+?\\)?${SEP}([\\d,]+\\.\\d{2})`, "i")) ??
       // Banorte no dice «final»: dice «Saldo actual» (y luego repite el
       // disponible, que puede diferir por retenciones — se toma el actual).
-      buscar(new RegExp(`Saldo\\s*actual${SEP}([\\d,]+\\.\\d{2})`, "i")),
+      buscar(new RegExp(`Saldo[^\\S\\r\\n]*actual${SEP}([\\d,]+\\.\\d{2})`, "i")),
   };
 }
 
