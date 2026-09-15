@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { CompanyProvider } from "@/components/layout/CompanyProvider";
+import { PeriodProvider } from "@/components/contabilidad/PeriodProvider";
 import { ChatPanel } from "@/components/ai/ChatPanel";
 import { CopilotoRail } from "@/components/ai/CopilotoRail";
 import { CommandPalette } from "@/components/layout/CommandPalette";
@@ -111,6 +112,13 @@ export default async function AppLayout({
 
   return (
     <CompanyProvider userId={session.user.id!}>
+      {/* EL PERÍODO ES UNO SOLO PARA TODA LA APP. Vivía en dos proveedores
+          —el flujo contable y /cierre— que se sincronizaban de milagro por
+          compartir la llave de localStorage, y las pantallas de fuera (Bancos,
+          Facturas) ni se enteraban: estabas en agosto en el cierre, cambiabas
+          a Bancos y te encontrabas septiembre. Un proveedor arriba de todo y
+          el mes deja de perderse al cambiar de pestaña. */}
+      <PeriodProvider>
       <AceptacionLegalGate pendientes={legalPendientes} />
       <div className="flex h-screen bg-cos-paper">
         <Sidebar user={session.user} esOperador={esOperador} />
@@ -126,6 +134,7 @@ export default async function AppLayout({
         <InstallPrompt />
         <PushOptIn />
       </div>
+      </PeriodProvider>
     </CompanyProvider>
   );
 }
