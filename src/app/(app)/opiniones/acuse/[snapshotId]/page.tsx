@@ -1,37 +1,49 @@
 "use client";
 
 import { use } from "react";
-import Link from "next/link";
-import { ChevronLeft, FileDown } from "lucide-react";
+import { VisorPdf } from "@/components/ui";
+import { rutaInternaSegura } from "@/lib/navegacion";
 
-// In-app acuse viewer. The PDF itself is streamed by /api/cumplimiento/acuse/[id].
-// We embed it here instead of navigating straight to the raw PDF so there's
-// always a "Volver" control — in the standalone PWA (no browser chrome) opening
-// the PDF directly leaves the user with no way back. A "Descargar" fallback
-// covers browsers that won't render a PDF inside an iframe (some iOS builds).
-export default function AcuseViewerPage({ params }: { params: Promise<{ snapshotId: string }> }) {
+// Visor in-app del acuse de cumplimiento: opinión SAT (32-D), Constancia de
+// Situación Fiscal u opinión IMSS. El PDF lo sirve
+// /api/cumplimiento/acuse/[snapshotId]; se embebe aquí en vez de navegar al PDF
+// crudo para que SIEMPRE haya Volver y Descargar — en la PWA instalada (sin
+// chrome del navegador) abrir el PDF directo deja al usuario sin salida.
+//
+// ?doc= etiqueta la barra (es el mismo endpoint para los tres documentos) y
+// ?volver= dice a dónde regresa, validado como ruta interna.
+
+const TITULOS: Record<string, string> = {
+  csf: "Constancia de Situación Fiscal",
+  sat: "Opinión de cumplimiento (32-D)",
+  imss: "Opinión de cumplimiento IMSS",
+};
+
+const NOMBRES: Record<string, string> = {
+  csf: "constancia-situacion-fiscal",
+  sat: "opinion-cumplimiento-sat",
+  imss: "opinion-cumplimiento-imss",
+};
+
+export default function AcuseViewerPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ snapshotId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { snapshotId } = use(params);
-  const src = `/api/cumplimiento/acuse/${snapshotId}`;
+  const sp = use(searchParams);
+
+  const docParam = Array.isArray(sp.doc) ? sp.doc[0] : sp.doc;
+  const doc = docParam && docParam in TITULOS ? docParam : null;
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between gap-2 border-b border-cos-line bg-cos-card px-3 py-2.5 sm:px-4">
-        <Link
-          href="/opiniones"
-          className="inline-flex items-center gap-1 rounded-control px-2 py-1.5 text-sm font-medium text-cos-ink hover:bg-cos-paper"
-        >
-          <ChevronLeft className="h-4 w-4" /> Volver
-        </Link>
-        <span className="truncate text-sm font-medium text-cos-ink-soft">Acuse</span>
-        <a
-          href={src}
-          download
-          className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-cos-card px-3 py-1.5 text-sm font-medium text-cos-ink hover:bg-cos-paper"
-        >
-          <FileDown className="h-4 w-4" /> Descargar
-        </a>
-      </div>
-      <iframe src={src} title="Acuse de cumplimiento" className="w-full flex-1 border-0 bg-cos-slate-tint" />
-    </div>
+    <VisorPdf
+      src={`/api/cumplimiento/acuse/${snapshotId}`}
+      titulo={doc ? TITULOS[doc] : "Acuse"}
+      nombreArchivo={`${doc ? NOMBRES[doc] : "acuse"}-${snapshotId}.pdf`}
+      volverHref={rutaInternaSegura(sp.volver, "/opiniones")}
+    />
   );
 }

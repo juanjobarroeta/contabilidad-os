@@ -8,6 +8,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { FileText, Loader2, RefreshCw, ShieldAlert, ShieldCheck, ShieldQuestion } from "lucide-react";
 import { Card } from "@/components/ui";
 import { formatDate } from "@/lib/utils";
@@ -95,10 +96,12 @@ export default function OpinionImssCard({ companyId }: { companyId: string }) {
 
       <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-cos-line pt-2.5">
         {opinion?.tieneAcuse && (
-          <a href={`/api/cumplimiento/acuse/${opinion.snapshotId}`} target="_blank" rel="noreferrer"
+          // Al visor in-app, no al PDF crudo: en la PWA instalada abrir el PDF
+          // directo deja la pantalla sin "atrás" ni "descargar".
+          <Link href={`/opiniones/acuse/${opinion.snapshotId}?doc=imss&volver=/nomina%3Ftab%3Dcumplimiento`}
             className="inline-flex items-center gap-1 rounded-control border border-cos-line px-2.5 py-1 text-[12px] font-semibold text-cos-ink hover:border-cos-brand hover:text-cos-brand-ink">
             <FileText className="h-3.5 w-3.5" /> Ver PDF
-          </a>
+          </Link>
         )}
         <button onClick={consultar} disabled={consultando || !configurado}
           title={configurado ? "Pide al IMSS una opinión nueva (1–2 min)" : "Integración SatGo no configurada (SATGO_API_KEY)"}

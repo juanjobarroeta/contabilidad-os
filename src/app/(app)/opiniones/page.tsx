@@ -142,7 +142,7 @@ function EmpresaCard({ e }: { e: CumplimientoEmpresa }) {
               )}
               {e.sat.vigencia && <Row label="Vigencia" value={fmtDate(e.sat.vigencia)} />}
               <Row label="Consultado" value={fmtDate(e.sat.fetchedAt)} />
-              <AcuseLink snapshotId={e.sat.snapshotId} tieneAcuse={e.sat.tieneAcuse} />
+              <AcuseLink snapshotId={e.sat.snapshotId} tieneAcuse={e.sat.tieneAcuse} doc="sat" />
             </div>
           ) : (
             <p className="text-[13px] text-cos-ink-faint">Sin opinión monitoreada.</p>
@@ -164,7 +164,7 @@ function EmpresaCard({ e }: { e: CumplimientoEmpresa }) {
               <Row label="Obligaciones" value={`${e.csf.obligacionesCount}`} />
               {e.csf.codigoPostal && <Row label="C.P." value={e.csf.codigoPostal} />}
               <Row label="Consultado" value={fmtDate(e.csf.fetchedAt)} />
-              <AcuseLink snapshotId={e.csf.snapshotId} tieneAcuse={e.csf.tieneAcuse} />
+              <AcuseLink snapshotId={e.csf.snapshotId} tieneAcuse={e.csf.tieneAcuse} doc="csf" />
             </div>
           ) : (
             <p className="text-[13px] text-cos-ink-faint">Sin constancia monitoreada.</p>
@@ -217,7 +217,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function AcuseLink({ snapshotId, tieneAcuse }: { snapshotId: string; tieneAcuse: boolean }) {
+function AcuseLink({ snapshotId, tieneAcuse, doc }: { snapshotId: string; tieneAcuse: boolean; doc: "sat" | "csf" }) {
   if (!tieneAcuse) {
     return (
       <p className="flex items-center gap-1.5 pt-1 text-[12px] text-cos-ink-faint">
@@ -227,10 +227,10 @@ function AcuseLink({ snapshotId, tieneAcuse }: { snapshotId: string; tieneAcuse:
   }
   return (
     <Link
-      href={`/opiniones/acuse/${snapshotId}`}
+      href={`/opiniones/acuse/${snapshotId}?doc=${doc}&volver=/opiniones`}
       className="inline-flex items-center gap-1.5 pt-1 text-[13px] font-semibold text-cos-brand-ink hover:underline"
     >
-      <FileDown className="h-3.5 w-3.5" /> Ver acuse
+      <FileDown className="h-3.5 w-3.5" /> {doc === "csf" ? "Ver constancia" : "Ver acuse"}
     </Link>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { Money } from "@/components/ui";
 import { AjusteInflacionPanel } from "./AjusteInflacionPanel";
@@ -330,9 +331,11 @@ export function DeclaracionAnualView() {
                         <Download className="h-3.5 w-3.5" /> Ver acuse
                       </a>
                     ) : (
-                      <a href={`/api/declaraciones/acuse/${result.existingDeclaration.id}`} className="inline-flex items-center gap-1 underline">
+                      // Al visor in-app: el PDF crudo deja a la PWA instalada sin
+                      // botón de regreso ni de descarga.
+                      <Link href={`/declaraciones/acuse/${result.existingDeclaration.id}?volver=/impuestos%3Ftab%3Danual`} className="inline-flex items-center gap-1 underline">
                         <Download className="h-3.5 w-3.5" /> Descargar acuse
-                      </a>
+                      </Link>
                     )
                   )}
                 </div>
