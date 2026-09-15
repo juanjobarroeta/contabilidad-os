@@ -166,7 +166,7 @@ conversación se archive.
 | `GET/POST /api/juridico/casos/[id]/tareas` | Pendientes del caso; POST acepta una o varias. |
 | `PATCH/DELETE /api/juridico/tareas/[id]` | Mover, asignar, reprogramar o quitar. |
 | `GET/POST /api/juridico/casos/[id]/plazos` | Plazos del caso, el que vence antes primero. `POST ?simular=1` computa y devuelve la traza **sin guardar**: es la vista previa. |
-| `PATCH /api/juridico/plazos/[id]` | `{estado:"confirmado"\|"cumplido"\|"descartado", nota?}` o `{recomputar:true}`. |
+| `PATCH /api/juridico/plazos/[id]` | `{estado:"confirmado"\|"cumplido"\|"descartado", nota?}` o `{recomputar:true}`. Al confirmar acepta `tarea: {asignadoUserId?, diasAntes?, titulo?}` y crea el pendiente que lo persigue. |
 | `GET /api/juridico/plazos?dias=30` | Lo que vence pronto en TODOS los casos que alcanza la persona. La pantalla de la mañana. |
 | `GET /api/juridico/casos/[id]/bitacora` | Append-only, lo nuevo primero, con `frase` ya redactada y el nombre del actor resuelto. Paginación con `antesDe`. |
 | `GET/POST /api/juridico/clientes` | Directorio y alta. El alta responde **409 con `candidatos`** si detecta un posible duplicado; `forzar: true` la fuerza y `comprobar: true` sólo consulta. |
@@ -303,6 +303,40 @@ divergen en ocho días. El selector de fuero es obligatorio al crear.
 
 Para la urgencia usa `diasHabilesRestantes` (se calcula al leer, no está
 guardado), no restes fechas del calendario.
+
+**Quién responde por la fecha.** Al confirmar se puede pedir la tarea que
+persigue el plazo, y ahí `diasAntes` son días **hábiles**, no de calendario: un
+recordatorio «tres días antes» que cae en un puente vale cero días de trabajo.
+
+```json
+PATCH /api/juridico/plazos/abc
+{ "estado": "confirmado", "tarea": { "asignadoUserId": "u1", "diasAntes": 3 } }
+```
+
+El plazo devuelve `tareaId` y la tarea nace en alta prioridad, con el
+vencimiento y el fundamento en el detalle. Eso es lo que separa una agenda de
+la infraestructura del despacho: la fecha tiene dueño.
+
+### Qué declaró el documento (para el alta en pasos)
+
+`POST /api/juridico/documentos` devuelve además `extraido`, un renglón por
+documento con lo que el texto dice **literalmente**, antes de que el abogado lo
+confirme:
+
+```json
+"extraido": [{
+  "documentoId": "…", "nombre": "demanda.pdf",
+  "partes": [{ "rol": "actor", "tipoPersona": "fisica", "nombre": "…", "rfc": null, "curp": null, "domicilio": null, "representante": null }],
+  "expediente": "123/2026", "autoridad": "Juzgado Segundo…",
+  "materia": "civil", "via": "ordinario civil", "entidad": "PUE",
+  "tipoDocumento": "demanda"
+}]
+```
+
+Se sigue aplicando al asunto como antes (los campos que estaban vacíos), pero
+ahora también se devuelve, que es lo que faltaba para poder enseñar «esto leí»
+y dejar que lo corrijan. Nada de esto está verificado: son datos del documento,
+no de un registro.
 
 ### El copiloto
 

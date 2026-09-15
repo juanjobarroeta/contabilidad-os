@@ -219,6 +219,22 @@ export function diasHabilesRestantes(vence: string, cal: Calendario, hoy: string
   return n;
 }
 
+/**
+ * N días hábiles ANTES de una fecha. Es lo que pide un recordatorio útil:
+ * «avísame tres días hábiles antes de que venza», no tres días de calendario,
+ * que en un puente son cero días de trabajo.
+ */
+export function restarDiasHabiles(fecha: string, dias: number, cal: Calendario): string {
+  let cursor = fecha;
+  let restados = 0;
+  let guarda = 0;
+  while (restados < dias && guarda++ < 3650) {
+    cursor = sumarDias(cursor, -1);
+    if (esHabil(cursor, cal).habil) restados++;
+  }
+  return cursor;
+}
+
 /** Una frase que explica el cómputo sin abrir la tabla. Pura. */
 export function explicacion(c: Computo): string {
   const saltados = c.pasos.filter((p) => p.clase === "salta").length;
