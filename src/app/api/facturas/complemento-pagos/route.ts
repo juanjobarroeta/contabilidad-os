@@ -5,6 +5,8 @@ import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { gateEscritura } from "@/lib/subscription";
 import { registrarBitacora } from "@/lib/audit";
 import { emitirComplementoPago, prepararRep } from "@/lib/complementos-rep-emit";
+import { amparadoPorReps, repsPorFactura } from "@/lib/facturas/reps-amparados";
+import { normalizarUuid } from "@/lib/fiscal/uuid";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Complemento de Pagos (REP — Recibo Electrónico de Pago)
@@ -101,28 +103,23 @@ export async function GET(req: Request) {
     })),
   ];
 
-  // Find existing REP CFDIs (tipo PAGO) that reference these invoices
-  const existingReps = await prisma.invoice.findMany({
-    where: {
-      companyId,
-      tipo: "PAGO",
-      status: "STAMPED",
-      notas: { in: ppdIds }, // We store the parent invoice ID in notas for REPs
-    },
-    select: { id: true, notas: true, total: true, uuid: true },
-  });
-  const repByParent = new Map<string, typeof existingReps>();
-  for (const rep of existingReps) {
-    const key = rep.notas ?? "";
-    if (!repByParent.has(key)) repByParent.set(key, []);
-    repByParent.get(key)!.push(rep);
-  }
+  // LOS REPS QUE YA AMPARAN CADA FACTURA, POR UUID.
+  //
+  // Antes se buscaban por `Invoice.notas = <id del padre>`, una convención que
+  // sólo escribe esta app al timbrar. El REP que viene del portal del SAT, de
+  // otro PAC o del contador anterior llega con `notas = "SAT — emitidos"` y era
+  // invisible: su factura salía «sin complemento» para siempre. El enlace real
+  // —el UUID del <pago:DoctoRelacionado>— ya estaba en la base.
+  const amparado = await amparadoPorReps(prisma, companyId, ppdInvoices.map((i) => i.uuid));
+  const repsDe = await repsPorFactura(prisma, companyId, ppdInvoices.map((i) => i.uuid));
+  const amparadoDe = (inv: { uuid: string | null }) => (inv.uuid ? amparado.get(normalizarUuid(inv.uuid)) ?? 0 : 0);
+  const listaRepsDe = (inv: { uuid: string | null }) => (inv.uuid ? repsDe.get(normalizarUuid(inv.uuid)) ?? [] : []);
 
   // Build pending list
   type PendingRep = {
     invoice: typeof ppdInvoices[0];
     payments: typeof matchedPayments;
-    existingReps: typeof existingReps;
+    existingReps: ReturnType<typeof listaRepsDe>;
     totalPaid: number;
     totalReped: number;
     pendingAmount: number;
@@ -133,9 +130,11 @@ export async function GET(req: Request) {
 
   for (const inv of ppdInvoices) {
     const payments = matchedPayments.filter(p => p.invoiceId === inv.id);
-    const reps = repByParent.get(inv.id) ?? [];
+    const reps = listaRepsDe(inv);
     const totalPaid = payments.reduce((s, p) => s + Number(p.monto), 0);
-    const totalReped = reps.reduce((s, r) => s + Number(r.total), 0);
+    // Lo amparado es la suma de `impPagado` de cada REP para ESTA factura, no
+    // el total del REP: uno solo puede amparar cinco facturas.
+    const totalReped = amparadoDe(inv);
     const pendingAmount = Math.round((totalPaid - totalReped) * 100) / 100;
 
     if (payments.length > 0) {
@@ -162,8 +161,7 @@ export async function GET(req: Request) {
   const conPagoIds = new Set(matchedPayments.map((p) => p.invoiceId));
   const sinCobroDetectado = ppdInvoices
     .map((inv) => {
-      const reps = repByParent.get(inv.id) ?? [];
-      const totalReped = reps.reduce((s, r) => s + Number(r.total), 0);
+      const totalReped = amparadoDe(inv);
       return {
         invoice: inv,
         totalReped,
