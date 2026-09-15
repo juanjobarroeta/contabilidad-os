@@ -6,6 +6,8 @@ import { INSTANCIA, iniciarTurno, nuevoIdTurno, respuestaSse, respuestaSseDesdeA
 import { almacenPrisma } from "@/lib/juridico/turnos-almacen";
 import { cargarContextoConversacion, correrTurnoAbogado } from "@/lib/juridico/turno-abogado";
 import { asegurarConsumoJuridico } from "@/lib/juridico/consumo";
+import { asegurarSuscripcion } from "@/lib/juridico/suscripcion";
+import { despachoParaCrear } from "@/lib/juridico/despacho";
 import { reportError } from "@/lib/observability";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -51,6 +53,10 @@ export async function POST(req: Request) {
 
   // Tope del asiento: el jurídico no tiene empresa, así que la guardia por
   // empresa no aplica y sin esto corría sin techo (ver src/lib/juridico/consumo.ts).
+  // Lo que paga el despacho (o su prueba) antes que el tope técnico: el
+  // mensaje que importa es «elige un plan», no «te pasaste de USD».
+  const sus = await asegurarSuscripcion(await despachoParaCrear(userId));
+  if (!sus.permitido) return NextResponse.json({ error: sus.motivo, codigo: "JURIDICO_SIN_PLAN", estado: sus.estado }, { status: 402 });
   const puede = await asegurarConsumoJuridico(userId);
   if (!puede.permitido) return NextResponse.json({ error: puede.motivo, codigo: "JURIDICO_TOPE_MES", consumo: puede.consumo }, { status: 429 });
 
