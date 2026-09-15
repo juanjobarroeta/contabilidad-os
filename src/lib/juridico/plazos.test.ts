@@ -7,6 +7,7 @@ import {
   explicacion,
   inhabilesDeLey,
   lunesDe,
+  restarDiasHabiles,
 } from "./plazos";
 
 const cal = (fuero: Calendario["fuero"], inhabilesExtra: string[] = []): Calendario => ({
@@ -180,5 +181,25 @@ describe("lo que ve el abogado", () => {
     expect(t).toContain("15 días hábiles");
     expect(t).toContain(c.vence);
     expect(t).toMatch(/saltando \d+ días inhábiles/);
+  });
+});
+
+describe("recordar antes de que venza", () => {
+  it("cuenta hacia atrás en días hábiles, no de calendario", () => {
+    // Del lunes 26 de octubre de 2026, tres hábiles antes es el miércoles 21:
+    // el 24 y 25 son fin de semana y no cuentan.
+    expect(restarDiasHabiles("2026-10-26", 3, cal("amparo"))).toBe("2026-10-21");
+  });
+
+  it("salta los inhábiles del fuero al retroceder", () => {
+    // Del martes 13 de octubre, dos hábiles antes salta el 12 (Art. 19 LA) y
+    // el fin de semana: cae en el jueves 8.
+    expect(restarDiasHabiles("2026-10-13", 2, cal("amparo"))).toBe("2026-10-08");
+    // En laboral el 12 sí es hábil, así que se queda más cerca.
+    expect(restarDiasHabiles("2026-10-13", 2, cal("laboral"))).toBe("2026-10-09");
+  });
+
+  it("cero días devuelve la misma fecha", () => {
+    expect(restarDiasHabiles("2026-10-26", 0, cal("amparo"))).toBe("2026-10-26");
   });
 });

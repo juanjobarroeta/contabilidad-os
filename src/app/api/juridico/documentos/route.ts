@@ -197,6 +197,9 @@ export async function POST(req: Request) {
     convId = created.id;
     nueva = true;
   }
+  // Lo que cada documento declara, devuelto tal cual además de aplicarse: el
+  // alta de un asunto empieza por enseñárselo al abogado para que lo corrija.
+  const extraido: ({ documentoId: string; nombre: string } & Awaited<ReturnType<typeof extraerDatosDeDocumento>>)[] = [];
   const documentos = [];
   for (const p of preparados) {
     const secciones = indexarDocumento(p.texto);
@@ -233,8 +236,14 @@ export async function POST(req: Request) {
     // Partes, expediente y autoridad que el documento declara → al asunto, sin
     // verificar, para que el abogado los confirme en el panel. Si falla, el
     // documento ya está guardado.
+    //
+    // Lo extraído se DEVUELVE además tal cual: el alta de un asunto empieza por
+    // enseñarle al abogado qué se leyó del documento para que lo corrija antes
+    // de darlo por bueno. Antes esto se aplicaba y se tiraba, y la pantalla no
+    // tenía con qué construir ese paso.
     try {
       const datos = await extraerDatosDeDocumento(anthropic, { id: doc.id, nombre: doc.nombre, texto: p.texto }, { cost: { companyId: null, userId } });
+      extraido.push({ documentoId: doc.id, nombre: doc.nombre, ...datos });
       if (datos.partes.length || datos.expediente || datos.autoridad) {
         const asunto = await asuntoDeConversacion(convId, userId, { crear: true });
         if (asunto) {
@@ -249,5 +258,5 @@ export async function POST(req: Request) {
   }
   await prisma.juridicoConversacion.update({ where: { id: convId }, data: { updatedAt: new Date() } });
   const asunto = await asuntoDeConversacion(convId, userId);
-  return NextResponse.json({ conversacionId: convId, nueva, documentos, documento: documentos[0], asunto }, { status: 201 });
+  return NextResponse.json({ conversacionId: convId, nueva, documentos, documento: documentos[0], asunto, extraido }, { status: 201 });
 }

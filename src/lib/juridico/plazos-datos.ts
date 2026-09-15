@@ -22,7 +22,9 @@ import {
   computarPlazo,
   diasHabilesRestantes,
   explicacion,
+  restarDiasHabiles,
 } from "./plazos";
+import { crearTareas } from "./tareas";
 
 export type EstadoPlazo = "propuesto" | "confirmado" | "cumplido" | "descartado";
 
@@ -52,6 +54,8 @@ export interface Plazo {
   confirmadoAt: Date | null;
   nota: string | null;
   origen: "manual" | "copiloto";
+  /** La tarea que lo persigue, si el abogado pidió una al confirmar. */
+  tareaId: string | null;
   creadoPorUserId: string;
   createdAt: Date;
   /** Calculado al leer, no guardado: cambia solo con el paso de los días. */
@@ -136,6 +140,7 @@ function aPlazo(f: Record<string, unknown>, hoy: string, inhabilesExtra: string[
     confirmadoAt: (f.confirmadoAt as Date) ?? null,
     nota: (f.nota as string) ?? null,
     origen: f.origen === "copiloto" ? "copiloto" : "manual",
+    tareaId: (f.tareaId as string) ?? null,
     creadoPorUserId: f.creadoPorUserId as string,
     createdAt: f.createdAt as Date,
     diasHabilesRestantes: 0,
@@ -239,15 +244,52 @@ async function conAlcance(id: string, userId: string) {
   return f;
 }
 
+/**
+ * Qué tarea persigue el plazo. Un plazo confirmado sin dueño es una fecha en
+ * una pantalla; con dueño y con recordatorio es trabajo asignado, que es lo que
+ * separa una agenda de la infraestructura del despacho.
+ */
+export interface TareaDelPlazo {
+  asignadoUserId?: string | null;
+  /** Días HÁBILES antes del vencimiento en que hay que tenerlo listo. */
+  diasAntes?: number;
+  titulo?: string;
+}
+
 /** El acto que convierte una propuesta en algo de lo que el despacho responde. */
-export async function confirmarPlazo(id: string, userId: string, actor: Actor, nota?: string | null): Promise<Plazo> {
+export async function confirmarPlazo(id: string, userId: string, actor: Actor, nota?: string | null, tarea?: TareaDelPlazo, despachoId?: string | null): Promise<Plazo> {
   const actual = await conAlcance(id, userId);
   if (actual.estado === "cumplido" || actual.estado === "descartado") {
     throw conflicto(`Ese plazo ya está ${actual.estado}; reábrelo antes de confirmarlo.`);
   }
+
+  // La tarea se crea ANTES del update para poder guardar su id en el plazo y
+  // que la pantalla de plazos sepa quién responde por cada fecha.
+  let tareaId: string | null = actual.tareaId;
+  if (tarea && !tareaId) {
+    const fuero = esFuero(actual.fuero) ? actual.fuero : "federal";
+    const vence = aISO(actual.vence);
+    const cal = await calendarioDe({ despachoId, fuero, entidad: actual.entidad, desde: aISO(new Date()), hasta: vence });
+    const dias = Math.max(0, Math.min(60, Math.floor(tarea.diasAntes ?? 0)));
+    const creadas = await crearTareas(
+      actual.casoId,
+      userId,
+      [{
+        titulo: (tarea.titulo ?? actual.titulo).slice(0, 300),
+        detalle: `Vence el ${vence}${actual.fundamento ? ` · ${actual.fundamento}` : ""}.${dias > 0 ? ` Se pide listo ${dias} día(s) hábil(es) antes.` : ""}`,
+        vence: dias > 0 ? restarDiasHabiles(vence, dias, cal) : vence,
+        prioridad: "alta",
+        asignadoUserId: tarea.asignadoUserId ?? null,
+        origen: "copiloto",
+      }],
+      actor,
+    );
+    tareaId = creadas[0]?.id ?? null;
+  }
+
   const f = await prisma.juridicoPlazo.update({
     where: { id },
-    data: { estado: "confirmado", confirmadoPorUserId: userId, confirmadoAt: new Date(), ...(nota === undefined ? {} : { nota }) },
+    data: { estado: "confirmado", confirmadoPorUserId: userId, confirmadoAt: new Date(), ...(tareaId ? { tareaId } : {}), ...(nota === undefined ? {} : { nota }) },
   });
   await apuntar({
     casoId: f.casoId,
@@ -261,8 +303,8 @@ export async function confirmarPlazo(id: string, userId: string, actor: Actor, n
   return aPlazo(f as unknown as Record<string, unknown>, aISO(new Date()));
 }
 
-export async function cambiarEstadoPlazo(id: string, userId: string, estado: "cumplido" | "descartado" | "confirmado", actor: Actor, nota?: string | null): Promise<Plazo> {
-  if (estado === "confirmado") return confirmarPlazo(id, userId, actor, nota);
+export async function cambiarEstadoPlazo(id: string, userId: string, estado: "cumplido" | "descartado" | "confirmado", actor: Actor, nota?: string | null, tarea?: TareaDelPlazo, despachoId?: string | null): Promise<Plazo> {
+  if (estado === "confirmado") return confirmarPlazo(id, userId, actor, nota, tarea, despachoId);
   const actual = await conAlcance(id, userId);
   const f = await prisma.juridicoPlazo.update({
     where: { id },
