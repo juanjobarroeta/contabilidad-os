@@ -86,7 +86,11 @@ const CLAVE_INVERSION_PREFIJOS = ["251", "4321", "24", "23", "2510"];
 // («Software»): 432315xx aplicaciones y negocios, 432320xx sistemas
 // operativos, 432321xx herramientas de desarrollo… Un bien de estos NO se
 // deprecia: se amortiza (Art. 33), en otra cuenta y a otra tasa.
-const CLAVE_INTANGIBLE_PREFIJOS = ["4323", "81112"];
+// SÓLO la familia 4323 («Software»). 81112 —servicios de tecnologías de
+// información— estuvo aquí un rato y fue un error de los caros: un servicio no
+// es un activo intangible, es gasto del periodo, y de paso arrastró hardware
+// mal clasificado por el vendedor (un servidor Dell facturado bajo servicios).
+const CLAVE_INTANGIBLE_PREFIJOS = ["4323"];
 
 /**
  * Por debajo de esto, una «inversión» casi siempre es un consumible que alguien

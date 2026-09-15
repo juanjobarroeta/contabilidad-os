@@ -21,10 +21,23 @@ import { TASA_DEPRECIACION } from "../src/lib/fiscal/depreciacion";
 
 const prisma = new PrismaClient();
 
-/** Las mismas familias que el clasificador (clasificar-cfdi.ts). */
-const CLAVE_INTANGIBLE_PREFIJOS = ["4323", "81112"];
-/** Cuando no hay renglones, el nombre del activo es la última pista. */
-const PALABRAS = /licenc|software|suscripci|sistema operativo|antivirus|office\b|saas/i;
+/** La misma familia que el clasificador (clasificar-cfdi.ts): «Software». */
+const CLAVE_INTANGIBLE_PREFIJOS = ["4323"];
+
+/**
+ * El nombre NO alcanza para reclasificar solo, y el simulacro lo demostró: las
+ * descripciones traen la ficha técnica completa, así que «LAPTOP TOSHIBA … /
+ * Sistema operativo: Windows» y hasta un tomógrafo Siemens pegaban con
+ * «software». Un equipo reclasificado a intangible se amortiza al 15 % en la
+ * cuenta equivocada — peor que dejarlo como está.
+ *
+ * Así que el nombre sólo SUGIERE: esos salen en una lista aparte, para que los
+ * mire una persona y los corrija con el selector de tipo.
+ */
+const PALABRAS = /licenc|suscripci|antivirus|\boffice\b|saas|software/i;
+
+/** Si el nombre dice que es una cosa física, no es un intangible. */
+const PALABRAS_HARDWARE = /laptop|notebook|servidor|computadora|\baio\b|pantalla|monitor|impresora|procesador|tom[oó]grafo|equipo|enrolador|esc[aá]ner|tel[eé]fono|celular|tablet|disco|memoria|teclado|mouse/i;
 
 async function main() {
   const aplicar = process.argv.includes("--aplicar");
@@ -63,23 +76,31 @@ async function main() {
   }
 
   const tasa = TASA_DEPRECIACION.intangible.tasa;
-  const candidatos = activos.filter((a) => {
-    const porClave = (claves.get(a.invoiceId ?? "") ?? []).some((c) =>
-      CLAVE_INTANGIBLE_PREFIJOS.some((p) => c?.startsWith(p)),
-    );
-    return porClave || PALABRAS.test(a.descripcion);
-  });
+  const etiqueta = (a: { companyId: string; descripcion: string; tipo: string; tasaAnual: unknown }) =>
+    `  ${(empresas.get(a.companyId) ?? a.companyId).slice(0, 28).padEnd(28)} ${a.descripcion.replace(/\s+/g, " ").slice(0, 46).padEnd(46)} ` +
+    `${a.tipo} ${(Number(a.tasaAnual ?? 0) * 100).toFixed(0)}%`;
 
-  console.log(`${activos.length} activos auto-creados revisados · ${candidatos.length} parecen intangibles\n`);
-  for (const a of candidatos) {
-    const porClave = (claves.get(a.invoiceId ?? "") ?? []).some((c) =>
-      CLAVE_INTANGIBLE_PREFIJOS.some((p) => c?.startsWith(p)),
-    );
-    console.log(
-      `  ${(empresas.get(a.companyId) ?? a.companyId).slice(0, 28).padEnd(28)} ${a.descripcion.slice(0, 44).padEnd(44)} ` +
-        `${a.tipo} ${(Number(a.tasaAnual ?? 0) * 100).toFixed(0)}% → intangible ${(tasa * 100).toFixed(0)}%  ` +
-        `(${porClave ? "clave de producto" : "por el nombre"})`,
-    );
+  const porClaveDe = (a: { invoiceId: string | null }) =>
+    (claves.get(a.invoiceId ?? "") ?? []).some((c) => CLAVE_INTANGIBLE_PREFIJOS.some((p) => c?.startsWith(p)));
+
+  // EVIDENCIA FUERTE: la clave del CFDI dice «Software» y el nombre no dice que
+  // sea una cosa física. Sólo estos se tocan.
+  const candidatos = activos.filter((a) => porClaveDe(a) && !PALABRAS_HARDWARE.test(a.descripcion));
+  // SOSPECHOSOS: el nombre suena a licencia o suscripción, pero el nombre solo
+  // no basta. Se listan para que los corrija una persona con el selector.
+  const sospechosos = activos.filter(
+    (a) => !candidatos.includes(a) && (PALABRAS.test(a.descripcion) || (porClaveDe(a) && PALABRAS_HARDWARE.test(a.descripcion))),
+  );
+
+  console.log(`${activos.length} activos auto-creados revisados\n`);
+  console.log(`${candidatos.length} con evidencia fuerte (la clave del CFDI dice Software):`);
+  for (const a of candidatos) console.log(`${etiqueta(a)} → intangible ${(tasa * 100).toFixed(0)}%`);
+
+  if (sospechosos.length > 0) {
+    console.log(`\n${sospechosos.length} para MIRAR a mano — no se tocan:`);
+    for (const a of sospechosos) {
+      console.log(`${etiqueta(a)}   (${porClaveDe(a) ? "clave dice software pero el nombre dice hardware" : "sólo el nombre lo sugiere"})`);
+    }
   }
 
   if (!aplicar) {
