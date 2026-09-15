@@ -13,7 +13,7 @@ import {
   tokenIdentificante,
 } from "@/lib/bancos/auto-conciliar";
 import { sugerirPagoJunto } from "@/lib/bancos/pago-junto";
-import { buscarOrigenDevolucion, buscarRebotePosterior, pareceDevolucionSuelta } from "@/lib/bancos/devoluciones-repo";
+import { buscarOrigenDevolucion, buscarRebotePosterior, candidatosDePar, pareceDevolucionSuelta } from "@/lib/bancos/devoluciones-repo";
 import { signoDeMonto, sugerirCategoriaConcepto, type CompanyRule } from "@/lib/bancos/categorizar-concepto";
 import { sugerirCategoriaConceptoLLM } from "@/lib/bancos/categorizar-llm";
 import {
@@ -728,11 +728,28 @@ export async function GET(req: Request, { params }: Params) {
           };
         }
         const rebote = await buscarRebotePosterior(candidata);
-        return rebote
+        if (rebote) {
+          return {
+            estado: "sugerida" as const,
+            rol: "pago" as const,
+            par: { id: rebote.origenId, fecha: rebote.fecha.toISOString().slice(0, 10), monto: rebote.monto, descripcion: rebote.descripcion },
+          };
+        }
+        // Sin señal fuerte para proponer: lo que el validador SÍ aceptaría, para
+        // que lo elija quien sabe. Un par real puede no llegar al umbral —sin
+        // referencia común y sin que el banco escriba «devuelto»— y sin esto no
+        // quedaba forma de vincularlo.
+        const opciones = await candidatosDePar(candidata);
+        return opciones.length > 0
           ? {
-              estado: "sugerida" as const,
-              rol: "pago" as const,
-              par: { id: rebote.origenId, fecha: rebote.fecha.toISOString().slice(0, 10), monto: rebote.monto, descripcion: rebote.descripcion },
+              estado: "candidatos" as const,
+              opciones: opciones.map((o) => ({
+                id: o.origenId,
+                fecha: o.fecha.toISOString().slice(0, 10),
+                monto: o.monto,
+                descripcion: o.descripcion,
+                rol: o.rol,
+              })),
             }
           : null;
       })();

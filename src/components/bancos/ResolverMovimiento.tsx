@@ -88,12 +88,18 @@ function diaISO(fecha: string, dias: number): string {
 /** Lo que el servidor devuelve al conciliar el cobro de una PPD: hay que
  *  timbrar el complemento de pago. */
 /** El par de un pago rebotado: propuesto por el servidor o ya vinculado. */
-export interface EstadoDevolucion {
-  estado: "sugerida" | "vinculada";
-  /** Si este movimiento es el rebote o el pago que rebotó. */
-  rol: "rebote" | "pago";
-  par: { id: string; fecha: string; monto: number; descripcion: string };
-}
+export type EstadoDevolucion =
+  | {
+      estado: "sugerida" | "vinculada";
+      /** Si este movimiento es el rebote o el pago que rebotó. */
+      rol: "rebote" | "pago";
+      par: { id: string; fecha: string; monto: number; descripcion: string };
+    }
+  | {
+      /** Sin señal para proponer, pero hay pares posibles: elige una persona. */
+      estado: "candidatos";
+      opciones: Array<{ id: string; fecha: string; monto: number; descripcion: string; rol: "rebote" | "pago" }>;
+    };
 
 export interface RepSugerido {
   txId: string;
@@ -285,20 +291,24 @@ export function ResolverMovimiento({
    * acreditado sin flujo y los KPIs contando un gasto que volvió. Vincular
    * deshace la conciliación del original y neta el par en el libro.
    */
-  async function resolverDevolucion(accion: "vincular-devolucion" | "desvincular-devolucion") {
-    if (!devolucion) return;
+  async function resolverDevolucion(
+    accion: "vincular-devolucion" | "desvincular-devolucion",
+    elegido?: { id: string; rol: "rebote" | "pago" },
+  ) {
+    const par = elegido ?? (devolucion && devolucion.estado !== "candidatos" ? { id: devolucion.par.id, rol: devolucion.rol } : null);
+    if (!par) return;
     setOcupado(true);
     try {
       // `devolucionDeId` vive en el REBOTE y apunta al pago. Si el movimiento
       // abierto es el pago, el PATCH va sobre su rebote, con éste de origen:
       // el par se vincula desde cualquiera de los dos lados.
-      const esRebote = devolucion.rol === "rebote";
-      const objetivo = accion === "vincular-devolucion" && !esRebote ? devolucion.par.id : tx.id;
+      const esRebote = par.rol === "rebote";
+      const objetivo = accion === "vincular-devolucion" && !esRebote ? par.id : tx.id;
       const res = await fetch(`/api/bancos/transactions/${objetivo}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           accion === "vincular-devolucion"
-            ? { action: accion, origenId: esRebote ? devolucion.par.id : tx.id }
+            ? { action: accion, origenId: esRebote ? par.id : tx.id }
             : { action: accion },
         ),
       });
@@ -465,7 +475,7 @@ export function ResolverMovimiento({
           Movimientos, y el triage es de la mesa: aquí el rebote se vincula con
           su pago en un clic. Ignorar los dos deja la factura pagada, el IVA
           acreditado sin flujo y el par contando en los KPIs. */}
-      {devolucion && (
+      {devolucion && devolucion.estado !== "candidatos" && (
         <div
           className={cn(
             "rounded-control border px-3 py-2.5",
@@ -505,6 +515,41 @@ export function ResolverMovimiento({
           >
             {ocupado ? "Guardando…" : devolucion.estado === "vinculada" ? "Desvincular" : "Vincular como devolución"}
           </button>
+        </div>
+      )}
+
+      {/* Sin señal para proponer, pero hay pares posibles. Un depósito
+          equivocado que regresa no trae referencia común ni la palabra del
+          banco: no llega al umbral de la propuesta automática y antes no había
+          forma de vincularlo a mano. Esto lista lo que el validador acepta
+          —misma cuenta, monto opuesto al centavo, dentro de la ventana— y lo
+          elige quien sabe. */}
+      {devolucion?.estado === "candidatos" && (
+        <div className="rounded-control border border-cos-line bg-cos-paper px-3 py-2.5">
+          <p className="flex items-center gap-1.5 text-[12.5px] font-semibold text-cos-ink">
+            <ArrowLeftRight className="h-3.5 w-3.5 shrink-0" />
+            ¿Es el par de alguno de estos? ({devolucion.opciones.length})
+          </p>
+          <p className="mt-1 text-[11.5px] text-cos-ink-faint">
+            Mismo importe en sentido contrario, en esta cuenta y dentro de los 30 días. Vincularlos resuelve los dos
+            renglones y deshace la conciliación del pago.
+          </p>
+          <select
+            value=""
+            disabled={ocupado}
+            onChange={(e) => {
+              const o = devolucion.opciones.find((x) => x.id === e.target.value);
+              if (o) resolverDevolucion("vincular-devolucion", { id: o.id, rol: o.rol });
+            }}
+            className="mt-2 w-full rounded-control border border-cos-line bg-cos-card px-2.5 py-1.5 text-[12.5px] text-cos-ink"
+          >
+            <option value="">Elegir el movimiento con el que hace par…</option>
+            {devolucion.opciones.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.fecha} · {fmt(Math.abs(o.monto))} · {o.descripcion.slice(0, 50)}
+              </option>
+            ))}
+          </select>
         </div>
       )}
 

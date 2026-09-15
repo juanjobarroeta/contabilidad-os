@@ -142,3 +142,57 @@ export async function buscarRebotePosterior(origen: CandidataDevolucion): Promis
     ? { origenId: mejor.id, descripcion: mejor.descripcion, fecha: mejor.fecha, monto: mejor.monto }
     : null;
 }
+
+/** Una opción para vincular a mano, con el papel que jugaría el movimiento abierto. */
+export interface CandidatoPar extends OrigenPropuesto {
+  /** Si el movimiento abierto sería el rebote (el par es el pago) o al revés. */
+  rol: "rebote" | "pago";
+}
+
+/**
+ * Los pares POSIBLES cuando no hay uno que proponer.
+ *
+ * La propuesta automática exige señal fuerte (referencia idéntica, o la palabra
+ * del banco más cercanía) porque va a actuar sola. Un par real puede no llegar
+ * a ese umbral —un depósito equivocado que regresa, sin referencia común y sin
+ * que el banco escriba «devuelto»— y entonces no había NADA que hacer: ni
+ * propuesta ni forma de vincularlos a mano. Aquí se lista lo que el validador
+ * acepta (misma cuenta, monto opuesto al centavo, la devolución no antes que su
+ * pago, dentro de la ventana) y elige una persona, que es quien sabe.
+ */
+export async function candidatosDePar(tx: CandidataDevolucion, limite = 8): Promise<CandidatoPar[]> {
+  if (tx.devolucionDeId || tx.devolucionPor) return [];
+  const desde = new Date(tx.fecha.getTime() - DEVOLUCION_VENTANA_DIAS * 86400000);
+  const hasta = new Date(tx.fecha.getTime() + DEVOLUCION_VENTANA_DIAS * 86400000);
+  const posibles = (
+    await prisma.bankTransaction.findMany({
+      where: {
+        bankAccountId: tx.bankAccountId,
+        id: { not: tx.id },
+        fecha: { gte: desde, lte: hasta },
+        monto: -tx.monto,
+        devolucionDeId: null,
+        devolucionPor: { is: null },
+      },
+      select: { id: true, bankAccountId: true, fecha: true, monto: true, descripcion: true, referencia: true, status: true },
+      orderBy: { fecha: "desc" },
+      take: limite * 3,
+    })
+  ).map((p) => ({ ...p, monto: Number(p.monto) }));
+
+  const out: CandidatoPar[] = [];
+  for (const c of posibles) {
+    // Como rebote de este pago: el candidato es la devolución. Uno ya cruzado
+    // con su factura no es un rebote.
+    if (c.status !== "MATCHED" && validarParDevolucion(c, tx) === null) {
+      out.push({ origenId: c.id, descripcion: c.descripcion, fecha: c.fecha, monto: c.monto, rol: "pago" });
+      continue;
+    }
+    // O como el pago que este movimiento devuelve. Aquí el candidato SÍ puede
+    // estar conciliado: vincular deshace su conciliación, que es el punto.
+    if (validarParDevolucion(tx, c) === null) {
+      out.push({ origenId: c.id, descripcion: c.descripcion, fecha: c.fecha, monto: c.monto, rol: "rebote" });
+    }
+  }
+  return out.slice(0, limite);
+}
