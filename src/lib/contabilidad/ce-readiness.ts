@@ -376,6 +376,14 @@ export async function evaluarReadinessCE(
               { notes: null },
               { notes: { notIn: [...IGNORED_TAGS_VALIDOS] } },
             ],
+            // Salvo un par de devolución vinculado: el PAR es la categoría y
+            // el motor ya lo postea contra la cuenta puente. Sin esto, la
+            // pantalla de cierre acusaba «3 sin clasificar» —un UNMATCHED real
+            // más las dos patas de un rebote bien resuelto— mientras la mesa
+            // decía 1 y el mes contabilizaba sin problema. La verificación no
+            // puede ser más estricta que el motor que dice reflejar.
+            devolucionDeId: null,
+            devolucionPor: { is: null },
           },
         ],
       },

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, empresasAccesiblesIds, requireUser } from "@/lib/authz";
 import { armarCola, type SenalesEmpresa } from "@/lib/inicio/cola";
+import { IGNORED_TAGS_VALIDOS } from "@/lib/contabilidad/posting";
 import { calcularVencimiento, fechaCalendarioIso } from "@/lib/obligaciones";
 import { contratoMensualFiscal, OBLIGACION_FEDERAL_MENSUAL } from "@/lib/fiscal/contrato-mensual";
 import {
@@ -22,10 +23,10 @@ const MESES = [
 ];
 const MESES_CORTO = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 
-const TAGS_IGNORED = [
-  "PENDING_MONTHLY_CFDI", "TAX_PAYMENT", "PAYROLL_NO_CFDI", "NON_DEDUCTIBLE",
-  "INTERNAL_TRANSFER", "LOAN_RECEIVED", "LOAN_GIVEN", "CAPITAL_CONTRIBUTION",
-];
+// La lista viva del motor, no una copia: ésta se quedó en ocho tags mientras
+// el cierre ya aceptaba dieciséis, así que la cola de Inicio contaba como «sin
+// clasificar» rentas, intereses, anticipos y centavos del banco que el mes
+// contabiliza sin chistar. Un número que asusta y no corresponde a nada.
 
 export async function GET(req: Request) {
   try {
@@ -84,7 +85,14 @@ export async function GET(req: Request) {
             companyId: { in: companyIds },
             OR: [
               { status: "UNMATCHED" },
-              { status: "IGNORED", OR: [{ notes: null }, { notes: { notIn: TAGS_IGNORED } }] },
+              {
+                status: "IGNORED",
+                OR: [{ notes: null }, { notes: { notIn: [...IGNORED_TAGS_VALIDOS] } }],
+                // Un par de devolución vinculado no está sin clasificar: el par
+                // es la categoría (ver posting.esParDevolucion).
+                devolucionDeId: null,
+                devolucionPor: { is: null },
+              },
             ],
           },
           _count: { id: true },
