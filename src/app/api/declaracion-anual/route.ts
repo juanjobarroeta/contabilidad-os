@@ -206,7 +206,7 @@ export async function GET(req: Request) {
   const ajusteAuto = await (async () => {
     try {
       const { resultado, mesesSinPostear } = await cargarAjusteInflacion(companyId, ejercicio);
-      return ajusteParaDeclaracionAnual({ tipoPersona, resultado, mesesSinPostear });
+      return ajusteParaDeclaracionAnual({ tipoPersona: tipoPersona!, resultado, mesesSinPostear });
     } catch {
       return { acumulable: 0, deducible: 0, motivo: "No se pudo leer el libro para calcularlo." };
     }
