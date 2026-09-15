@@ -956,6 +956,13 @@ model Invoice {
    */
   naturalezaRevision Boolean @default(false)
   /**
+   * POR QUÉ hay que revisarla, en una línea y en voz del motor. El aviso de la
+   * ficha decía siempre lo mismo —«la clave sugiere activo fijo»— aunque la
+   * duda fuera la contraria: un CFDI con uso de inversión por $120 que huele a
+   * consumible, o una licencia que se amortiza en vez de depreciarse.
+   */
+  naturalezaMotivo   String?
+  /**
    * True cuando el contador fijó la naturaleza a mano — no la sobrescribe el re-sync.
    */
   naturalezaManual   Boolean @default(false)

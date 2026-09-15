@@ -47,6 +47,7 @@ interface Invoice {
   facturapiId: string | null;
   naturaleza: "GASTO" | "INVERSION" | "INVENTARIO" | "SIN_EFECTOS" | null;
   naturalezaRevision: boolean;
+  naturalezaMotivo?: string | null;
   regimenNomina: string | null;
   isrRetenidoNomina: number | null;
   /** ORDINARIA | EXTRAORDINARIA | FINIQUITO | AGUINALDO | PTU (lib/nomina/tipo-corrida). */
@@ -890,7 +891,14 @@ function NaturalezaRow({ inv }: { inv: Invoice }) {
       {revision && (
         <p className="mt-1.5 flex items-start gap-1.5 text-[12px] text-cos-amber-ink">
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          Clasificación automática por revisar — la clave del producto sugiere que podría ser activo fijo (a depreciar) en vez de gasto inmediato.
+          {/* El motivo lo escribe el motor (clasificar-cfdi.ts). Este aviso decía
+              SIEMPRE «la clave sugiere activo fijo», aunque la duda fuera la
+              contraria: una memoria USB facturada con uso de inversión leía el
+              mensaje exactamente al revés. Lo importado antes de guardar el
+              motivo cae al texto de siempre. */}
+          {inv.naturalezaMotivo?.trim()
+            ? inv.naturalezaMotivo
+            : "Clasificación automática por revisar — la clave del producto sugiere que podría ser activo fijo (a depreciar) en vez de gasto inmediato."}
         </p>
       )}
       {valor === "INVERSION" && (

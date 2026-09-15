@@ -40,6 +40,7 @@ export async function POST(req: Request, { params }: Params) {
     fileContent,
     filename,
     encoding: encoding === "base64" ? "base64" : "text",
+    mesEsperado: new URL(req.url).searchParams.get("mes"),
   });
 
   return NextResponse.json(result, { status: result.ok ? 200 : 422 });
