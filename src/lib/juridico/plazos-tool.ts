@@ -57,7 +57,7 @@ export async function ejecutarHerramientaPlazos(nombre: string, input: Record<st
   }
 
   if (nombre === "consultar_plazos") {
-    const plazos = await listarPlazos(casoId);
+    const plazos = await listarPlazos(casoId, { despachoId: (await despachoDe(ctx.userId))?.despachoId ?? null });
     return JSON.stringify({
       plazos: plazos.map((p) => ({ titulo: p.titulo, vence: p.vence, diasHabilesRestantes: p.diasHabilesRestantes, estado: p.estado, fundamento: p.fundamento })),
       resumen: plazos.length === 0 ? "sin plazos registrados" : `${plazos.length} plazo(s) abierto(s)`,

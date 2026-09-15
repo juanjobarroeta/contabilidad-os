@@ -9,7 +9,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "@/lib/prisma";
 import { apuntar, type Actor } from "./bitacora";
-import { alcance } from "./despacho";
+import { alcance, despachoDe } from "./despacho";
 import { noEncontrado, conflicto } from "./errores-api";
 import {
   type Calendario,
@@ -111,7 +111,7 @@ export async function simular(args: NuevoPlazo & { despachoId?: string | null })
   });
 }
 
-function aPlazo(f: Record<string, unknown>, hoy: string): Plazo {
+function aPlazo(f: Record<string, unknown>, hoy: string, inhabilesExtra: string[] = []): Plazo {
   const fuero = esFuero(f.fuero) ? f.fuero : "federal";
   const traza = Array.isArray(f.traza) ? (f.traza as PasoComputo[]) : [];
   const vence = aISO(f.vence as Date);
@@ -141,7 +141,9 @@ function aPlazo(f: Record<string, unknown>, hoy: string): Plazo {
     diasHabilesRestantes: 0,
     explicacion: "",
   };
-  p.diasHabilesRestantes = diasHabilesRestantes(vence, { fuero, inhabilesExtra: [], finDeSemanaInhabil: true }, hoy);
+  // Con los MISMOS inhábiles con que se computó el vencimiento: si la cuenta
+  // regresiva ignorara las vacaciones del juzgado, diría más días de los que hay.
+  p.diasHabilesRestantes = diasHabilesRestantes(vence, { fuero, inhabilesExtra, finDeSemanaInhabil: true }, hoy);
   p.explicacion = explicacion({ vence, inicio: traza.find((x) => x.clase === "cuenta")?.fecha ?? vence, dias: p.dias, tipo: p.tipo, pasos: traza, advertencias: p.advertencias });
   return p;
 }
@@ -186,13 +188,35 @@ export async function crearPlazo(casoId: string, userId: string, nuevo: NuevoPla
   return aPlazo(f as unknown as Record<string, unknown>, aISO(new Date()));
 }
 
-export async function listarPlazos(casoId: string, opts: { incluirCerrados?: boolean } = {}): Promise<Plazo[]> {
+export async function listarPlazos(casoId: string, opts: { incluirCerrados?: boolean; despachoId?: string | null } = {}): Promise<Plazo[]> {
   const filas = await prisma.juridicoPlazo.findMany({
     where: { casoId, ...(opts.incluirCerrados ? {} : { estado: { in: ["propuesto", "confirmado"] } }) },
     orderBy: [{ vence: "asc" }],
   });
   const hoy = aISO(new Date());
-  return filas.map((f) => aPlazo(f as unknown as Record<string, unknown>, hoy));
+  const extras = await inhabilesDeVentana(filas, hoy, opts.despachoId ?? null);
+  return filas.map((f) => aPlazo(f as unknown as Record<string, unknown>, hoy, extras.get(f.fuero) ?? []));
+}
+
+/**
+ * Los inhábiles que hacen falta para contar lo que resta, por fuero y de una
+ * sola consulta. Sin esto la cuenta regresiva diría más días de los que hay.
+ */
+async function inhabilesDeVentana(filas: { fuero: string; vence: Date }[], hoy: string, despachoId: string | null): Promise<Map<string, string[]>> {
+  const porFuero = new Map<string, string[]>();
+  if (filas.length === 0) return porFuero;
+  const hasta = filas.reduce((max, f) => (aISO(f.vence) > max ? aISO(f.vence) : max), hoy);
+  const registros = await prisma.juridicoInhabil.findMany({
+    where: {
+      fecha: { gte: new Date(`${hoy}T00:00:00Z`), lte: new Date(`${hasta}T00:00:00Z`) },
+      OR: [{ despachoId: null }, ...(despachoId ? [{ despachoId }] : [])],
+    },
+    select: { fecha: true, fuero: true },
+  });
+  for (const fuero of new Set(filas.map((f) => f.fuero))) {
+    porFuero.set(fuero, [...new Set(registros.filter((r) => r.fuero === null || r.fuero === fuero).map((r) => aISO(r.fecha)))].sort());
+  }
+  return porFuero;
 }
 
 /** Lo que vence pronto en todos los casos a los que alcanza esta persona. */
@@ -205,7 +229,8 @@ export async function plazosProximos(userId: string, opts: { dias?: number; limi
     take: Math.min(opts.limite ?? 50, 200),
   });
   const hoy = aISO(new Date());
-  return filas.map((f) => ({ ...aPlazo(f as unknown as Record<string, unknown>, hoy), casoTitulo: f.caso.titulo }));
+  const extras = await inhabilesDeVentana(filas, hoy, (await despachoDe(userId))?.despachoId ?? null);
+  return filas.map((f) => ({ ...aPlazo(f as unknown as Record<string, unknown>, hoy, extras.get(f.fuero) ?? []), casoTitulo: f.caso.titulo }));
 }
 
 async function conAlcance(id: string, userId: string) {

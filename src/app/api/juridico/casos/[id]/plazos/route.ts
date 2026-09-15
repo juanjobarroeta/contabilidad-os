@@ -23,7 +23,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const { id } = await params;
   if (!(await esDelUsuario(id, userId))) return NextResponse.json({ error: "Caso no encontrado" }, { status: 404 });
   const url = new URL(req.url);
-  return NextResponse.json({ plazos: await listarPlazos(id, { incluirCerrados: url.searchParams.get("todos") === "1" }) });
+  const despachoId = (await despachoDe(userId))?.despachoId ?? null;
+  return NextResponse.json({ plazos: await listarPlazos(id, { incluirCerrados: url.searchParams.get("todos") === "1", despachoId }) });
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
