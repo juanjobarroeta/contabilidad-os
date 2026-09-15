@@ -150,7 +150,14 @@ async function llamar(anthropic: Anthropic, args: { system: string; user: string
   let modelo = MODELO;
   for (;;) {
     try {
-      const res = await anthropic.messages.create({ model: modelo, max_tokens: args.maxTokens, system: args.system, messages: [{ role: "user", content: args.user }] });
+      // El system es el mismo para todas las secciones de un documento: con
+      // caché, de la segunda en adelante se lee a una décima parte del precio.
+      const res = await anthropic.messages.create({
+        model: modelo,
+        max_tokens: args.maxTokens,
+        system: [{ type: "text", text: args.system, cache_control: { type: "ephemeral" } }],
+        messages: [{ role: "user", content: args.user }],
+      });
       await recordLlmCost(modelo, res.usage, { ...args.cost, subtipo: args.subtipo });
       return res.content
         .filter((c): c is Anthropic.TextBlock => c.type === "text")
