@@ -21,6 +21,7 @@
 import { prisma } from "@/lib/prisma";
 import { calcularVencimiento } from "@/lib/obligaciones";
 import { esPersonaFisicaRfc, requiereDeclaracionAnual } from "@/lib/fiscal/regimen-anual";
+import { companyRegimenCodesForPeriod } from "@/lib/fiscal/regimen-capabilities";
 
 export type TipoAcuseFaltante = "DECLARACION_ANUAL" | "ISR_PROVISIONAL" | "IVA_MENSUAL" | "IEPS_MENSUAL";
 
@@ -90,7 +91,9 @@ export async function declaracionesFaltantesEmpresa(companyId: string): Promise<
       fechaInicioOperaciones: true,
       isActive: true,
       obligations: { where: { activa: true }, select: { tipo: true } },
-      regimenes: { where: { active: true }, select: { code: true } },
+      regimenes: {
+        select: { code: true, since: true, endedAt: true, active: true },
+      },
     },
   });
   if (!company || !company.isActive) return [];
@@ -101,18 +104,12 @@ export async function declaracionesFaltantesEmpresa(companyId: string): Promise<
   // IEPS es definitivo mensual como el IVA: mismo patrón de cobertura (año en
   // curso + diciembre previo para el arrastre, que sólo compensa contra IEPS).
   const tieneIEPS = tipos.has("IEPS_MENSUAL");
-  // La gran mayoría presenta anual; la pedimos para años cerrados si tiene ISR
-  // (provisional o anual)… EXCEPTO cuando el régimen la exime: RESICO PF
-  // (Art. 113-E, pagos definitivos) no presenta anual aunque su CSF liste la
-  // obligación y aunque tenga ISR mensual. Caso real: el agente le cobró a una
-  // cliente RESICO una "anual vencida" inexistente.
-  const tieneAnual =
-    (tieneISR || [...tipos].some((t) => t.includes("ANUAL"))) &&
-    requiereDeclaracionAnual({
-      regimenes: [company.regimenFiscal, ...company.regimenes.map((r) => r.code)],
-      esPersonaFisica: esPersonaFisicaRfc(company.rfc),
-    });
-  if (!tieneIVA && !tieneISR && !tieneIEPS && !tieneAnual) return [];
+  // La obligación vigente dice si existe un flujo anual que evaluar; el régimen
+  // aplicable se resuelve después, ejercicio por ejercicio. Usar sólo el régimen
+  // actual ocultaba una anual histórica 612 al cambiar a RESICO, o inventaba una
+  // anual RESICO al cambiar después a 612.
+  const puedeRequerirAnual = tieneISR || [...tipos].some((t) => t.includes("ANUAL"));
+  if (!tieneIVA && !tieneISR && !tieneIEPS && !puedeRequerirAnual) return [];
 
   const now = new Date();
   const curYear = now.getFullYear();
@@ -137,8 +134,19 @@ export async function declaracionesFaltantesEmpresa(companyId: string): Promise<
   const out: AcuseFaltante[] = [];
 
   // 1. Años cerrados → ANUAL (cubre ISR mensual del año).
-  if (tieneAnual) {
+  if (puedeRequerirAnual) {
     for (let y = startYear; y < curYear; y++) {
+      const regimenesEjercicio = companyRegimenCodesForPeriod({
+        regimenFiscal: company.regimenFiscal,
+        regimenes: company.regimenes,
+        from: new Date(Date.UTC(y, 0, 1)),
+        to: new Date(Date.UTC(y + 1, 0, 1)),
+      });
+      // RESICO PF puro no presenta anual. Sin evidencia para ese ejercicio, el
+      // helper conserva el default seguro de pedir revisión en vez de ocultarla.
+      if (!requiereDeclaracionAnual({ regimenes: regimenesEjercicio, esPersonaFisica: esPF })) {
+        continue;
+      }
       // La anual del ejercicio inmediato anterior no "falta" antes de su fecha
       // límite (ene–mar PM / ene–abr PF): está por presentarse.
       if (!anualVencida(y, esPF, now)) continue;

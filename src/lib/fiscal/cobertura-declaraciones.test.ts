@@ -1,5 +1,22 @@
-import { describe, expect, it } from "vitest";
-import { anualVencida, mensualVencido } from "./cobertura-declaraciones";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  companyFindUnique: vi.fn(),
+  declarationFindMany: vi.fn(),
+}));
+
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    company: { findUnique: mocks.companyFindUnique },
+    taxDeclaration: { findMany: mocks.declarationFindMany },
+  },
+}));
+
+import {
+  anualVencida,
+  declaracionesFaltantesEmpresa,
+  mensualVencido,
+} from "./cobertura-declaraciones";
 
 // Caso real (FRC ABOGADOS, 3-sep-2026): el banner pedía el acuse de agosto
 // 2026 cuando agosto vence el 17 de septiembre. Un periodo cuya fecha límite no
@@ -52,5 +69,102 @@ describe("anualVencida", () => {
   it("ejercicios más viejos siempre están vencidos", () => {
     expect(anualVencida(2023, false, new Date(2026, 0, 2))).toBe(true);
     expect(anualVencida(2023, true, new Date(2026, 0, 2))).toBe(true);
+  });
+});
+
+describe("declaracionesFaltantesEmpresa by historical regime", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 8, 15, 12));
+    mocks.companyFindUnique.mockReset();
+    mocks.declarationFindMany.mockReset();
+    mocks.declarationFindMany.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const company = (regimenFiscal: string, regimenes: Array<{
+    code: string;
+    since: Date | null;
+    endedAt: Date | null;
+    active: boolean;
+  }>) => ({
+    rfc: "AAAA010101AAA",
+    regimenFiscal,
+    fechaInicioOperaciones: new Date("2025-01-01T12:00:00.000Z"),
+    isActive: true,
+    obligations: [{ tipo: "ISR_PROVISIONAL" }],
+    regimenes,
+  });
+
+  it("asks for the 612 annual even when the taxpayer is now RESICO", async () => {
+    mocks.companyFindUnique.mockResolvedValue(company("626", [
+      {
+        code: "612",
+        since: new Date("2024-01-01T00:00:00.000Z"),
+        endedAt: new Date("2026-01-01T00:00:00.000Z"),
+        active: false,
+      },
+      {
+        code: "626",
+        since: new Date("2026-01-01T00:00:00.000Z"),
+        endedAt: null,
+        active: true,
+      },
+    ]));
+
+    const faltantes = await declaracionesFaltantesEmpresa("company-1");
+
+    expect(faltantes.filter((acuse) => acuse.tipo === "DECLARACION_ANUAL"))
+      .toMatchObject([{ periodo: "2025", critico: true }]);
+  });
+
+  it("does not invent a RESICO-only annual because the taxpayer is now 612", async () => {
+    mocks.companyFindUnique.mockResolvedValue(company("612", [
+      {
+        code: "626",
+        since: new Date("2024-01-01T00:00:00.000Z"),
+        endedAt: new Date("2026-01-01T00:00:00.000Z"),
+        active: false,
+      },
+      {
+        code: "612",
+        since: new Date("2026-01-01T00:00:00.000Z"),
+        endedAt: null,
+        active: true,
+      },
+    ]));
+
+    const faltantes = await declaracionesFaltantesEmpresa("company-1");
+
+    expect(faltantes.filter((acuse) => acuse.tipo === "DECLARACION_ANUAL"))
+      .toEqual([]);
+  });
+
+  it("reads the complete lifecycle instead of filtering only active rows", async () => {
+    mocks.companyFindUnique.mockResolvedValue(company("626", [{
+      code: "626",
+      since: new Date("2025-01-01T00:00:00.000Z"),
+      endedAt: null,
+      active: true,
+    }]));
+
+    await declaracionesFaltantesEmpresa("company-1");
+
+    expect(mocks.companyFindUnique).toHaveBeenCalledWith({
+      where: { id: "company-1" },
+      select: {
+        rfc: true,
+        regimenFiscal: true,
+        fechaInicioOperaciones: true,
+        isActive: true,
+        obligations: { where: { activa: true }, select: { tipo: true } },
+        regimenes: {
+          select: { code: true, since: true, endedAt: true, active: true },
+        },
+      },
+    });
   });
 });
