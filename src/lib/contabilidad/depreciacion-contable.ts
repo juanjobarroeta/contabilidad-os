@@ -29,6 +29,7 @@ export const CUENTA_ACTIVO_FIJO: Record<TipoActivo, string> = {
   computo:        "156.01", // Equipo de cómputo
   comunicaciones: "157.01", // Equipo de comunicación
   herramental:    "164.01", // Troqueles, moldes, matrices y herramental
+  intangible:     "176.01", // Activos intangibles (no es activo FIJO: se amortiza)
   otro:           "160.01", // Otros activos fijos
 };
 
@@ -43,6 +44,8 @@ export const CUENTA_DEPRECIACION_ACUMULADA: Record<TipoActivo, string> = {
   computo:        "171.05",
   comunicaciones: "171.06",
   herramental:    "171.12",
+  // Amortización, no depreciación: su acumulada vive en 183.x.
+  intangible:     "183.04",
   otro:           "171.08",
 };
 
@@ -56,6 +59,7 @@ export const CUENTA_PERDIDA_BAJA: Record<TipoActivo, string> = {
   computo:        "703.06",
   comunicaciones: "703.07",
   herramental:    "703.09",
+  intangible:     "703.09",
   otro:           "703.09",
 };
 

@@ -33,6 +33,7 @@ export type SubtipoInversion =
   | "herramental"       // I05
   | "comunicaciones"    // I06, I07
   | "maquinaria"        // I08
+  | "intangible"        // software, licencias: se AMORTIZA (Art. 33), no se deprecia
   | "otro";
 
 export interface ClasificacionItem {
@@ -79,8 +80,26 @@ const CLAVE_INVERSION_PREFIJOS = ["251", "4321", "24", "23", "2510"];
 // Vehículos de PASAJEROS (tope Art. 36-II) vs carga. Catálogo SAT:
 //   25101500/25101600/25101900 automóviles · 25101800/25101700 camiones de carga,
 //   pickups, tractocamiones (sin tope). Heurística por prefijo.
+// Software y licencias. El catálogo del SAT los agrupa en 43230000
+// («Software»): 432315xx aplicaciones y negocios, 432320xx sistemas
+// operativos, 432321xx herramientas de desarrollo… Un bien de estos NO se
+// deprecia: se amortiza (Art. 33), en otra cuenta y a otra tasa.
+const CLAVE_INTANGIBLE_PREFIJOS = ["4323", "81112"];
+
+/**
+ * Por debajo de esto, una «inversión» casi siempre es un consumible que alguien
+ * facturó con uso I0x: un cable, una memoria, un teclado. NO es un umbral legal
+ * —la LISR no tiene monto mínimo para capitalizar— sino una señal para que lo
+ * mire una persona antes de depreciar tres años un gasto del mes.
+ */
+export const MONTO_REVISION_INVERSION = 5000;
+
 const CLAVE_AUTO_PASAJEROS = ["251015", "251016", "251019"];
 const CLAVE_VEHICULO_CARGA = ["251017", "251018", "251020", "251021", "251022"];
+
+function pareceIntangible(items: ClasificacionItem[]): boolean {
+  return items.some((it) => CLAVE_INTANGIBLE_PREFIJOS.some((p) => it.claveProdServ?.startsWith(p)));
+}
 
 function pareceInversion(items: ClasificacionItem[]): boolean {
   return items.some((it) => CLAVE_INVERSION_PREFIJOS.some((p) => it.claveProdServ?.startsWith(p)));
@@ -137,6 +156,26 @@ export function clasificarCfdi(input: ClasificarInput): ClasificacionCfdi {
       subtipoInversion: subtipo,
       requiereRevision: false,
     };
+
+    // EL GUARDIA QUE FALTABA, DEL OTRO LADO. Un G03 cuya clave parece activo ya
+    // se marcaba; un I0x cuya clave parece software o cuyo importe parece un
+    // consumible, no se cuestionaba nunca. Por ahí entraban una licencia al
+    // 30 % como equipo de cómputo y una memoria USB depreciándose tres años.
+    if (pareceIntangible(items)) {
+      out.subtipoInversion = "intangible";
+      out.fundamento = "Art. 33 LISR (amortización de gastos diferidos)";
+      out.requiereRevision = true;
+      out.motivoRevision =
+        "La clave de producto dice software o licencia: eso se AMORTIZA (Art. 33), no se deprecia. Confirma si es licencia perpetua (cargo diferido 5 %), gasto diferido (15 %) o una suscripción del periodo, que no es activo.";
+      return out;
+    }
+
+    const importe = items.reduce((s, it) => s + (Number(it.importe) || 0), 0);
+    if (importe > 0 && importe < MONTO_REVISION_INVERSION) {
+      out.requiereRevision = true;
+      out.motivoRevision = `El uso dice inversión pero el importe es de $${importe.toFixed(2)}: confirma que sea un activo y no un consumible del periodo.`;
+    }
+
     if (subtipo === "transporte") {
       const tope = detectarTopeAutomovil(items);
       out.posibleTopeAutomovil = tope;
