@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aplicarCorrecciones, armarDocumento, buscarSeccion, esquemaComoMarkdown, type Plan } from "./redaccion-estructurada";
+import { aplicarCorrecciones, armarDocumento, bloquesDeUser, buscarSeccion, encabezadoConDocumento, esquemaComoMarkdown, type Plan } from "./redaccion-estructurada";
 
 const plan: Plan = {
   titulo: "Contestación de demanda — exp. 133/2025",
@@ -40,5 +40,70 @@ describe("redacción por esquema", () => {
     expect(buscarSeccion(plan, "excepciones")?.n).toBe(3);
     expect(buscarSeccion(plan, "CONTESTACION A LOS HECHOS")?.n).toBe(2);
     expect(buscarSeccion(plan, "firmas")).toBeUndefined();
+  });
+});
+
+// El bug que estas pruebas cuidan: el `cache_control` iba en el `system`, que
+// aquí son frases de 124 caracteres. Anthropic ignora en silencio los prefijos
+// de menos de ~1024 tokens, así que PARECÍA cacheado y no lo estaba. Medido en
+// producción: 0 tokens leídos de caché en redacción y revisión, todos los días.
+describe("dónde se pide el caché", () => {
+  const largo = (n: number) => "x".repeat(n);
+
+  it("un texto suelto va sin punto de caché", () => {
+    const b = bloquesDeUser("hola");
+    expect(b).toHaveLength(1);
+    expect(b[0]).not.toHaveProperty("cache_control");
+  });
+
+  it("no lo pide cuando el prefijo no llega al mínimo: sería un gesto vacío", () => {
+    const b = bloquesDeUser([{ texto: "Eres un abogado revisor.", cachear: true }, { texto: "el resto" }]);
+    expect(b.some((x) => "cache_control" in x)).toBe(false);
+  });
+
+  it("lo pide en cuanto el prefijo da el mínimo", () => {
+    const b = bloquesDeUser([{ texto: largo(4_000), cachear: true }, { texto: "instrucciones" }]);
+    expect(b[0]).toHaveProperty("cache_control");
+    expect(b[1]).not.toHaveProperty("cache_control");
+  });
+
+  it("gasta dos puntos como mucho: el API sólo admite cuatro y el resto son del system", () => {
+    const b = bloquesDeUser([
+      { texto: largo(4_000), cachear: true },
+      { texto: largo(4_000), cachear: true },
+      { texto: largo(4_000), cachear: true },
+      { texto: "cola" },
+    ]);
+    expect(b.filter((x) => "cache_control" in x)).toHaveLength(2);
+  });
+
+  it("tira los trozos vacíos, que sólo ensucian el prefijo", () => {
+    expect(bloquesDeUser([{ texto: "" }, { texto: "algo" }])).toEqual([{ type: "text", text: "algo" }]);
+  });
+
+  it("nunca devuelve un mensaje sin bloques", () => {
+    expect(bloquesDeUser([{ texto: "" }])).toHaveLength(1);
+  });
+});
+
+// De esto depende que la relectura lea de caché lo que escribió la pasada de
+// coherencia: si los dos textos no son idénticos byte a byte, no hay prefijo
+// compartido y se paga el documento entero dos veces.
+describe("el encabezado con el documento", () => {
+  const secciones = [{ n: 1, titulo: "Proemio" }, { n: 2, titulo: "Hechos" }];
+
+  it("es el mismo para la coherencia y para la relectura", () => {
+    const a = encabezadoConDocumento(secciones, "El documento.");
+    const b = encabezadoConDocumento([...secciones], "El documento.");
+    expect(a).toBe(b);
+    expect(a).toContain("Secciones:");
+    expect(a).toContain("[2] Hechos");
+    expect(a.endsWith("El documento.")).toBe(true);
+  });
+
+  it("corta los documentos enormes en el mismo punto", () => {
+    const enorme = "y".repeat(200_000);
+    expect(encabezadoConDocumento(secciones, enorme)).toBe(encabezadoConDocumento(secciones, enorme));
+    expect(encabezadoConDocumento(secciones, enorme).length).toBeLessThan(121_000);
   });
 });
