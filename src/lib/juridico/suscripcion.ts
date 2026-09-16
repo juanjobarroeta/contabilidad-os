@@ -75,7 +75,16 @@ export function diasHasta(fecha: Date | null, ahora: Date = new Date()): number 
  * una cuota es peor negocio que facturarle un paquete.
  */
 export function decidirSuscripcion(
-  d: { plan: PlanDespacho; pruebaHasta: Date | null; asientos: number; periodoFin: Date | null; documentosDelMes: number; gastoUsd?: number },
+  d: {
+    plan: PlanDespacho;
+    pruebaHasta: Date | null;
+    asientos: number;
+    periodoFin: Date | null;
+    documentosDelMes: number;
+    gastoUsd?: number;
+    /** El despacho del operador no se corta por gasto: es nuestra propia casa. */
+    sinTopeDeGasto?: boolean;
+  },
   ahora: Date = new Date()
 ): EstadoSuscripcion {
   const dias = diasHasta(d.pruebaHasta, ahora);
@@ -109,13 +118,13 @@ export function decidirSuscripcion(
   if (d.documentosDelMes >= DOCUMENTOS_DE_PRUEBA) {
     return { ...base, activo: false, avisar: true, motivo: `La prueba incluye ${DOCUMENTOS_DE_PRUEBA} documentos y ya los usaste. Activa el plan para seguir; lo redactado es tuyo y ahí está.` };
   }
-  if (gasto >= TOPE_USD_PRUEBA) {
+  if (gasto >= TOPE_USD_PRUEBA && !d.sinTopeDeGasto) {
     return { ...base, activo: false, avisar: true, motivo: "Le sacaste a la prueba todo lo que trae. Activa el plan para seguir hoy mismo; tus casos y tus borradores quedan como están." };
   }
   return {
     ...base,
     activo: true,
-    avisar: (dias ?? 99) <= 2 || d.documentosDelMes >= DOCUMENTOS_DE_PRUEBA - 1 || gasto >= TOPE_USD_PRUEBA * 0.8,
+    avisar: (dias ?? 99) <= 2 || d.documentosDelMes >= DOCUMENTOS_DE_PRUEBA - 1 || (!d.sinTopeDeGasto && gasto >= TOPE_USD_PRUEBA * 0.8),
   };
 }
 
@@ -141,6 +150,18 @@ export async function gastoDePruebaUsd(despachoId: string, desde: Date): Promise
   return (r._sum.costoMicroUsd ?? 0) / 1_000_000;
 }
 
+/**
+ * ¿Hay un operador en el despacho? El tope de gasto de la prueba es para los
+ * prospectos, no para nuestra propia casa: el 16-sep-2026 el despacho del
+ * operador llevaba 49.98 USD de uso real y el tope de 20 lo dejó fuera de su
+ * propio producto. Mismo criterio que `asegurarConsumoJuridico`, y se lee
+ * directo de prisma para no arrastrar next-auth a las pruebas puras.
+ */
+export async function despachoDeOperador(despachoId: string): Promise<boolean> {
+  const n = await prisma.juridicoMiembro.count({ where: { despachoId, user: { esOperador: true } } });
+  return n > 0;
+}
+
 export async function estadoSuscripcion(despachoId: string, ahora: Date = new Date()): Promise<EstadoSuscripcion | null> {
   const d = await prisma.juridicoDespacho.findUnique({ where: { id: despachoId }, select: { plan: true, pruebaHasta: true, asientos: true, periodoFin: true, createdAt: true } });
   if (!d) return null;
@@ -156,6 +177,7 @@ export async function estadoSuscripcion(despachoId: string, ahora: Date = new Da
       documentosDelMes: await documentosDelMes(despachoId, desde),
       // El gasto sólo importa mientras la prueba corre: quien ya paga no tiene tope aquí.
       gastoUsd: enPrueba ? await gastoDePruebaUsd(despachoId, d.createdAt) : 0,
+      sinTopeDeGasto: enPrueba ? await despachoDeOperador(despachoId) : true,
     },
     ahora
   );

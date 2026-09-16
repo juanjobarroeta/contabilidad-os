@@ -111,3 +111,32 @@ describe("el tope de gasto de la prueba", () => {
     expect(vencida.motivo).toContain("7 días");
   });
 });
+
+// El 16-sep-2026 el tope de 20 USD dejó al operador fuera de su propio
+// producto: su despacho llevaba 49.98 USD de uso real. El tope es para los
+// prospectos, no para nuestra propia casa.
+describe("el despacho del operador no se corta por gasto", () => {
+  const conOperador = (gastoUsd: number) =>
+    decidirSuscripcion({ plan: "prueba", pruebaHasta: enDias(5), asientos: 1, periodoFin: null, documentosDelMes: 0, gastoUsd, sinTopeDeGasto: true }, ahora);
+
+  it("sigue trabajando muy por encima del tope", () => {
+    const e = conOperador(TOPE_USD_PRUEBA * 5);
+    expect(e.activo).toBe(true);
+    expect(e.avisar).toBe(false);
+  });
+
+  it("aun así reporta el gasto real, sin maquillarlo", () => {
+    expect(conOperador(49.98).gastoUsd).toBe(49.98);
+  });
+
+  it("los días y los documentos sí lo siguen cortando", () => {
+    const porDias = decidirSuscripcion({ plan: "prueba", pruebaHasta: enDias(0), asientos: 1, periodoFin: null, documentosDelMes: 0, gastoUsd: 999, sinTopeDeGasto: true }, ahora);
+    expect(porDias.activo).toBe(false);
+    const porDocs = decidirSuscripcion({ plan: "prueba", pruebaHasta: enDias(5), asientos: 1, periodoFin: null, documentosDelMes: DOCUMENTOS_DE_PRUEBA, gastoUsd: 999, sinTopeDeGasto: true }, ahora);
+    expect(porDocs.activo).toBe(false);
+  });
+
+  it("a un despacho normal el tope sí lo corta", () => {
+    expect(decidirSuscripcion({ plan: "prueba", pruebaHasta: enDias(5), asientos: 1, periodoFin: null, documentosDelMes: 0, gastoUsd: TOPE_USD_PRUEBA }, ahora).activo).toBe(false);
+  });
+});
