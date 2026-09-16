@@ -146,17 +146,77 @@ function json<T>(texto: string, abre: string, cierra: string): T | null {
 
 // ── Modelo ───────────────────────────────────────────────────────────────────
 
-async function llamar(anthropic: Anthropic, args: { system: string; user: string; maxTokens: number; cost: CostCtx; subtipo: string }): Promise<string> {
+/**
+ * Un trozo del mensaje del usuario. `cachear` pide un punto de caché DESPUÉS de
+ * este trozo: todo lo anterior se lee a una décima parte del precio en la
+ * llamada siguiente.
+ */
+export interface TrozoUser {
+  texto: string;
+  cachear?: boolean;
+}
+
+/**
+ * Mínimo de caracteres para que valga la pena pedir caché. Anthropic no cachea
+ * prefijos de menos de ~1024 tokens: pedirlo por debajo no falla, simplemente
+ * se ignora en silencio. Con ~3.5 caracteres por token en español, 3 600.
+ */
+const MIN_CHARS_CACHE = 3_600;
+
+/**
+ * Arma el mensaje del usuario poniendo los puntos de caché donde de verdad
+ * sirven. Puro, para poder probarlo.
+ *
+ * Por qué existe: antes el `cache_control` iba en el `system`, que aquí son
+ * frases de 124 caracteres («Eres un abogado revisor…»). Por debajo del mínimo
+ * Anthropic lo ignora sin decir nada, así que PARECÍA cacheado y no lo estaba,
+ * mientras el bulto de verdad —el asunto, el esquema, las secciones ya escritas
+ * y el documento entero— viajaba en el mensaje del usuario a precio completo en
+ * cada sección. Medido en producción: 0 tokens leídos de caché en redacción y
+ * revisión, todos los días.
+ */
+export function bloquesDeUser(trozos: string | TrozoUser[]): Anthropic.TextBlockParam[] {
+  if (typeof trozos === "string") return [{ type: "text", text: trozos }];
+  const bloques: Anthropic.TextBlockParam[] = [];
+  let acumulado = 0;
+  let puntos = 0;
+  for (const t of trozos) {
+    if (!t.texto) continue;
+    acumulado += t.texto.length;
+    const bloque: Anthropic.TextBlockParam = { type: "text", text: t.texto };
+    // El límite del API son cuatro puntos por petición; aquí se gastan dos como
+    // mucho y el prefijo tiene que dar el mínimo para que no sea un gesto vacío.
+    if (t.cachear && acumulado >= MIN_CHARS_CACHE && puntos < 2) {
+      bloque.cache_control = { type: "ephemeral" };
+      puntos++;
+    }
+    bloques.push(bloque);
+  }
+  return bloques.length > 0 ? bloques : [{ type: "text", text: "" }];
+}
+
+/**
+ * El encabezado con el documento entero, tal como lo mandan la pasada de
+ * coherencia y la relectura final. Es UNA función a propósito: las dos
+ * llamadas comparten el prefijo de caché sólo si el texto es idéntico byte a
+ * byte, y dos plantillas parecidas escritas en dos lugares distintos se
+ * separan en cuanto alguien toca una.
+ */
+export function encabezadoConDocumento(secciones: { n: number; titulo: string }[], doc: string): string {
+  return ["Secciones:", secciones.map((s) => `[${s.n}] ${s.titulo}`).join("\n"), "", "Documento:", doc.slice(0, 120_000)].join("\n");
+}
+
+async function llamar(anthropic: Anthropic, args: { system: string; user: string | TrozoUser[]; maxTokens: number; cost: CostCtx; subtipo: string }): Promise<string> {
   let modelo = MODELO;
   for (;;) {
     try {
-      // El system es el mismo para todas las secciones de un documento: con
-      // caché, de la segunda en adelante se lee a una décima parte del precio.
+      // El caché va en el MENSAJE, no en el system: estos system son frases
+      // cortas, por debajo del mínimo que Anthropic cachea.
       const res = await anthropic.messages.create({
         model: modelo,
         max_tokens: args.maxTokens,
-        system: [{ type: "text", text: args.system, cache_control: { type: "ephemeral" } }],
-        messages: [{ role: "user", content: args.user }],
+        system: args.system,
+        messages: [{ role: "user", content: bloquesDeUser(args.user) }],
       });
       await recordLlmCost(modelo, res.usage, { ...args.cost, subtipo: args.subtipo });
       return res.content
@@ -206,16 +266,26 @@ function contextoPrevio(plan: Plan, hasta: number): string {
 
 async function redactarSeccion(anthropic: Anthropic, plan: Plan, seccion: PlanSeccion, asunto: Asunto | null, cost: CostCtx, instrucciones?: string): Promise<{ markdown: string; citas: string[] }> {
   const normas = await normasPara(seccion, plan, cost);
-  const user = [
+  const unir = (ls: (string | false | undefined)[]) => ls.filter((l): l is string => !!l && l !== "").join("\n");
+  // El orden NO es cosmético: manda el caché. Primero lo que no cambia en todo
+  // el documento, luego lo que sólo crece, y al final lo de esta sección. Así
+  // la sección 7 lee de caché todo lo que ya viajó en la 6 en vez de pagarlo.
+  const estable = unir([
     bloqueAsuntoParaPrompt(asunto),
     `## Documento: ${plan.titulo} (${plan.tipo})`,
     plan.instrucciones ? `Instrucciones generales: ${plan.instrucciones}` : "",
     "",
     "## Esquema completo",
     plan.secciones.map((s) => `${s.n}. ${s.titulo} — ${s.proposito}`).join("\n"),
+  ]);
+  // Crece con cada sección, pero siempre empezando igual: el prefijo compartido
+  // con la llamada anterior se lee de caché.
+  const previas = unir([
     "",
     "## Secciones ya redactadas (mantén sus términos definidos, nombres, numeración y referencias)",
     contextoPrevio(plan, seccion.n) || "(ninguna todavía)",
+  ]);
+  const deEstaSeccion = unir([
     "",
     `## Normas recuperadas para la sección ${seccion.n}`,
     normas.texto,
@@ -227,17 +297,33 @@ async function redactarSeccion(anthropic: Anthropic, plan: Plan, seccion: PlanSe
     instrucciones ? `Instrucciones específicas: ${instrucciones}` : "",
     "",
     "Formato: Markdown. Si es una cláusula, empieza con su título en negritas al inicio del párrafo («**PRIMERA.- OBJETO.**»); si es un apartado (Hechos, Derecho, Pruebas, Puntos petitorios), empieza con «## Título». Numera hechos y fracciones. Sin comentarios, sin notas al abogado, sin repetir otras secciones: sólo el texto final de esta sección.",
-  ]
-    .filter((l) => l !== "")
-    .join("\n");
-  const markdown = await llamar(anthropic, { system: SYSTEM_REDACTOR, user, maxTokens: 4_000, cost, subtipo: "ai.juridico.redaccion" });
+  ]);
+  const markdown = await llamar(anthropic, {
+    system: SYSTEM_REDACTOR,
+    user: [{ texto: estable, cachear: true }, { texto: previas, cachear: true }, { texto: deEstaSeccion }],
+    maxTokens: 4_000,
+    cost,
+    subtipo: "ai.juridico.redaccion",
+  });
   return { markdown, citas: normas.citas };
 }
 
 async function pasadaDeCoherencia(anthropic: Anthropic, plan: Plan, cost: CostCtx): Promise<{ n: number; markdown: string }[]> {
   const doc = armarDocumento(plan);
-  const user = `Revisa la COHERENCIA de este documento redactado por secciones: términos definidos que cambian de nombre, referencias cruzadas rotas («la cláusula anterior», «el artículo 5» cuando es el 7), numeración, partes llamadas distinto, datos que difieren entre secciones, repeticiones. Devuelve SOLO JSON con las secciones que haya que corregir, con su texto completo corregido: {"correcciones":[{"n":<número>,"markdown":"<texto completo de la sección>"}]}. Si no hay nada que corregir: {"correcciones":[]}. No cambies el fondo ni añadas contenido.\n\nSecciones:\n${plan.secciones.map((s) => `[${s.n}] ${s.titulo}`).join("\n")}\n\nDocumento:\n${doc.slice(0, 120_000)}`;
-  const out = await llamar(anthropic, { system: "Eres un abogado revisor. Sólo coherencia interna. Respondes con JSON.", user, maxTokens: 12_000, cost, subtipo: "ai.juridico.redaccion" });
+  // El documento va PRIMERO y con punto de caché: es el bulto, es idéntico al
+  // que releerá `revisar_documento` después, y así la segunda llamada lo lee a
+  // una décima parte en vez de reenviarlo entero.
+  const encabezado = encabezadoConDocumento(plan.secciones, doc);
+  const out = await llamar(anthropic, {
+    system: "Eres un abogado revisor. Sólo coherencia interna. Respondes con JSON.",
+    user: [
+      { texto: encabezado, cachear: true },
+      { texto: `\nRevisa la COHERENCIA de este documento redactado por secciones: términos definidos que cambian de nombre, referencias cruzadas rotas («la cláusula anterior», «el artículo 5» cuando es el 7), numeración, partes llamadas distinto, datos que difieren entre secciones, repeticiones. Devuelve SOLO JSON con las secciones que haya que corregir, con su texto completo corregido: {"correcciones":[{"n":<número>,"markdown":"<texto completo de la sección>"}]}. Si no hay nada que corregir: {"correcciones":[]}. No cambies el fondo ni añadas contenido.` },
+    ],
+    maxTokens: 12_000,
+    cost,
+    subtipo: "ai.juridico.redaccion",
+  });
   return json<{ correcciones: { n: number; markdown: string }[] }>(out, "{", "}")?.correcciones ?? [];
 }
 
@@ -450,7 +536,12 @@ export async function ejecutarRedaccionEstructurada(nombre: string, input: Recor
     const citas = extraerCitas(doc);
     const conocidas = new Set(plan.secciones.flatMap((s) => s.fundamentos ?? []));
     const citasNoVerificables = citas.filter((c) => ![...conocidas].some((k) => k.toLowerCase().includes(c.toLowerCase()) || c.toLowerCase().includes(k.toLowerCase())));
-    const user = [
+    // Mismo encabezado y mismo documento que la pasada de coherencia, y en el
+    // mismo orden: si el documento no cambió, esta llamada lo lee de caché
+    // entero. Las instrucciones van al final, que además es donde mejor se
+    // siguen cuando arriba hay cien mil caracteres de texto.
+    const encabezado = encabezadoConDocumento(plan.secciones, doc);
+    const indicaciones = [
       bloqueAsuntoParaPrompt(ctx.asunto),
       `## Relectura final de «${plan.titulo}» (${plan.tipo}) antes de entregarlo al cliente`,
       "Revisa y reporta observaciones por sección, con gravedad alta (no se puede entregar así), media (conviene corregir) o baja (mecánico):",
@@ -462,14 +553,14 @@ export async function ejecutarRedaccionEstructurada(nombre: string, input: Recor
       `6. Citas normativas: estas no fueron devueltas por la base y hay que verificarlas o quitarlas: ${citasNoVerificables.length ? citasNoVerificables.join("; ") : "ninguna"}.`,
       "7. Riesgos para nuestro cliente que el abogado deba ver antes de firmar o presentar.",
       'Responde SOLO con JSON: {"observaciones":[{"seccion":<n o null>,"gravedad":"alta|media|baja","texto":"…"}],"correcciones":[{"n":<sección>,"markdown":"<texto completo corregido, sólo para lo mecánico: numeración, referencias, erratas>"}],"listo":<true si no hay observaciones altas>}',
-      "",
-      "Secciones:",
-      plan.secciones.map((s) => `[${s.n}] ${s.titulo}`).join("\n"),
-      "",
-      "Documento:",
-      doc.slice(0, 120_000),
     ].join("\n");
-    const out = await llamar(ctx.anthropic, { system: "Eres el socio que relee antes de entregar. Exigente, concreto, sin cortesía. Respondes con JSON.", user, maxTokens: 12_000, cost, subtipo: "ai.juridico.revision" });
+    const out = await llamar(ctx.anthropic, {
+      system: "Eres el socio que relee antes de entregar. Exigente, concreto, sin cortesía. Respondes con JSON.",
+      user: [{ texto: encabezado, cachear: true }, { texto: indicaciones }],
+      maxTokens: 12_000,
+      cost,
+      subtipo: "ai.juridico.revision",
+    });
     const r = json<{ observaciones: Observacion[]; correcciones: { n: number; markdown: string }[]; listo: boolean }>(out, "{", "}");
     const observaciones: Observacion[] = (r?.observaciones ?? []).filter((o) => o && typeof o.texto === "string").map((o) => ({ seccion: typeof o.seccion === "number" ? o.seccion : undefined, gravedad: (["alta", "media", "baja"].includes(o.gravedad) ? o.gravedad : "media") as Observacion["gravedad"], texto: o.texto.slice(0, 600) })).slice(0, 40);
     for (const c of citasNoVerificables) observaciones.push({ gravedad: "alta", texto: `Cita no verificable en la base: ${c}. Verifícala o quítala.` });
