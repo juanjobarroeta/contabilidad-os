@@ -63,7 +63,7 @@ export async function GET() {
       distinct: ["companyId", "tipo"],
       select: {
         id: true, companyId: true, tipo: true, resultado: true, motivos: true,
-        perfil: true, acuseUrl: true, vigencia: true, fetchedAt: true,
+        perfil: true, acuseUrl: true, acusePdfNombre: true, vigencia: true, fetchedAt: true,
       },
     }),
     prisma.fiscalHallazgo.findMany({
@@ -102,7 +102,7 @@ export async function GET() {
             motivos: sat.motivos,
             vigencia: sat.vigencia ? sat.vigencia.toISOString() : null,
             fetchedAt: sat.fetchedAt.toISOString(),
-            tieneAcuse: !!sat.acuseUrl,
+            tieneAcuse: !!(sat.acuseUrl || sat.acusePdfNombre),
           }
         : null,
       csf: csf
@@ -113,7 +113,7 @@ export async function GET() {
             obligacionesCount: perfil?.obligaciones?.length ?? 0,
             codigoPostal: perfil?.codigoPostal ?? null,
             fetchedAt: csf.fetchedAt.toISOString(),
-            tieneAcuse: !!csf.acuseUrl,
+            tieneAcuse: !!(csf.acuseUrl || csf.acusePdfNombre),
           }
         : null,
       hallazgos: hallazgosByCompany.get(c.id) ?? [],

@@ -2,13 +2,26 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { empresasAccesiblesIds } from "@/lib/authz";
+import { bytesDeDataUrl } from "@/lib/fiscal/cumplimiento/persist";
 import { SyntageClient, SyntageError } from "@/lib/fiscal/cumplimiento/syntage";
 
 // GET /api/cumplimiento/acuse/[snapshotId]
-// Proxy server-side del acuse PDF (opinión SAT / CSF) que vive en Syntage. Nunca
-// expone SYNTAGE_API_KEY al browser: descarga con la API key y hace stream del PDF.
-// La resolución del archivo (ref directa al file vs. recurso padre) la maneja
-// SyntageClient.downloadAcuse().
+// Stream del acuse PDF (opinión SAT 32-D / opinión IMSS / CSF) de un snapshot.
+// Orden de fuentes: (1) los bytes guardados en la base (acusePdf — lo normal
+// desde que SatGo y el gap-fill los guardan), (2) la data URL legado que el
+// proveedor IMSS dejaba en acuseUrl, (3) proxy server-side a Syntage para las
+// referencias viejas que aún no se han bajado. Nunca expone SYNTAGE_API_KEY.
+
+function pdf(bytes: Uint8Array<ArrayBuffer>, nombre: string, contentType = "application/pdf") {
+  return new NextResponse(bytes, {
+    status: 200,
+    headers: {
+      "Content-Type": contentType,
+      "Content-Disposition": `inline; filename="${nombre}"`,
+      "Cache-Control": "private, max-age=300",
+    },
+  });
+}
 
 export async function GET(_req: Request, { params }: { params: Promise<{ snapshotId: string }> }) {
   const session = await auth();
@@ -17,7 +30,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ snapsho
   const { snapshotId } = await params;
   const snapshot = await prisma.complianceSnapshot.findUnique({
     where: { id: snapshotId },
-    select: { id: true, companyId: true, tipo: true, acuseUrl: true },
+    select: { id: true, companyId: true, tipo: true, acuseUrl: true, acusePdf: true, acusePdfNombre: true },
   });
   if (!snapshot) return NextResponse.json({ error: "Acuse no encontrado" }, { status: 404 });
 
@@ -26,24 +39,19 @@ export async function GET(_req: Request, { params }: { params: Promise<{ snapsho
   if (!ids.includes(snapshot.companyId)) {
     return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
   }
+
+  const nombreDefault = `acuse-${snapshot.tipo.toLowerCase()}-${snapshot.id}.pdf`;
+  if (snapshot.acusePdf && snapshot.acusePdf.byteLength > 0) {
+    return pdf(new Uint8Array(snapshot.acusePdf), snapshot.acusePdfNombre || nombreDefault);
+  }
   if (!snapshot.acuseUrl) {
     return NextResponse.json({ error: "Este snapshot no tiene acuse de respaldo" }, { status: 404 });
   }
 
-  // Acuses que ya viven en la base (SatGo guarda el PDF como data URL): se
-  // sirven directo, sin proveedor de por medio.
-  if (snapshot.acuseUrl.startsWith("data:")) {
-    const m = snapshot.acuseUrl.match(/^data:([^;,]+);base64,([\s\S]+)$/);
-    if (!m) return NextResponse.json({ error: "Acuse ilegible" }, { status: 500 });
-    const bytes = Buffer.from(m[2], "base64");
-    return new NextResponse(new Uint8Array(bytes), {
-      status: 200,
-      headers: {
-        "Content-Type": m[1],
-        "Content-Disposition": `inline; filename="acuse-${snapshot.tipo.toLowerCase()}-${snapshot.id}.${m[1].includes("pdf") ? "pdf" : "bin"}"`,
-        "Cache-Control": "private, max-age=300",
-      },
-    });
+  const enBase = bytesDeDataUrl(snapshot.acuseUrl);
+  if (enBase) {
+    const ct = snapshot.acuseUrl.match(/^data:([^;,]+);/)?.[1] ?? "application/pdf";
+    return pdf(new Uint8Array(enBase), nombreDefault, ct);
   }
 
   let client: SyntageClient;
@@ -57,14 +65,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ snapsho
     const { data, contentType, filename } = await client.downloadAcuse(snapshot.acuseUrl);
     const ext = contentType.includes("pdf") ? "pdf" : "bin";
     const nombre = filename || `acuse-${snapshot.tipo.toLowerCase()}-${snapshot.id}.${ext}`;
-    return new NextResponse(data, {
-      status: 200,
-      headers: {
-        "Content-Type": contentType,
-        "Content-Disposition": `inline; filename="${nombre}"`,
-        "Cache-Control": "private, max-age=300",
-      },
-    });
+    return pdf(new Uint8Array(data), nombre, contentType);
   } catch (e) {
     console.error("[cumplimiento/acuse] error:", e instanceof SyntageError ? `${e.message} (${e.status})` : e);
     return NextResponse.json({ error: "No se pudo descargar el acuse desde el proveedor" }, { status: 502 });

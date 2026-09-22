@@ -17,10 +17,10 @@ import { SatGoComplianceProvider, SatGoError, satGoConfigurado } from "@/lib/fis
 
 export const maxDuration = 300;
 
-function fila(s: { id: string; resultado: string; motivos: string[]; vigencia: Date | null; fetchedAt: Date; acuseUrl: string | null }) {
-  return { snapshotId: s.id, resultado: s.resultado, motivos: s.motivos, vigencia: s.vigencia?.toISOString().slice(0, 10) ?? null, fetchedAt: s.fetchedAt.toISOString(), tieneAcuse: !!s.acuseUrl };
+function fila(s: { id: string; resultado: string; motivos: string[]; vigencia: Date | null; fetchedAt: Date; acuseUrl: string | null; acusePdfNombre: string | null }) {
+  return { snapshotId: s.id, resultado: s.resultado, motivos: s.motivos, vigencia: s.vigencia?.toISOString().slice(0, 10) ?? null, fetchedAt: s.fetchedAt.toISOString(), tieneAcuse: !!(s.acuseUrl || s.acusePdfNombre) };
 }
-const SELECT = { id: true, resultado: true, motivos: true, vigencia: true, fetchedAt: true, acuseUrl: true } as const;
+const SELECT = { id: true, resultado: true, motivos: true, vigencia: true, fetchedAt: true, acuseUrl: true, acusePdfNombre: true } as const;
 
 export async function GET(req: Request) {
   try {
