@@ -8,6 +8,13 @@
 // COMPARTIR: Web Share API con el archivo, donde «Guardar en Archivos» vive.
 // En navegador normal, el ancla de siempre.
 //
+// OJO: «standalone» NO basta para decidir. macOS también instala la app (Safari
+// «Agregar al Dock», Chrome «Instalar»), también implementa navigator.share, y
+// SÍ tiene gestor de descargas. Ahí la hoja de compartir es un estorbo: el
+// owner pidió el PDF de un CFDI en Facturas y le salió la tarjeta de compartir
+// de macOS en vez de la descarga. La hoja sólo aplica donde <a download> de
+// veras no opera: iOS/iPadOS.
+//
 // Módulo de CLIENTE (usa window/navigator). No importar desde el servidor.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -19,6 +26,26 @@ export function esStandalone(): boolean {
     // iOS marca la PWA con navigator.standalone (no estándar).
     (navigator as unknown as { standalone?: boolean }).standalone === true
   );
+}
+
+/**
+ * ¿Es un dispositivo SIN gestor de descargas dentro de la app instalada?
+ *
+ * Sólo iOS/iPadOS: ahí el click de `<a download>` se traga en silencio y la
+ * hoja de compartir es el único camino honesto. Todo escritorio —macOS
+ * incluido, aunque la app esté en el Dock— descarga normal, así que la hoja
+ * sobra y confunde.
+ *
+ * Se mira el user agent porque no hay feature-detection fiable: Safari iOS
+ * dice que soporta `download` aunque en standalone no haga nada.
+ */
+export function sinGestorDeDescargas(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent ?? "";
+  if (/iPhone|iPad|iPod/.test(ua)) return true;
+  // iPadOS 13+ se anuncia como «Macintosh»: lo delata el multitáctil. Un Mac
+  // de verdad reporta 0 (o 1 con pantalla táctil externa, que igual descarga).
+  return /Macintosh/.test(ua) && (navigator.maxTouchPoints ?? 0) > 1;
 }
 
 function descargarConAncla(blob: Blob, nombre: string): void {
@@ -34,12 +61,12 @@ function descargarConAncla(blob: Blob, nombre: string): void {
 }
 
 /**
- * Entrega un blob al usuario: hoja de compartir en la PWA (si el dispositivo
- * comparte archivos), ancla clásica en el navegador. Cancelar la hoja de
- * compartir no es un error.
+ * Entrega un blob al usuario: hoja de compartir SÓLO en la PWA de iOS/iPadOS
+ * (donde `<a download>` no opera), ancla clásica en todo lo demás —navegador
+ * normal y app instalada en escritorio. Cancelar la hoja no es un error.
  */
 export async function descargarBlob(blob: Blob, nombre: string): Promise<void> {
-  if (esStandalone() && typeof navigator.share === "function") {
+  if (esStandalone() && sinGestorDeDescargas() && typeof navigator.share === "function") {
     const file = new File([blob], nombre, { type: blob.type || "application/octet-stream" });
     if (!navigator.canShare || navigator.canShare({ files: [file] })) {
       try {
