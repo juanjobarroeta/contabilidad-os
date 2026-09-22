@@ -4770,6 +4770,13 @@ model ComplianceSnapshot {
   perfil   Json? // CSF: { rfc, regimenes, obligaciones, codigoPostal, estatusPadron }
   acuseUrl String? @db.Text // PDF/acuse de respaldo
 
+  // El acuse PDF entero, en la base — igual que TaxDeclaration.acusePdf. Antes
+  // sólo se guardaba la referencia al archivo en el proveedor (acuseUrl), que
+  // muere al cambiar de proveedor; los bytes son nuestros. `acusePdfNombre`
+  // hace de bandera «tiene PDF» en los listados sin cargar los bytes.
+  acusePdf       Bytes?
+  acusePdfNombre String?
+
   contenidoHash String // para detección de cambios entre corridas
   vigencia      DateTime?
   fetchedAt     DateTime  @default(now())

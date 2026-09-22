@@ -8,7 +8,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { planIncluyeSyntage } from "@/lib/planes";
-import { persistComplianceResult } from "../persist";
+import { persistComplianceResult, asegurarAcusePdf, type EstadoAcusePdf } from "../persist";
 import { SyntageClient } from "./client";
 import {
   mapTaxCompliance,
@@ -38,6 +38,8 @@ export interface SyncResult {
   companyId: string;
   rfc?: string;
   opinion?: { changed: boolean; hallazgos: number } | null;
+  /** Gap-fill del acuse PDF en la base (opinión SAT y CSF): ya_tenia · guardado · sin_fuente · error. */
+  acusesPdf?: Partial<Record<"SAT_OPINION" | "CSF", EstadoAcusePdf>>;
   csf?: { changed: boolean; hallazgos: number } | null;
   /**
    * Declaraciones anuales históricas creadas a partir de los tax-returns.
@@ -322,6 +324,16 @@ export async function syncCompanyComplianceSyntage(
     : null;
   const csf = csfRaw ? await persistComplianceResult(companyId, mapTaxStatus(csfRaw)) : null;
 
+  // Acuse PDF en la base: los snapshots sólo traían la referencia a Syntage
+  // (acuseUrl), que muere al dejar el proveedor. Mientras siga, se baja UNA vez
+  // y queda guardado; idempotente y aislado de opinión/CSF.
+  const acusesPdf: SyncResult["acusesPdf"] = {};
+  for (const tipo of ["SAT_OPINION", "CSF"] as const) {
+    const r = await asegurarAcusePdf(companyId, tipo, (ref) => client.downloadAcuse(ref));
+    acusesPdf[tipo] = r.estado;
+    if (r.estado === "error") console.error(`[compliance-sync] ${company.rfc} ${tipo}: acuse PDF no bajó — ${r.error}`);
+  }
+
   // Declaraciones anuales: aislado en try/catch para no romper opinión/CSF si
   // los tax-returns aún no se han extraído o el recurso cambia de forma.
   let declaracionesAnuales: SyncResult["declaracionesAnuales"] = null;
@@ -421,6 +433,7 @@ export async function syncCompanyComplianceSyntage(
     rfc: company.rfc,
     opinion: opinion && { changed: opinion.changed, hallazgos: opinion.hallazgos },
     csf: csf && { changed: csf.changed, hallazgos: csf.hallazgos },
+    acusesPdf,
     declaracionesAnuales,
     ceBootstrap,
     cePresentadas,

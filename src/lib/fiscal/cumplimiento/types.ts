@@ -20,8 +20,11 @@ export interface OpinionResult {
   resultado: ResultadoOpinion;
   /** Obligaciones omitidas / motivos de la negativa. */
   motivos: string[];
-  /** PDF/acuse de respaldo. */
+  /** Referencia al PDF en el proveedor (Syntage). Legado: lo nuevo trae los bytes. */
   acuseUrl?: string;
+  /** Bytes del acuse PDF; se guardan en la base (ComplianceSnapshot.acusePdf). */
+  acusePdf?: Uint8Array;
+  acusePdfNombre?: string;
   /** Vigencia de la opinión (ISO). */
   vigencia?: string;
   /** Cuándo se obtuvo (ISO). */
@@ -45,6 +48,8 @@ export interface CsfResult {
   tipo: "CSF";
   perfil: CsfPerfil;
   acuseUrl?: string;
+  acusePdf?: Uint8Array;
+  acusePdfNombre?: string;
   fetchedAt: string;
 }
 
@@ -58,6 +63,7 @@ export interface ComplianceSnapshot {
   perfil?: CsfPerfil | null;
   contenidoHash: string;
   acuseUrl?: string | null;
+  acusePdfNombre?: string | null;
   vigencia?: string | null;
   fetchedAt: string;
 }
