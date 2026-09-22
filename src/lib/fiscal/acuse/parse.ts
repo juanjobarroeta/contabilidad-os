@@ -45,6 +45,13 @@ REGLAS CRÍTICAS:
    - "utilidadFiscal" = "UTILIDAD FISCAL DEL EJERCICIO" (antes de restar pérdidas de ejercicios anteriores), NO el "RESULTADO FISCAL".
    - "perdidaFiscalRemanente" = el "REMANENTE" de pérdidas fiscales de ejercicios anteriores que queda PENDIENTE de aplicar a ejercicios FUTUROS (la columna "Remanente" de la tabla de pérdidas, ya actualizada). NO es el monto aplicado en este ejercicio ni las "PÉRDIDAS FISCALES DE EJERCICIOS ANTERIORES" restadas este año. "perdidasPendientes" puede dejarse igual al remanente si el documento no las separa. En el formato largo la tabla vive en la sección DETERMINACIÓN con columnas "PÉRDIDAS PENDIENTES DE APLICAR / PÉRDIDA FISCAL ACTUALIZADA / POR APLICAR EN ESTE EJERCICIO / REMANENTE": toma el renglón "Total" de la columna REMANENTE (suma de todas las pérdidas por año de origen). El "LÍMITE DE PÉRDIDAS A APLICAR" y el "MONTO POR APLICAR" NO son el remanente.
 
+8. Para ACUSE_MENSUAL, un mismo acuse suele traer VARIOS conceptos (obligaciones) uno tras otro, cada uno con su propio "IMPUESTO A CARGO" / "CANTIDAD A PAGAR". NO los sumes ni los mezcles:
+   - "isrAPagar" es SOLO el ISR PROPIO del contribuyente: el concepto "ISR personas morales", "ISR personas físicas actividad empresarial y profesional", "ISR simplificado de confianza" o similar. Si ese concepto dice 0, "isrAPagar" es 0 aunque otros conceptos tengan importe.
+   - "retencionesSalarios" = suma de los conceptos "ISR retenciones por salarios" + "ISR retenciones por asimilados a salarios" (impuesto de los trabajadores que el patrón entera).
+   - "retencionesTerceros" = suma de "ISR retenciones por servicios profesionales", "ISR retenciones por arrendamiento" y demás retenciones de ISR a terceros distintas de salarios.
+   - "isrRetenciones" son las retenciones que a ESTE contribuyente le hicieron sus clientes (se acreditan contra su ISR propio); no confundir con las dos anteriores.
+   - "ivaAPagar" es la "CANTIDAD A PAGAR" del concepto "Impuesto al Valor Agregado"; el concepto "IVA retenciones" NO entra ahí.
+
 CATÁLOGO DE RÉGIMENES (clave — nombre). Usa exactamente estas claves:
 ${REGIMEN_CATALOG}
 
@@ -118,6 +125,8 @@ SCHEMA DE RESPUESTA (devuelve exactamente estos campos, null cuando no apliquen)
     "isrRetenciones": number | null,
     "isrPagosAnteriores": number | null,
     "isrAPagar": number | null,
+    "retencionesSalarios": number | null,
+    "retencionesTerceros": number | null,
     "coeficienteUtilidadAplicado": number | null,
     "iepsAPagar": number | null,
     "iepsAFavor": number | null,
@@ -168,6 +177,10 @@ export interface AcuseMensual {
   isrRetenciones: number | null;
   isrPagosAnteriores: number | null;
   isrAPagar: number | null;
+  /** ISR retenido a trabajadores (salarios + asimilados) que el patrón entera: concepto aparte del ISR propio. */
+  retencionesSalarios?: number | null;
+  /** ISR retenido a terceros (servicios profesionales, arrendamiento, …) a enterar. */
+  retencionesTerceros?: number | null;
   coeficienteUtilidadAplicado: number | null;
   /** Renglones de IEPS del acuse (RESICO/actividad con IEPS los combina en el
    *  mismo acuse mensual que IVA/ISR). Null si el acuse no trae IEPS. */

@@ -253,6 +253,9 @@ export function parseCfdiXml(xml: string) {
   const fecha = rootAttr("Fecha") ?? rootAttr("fecha");
   const tipoCrudo = rootAttr("TipoDeComprobante") ?? rootAttr("tipoDeComprobante");
   const subtotal = parseFloat(rootAttr("SubTotal") ?? rootAttr("subTotal") ?? "0");
+  // Descuento del Comprobante (CFDI 3.3/4.0 `Descuento`, 3.2 `descuento`). Se
+  // ignoraba: 43 mil CFDIs con descuento en el XML tenían 0 en la fila.
+  const descuento = parseFloat(rootAttr("Descuento") ?? rootAttr("descuento") ?? "0") || 0;
   const total = parseFloat(rootAttr("Total") ?? rootAttr("total") ?? "0");
   // 3.2 traía `formaDePago`/`metodoDePago` como TEXTO LIBRE («PAGO EN UNA SOLA
   // EXHIBICION»), no como clave del catálogo. Un texto ahí rompería cualquier
@@ -588,6 +591,7 @@ export function parseCfdiXml(xml: string) {
     folio,
     relacionados,
     subtotal,
+    descuento,
     total,
     ivaTotal,
     formaPago,

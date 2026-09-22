@@ -20,8 +20,8 @@ import { parseSatDocument, SatParsePagadoError, type AcuseMensual } from "@/lib/
 import { SatGoClient, SatGoError } from "./client";
 import { fielDeEmpresa, type FielResolver } from "./fiel";
 
-type TipoMensual = "IVA_MENSUAL" | "ISR_PROVISIONAL" | "IEPS_MENSUAL";
-const TIPOS: TipoMensual[] = ["IVA_MENSUAL", "ISR_PROVISIONAL", "IEPS_MENSUAL"];
+type TipoMensual = "IVA_MENSUAL" | "ISR_PROVISIONAL" | "IEPS_MENSUAL" | "RETENCIONES_ISR";
+const TIPOS: TipoMensual[] = ["IVA_MENSUAL", "ISR_PROVISIONAL", "IEPS_MENSUAL", "RETENCIONES_ISR"];
 
 const MESES: Record<string, number> = {
   enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6,
@@ -93,7 +93,7 @@ async function archivosDe(doc: { data: Buffer; contentType: string; filename?: s
   return out.sort((a, b) => (/complementaria/i.test(a.nombre) ? 1 : 0) - (/complementaria/i.test(b.nombre) ? 1 : 0) || a.nombre.localeCompare(b.nombre));
 }
 
-function filasDeAcuse(acuse: AcuseMensual, faltan: Set<TipoMensual>): { tipo: TipoMensual; data: Record<string, unknown> }[] {
+export function filasDeAcuse(acuse: AcuseMensual, faltan: Set<TipoMensual>): { tipo: TipoMensual; data: Record<string, unknown> }[] {
   const out: { tipo: TipoMensual; data: Record<string, unknown> }[] = [];
   const tieneIva = acuse.ivaAPagar != null || acuse.ivaCausado != null || acuse.ivaAFavor != null || acuse.ivaAcreditable != null;
   const tieneIsr = acuse.isrAPagar != null || acuse.isrIngresos != null;
@@ -106,6 +106,11 @@ function filasDeAcuse(acuse: AcuseMensual, faltan: Set<TipoMensual>): { tipo: Ti
   }
   if (faltan.has("IEPS_MENSUAL") && tieneIeps) {
     out.push({ tipo: "IEPS_MENSUAL", data: { iepsPagar: acuse.iepsAPagar, iepsSaldoFavor: acuse.iepsAFavor } });
+  }
+  // Retenciones de nómina enteradas (salarios + asimilados): concepto propio
+  // del acuse, distinto del ISR de la empresa. Vive en su fila RETENCIONES_ISR.
+  if (faltan.has("RETENCIONES_ISR") && acuse.retencionesSalarios != null) {
+    out.push({ tipo: "RETENCIONES_ISR", data: { retencionesIsr: acuse.retencionesSalarios } });
   }
   return out;
 }
