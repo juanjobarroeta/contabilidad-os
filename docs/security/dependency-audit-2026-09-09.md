@@ -92,10 +92,11 @@ SEC-DEP-001C verification:
 
 ## Remaining SEC-DEP-001 work
 
-The Phase 0 release gate remains open because seven high advisories remain:
+Historical snapshot as of September 9: seven high advisories remained. The
+[September 22 remediation](./dependency-audit-2026-09-22.md) supersedes this remaining-work assessment and documents the supported-line upgrades and scoped overrides that clear them.
 
 - Facturapi and Axios require a major SDK upgrade; isolate it behind contract tests.
-- Prisma, `@prisma/config`, `deepmerge-ts`, and `effect` require a separate controlled major upgrade.
-- Next.js pins the remaining affected PostCSS release; npm reports a Next.js 16 major as the available remediation.
+- Prisma, `@prisma/config`, `deepmerge-ts`, and `effect` required separate compatibility work; the September 22 solution retains Prisma 6.
+- Next.js pinned the affected PostCSS release; npm suggested Next.js 16. The September 22 solution retains Next.js 15 with a scoped PostCSS override.
 
 Moderate findings, including the Anthropic SDK and Next.js/PostCSS chain, remain tracked but do not replace the zero-critical/high Phase 0 requirement.

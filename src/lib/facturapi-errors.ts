@@ -9,6 +9,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextResponse } from "next/server";
+import { FacturapiError } from "facturapi";
 
 export type FacturapiErrorKind =
   | "auth"         // 401/403 — key dead or permission denied
@@ -31,7 +32,17 @@ export type FacturapiErrorInfo = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function parseFacturapiError(e: any): FacturapiErrorInfo {
   const status = e?.response?.status ?? e?.status ?? 0;
-  const data = e?.response?.data ?? null;
+  // The fetch-based SDK exposes structured fields directly. Preserve the
+  // diagnostic body without forwarding arbitrary response headers.
+  const data = e?.response?.data ?? (e instanceof FacturapiError ? {
+    message: e.message,
+    status: e.status,
+    code: e.code,
+    path: e.path,
+    location: e.location,
+    errors: e.errors,
+    logId: e.logId,
+  } : null);
   const raw =
     (typeof data === "string" && data) ||
     data?.message ||

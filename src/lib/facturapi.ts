@@ -1,5 +1,4 @@
 import Facturapi from "facturapi";
-import { Readable } from "stream";
 import { prisma } from "./prisma";
 import { decryptSecret, encryptSecret } from "./crypto";
 import { emisorNombreDesdeXml, sinRegimenSocietario } from "./fiscal/nombre-fiscal";
@@ -84,14 +83,6 @@ async function nombreEmisorDesdeCfdisTimbrados(
     if (nombre) return nombre;
   }
   return null;
-}
-
-function base64ToStream(base64: string): NodeJS.ReadableStream {
-  const buffer = Buffer.from(base64, "base64");
-  const readable = new Readable();
-  readable.push(buffer);
-  readable.push(null);
-  return readable;
 }
 
 /**
@@ -184,8 +175,8 @@ export async function provisionFacturapiOrg(companyId: string): Promise<Provisio
       try {
         await admin.organizations.uploadCertificate(
           orgId,
-          base64ToStream(decryptSecret(company.csdCer)),
-          base64ToStream(decryptSecret(company.csdKey)),
+          Buffer.from(decryptSecret(company.csdCer), "base64"),
+          Buffer.from(decryptSecret(company.csdKey), "base64"),
           decryptSecret(company.csdPassword)
         );
         csdUploaded = true;
