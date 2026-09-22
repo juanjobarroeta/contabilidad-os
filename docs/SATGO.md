@@ -98,9 +98,11 @@ por empresa para no repetir consultas ni pagar parseos de más.
 - El lector del 32-D es heurístico y se escribió sin PDF a la mano: los PDFs de
   la corrida de agosto son la prueba real. Si un sentido sale `ERROR`, el PDF
   queda guardado y el snapshot lo dice.
-- La CSF vía Claude puede variar la redacción de las obligaciones entre corridas
-  y abrir un snapshot «nuevo» sin cambio real. Mitigación: normalizar y ordenar
-  (hecho); si se repite, comparar por el texto del PDF y no por el JSON.
+- La CSF vía Claude escribe las obligaciones sin el punto final que Syntage
+  conserva («…de IVA.» vs «…de IVA»): la corrida del 22-sep abrió 11 hallazgos
+  «cambiaron tus obligaciones» falsos. `diff.ts` compara ya por clave
+  normalizada (`claveObligacion`); el primer sync tras ese cambio abre un
+  snapshot nuevo por empresa (cambia el hash) sin hallazgos.
 - `decfiel` con normal + complementaria del mismo mes: la Normal crea las filas y
   la Complementaria sólo adjunta PDF si faltaba. Sustituir importes por la
   complementaria queda para después (hoy tampoco lo hace Syntage).

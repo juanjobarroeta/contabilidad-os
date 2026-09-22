@@ -17,6 +17,29 @@ const ETIQUETA: Record<string, string> = {
   CSF: "constancia de situación fiscal",
 };
 
+/**
+ * Clave de comparación de una obligación: sin acentos ni mayúsculas, espacios
+ * colapsados y sin el punto final. Dos proveedores escriben la misma
+ * obligación distinto — Syntage «Pago definitivo mensual de IVA.» y la CSF
+ * leída por Claude «Pago definitivo mensual de IVA» — y compararlas tal cual
+ * abrió un hallazgo «cambiaron tus obligaciones» en 11 empresas el 22-sep-2026
+ * sin que cambiara nada.
+ */
+export function claveObligacion(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[\s.;:,]+$/g, "")
+    .trim();
+}
+
+/** Obligaciones de un perfil como claves únicas ordenadas. */
+function clavesObligaciones(obligaciones: string[]): string[] {
+  return [...new Set(obligaciones.map(claveObligacion))].filter(Boolean).sort();
+}
+
 /** Hash estable del contenido relevante, para detectar cambios entre corridas. */
 export function hashContenido(r: ComplianceResult): string {
   const salient =
@@ -25,7 +48,7 @@ export function hashContenido(r: ComplianceResult): string {
           t: r.tipo,
           estatus: r.perfil.estatusPadron,
           reg: [...r.perfil.regimenes].sort(),
-          obl: [...r.perfil.obligaciones].sort(),
+          obl: clavesObligaciones(r.perfil.obligaciones),
           cp: r.perfil.codigoPostal ?? "",
         }
       : { t: r.tipo, res: r.resultado, mot: [...r.motivos].sort() };
@@ -97,8 +120,11 @@ function evaluarCsf(next: CsfResult, prev: CsfResult | null): Hallazgo[] {
 
   if (!prev) return out; // primera captura: sin diff de perfil
 
-  const nuevasObl = next.perfil.obligaciones.filter((o) => !prev.perfil.obligaciones.includes(o));
-  const quitadas = prev.perfil.obligaciones.filter((o) => !next.perfil.obligaciones.includes(o));
+  // Se compara por clave normalizada y se muestra el texto original de cada lado.
+  const clavesNext = new Set(clavesObligaciones(next.perfil.obligaciones));
+  const clavesPrev = new Set(clavesObligaciones(prev.perfil.obligaciones));
+  const nuevasObl = next.perfil.obligaciones.filter((o) => !clavesPrev.has(claveObligacion(o)));
+  const quitadas = prev.perfil.obligaciones.filter((o) => !clavesNext.has(claveObligacion(o)));
   if (nuevasObl.length || quitadas.length) {
     out.push({
       checkClave: "cumplimiento.csf.obligaciones",
