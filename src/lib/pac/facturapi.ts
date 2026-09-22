@@ -7,6 +7,7 @@
 // getPacProvider() de "@/lib/pac".
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { CancellationMotive } from "facturapi";
 import { getFacturapiClient, provisionFacturapiOrg } from "../facturapi";
 import { parseFacturapiError } from "../facturapi-errors";
 import type {
@@ -124,7 +125,9 @@ export const facturapiPacProvider: PacProvider = {
 
   async discardDraft(apiKey, draftId): Promise<void> {
     try {
-      await getFacturapiClient(apiKey).invoices.cancel(draftId);
+      await getFacturapiClient(apiKey).invoices.cancel(draftId, {
+        motive: CancellationMotive.NO_SE_CONCRETO,
+      });
     } catch (e) {
       console.error("[pac:facturapi] discardDraft falló", e);
     }

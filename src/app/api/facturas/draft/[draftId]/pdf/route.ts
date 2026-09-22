@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyDraftToken } from "@/lib/facturas/file-token";
 import { getFacturapiClient } from "@/lib/facturapi";
+import { readFacturapiFile } from "@/lib/facturapi-file";
 
 export const runtime = "nodejs";
 
@@ -33,10 +34,8 @@ export async function GET(req: Request, { params }: Params) {
 
   try {
     const fp = getFacturapiClient(company.facturapiApiKey);
-    const stream = await fp.invoices.downloadPdf(draftId);
-    const chunks: Buffer[] = [];
-    for await (const c of stream as AsyncIterable<Buffer>) chunks.push(Buffer.from(c));
-    return new NextResponse(Buffer.concat(chunks), {
+    const file = await readFacturapiFile(await fp.invoices.downloadPdf(draftId));
+    return new NextResponse(new Uint8Array(file), {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `inline; filename="prefactura_${draftId}.pdf"`,

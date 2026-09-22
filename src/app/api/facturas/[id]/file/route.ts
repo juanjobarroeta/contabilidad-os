@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyFileToken } from "@/lib/facturas/file-token";
 import { getFacturapiClient } from "@/lib/facturapi";
+import { readFacturapiFile } from "@/lib/facturapi-file";
 
 export const runtime = "nodejs";
 
@@ -59,11 +60,8 @@ export async function GET(req: Request, { params }: Params) {
   }
   try {
     const fp = getFacturapiClient(invoice.company.facturapiApiKey);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const stream: any = await (fp as any).invoices.downloadPdf(invoice.facturapiId);
-    const chunks: Buffer[] = [];
-    for await (const c of stream) chunks.push(Buffer.from(c));
-    return new NextResponse(Buffer.concat(chunks), {
+    const file = await readFacturapiFile(await fp.invoices.downloadPdf(invoice.facturapiId));
+    return new NextResponse(new Uint8Array(file), {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="${filename}"`,
