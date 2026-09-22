@@ -135,6 +135,7 @@ export async function importCfdiFromXml(opts: {
       naturalezaMotivo: clasif.motivoRevision ?? null,
       moneda: cfdi.moneda ?? "MXN",
       subtotal: cfdi.subtotal,
+      descuento: cfdi.descuento,
       total: cfdi.total,
       totalImpuestos: cfdi.ivaTotal,
       status: "STAMPED", // it carries a UUID — already stamped by the issuer

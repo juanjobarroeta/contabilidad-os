@@ -261,6 +261,7 @@ export async function importarCfdiXml(args: ImportarCfdiArgs): Promise<Resultado
       tipoCorrida: cfdi.nomina ? tipoCorridaDeXml(xmlContent) : null,
       moneda: cfdi.moneda ?? "MXN",
       subtotal: cfdi.subtotal,
+      descuento: cfdi.descuento,
       total: cfdi.total,
       totalImpuestos: cfdi.ivaTotal,
       status: "STAMPED",

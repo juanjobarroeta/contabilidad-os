@@ -40,6 +40,11 @@ describe("parseCfdiXml — complemento de nómina", () => {
     expect(r.uuid).toBe("ABCDEF01-2345-6789-ABCD-EF0123456789");
   });
 
+  it("lee el Descuento del Comprobante (y 0 cuando no viene)", () => {
+    expect(parseCfdiXml(NOMINA_ASIMILADOS)?.descuento).toBe(80000);
+    expect(parseCfdiXml(INGRESO)?.descuento).toBe(0);
+  });
+
   it("no produce datos de nómina para un CFDI de ingreso", () => {
     const r = parseCfdiXml(INGRESO);
     expect(r.tipo).toBe("I");
