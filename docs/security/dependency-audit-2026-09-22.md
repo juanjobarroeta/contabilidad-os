@@ -40,7 +40,8 @@ Facturapi compatibility changes:
 - Focused contracts: 3 test files / 27 passing tests. The installed SDK handles CFDI creation, PPD/payroll JSON, draft lifecycle, cancellation, customer creation, CSD provisioning, binary downloads, stream failures, and HTTP error normalization. Fetch is intercepted and persistence mocked; no real credential, stamp, cancellation, key rotation, or email is sent.
 - Full unit suite: 427 files / 4,669 passing tests.
 - `npm run build`: compilation, type validation, and all 391 static pages pass.
-- CI additionally exercises real-Postgres authorization and migration/schema drift on Node 22. Local checks ran on Node 24.18.0; CI and deployment results remain to be recorded.
+- [PR #1162 CI](https://github.com/juanjobarroeta/contabilidad-os/actions/runs/35764369672) passed all five checks: test (including the production audit) 1m27s, build 4m26s, real-Postgres authorization 1m8s, migration/schema drift 58s, and secrets 7s. CI runs on Node 22. All new SDK/config tests pass there. Its unit totals are 425 passing files / 4,655 passing tests, plus 14 existing XSD tests skipped because `xmllint` is unavailable; those 14 pass locally. Local checks ran on Node 24.18.0.
+- The local production server smoke passed with temporary test keys and an unreachable fixture database: `/login` 200; `/facturas` 307 to login; invoice and PPD APIs 401; both invoice PDF download routes 403 without a valid token; generated CSS 200 (63,367 bytes).
 - No migration, backfill, or fiscal-calculation change. Rollback is the previous application image and lockfile; no data reversal is needed.
 
 ## Remaining moderate finding
@@ -49,4 +50,20 @@ The Anthropic SDK 0.82.0 retains [GHSA-p7fg-763f-g4gf](https://github.com/adviso
 
 ## Deployment acceptance
 
-Pending: all PR checks, exact production merge SHA/deployment, startup/schema evidence, public login/assets, and protected fiscal API smoke. Production PAC side effects are outside this smoke; the upgrade's SDK acceptance uses the offline transport contracts above.
+- [PR #1162](https://github.com/juanjobarroeta/contabilidad-os/pull/1162) merged at `2026-09-22T18:05:47Z` as `3cc86929e8cbac99bc7397ce508927cb527a761d`, after all five required CI checks passed.
+- Railway deployment `8b3947fd-10ce-40a0-9ceb-1b46904f4cdb` reached `SUCCESS`. Startup found 142 migrations with none pending, reported ready in 771 ms, and initialized production observability with that exact merge SHA.
+- Public smoke at `2026-09-22T18:17:07Z`–`18:17:08Z` passed. Railway HTTP logs attribute every response below to the exact deployment, including during the old/new instance overlap.
+
+| Request | Result |
+|---|---|
+| `/login` | `200` |
+| `/facturas` | `307`, redirect to `/login` |
+| `/api/facturas` | `401`, unauthenticated |
+| `/api/impuestos/asignaciones-regimen/ppd` | `401`, unauthenticated |
+| `/api/facturas/contract-smoke/file?format=pdf` | `403`, no valid file token |
+| `/api/facturas/draft/contract-smoke/pdf` | `403`, no valid file token |
+| `/_next/static/css/446400425ed6fe6b.css` | `200`, CSS content type, 63,367 bytes |
+
+The initial deployment-specific HTTP error-log check returned no 5xx rows. This is a bounded rollout observation, not a long-running availability claim. Roll back to the prior application image if dependency-related startup, auth, rendering, or PAC transport regressions appear; no database rollback is needed.
+
+Acceptance closes the root production critical/high dependency gate, including the earlier SEC-DEP-001A–C changes carried by this deployment. Production PAC side effects and authenticated invoice workflows were not exercised; the SDK compatibility evidence uses offline transport contracts and synthetic fixtures, not a live PAC or separate staging integration. The remaining moderate finding, worker dependency graphs, and broader fiscal/product acceptance remain outside this closure.
