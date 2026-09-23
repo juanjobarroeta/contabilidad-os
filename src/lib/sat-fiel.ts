@@ -207,6 +207,17 @@ export function decodificarEntidadesXml(s: string): string {
     .replace(/&amp;/g, "&");
 }
 
+/**
+ * El folio fiscal del CFDI: el `UUID` del TimbreFiscalDigital (TFD 1.0 o 1.1,
+ * con cualquier prefijo de namespace), en MAYÚSCULAS. null si no hay timbre:
+ * un XML sin timbrar no es un comprobante y no tiene folio que guardar.
+ */
+export function uuidDelTimbre(xml: string): string | null {
+  const tfd = /<(?:[a-zA-Z0-9]+:)?TimbreFiscalDigital\b([^>]*)>/.exec(xml)?.[1];
+  const v = tfd ? /\bUUID="([^"]+)"/.exec(tfd)?.[1] : undefined;
+  return v ? decodificarEntidadesXml(v).trim().toUpperCase() : null;
+}
+
 /** Parse key fields from a CFDI XML string */
 export function parseCfdiXml(xml: string) {
   const attr = (name: string) => {
@@ -249,7 +260,13 @@ export function parseCfdiXml(xml: string) {
   // con distinta caja. Si no canonizamos, el mismo CFDI se duplica y las
   // cancelaciones no empatan. La forma canónica del SAT es mayúsculas.
   // (El TFD 1.0 de 3.2 también lo trae en mayúsculas, así que no cambia.)
-  const uuid = attr("UUID")?.toUpperCase() ?? null;
+  //
+  // Se lee DEL NODO DEL TIMBRE, no del primer `UUID="` del documento: en un
+  // CFDI con CfdiRelacionados (nota de crédito 01, sustitución 04, aplicación
+  // de anticipo 07) el primer UUID es el del comprobante RELACIONADO, que va
+  // antes del Complemento. Con eso la nota subida a mano se tomaba por un
+  // duplicado de su factura, o se guardaba con el folio de la factura.
+  const uuid = uuidDelTimbre(xml);
   const fecha = rootAttr("Fecha") ?? rootAttr("fecha");
   const tipoCrudo = rootAttr("TipoDeComprobante") ?? rootAttr("tipoDeComprobante");
   const subtotal = parseFloat(rootAttr("SubTotal") ?? rootAttr("subTotal") ?? "0");

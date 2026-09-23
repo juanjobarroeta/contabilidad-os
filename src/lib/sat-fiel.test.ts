@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { decodificarEntidadesXml, parseCfdiXml } from "./sat-fiel";
+import { decodificarEntidadesXml, parseCfdiXml, uuidDelTimbre } from "./sat-fiel";
 
 // CFDI 4.0 de nómina (tipo "N") de ASIMILADOS A SALARIOS: el emisor (un tercero)
 // le paga a JUAN JOSE BARROETA bajo régimen 09 (asimilados honorarios) y le
@@ -283,5 +283,63 @@ describe("parseCfdiXml — entidades XML en los atributos", () => {
   it("decodificarEntidadesXml: numéricas, tipográficas y &amp; al final para no decodificar dos veces", () => {
     expect(decodificarEntidadesXml("R&amp;C &#209;U &#x41; &lt;x&gt; &apos;a&apos;")).toBe("R&C ÑU A <x> 'a'");
     expect(decodificarEntidadesXml("&amp;lt;")).toBe("&lt;");
+  });
+});
+
+// ─── El folio fiscal sale del TIMBRE ─────────────────────────────────────────
+// Se tomaba el primer `UUID="` del documento. En un CFDI con CfdiRelacionados
+// ése es el del comprobante relacionado (va antes del Complemento): la nota de
+// crédito subida a mano se daba por duplicado de su propia factura.
+
+const TFD = (uuid: string) =>
+  `<cfdi:Complemento><tfd:TimbreFiscalDigital xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Version="1.1" UUID="${uuid}" FechaTimbrado="2026-06-15T12:05:00" RfcProvCertif="SAT970701NN3"/></cfdi:Complemento>`;
+
+describe("parseCfdiXml — UUID del timbre", () => {
+  it("una nota con relaciones 01 y 07 lleva SU folio, no el de la factura", () => {
+    const r = parseCfdiXml(
+      `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" Version="4.0" Fecha="2026-06-15T12:00:00" TipoDeComprobante="E" SubTotal="100.00" Total="116.00">` +
+        `<cfdi:CfdiRelacionados TipoRelacion="01"><cfdi:CfdiRelacionado UUID="11111111-1111-1111-1111-111111111111"/></cfdi:CfdiRelacionados>` +
+        `<cfdi:CfdiRelacionados TipoRelacion="07"><cfdi:CfdiRelacionado UUID="22222222-2222-2222-2222-222222222222"/></cfdi:CfdiRelacionados>` +
+        `<cfdi:Emisor Rfc="AAA010101AAA" RegimenFiscal="601"/><cfdi:Receptor Rfc="BBB010101BBB" UsoCFDI="G02"/>` +
+        TFD("abcdef01-2345-6789-abcd-ef0123456789") +
+        `</cfdi:Comprobante>`,
+    );
+    expect(r.uuid).toBe("ABCDEF01-2345-6789-ABCD-EF0123456789");
+    expect(r.relacionados).toEqual([
+      { tipoRelacion: "01", uuids: ["11111111-1111-1111-1111-111111111111"] },
+      { tipoRelacion: "07", uuids: ["22222222-2222-2222-2222-222222222222"] },
+    ]);
+  });
+
+  it("un REP 2.0: el IdDocumento del DoctoRelacionado no es el folio", () => {
+    const r = parseCfdiXml(
+      `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:pago20="http://www.sat.gob.mx/Pagos20" Version="4.0" Fecha="2026-06-20T10:00:00" TipoDeComprobante="P" SubTotal="0" Total="0" Moneda="XXX">` +
+        `<cfdi:Emisor Rfc="AAA010101AAA" RegimenFiscal="601"/><cfdi:Receptor Rfc="BBB010101BBB" UsoCFDI="CP01"/>` +
+        `<cfdi:Complemento><pago20:Pagos Version="2.0"><pago20:Totales MontoTotalPagos="116.00"/>` +
+        `<pago20:Pago FechaPago="2026-06-20T10:00:00" FormaDePagoP="03" MonedaP="MXN" TipoCambioP="1" Monto="116.00">` +
+        `<pago20:DoctoRelacionado IdDocumento="33333333-3333-3333-3333-333333333333" MonedaDR="MXN" EquivalenciaDR="1" NumParcialidad="1" ImpSaldoAnt="116.00" ImpPagado="116.00" ImpSaldoInsoluto="0.00" ObjetoImpDR="02"/>` +
+        `</pago20:Pago></pago20:Pagos>` +
+        `<tfd:TimbreFiscalDigital xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Version="1.1" UUID="44444444-4444-4444-4444-444444444444"/>` +
+        `</cfdi:Complemento></cfdi:Comprobante>`,
+    );
+    expect(r.uuid).toBe("44444444-4444-4444-4444-444444444444");
+    expect(r.doctosRelacionados?.[0]?.uuid).toBe("33333333-3333-3333-3333-333333333333");
+  });
+
+  it("sin timbre no hay folio (antes tomaba el del relacionado)", () => {
+    const r = parseCfdiXml(
+      `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" Version="4.0" Fecha="2026-06-15T12:00:00" TipoDeComprobante="E" SubTotal="100.00" Total="116.00">` +
+        `<cfdi:CfdiRelacionados TipoRelacion="01"><cfdi:CfdiRelacionado UUID="11111111-1111-1111-1111-111111111111"/></cfdi:CfdiRelacionados>` +
+        `</cfdi:Comprobante>`,
+    );
+    expect(r.uuid).toBeNull();
+  });
+
+  it("TFD 1.0 de un 3.2, con otro prefijo", () => {
+    expect(
+      uuidDelTimbre(
+        `<cfdi:Comprobante version="3.2"><cfdi:Complemento><timbre:TimbreFiscalDigital version="1.0" UUID="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"/></cfdi:Complemento></cfdi:Comprobante>`,
+      ),
+    ).toBe("AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE");
   });
 });
