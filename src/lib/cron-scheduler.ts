@@ -174,6 +174,14 @@ const JOBS: Job[] = [
   // acotado en cuanto Syntage termina; esta cadencia es la red de seguridad si
   // un redeploy mató ese seguimiento — por eso 1 h y no 6.
   { name: "declaraciones-backfill", everyMs: HOUR, firstDelayMs: 20 * MIN, minMs: MIN_CARO },
+  // LA AGENDA DEL SAT (lib/agenda-sat): acuse mensual, opinión 32-D/CSF y
+  // balanza de CE por empresa y periodo, con la cadencia de un contador — la
+  // noche del vencimiento, el día siguiente, a diario, cada tanto, y un
+  // pendiente en el expediente si no aparece. El tick es cada 15 min porque la
+  // agenda pone horas exactas (22:00, 10:00); sin filas vencidas es un no-op.
+  // Corre EN PARALELO con declaraciones-backfill/compliance-sync de Syntage
+  // hasta el corte de octubre (docs/SATGO.md): ambos son gap-fill.
+  { name: "agenda-sat", everyMs: 15 * MIN, firstDelayMs: 18 * MIN, minMs: MIN_CARO },
   // Inventario automotriz: deriva unidades de los CFDIs recién bajados (parse
   // local del rawXml, sin cuota SAT). Desfasado del rawxml-backfill para
   // procesar lo que ese ciclo acaba de traer; sin empresas AUTOMOTRIZ es no-op.

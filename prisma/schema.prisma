@@ -453,6 +453,7 @@ model Company {
   expedienteHechos   ExpedienteHecho[]
   solicitudes        Solicitud[]
   expedienteNotas    ExpedienteNota[]
+  agendaSat          AgendaSat[]
   saludSnapshots     SaludSnapshot[]
 }
 
@@ -9962,4 +9963,43 @@ model Solicitud {
   @@unique([companyId, dedupeKey])
   @@index([companyId, estado, createdAt])
   @@index([companyId, tipo, periodo])
+}
+
+/// LA AGENDA DEL SAT: cuándo ir a buscar cada entregable de cada empresa, como
+/// lo haría un contador — la noche del vencimiento, el día siguiente, luego a
+/// diario, cada tanto, y levantar la mano si no aparece. Una fila por empresa,
+/// entregable y periodo. La cadencia la decide src/lib/agenda-sat/calendario.ts
+/// (puro); el cron agenda-sat y el ce-worker ejecutan lo que ya tocó.
+model AgendaSat {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// "DECLARACION_MENSUAL" | "BALANZA_CE" | "CUMPLIMIENTO"
+  entregable String
+  /// "2026-08"
+  periodo    String
+  /// Fecha límite legal (o, en CUMPLIMIENTO, desde cuándo vale la pena pedirlo).
+  vence      DateTime @db.Date
+
+  /// "PENDIENTE" | "TARDE" | "ENCONTRADO" | "NO_APLICA" | "ABANDONADO"
+  estado          String    @default("PENDIENTE")
+  /// null = ya no se busca. Es el campo por el que el cron elige qué toca.
+  proximaRevision DateTime?
+  ultimaRevision  DateTime?
+  intentos        Int       @default(0)
+  /// Errores SEGUIDOS: un SAT caído no es una declaración omitida.
+  errores         Int       @default(0)
+  ultimoResultado String?
+  /// Por qué la próxima revisión cae cuando cae, en palabras.
+  motivo          String?
+  encontradoAt    DateTime?
+  /// El pendiente abierto en el expediente cuando se volvió TARDE; se cierra solo al aparecer.
+  notaPendienteId String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, entregable, periodo])
+  @@index([estado, proximaRevision])
 }
