@@ -454,6 +454,12 @@ export async function autoConciliarCuenta(
       ? ["INGRESO"]
       : ["EGRESO", "NOMINA"];
 
+    // Una nota de crédito (E) mueve el dinero al REVÉS que su tipo: la del
+    // proveedor es un reembolso (abono), la nuestra una devolución (cargo).
+    // Casarla por importe con un pago normal dejaba a la factura verdadera «sin
+    // pagar» y a la nota «pagada». Fuera del pool; tipoSat null = I legado.
+    const noEsNota = { OR: [{ tipoSat: null }, { tipoSat: { not: "E" } }] };
+
     const windowStart = new Date(tx.fecha.getTime() - WINDOW_DAYS * 86400000);
     const windowEnd = new Date(tx.fecha.getTime() + WINDOW_DAYS * 86400000);
 
@@ -468,6 +474,7 @@ export async function autoConciliarCuenta(
         // vínculo legado 1:1 ni por porciones asignadas (ConciliacionDetalle).
         bankTransactions: { none: { status: "MATCHED" } },
         conciliacionDetalles: { none: {} },
+        AND: [noEsNota],
       },
       // contraparteNombre/Rfc: la contraparte del CFDI mismo (backfilleada del
       // rawXml). Los EGRESO sincronizados del SAT casi nunca tienen `customer`
@@ -510,6 +517,7 @@ export async function autoConciliarCuenta(
             { contraparteRfc: { equals: tx.contraparteRfc, mode: "insensitive" } },
             { customer: { rfc: { equals: tx.contraparteRfc, mode: "insensitive" } } },
           ],
+          AND: [noEsNota],
         },
         include: { customer: { select: { rfc: true, razonSocial: true } } },
       });

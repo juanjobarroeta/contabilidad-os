@@ -5,6 +5,7 @@ import { toCsv, type CsvRow } from "@/lib/csv";
 import { calcularActosDelPeriodo } from "@/lib/fiscal/iva";
 import { reconciliacionActiva } from "@/lib/fiscal/conciliacion-pue";
 import { aplicarFlujoPue, pagosPueDelPeriodo, puesAnterioresPagadosEnPeriodo, type ModoPue } from "@/lib/fiscal/iva-pue-flujo";
+import { notasRecibidasPorPadre, padresDeNotasRecibidas, reduccionPorNotaRecibida, totalNetoDeNotas } from "@/lib/fiscal/iva-notas-credito";
 import { repIvaAcreditableDe } from "@/lib/impuestos";
 import { repIvaRetenidoDe, revisarRetencionIva } from "@/lib/fiscal/iva-retenciones";
 import { ivaRetenidoAProveedoresEnPeriodo } from "@/lib/fiscal/iva-retenciones-db";
@@ -235,6 +236,11 @@ export async function GET(req: Request) {
     /** La retención es anómala (mayor al IVA trasladado o al 16% de la base): revisar el XML. */
     revisar?: boolean;
     motivoRevisar?: string;
+    /**
+     * Nota de crédito (CFDI E). En acreditable, `importe` es NEGATIVO: el IVA
+     * que la nota recibida resta del mes (Art. 7 LIVA), sin depender del banco.
+     */
+    notaCredito?: boolean;
   };
 
   const trasladado: Row[] = [];
@@ -254,8 +260,10 @@ export async function GET(req: Request) {
         rfc: rfcContraparte(inv),
         subtotal: inv.subtotal,
         tasa: inv.subtotal > 0 ? +(t / inv.subtotal).toFixed(4) : null,
-        importe: t,
+        // Nota de crédito emitida: resta el trasladado, como en el motor.
+        importe: inv.tipoSat === "E" ? -t : t,
         metodoPago: inv.metodoPago,
+        notaCredito: inv.tipoSat === "E" || undefined,
         // El contador marcó el ingreso como no cobrado → no se causa IVA aún.
         excluidoAcreditamiento: inv.ivaNoCausado,
       });
@@ -363,15 +371,38 @@ export async function GET(req: Request) {
   const acreditable: Row[] = [];
   const retenidoAProveedores: Row[] = [];
 
+  // Notas de crédito recibidas: la misma regla que el motor (Art. 7 LIVA).
+  const notasRecibidas = egresos.filter((inv) => inv.tipoSat === "E");
+  const padresDeNotas = await padresDeNotasRecibidas(companyId, notasRecibidas);
+
   for (const inv of egresos) {
     const { trasladado: t, retenido: r } = extractIva(inv);
+    if (inv.tipoSat === "E" && t > 0.005) {
+      const nota = reduccionPorNotaRecibida({ total: inv.total, ivaNeto: Math.max(0, t - r) }, padresDeNotas.get(inv.id) ?? []);
+      acreditable.push({
+        id: inv.id,
+        fecha: inv.fecha.toISOString().slice(0, 10),
+        uuid: inv.uuid,
+        serie: inv.serie,
+        folio: inv.folio,
+        contraparte: nombreContraparte(inv),
+        rfc: rfcContraparte(inv),
+        subtotal: inv.subtotal,
+        tasa: inv.subtotal > 0 ? +(t / inv.subtotal).toFixed(4) : null,
+        importe: -nota.reduccion,
+        metodoPago: inv.metodoPago,
+        notaCredito: true,
+        excluidoAcreditamiento: inv.ivaNoAcreditable,
+        emisorEnLista69B: bloqueado69B(rfcContraparte(inv)),
+      });
+    }
     const esPPD = inv.metodoPago === "PPD";
     const links = inv.uuid ? repLinksPorParent.get(normalizarUuid(inv.uuid)) : undefined;
     const parentLike = { taxes: inv.taxes, totalImpuestos: inv.totalImpuestos, total: inv.total };
     // Retención en flujo (Art. 1-A): PUE completa al emitirse; PPD la parte de
     // cada pago del REP. Sin REP aún no se retiene (ni se entera).
     const retenidoPPD = esPPD && links ? links.reduce((s, l) => s + repIvaRetenidoDe(l, parentLike), 0) : 0;
-    if (t > 0.005) {
+    if (t > 0.005 && inv.tipoSat !== "E") {
       // PPD sólo es acreditable cuando llega su complemento de pago (REP), y por
       // el monto pagado (prorrateado) — exactamente como el motor. Sin REP en el
       // mes: aún no acreditable. PUE: el IVA del CFDI.
@@ -493,8 +524,13 @@ export async function GET(req: Request) {
   let ivaPueSinPago = 0;
   let cfdisPueSinPago = 0;
   if (modoPue === "FLUJO") {
-    const totalById = new Map(egresos.map((e) => [e.id, e.total]));
-    const pueRows = acreditable.filter((r) => r.metodoPago === "PUE" && !r.esComplemento && !r.excluidoAcreditamiento && !r.emisorEnLista69B);
+    // Un PUE que el proveedor cobra NETO de su nota se juzga contra el total neto.
+    const gastosPue = egresos.filter((e) => e.metodoPago === "PUE" && e.tipoSat !== "E");
+    const notasPorPadre = await notasRecibidasPorPadre(companyId, gastosPue.map((e) => e.uuid), to, notasRecibidas);
+    const totalById = new Map(
+      gastosPue.map((e) => [e.id, totalNetoDeNotas(e.total, e.uuid ? notasPorPadre.get(normalizarUuid(e.uuid)) ?? 0 : 0)]),
+    );
+    const pueRows = acreditable.filter((r) => r.metodoPago === "PUE" && !r.esComplemento && !r.notaCredito && !r.excluidoAcreditamiento && !r.emisorEnLista69B);
     const pagos = await pagosPueDelPeriodo(pueRows.map((r) => r.id), from, to);
     for (const r of pueRows) {
       const res = aplicarFlujoPue({ total: totalById.get(r.id) ?? 0, ivaNeto: r.importe }, pagos.get(r.id) ?? null, modoPue);
@@ -517,11 +553,14 @@ export async function GET(req: Request) {
         where: { id: { in: [...anteriores.keys()] } },
         include: { customer: { select: { razonSocial: true, rfc: true } }, taxes: true },
       }).then((rows) => rows.map(numInvoice));
+      // Una nota con movimiento en el banco (un reembolso) ya restó en su mes.
+      const notasDeAnteriores = await notasRecibidasPorPadre(companyId, padres.map((p) => p.uuid), to, []);
       for (const inv of padres) {
-        if (inv.ivaNoAcreditable || bloqueado69B(rfcContraparte(inv))) continue;
+        if (inv.tipoSat === "E" || inv.ivaNoAcreditable || bloqueado69B(rfcContraparte(inv))) continue;
         const { trasladado: t, retenido: rr } = extractIva(inv);
         if (t <= 0.005) continue;
-        const res = aplicarFlujoPue({ total: inv.total, ivaNeto: Math.max(0, t - rr) }, anteriores.get(inv.id) ?? null, modoPue);
+        const total = totalNetoDeNotas(inv.total, inv.uuid ? notasDeAnteriores.get(normalizarUuid(inv.uuid)) ?? 0 : 0);
+        const res = aplicarFlujoPue({ total, ivaNeto: Math.max(0, t - rr) }, anteriores.get(inv.id) ?? null, modoPue);
         if (res.acreditable <= 0.005) continue;
         acreditable.push({
           id: `${inv.id}-pago`,
