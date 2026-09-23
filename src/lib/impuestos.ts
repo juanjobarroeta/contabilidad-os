@@ -12,6 +12,7 @@ import { ivaTrasladadoDe, repIvaTrasladadoDe } from "./fiscal/iva-flujo";
 import { ivaAcreditableNetoDe, ivaRetenidoDe, isrRetenidoDe, repIsrRetenidoDe, repIvaRetenidoDe } from "./fiscal/iva-retenciones";
 import { ivaRetenidoAProveedoresEnPeriodo } from "./fiscal/iva-retenciones-db";
 import { aplicarFlujoPue, pagosPueDelPeriodo, puesAnterioresPagadosEnPeriodo, type ModoPue } from "./fiscal/iva-pue-flujo";
+import { notasRecibidasPorPadre, padresDeNotasRecibidas, reduccionPorNotaRecibida, totalNetoDeNotas } from "./fiscal/iva-notas-credito";
 import { reconciliacionActiva } from "./fiscal/conciliacion-pue";
 import { normalizarUuid, variantesUuid } from "./fiscal/uuid";
 import {
@@ -244,6 +245,9 @@ export interface TaxPosition {
       sinPago: { iva: number; cfdis: number };
       anterioresPagadosEsteMes: number;
     };
+    /** Notas de crédito recibidas en el mes: IVA que se RESTÓ del acreditable
+     *  (Art. 7 LIVA), en positivo, y cuántas restaron algo. */
+    notasCreditoRecibidas: { iva: number; cfdis: number };
   };
   isr: {
     /** Which régimen's method produced these figures. */
@@ -854,16 +858,34 @@ export async function computeTaxPosition(
   // distintas para el mismo mes. Empresa sin conciliación: se conserva la
   // suposición (modo SUPUESTO_PAGADO), y el resultado lo dice.
   const modoPue: ModoPue = (await reconciliacionActiva(companyId)) ? "FLUJO" : "SUPUESTO_PAGADO";
-  const puesDelMes = facturasEgresos.filter((inv) => inv.metodoPago === "PUE" && !inv.ivaNoAcreditable);
+  // Las notas de crédito recibidas (E) NO pasan por la regla de pago: restan su
+  // IVA en el mes en que se reciben (Art. 7 LIVA, lib/fiscal/iva-notas-credito).
+  // Antes, en FLUJO, una nota sin movimiento bancario salía SIN_PAGO y restaba 0.
+  const notasRecibidas = facturasEgresos.filter((inv) => inv.tipoSat === "E" && !inv.ivaNoAcreditable);
+  const puesDelMes = facturasEgresos.filter((inv) => inv.metodoPago === "PUE" && inv.tipoSat !== "E" && !inv.ivaNoAcreditable);
   const pagosPue = modoPue === "FLUJO" ? await pagosPueDelPeriodo(puesDelMes.map((i) => i.id), from, to) : new Map();
+  // Un PUE que el proveedor cobra NETO de su nota se juzga contra el total neto.
+  const notasPorPadre = modoPue === "FLUJO"
+    ? await notasRecibidasPorPadre(companyId, puesDelMes.map((i) => i.uuid), to, notasRecibidas)
+    : new Map<string, number>();
+  const totalPue = (inv: { uuid: string | null; total: unknown }) =>
+    totalNetoDeNotas(Number(inv.total), inv.uuid ? notasPorPadre.get(normalizarUuid(inv.uuid)) ?? 0 : 0);
   let ivaAcreditablePUE = 0;
   let ivaPueSinPago = 0;
   let cfdisPueSinPago = 0;
   for (const inv of puesDelMes) {
     const neto = ivaAcreditableNetoDe(inv);
-    const r = aplicarFlujoPue({ total: Number(inv.total), ivaNeto: neto }, pagosPue.get(inv.id) ?? null, modoPue);
-    ivaAcreditablePUE += signoTipoSat(inv.tipoSat) * r.acreditable;
+    const r = aplicarFlujoPue({ total: totalPue(inv), ivaNeto: neto }, pagosPue.get(inv.id) ?? null, modoPue);
+    ivaAcreditablePUE += r.acreditable;
     if (r.estado === "SIN_PAGO") { ivaPueSinPago += neto; cfdisPueSinPago += 1; }
+  }
+  const padresDeNotas = await padresDeNotasRecibidas(companyId, notasRecibidas);
+  let ivaNotasRecibidas = 0;
+  let cfdisNotasRecibidas = 0;
+  for (const nota of notasRecibidas) {
+    const r = reduccionPorNotaRecibida({ total: Number(nota.total), ivaNeto: ivaAcreditableNetoDe(nota) }, padresDeNotas.get(nota.id) ?? []);
+    ivaNotasRecibidas += r.reduccion;
+    if (r.reduccion > 0) cfdisNotasRecibidas += 1;
   }
   // PUE de meses anteriores pagados en este periodo (mismo principio que el
   // PPD por REP: se acredita cuando se paga).
@@ -875,9 +897,13 @@ export async function computeTaxPosition(
         where: { id: { in: [...anteriores.keys()] }, ivaNoAcreditable: false, ...efosWhere },
         include: invoiceInclude,
       }).then((rows) => rows.map((inv) => ({ ...inv, subtotal: Number(inv.subtotal), totalImpuestos: Number(inv.totalImpuestos), taxes: inv.taxes.map((t) => ({ ...t, importe: Number(t.importe), base: t.base === null ? null : Number(t.base) })) })));
-      for (const inv of padres) {
-        const r = aplicarFlujoPue({ total: Number(inv.total), ivaNeto: ivaAcreditableNetoDe(inv) }, anteriores.get(inv.id) ?? null, modoPue);
-        ivaAcreditablePueAnteriores += signoTipoSat(inv.tipoSat) * r.acreditable;
+      // Una nota con movimiento en el banco (un reembolso) ya restó en su mes.
+      const gastos = padres.filter((inv) => inv.tipoSat !== "E");
+      const notasDeAnteriores = await notasRecibidasPorPadre(companyId, gastos.map((i) => i.uuid), to, []);
+      for (const inv of gastos) {
+        const total = totalNetoDeNotas(Number(inv.total), inv.uuid ? notasDeAnteriores.get(normalizarUuid(inv.uuid)) ?? 0 : 0);
+        const r = aplicarFlujoPue({ total, ivaNeto: ivaAcreditableNetoDe(inv) }, anteriores.get(inv.id) ?? null, modoPue);
+        ivaAcreditablePueAnteriores += r.acreditable;
       }
     }
   }
@@ -886,7 +912,7 @@ export async function computeTaxPosition(
   // en ésta. Se calcula con el mismo criterio de flujo para el periodo previo.
   const prevFrom = new Date(Date.UTC(year, month - 2, 1));
   const ivaRetenidoMesAnteriorAcreditable = await ivaRetenidoAProveedoresEnPeriodo(companyId, prevFrom, from);
-  const ivaAcreditableBruto = ivaAcreditablePUE + ivaAcreditablePPD + ivaRetenidoMesAnteriorAcreditable;
+  const ivaAcreditableBruto = ivaAcreditablePUE + ivaAcreditablePPD + ivaRetenidoMesAnteriorAcreditable - ivaNotasRecibidas;
   const ivaAcreditableDevengado = facturasEgresos.reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * ivaTrasladado(inv), 0);
 
   // Proporción de acreditamiento (Art. 5-V LIVA): con actos exentos en el mes,
@@ -1388,6 +1414,8 @@ export async function computeTaxPosition(
         sinPago: { iva: round2(ivaPueSinPago), cfdis: cfdisPueSinPago },
         anterioresPagadosEsteMes: round2(ivaAcreditablePueAnteriores),
       },
+      // Notas de crédito recibidas: IVA que el mes RESTA del acreditable (Art. 7).
+      notasCreditoRecibidas: { iva: round2(ivaNotasRecibidas), cfdis: cfdisNotasRecibidas },
     },
     isr,
   };
