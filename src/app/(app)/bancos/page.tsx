@@ -33,6 +33,7 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import { usePeriod } from "@/components/contabilidad/PeriodProvider";
 import { Loading } from "@/components/ui/feedback";
 import { ConciliacionWorkbench } from "@/components/contabilidad/ConciliacionWorkbench";
+import { ExpedienteEnContexto } from "@/components/expediente/ExpedienteEnContexto";
 import { GestionBancos, type VistaBancos } from "@/components/bancos/GestionBancos";
 import { TopTabsBar } from "@/components/layout/TopTabsBar";
 import { SelectorPeriodo } from "@/components/ui/SelectorPeriodo";
@@ -182,6 +183,18 @@ export default function BancosPage() {
       </div>
 
       <div className="mt-5">
+        {tab === "conciliacion" && (
+          // En la mesa, no en Movimientos: lo que no vive en la mesa no se usa.
+          <ExpedienteEnContexto
+            companyId={activeCompany.id}
+            className="mb-4"
+            titulo="Lo que sabemos de sus terminales y cuentas"
+            familias={["terminal", "banco"]}
+            temas={["conciliacion"]}
+            claves={["terminal.afiliacion", "terminal.adquirente", "banco.cuenta"]}
+            vacio="Nada anotado. Con la terminal y su afiliación escritas, la conciliación sabe qué estado de cuenta pedir."
+          />
+        )}
         {tab === "conciliacion" ? (
           <ConciliacionWorkbench
             companyId={activeCompany.id}
