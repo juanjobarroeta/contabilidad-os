@@ -34,7 +34,39 @@ acuses 1–2/mes/empresa); `parseSatDocument` ya lo registra en `CostEvent`.
   `--guardar DIR` para conservar los PDFs y revisar los parsers.
 - `scripts/cumplimiento-acuse-a-bytes.ts`: pasa a bytes los acuses viejos.
 
-## Workflow automático propuesto
+## La agenda del SAT (hecho, sep-2026)
+
+`src/lib/agenda-sat/` + cron `agenda-sat` (tick 15 min) + tabla `AgendaSat`.
+Una fila por empresa elegible, entregable y periodo; la cadencia es la de un
+contador y la decide `calendario.ts` (puro, con pruebas):
+
+| Entregable | Vence | Primera revisión | Cómo se busca |
+|---|---|---|---|
+| `DECLARACION_MENSUAL` | 17 del mes siguiente, recorrido al hábil; PF + días del 6º dígito del RFC | 3 hábiles antes, 21:00 | `importarDeclaracionesSatGo` (gap-driven) |
+| `CUMPLIMIENTO` (32-D + CSF) | vencimiento de la declaración + 3 hábiles | ese día, 10:00 | `SatGoComplianceProvider` |
+| `BALANZA_CE` | día 3 (PM) / 5 (PF) del segundo mes, al hábil | 3 hábiles antes, 21:00 | la baja el `ce-worker`; la agenda pregunta si ya está en la base |
+
+Si no aparece: la noche del vencimiento (22:00) → D+1 10:00 → D+1 21:00 →
+cada noche hasta D + 5 hábiles → cada 3 días hasta D+30 → cada semana hasta
+D+90 → se deja (`ABANDONADO`). Desde la noche de D+1 la fila queda `TARDE` y
+se abre UN pendiente en el expediente (tema declaraciones/ce), que se cierra
+solo cuando el documento aparece. Un error (SAT o SatGo caído) se reintenta a
+las 2 h y nunca acusa de tarde. Opinión negativa: se vuelve a pedir cada
+semana (el hallazgo lo abre `diff.ts`).
+
+Siembra: declaración de los 3 meses cerrados, cumplimiento del último, balanza
+de M-2 a M-4 sólo para empresas que ya tienen balanzas en la base (la CE no
+está en `CompanyObligation`; sin historia, es el bootstrap del worker).
+
+El `ce-worker` dejó de barrer 5 años de cada empresa: por default (AGENDA≠0)
+sólo baja los años de las balanzas que la agenda revisará en las próximas
+`AGENDA_HORAS` (24) más el bootstrap de empresas sin ninguna balanza. Su cron
+de Railway debe correr al menos una vez al día (idealmente cada 6 h).
+
+Pendiente: complementarias (el importador es gap-driven y no vuelve a bajar
+un periodo que ya tiene PDF), la anual, y el censo de CFDIs.
+
+## Workflow automático propuesto (original)
 
 Todo cuelga de `cron-scheduler.ts` como los demás jobs; cada job se auto-gatea
 por empresa para no repetir consultas ni pagar parseos de más.
