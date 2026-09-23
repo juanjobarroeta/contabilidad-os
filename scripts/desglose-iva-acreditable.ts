@@ -18,11 +18,14 @@
  * retenido el mes anterior (va en «otras cantidades a favor»).
  */
 import { prisma } from "../src/lib/prisma";
-import { computeTaxPosition, repIvaAcreditableDe } from "../src/lib/impuestos";
+import { computeTaxPosition } from "../src/lib/impuestos";
 import { reconciliacionActiva } from "../src/lib/fiscal/conciliacion-pue";
 import { aplicarFlujoPue, pagosPueDelPeriodo, puesAnterioresPagadosEnPeriodo } from "../src/lib/fiscal/iva-pue-flujo";
-import { ivaAcreditableNetoDe, repIvaRetenidoDe } from "../src/lib/fiscal/iva-retenciones";
+import { ivaAcreditableNetoDe } from "../src/lib/fiscal/iva-retenciones";
 import { normalizarUuid } from "../src/lib/fiscal/uuid";
+import { REP_VIGENTE } from "../src/lib/fiscal/rep-vigente";
+import { montosRepDelPadre, type LinkRep } from "../src/lib/fiscal/rep-tope";
+import { linksVigentesAntesDe } from "../src/lib/fiscal/rep-tope-db";
 import { textoDePdf } from "../src/lib/fiscal/fuentes/texto";
 
 function arg(name: string): string | null {
@@ -163,13 +166,17 @@ async function main() {
     }
   }
 
-  // ── 3. PPD por REP ───────────────────────────────────────────────────────
+  // ── 3. PPD por REP — igual que el motor: sólo REPs vigentes (no sustituidos)
+  //       y acotados por factura a su IVA menos lo que tomaron meses anteriores.
   const links = (
     await prisma.pagoDoctoRelacionado.findMany({
-      where: { fechaPago: { gte: from, lt: to }, pagoInvoice: { companyId, tipo: "PAGO", status: "STAMPED" } },
+      where: { fechaPago: { gte: from, lt: to }, pagoInvoice: { companyId, ...REP_VIGENTE } },
       select: { parentUuid: true, impPagado: true, ivaTrasladado: true, ivaDerivado: true, pagoInvoice: { select: { uuid: true } } },
     })
   ).map((l) => ({ ...l, impPagado: l.impPagado === null ? null : Number(l.impPagado), ivaTrasladado: l.ivaTrasladado === null ? null : Number(l.ivaTrasladado) }));
+  const sustituidos = await prisma.pagoDoctoRelacionado.count({
+    where: { fechaPago: { gte: from, lt: to }, pagoInvoice: { companyId, tipo: "PAGO", status: "STAMPED", sustituidoPorUuid: { not: null } } },
+  });
   const uuids = [...new Set(links.map((l) => l.parentUuid))];
   const ppd = (
     await prisma.invoice.findMany({
@@ -178,62 +185,53 @@ async function main() {
     })
   ).map(conv);
   const porUuid = new Map(ppd.map((p) => [normalizarUuid(p.uuid!), p]));
-  const rPpd: Renglon[] = [];
-  const vistos = new Map<string, number>();
+  const delMes = new Map<string, (LinkRep & { rep: string })[]>();
   for (const l of links) {
-    const parent = porUuid.get(normalizarUuid(l.parentUuid));
-    if (!parent || parent.ivaNoAcreditable) continue;
-    const signo = parent.tipoSat === "E" ? -1 : 1;
-    const iva = signo * repIvaAcreditableDe(l, parent);
-    const ret = signo * repIvaRetenidoDe(l, parent);
-    const clave = `${normalizarUuid(l.parentUuid)}|${l.impPagado}`;
-    vistos.set(clave, (vistos.get(clave) ?? 0) + 1);
-    rPpd.push({
-      monto: Math.max(0, iva - ret),
-      texto: `${etiqueta(parent)} · REP ${(l.pagoInvoice?.uuid ?? "").slice(0, 8)} pagó ${fmt(l.impPagado ?? 0)}`,
-    });
+    const k = normalizarUuid(l.parentUuid);
+    if (!porUuid.has(k)) continue;
+    delMes.set(k, [...(delMes.get(k) ?? []), { impPagado: l.impPagado, ivaTrasladado: l.ivaTrasladado, ivaDerivado: l.ivaDerivado, rep: (l.pagoInvoice?.uuid ?? "").slice(0, 8) }]);
   }
-  const tPpd = cubeta("PPD pagados en el mes (por REP)", rPpd, top);
-  const repetidos = [...vistos.entries()].filter(([, n]) => n > 1);
-  if (repetidos.length) {
-    console.log(`   ⚠ ${repetidos.length} pagos con el MISMO padre e importe en más de un REP (¿REP duplicado o sustituido sin cancelar?):`);
-    for (const [k, n] of repetidos.slice(0, top)) console.log(`     padre ${k.split("|")[0].slice(0, 8)} importe ${fmt(Number(k.split("|")[1]))} × ${n}`);
-  }
-
-  // ── 3b. Tope por padre: ¿los REPs de TODA la vida del padre acreditan más IVA del que trae? ──
-  const padresAgosto = [...new Set(links.map((l) => normalizarUuid(l.parentUuid)))].filter((u) => porUuid.has(u));
-  const todos = (
-    await prisma.pagoDoctoRelacionado.findMany({
-      where: { parentUuid: { in: padresAgosto, mode: "insensitive" }, pagoInvoice: { companyId, tipo: "PAGO", status: "STAMPED" }, fechaPago: { lt: to } },
-      select: { parentUuid: true, impPagado: true, ivaTrasladado: true, ivaDerivado: true, fechaPago: true, numParcialidad: true, pagoInvoice: { select: { uuid: true, fecha: true, rawXml: true } } },
-    })
-  ).map((l) => ({ ...l, impPagado: l.impPagado === null ? null : Number(l.impPagado), ivaTrasladado: l.ivaTrasladado === null ? null : Number(l.ivaTrasladado) }));
-  let exceso = 0;
-  const excesos: string[] = [];
-  for (const u of padresAgosto) {
-    const parent = porUuid.get(u)!;
+  const previos = await linksVigentesAntesDe(companyId, delMes.keys(), from);
+  const rPpd: Renglon[] = [];
+  const recortes: string[] = [];
+  for (const [k, ls] of delMes) {
+    const parent = porUuid.get(k)!;
     if (parent.ivaNoAcreditable) continue;
-    const suyos = todos.filter((l) => normalizarUuid(l.parentUuid) === u);
-    const tope = Math.max(0, ivaAcreditableNetoDe(parent));
-    const acum = suyos.reduce((s2, l) => s2 + Math.max(0, repIvaAcreditableDe(l, parent) - repIvaRetenidoDe(l, parent)), 0);
-    if (acum > tope + 1) {
-      // Lo que cae en ESTE mes del exceso: lo acreditado en agosto, menos lo que aún cabía.
-      const antes = suyos.filter((l) => l.fechaPago && l.fechaPago < from).reduce((s2, l) => s2 + Math.max(0, repIvaAcreditableDe(l, parent) - repIvaRetenidoDe(l, parent)), 0);
-      const enMes = acum - antes;
-      const excesoMes = Math.min(enMes, acum - Math.max(tope, antes));
-      exceso += Math.max(0, excesoMes);
-      excesos.push(
-        `   padre ${(parent.uuid ?? "").slice(0, 8)} ${(parent.customer?.rfc ?? "").padEnd(13)} total ${fmt(parent.total)} IVA ${fmt(tope)} · REPs acreditan ${fmt(acum)} · exceso en el mes ${fmt(Math.max(0, excesoMes))}`,
-        ...suyos.map((l) => {
-          const sustituye = /TipoRelacion="04"/.test(l.pagoInvoice?.rawXml ?? "") ? " (sustituye a otro REP)" : "";
-          return `       REP ${(l.pagoInvoice?.uuid ?? "").slice(0, 8)} emitido ${l.pagoInvoice?.fecha.toISOString().slice(0, 10)} pago ${l.fechaPago?.toISOString().slice(0, 10)} parc ${l.numParcialidad ?? "?"} importe ${fmt(l.impPagado ?? 0)} IVA ${fmt(repIvaAcreditableDe(l, parent))}${sustituye}`;
-        }),
+    const signo = parent.tipoSat === "E" ? -1 : 1;
+    const m = montosRepDelPadre(parent, previos.get(k) ?? [], ls);
+    const monto = Math.max(0, signo * m.iva - signo * m.ivaRetenido);
+    rPpd.push({ monto, texto: `${etiqueta(parent)} · REPs ${ls.map((x) => `${x.rep}:${fmt(x.impPagado ?? 0)}`).join(" ")}` });
+    if (m.recortado) {
+      const sinTope = montosRepDelPadre(parent, [], ls);
+      const prev = previos.get(k) ?? [];
+      recortes.push(
+        `   ${fmt(Math.max(0, sinTope.iva - sinTope.ivaRetenido) - monto).padStart(10)} recortado · ${etiqueta(parent)} · IVA factura ${fmt(ivaAcreditableNetoDe(parent))}` +
+          ` · meses anteriores: ${prev.length} pago(s) por ${fmt(prev.reduce((s2, x) => s2 + (x.impPagado ?? 0), 0))} · este mes: ${ls.map((x) => `${x.rep} ${fmt(x.impPagado ?? 0)}`).join(", ")}`,
       );
     }
   }
-  console.log(`\n── REPs que acreditan MÁS IVA del que trae su factura: exceso en el mes ${fmt(exceso)}`);
-  for (const x of excesos.slice(0, top * 6)) console.log(x);
+  const tPpd = cubeta("PPD pagados en el mes (por REP vigente, con tope por factura)", rPpd, top);
+  console.log(`   (REPs sustituidos que ya NO cuentan en el mes: ${sustituidos})`);
+  if (recortes.length) {
+    console.log(`\n── Facturas donde el TOPE recortó (${recortes.length}):`);
+    for (const r of recortes) console.log(r);
+  }
 
+  // ── ISR: lo facturado en el mes (emitidas), bruto y neto de descuento ─────
+  const emit = await prisma.invoice.groupBy({
+    by: ["tipoSat", "metodoPago"],
+    where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: from, lt: to } },
+    _sum: { subtotal: true, descuento: true },
+    _count: { id: true },
+  });
+  console.log(`\n── Emitidas del mes (para el ISR)`);
+  for (const g of emit) {
+    console.log(`   tipo ${g.tipoSat ?? "?"} ${g.metodoPago}: ${g._count.id} CFDIs · subtotal ${fmt(Number(g._sum.subtotal ?? 0))} · descuento ${fmt(Number(g._sum.descuento ?? 0))}`);
+  }
+  const deTipo = (t: string) => emit.filter((g) => (g.tipoSat ?? "I") === t);
+  const sub = (t: string) => deTipo(t).reduce((a, g) => a + Number(g._sum.subtotal ?? 0), 0);
+  const des = (t: string) => deTipo(t).reduce((a, g) => a + Number(g._sum.descuento ?? 0), 0);
+  console.log(`   I bruto ${fmt(sub("I"))} · I neto de descuento ${fmt(sub("I") - des("I"))} · E ${fmt(sub("E"))}`);
   await imprimirAcuse(companyId, year, month);
 
   // ── 4. Lo demás, del motor ───────────────────────────────────────────────

@@ -968,6 +968,16 @@ export async function computeTaxPosition(
   const ingresosDelMes = round2(facturasEmitidas.reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * baseNeta(inv.subtotal, inv.descuento), 0));
   const gastosDelMes = round2(facturasEgresos.reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * baseNeta(inv.subtotal, inv.descuento), 0));
   const ingresosAcumulados = sumaNeta(ingresosAcumuladosAgg._sum) - 2 * sumaNeta(acumuladosE._sum);
+  // PERSONA MORAL (Art. 14 LISR): los INGRESOS NOMINALES van en BRUTO. El
+  // acuse de agosto 2026 de CENTRO lo zanjó: «INGRESOS NOMINALES FACTURADOS
+  // 3,387,843» es exactamente la suma del SubTotal de sus CFDI de ingreso, sin
+  // restar los 80,131 de Descuento. El descuento otorgado es una DEDUCCIÓN
+  // (Art. 25-I), no un menor ingreso nominal; sólo el IVA —que se causa sobre
+  // el precio efectivamente cobrado— usa «SubTotal − Descuento». Netearlo aquí
+  // (#1177) bajaba la base del pago provisional por debajo de la del SAT.
+  const bruto = (x: { subtotal: unknown }) => Number(x.subtotal ?? 0);
+  const ingresosDelMesBruto = round2(facturasEmitidas.reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * inv.subtotal, 0));
+  const ingresosAcumuladosBrutos = bruto(ingresosAcumuladosAgg._sum) - 2 * bruto(acumuladosE._sum);
   const isrPagadoAnterior = sumIsrPagar(declaracionesPrevias);
 
   // Avisos que nacen dentro del cálculo de ISR (origen del remanente de
@@ -1158,8 +1168,9 @@ export async function computeTaxPosition(
   } else {
     // The capability gate narrows this final branch to 601 PM only. RESICO PM
     // and every other PM regimen fail before any fiscal data is queried.
-    const prevIngresosTotal = sumaNeta(prevYearIngresos._sum) - 2 * sumaNeta(prevYearIngresosE._sum);
-    const prevGastosTotal = sumaNeta(prevYearEgresos._sum) - 2 * sumaNeta(prevYearEgresosE._sum);
+    // Mismo criterio que los ingresos nominales del mes: bruto (ver arriba).
+    const prevIngresosTotal = bruto(prevYearIngresos._sum) - 2 * bruto(prevYearIngresosE._sum);
+    const prevGastosTotal = bruto(prevYearEgresos._sum) - 2 * bruto(prevYearEgresosE._sum);
     const prevUtilidad = Math.max(0, prevIngresosTotal - prevGastosTotal);
     const coeficienteCalculado = prevIngresosTotal > 0 ? prevUtilidad / prevIngresosTotal : null;
 
@@ -1283,7 +1294,7 @@ export async function computeTaxPosition(
     let isrDelEjercicio: number | null = null;
     let isrPagar: number | null = null;
     if (coeficiente !== null && coeficiente > 0) {
-      utilidadFiscal = round2(ingresosAcumulados * coeficiente);
+      utilidadFiscal = round2(ingresosAcumuladosBrutos * coeficiente);
       // PTU pagada en el ejercicio disminuida en octavos acumulados de mayo a
       // diciembre (Art. 14, fracc. II, segundo párrafo LISR) — ANTES de
       // amortizar pérdidas fiscales de ejercicios anteriores. El excedente no
@@ -1305,9 +1316,9 @@ export async function computeTaxPosition(
 
     isr = {
       metodo: "PM_ART14",
-      ingresosDelMes,
+      ingresosDelMes: ingresosDelMesBruto,
       gastosDelMes,
-      ingresosAcumulados: round2(ingresosAcumulados),
+      ingresosAcumulados: round2(ingresosAcumuladosBrutos),
       isrPagadoAnterior: round2(isrPagadoAnterior),
       coeficiente,
       coeficienteFuente,

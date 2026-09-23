@@ -11,7 +11,6 @@ import { computeTaxPosition } from "@/lib/impuestos";
 import { nombreContraparte, rfcContraparte } from "@/lib/facturas/contraparte";
 import { REP_VIGENTE } from "@/lib/fiscal/rep-vigente";
 import { calculationForApi } from "@/lib/fiscal/regimen-capability-api";
-import { baseNeta, sumaNeta } from "@/lib/fiscal/base-neta";
 
 // GET /api/papeles/isr?companyId=xxx&year=2026&month=3[&format=csv]
 //
@@ -117,8 +116,9 @@ export async function GET(req: Request) {
     if (m < 1 || m > month) continue;
     monthlyTotals[m - 1].invoices += 1;
 
-    // Ingreso nominal neto de descuento (SubTotal − Descuento), como el SAT.
-    const subtotal = baseNeta(inv.subtotal, inv.descuento);
+    // Ingreso nominal en BRUTO (Art. 14 LISR): el SAT precarga la suma del
+    // SubTotal sin restar el Descuento, que es deducción (Art. 25-I).
+    const subtotal = Number(inv.subtotal);
     const total = Number(inv.total);
     let restante = subtotal;
     const links = inv.uuid ? (linksPorParent.get(normalizarUuid(inv.uuid)) ?? []) : [];
@@ -141,8 +141,8 @@ export async function GET(req: Request) {
   // El coeficiente crudo (ingresos−egresos)/ingresos se muestra como referencia,
   // pero NO es el que se aplica ni el que se sugiere: ambos vienen del motor
   // (computeTaxPosition) para no divergir de la pantalla de Impuestos.
-  const prevIngresosTotal = sumaNeta(prevYearIngresos._sum);
-  const prevGastosTotal = sumaNeta(prevYearGastos._sum);
+  const prevIngresosTotal = Number(prevYearIngresos._sum.subtotal ?? 0);
+  const prevGastosTotal = Number(prevYearGastos._sum.subtotal ?? 0);
   const prevUtilidad = Math.max(0, prevIngresosTotal - prevGastosTotal);
   const coeficienteCalculado = prevIngresosTotal > 0 ? prevUtilidad / prevIngresosTotal : null;
 
@@ -246,9 +246,9 @@ export async function GET(req: Request) {
       folio: inv.folio,
       contraparte: nombreContraparte(inv),
       rfc: rfcContraparte(inv),
-      // La columna es la base del ISR: neta de descuento, para que el detalle
-      // sume lo mismo que el mes (el descuento va aparte, por transparencia).
-      subtotal: baseNeta(inv.subtotal, inv.descuento),
+      // La columna es el ingreso nominal (bruto, como el SAT); el descuento
+      // va aparte, por transparencia.
+      subtotal: Number(inv.subtotal),
       descuento: Number(inv.descuento),
     })),
     calculo: esPfPlataformas && enginePos
