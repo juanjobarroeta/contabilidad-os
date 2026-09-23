@@ -218,6 +218,37 @@ export function uuidDelTimbre(xml: string): string | null {
   return v ? decodificarEntidadesXml(v).trim().toUpperCase() : null;
 }
 
+/**
+ * Los nodos CfdiRelacionados de un CFDI (o de un fragmento que los contenga):
+ * a qué OTRO comprobante apunta éste. TipoRelacion 04 lo sustituye, 01 es la
+ * nota de crédito que lo corrige, 07 es el CFDI que aplica un anticipo. Sin
+ * esto, una nota de crédito y su factura son dos documentos sueltos y el neteo
+ * se tiene que adivinar por importe y fecha.
+ *
+ * El CFDI 4.0 permite VARIOS nodos CfdiRelacionados (uno por TipoRelacion) y
+ * cada uno con varios hijos, así que se devuelven todos. Quien sólo tenga dos
+ * columnas escalares que llenar toma el primero, pero el dato no se pierde.
+ */
+export function relacionadosDeXml(xml: string): Array<{ tipoRelacion: string; uuids: string[] }> {
+  const relacionados: Array<{ tipoRelacion: string; uuids: string[] }> = [];
+  const relRe =
+    /<(?:[a-zA-Z0-9]+:)?CfdiRelacionados\b([^>]*)>([\s\S]*?)<\/(?:[a-zA-Z0-9]+:)?CfdiRelacionados>/g;
+  let rm: RegExpExecArray | null;
+  while ((rm = relRe.exec(xml)) !== null) {
+    const tipoRel = /\bTipoRelacion="([^"]*)"/.exec(rm[1] ?? "")?.[1]?.trim();
+    if (!tipoRel) continue;
+    const uuids: string[] = [];
+    for (const r of (rm[2] ?? "").matchAll(/<(?:[a-zA-Z0-9]+:)?CfdiRelacionado\b([^>]*?)\/?>/g)) {
+      // Mismo criterio que el UUID del timbre: mayúsculas, o el mismo folio
+      // fiscal escrito en dos cajas distintas no empata consigo mismo.
+      const u = /\bUUID="([^"]*)"/.exec(r[1] ?? "")?.[1]?.trim().toUpperCase();
+      if (u) uuids.push(u);
+    }
+    if (uuids.length > 0) relacionados.push({ tipoRelacion: tipoRel, uuids });
+  }
+  return relacionados;
+}
+
 /** Parse key fields from a CFDI XML string */
 export function parseCfdiXml(xml: string) {
   const attr = (name: string) => {
@@ -573,32 +604,8 @@ export function parseCfdiXml(xml: string) {
     };
   }
 
-  // ── CfdiRelacionados ───────────────────────────────────────────────────────
-  // El nodo que dice a qué OTRO comprobante apunta éste: TipoRelacion 04 lo
-  // sustituye, 01 es la nota de crédito que lo corrige, 07 es el CFDI que
-  // aplica un anticipo. Sin esto, una nota de crédito y su factura son dos
-  // documentos sueltos y el neteo se tiene que adivinar por importe y fecha.
-  //
-  // El CFDI 4.0 permite VARIOS nodos CfdiRelacionados (uno por TipoRelacion) y
-  // cada uno con varios hijos, así que se devuelven todos. Quien sólo tenga dos
-  // columnas escalares que llenar toma el primero, pero el dato no se pierde
-  // aquí.
-  const relacionados: Array<{ tipoRelacion: string; uuids: string[] }> = [];
-  const relRe =
-    /<(?:[a-zA-Z0-9]+:)?CfdiRelacionados\b([^>]*)>([\s\S]*?)<\/(?:[a-zA-Z0-9]+:)?CfdiRelacionados>/g;
-  let rm: RegExpExecArray | null;
-  while ((rm = relRe.exec(xml)) !== null) {
-    const tipoRel = /\bTipoRelacion="([^"]*)"/.exec(rm[1] ?? "")?.[1]?.trim();
-    if (!tipoRel) continue;
-    const uuids: string[] = [];
-    for (const r of (rm[2] ?? "").matchAll(/<(?:[a-zA-Z0-9]+:)?CfdiRelacionado\b([^>]*?)\/?>/g)) {
-      // Mismo criterio que el UUID del timbre: mayúsculas, o el mismo folio
-      // fiscal escrito en dos cajas distintas no empata consigo mismo.
-      const u = /\bUUID="([^"]*)"/.exec(r[1] ?? "")?.[1]?.trim().toUpperCase();
-      if (u) uuids.push(u);
-    }
-    if (uuids.length > 0) relacionados.push({ tipoRelacion: tipoRel, uuids });
-  }
+  // ── CfdiRelacionados (ver relacionadosDeXml) ───────────────────────────────
+  const relacionados = relacionadosDeXml(xml);
 
   return {
     uuid,

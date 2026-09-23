@@ -7,6 +7,7 @@ import { identidadDesdeCfdi, regimenParaAlta } from "./facturas/identidad-recept
 import { crearActivoDesdeCfdiSiAplica } from "./fiscal/auto-activo";
 import { derivarVehiculoInline } from "./automotriz/auto-vehiculo";
 import { derivarInsumosInline } from "./hospital/insumos-cfdi";
+import { registrarSustitucion } from "./cfdi-sustitucion";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Importar UN CFDI a partir de su XML — sin importar de dónde vino.
@@ -101,6 +102,9 @@ export async function importarCfdiXml(args: ImportarCfdiArgs): Promise<Resultado
   if (existing) {
     if (!existing.rawXml) {
       await prisma.invoice.update({ where: { id: existing.id }, data: { rawXml: xmlContent } });
+      // La relación 04 vive en el XML: con él recién llegado ya se sabe si
+      // éste sustituye a otros.
+      await registrarSustitucion(prisma, companyId, { id: existing.id, uuid, relacionados: parseCfdiXml(xmlContent).relacionados });
     }
     // Repara el régimen/ISR retenido de nómina de filas importadas antes de
     // parsear el complemento (incl. las que no tenían rawXml): así un re-sync
@@ -292,6 +296,10 @@ export async function importarCfdiXml(args: ImportarCfdiArgs): Promise<Resultado
       taxes: cfdi.taxes.length > 0 ? { create: cfdi.taxes } : undefined,
     },
   });
+
+  // Sustitución (TipoRelacion 04), en los dos sentidos: si éste sustituye a
+  // otros, dejan de contar; si otro ya lo sustituyó, éste nace sin contar.
+  await registrarSustitucion(prisma, companyId, { id: createdInvoice.id, uuid, relacionados: cfdi.relacionados });
 
   // Auto-registro de activo fijo si el CFDI es inversión (naturaleza
   // INVERSION) — depreciación sin captura manual; el contador sólo revisa.

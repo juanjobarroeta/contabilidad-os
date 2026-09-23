@@ -9,6 +9,7 @@ import {
 } from "@/lib/fiscal/vigencia-cfdi";
 import { contradiceAlSat, estadoDeCancelacion } from "@/lib/facturas/cancelacion-estado";
 import { revertirDerivadosDeCancelada } from "@/lib/automotriz/revertir-cancelada";
+import { liberarSustituidosPor } from "@/lib/cfdi-sustitucion";
 import { registrarBitacora } from "@/lib/audit";
 import {
   cupoPorEmpresa,
@@ -401,6 +402,11 @@ async function handle(req: Request) {
       where: { id: { in: cancelados.map((c) => c.id) } },
       data: { status: "CANCELLED", canceladaAt: new Date() },
     });
+    // Un sustituto cancelado deja de sustituir: lo que había reemplazado
+    // (TipoRelacion 04) vuelve a contar.
+    for (const companyId of new Set(cancelados.map((c) => c.companyId))) {
+      await liberarSustituidosPor(prisma, companyId, cancelados.filter((c) => c.companyId === companyId).map((c) => c.uuid));
+    }
 
     // Marcar la factura NO basta. El motor fiscal filtra por status al leer,
     // pero la capa de operación MATERIALIZA filas —unidades, costos, kardex,

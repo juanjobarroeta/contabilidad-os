@@ -39,7 +39,7 @@ export async function amparadoPorReps(
       parentUuid: { in: lista },
       // Un REP cancelado no ampara nada. La cancelación SOLICITADA sí ampara:
       // el CFDI sigue vigente hasta que el SAT la resuelve.
-      pagoInvoice: { companyId, tipo: "PAGO", status: { not: "CANCELLED" } },
+      pagoInvoice: { companyId, tipo: "PAGO", status: { not: "CANCELLED" }, sustituidoPorUuid: null },
     },
     select: { parentUuid: true, impPagado: true },
   });
@@ -63,7 +63,7 @@ export async function repsPorFactura(
   const links = await db.pagoDoctoRelacionado.findMany({
     where: {
       parentUuid: { in: lista },
-      pagoInvoice: { companyId, tipo: "PAGO", status: { not: "CANCELLED" } },
+      pagoInvoice: { companyId, tipo: "PAGO", status: { not: "CANCELLED" }, sustituidoPorUuid: null },
     },
     select: {
       parentUuid: true,

@@ -8,7 +8,9 @@
 // el acreditamiento se corre igual que el entero — eso no lo sabe el sistema.
 import { prisma } from "@/lib/prisma";
 import { normalizarUuid, variantesUuid } from "./uuid";
-import { repIvaRetenidoDe } from "./iva-retenciones";
+import { REP_VIGENTE } from "./rep-vigente";
+import { montosRepDelPadre, type LinkRep } from "./rep-tope";
+import { linksVigentesAntesDe } from "./rep-tope-db";
 
 export async function ivaRetenidoAProveedoresEnPeriodo(
   companyId: string,
@@ -34,8 +36,8 @@ export async function ivaRetenidoAProveedoresEnPeriodo(
       _sum: { importe: true },
     }),
     prisma.pagoDoctoRelacionado.findMany({
-      where: { fechaPago: { gte: from, lt: to }, pagoInvoice: { companyId, tipo: "PAGO", status: "STAMPED" } },
-      select: { parentUuid: true, impPagado: true },
+      where: { fechaPago: { gte: from, lt: to }, pagoInvoice: { companyId, ...REP_VIGENTE } },
+      select: { parentUuid: true, impPagado: true, ivaTrasladado: true, ivaDerivado: true },
     }),
   ]);
 
@@ -52,10 +54,20 @@ export async function ivaRetenidoAProveedoresEnPeriodo(
         { total: Number(p.total), totalImpuestos: p.totalImpuestos === null ? null : Number(p.totalImpuestos), taxes: p.taxes.map((t) => ({ ...t, importe: Number(t.importe) })) },
       ]),
     );
+    // Por factura y con tope (lib/fiscal/rep-tope): dos REPs del mismo pago no
+    // retienen dos veces lo que la factura retiene una.
+    const porPadre = new Map<string, LinkRep[]>();
     for (const l of repLinks) {
-      const parent = byUuid.get(normalizarUuid(l.parentUuid));
-      if (!parent) continue;
-      total += repIvaRetenidoDe({ impPagado: l.impPagado === null ? null : Number(l.impPagado) }, parent);
+      const k = normalizarUuid(l.parentUuid);
+      if (!byUuid.has(k)) continue;
+      porPadre.set(k, [
+        ...(porPadre.get(k) ?? []),
+        { impPagado: l.impPagado === null ? null : Number(l.impPagado), ivaTrasladado: l.ivaTrasladado === null ? null : Number(l.ivaTrasladado), ivaDerivado: l.ivaDerivado },
+      ]);
+    }
+    const previos = await linksVigentesAntesDe(companyId, porPadre.keys(), from);
+    for (const [k, links] of porPadre) {
+      total += montosRepDelPadre(byUuid.get(k)!, previos.get(k) ?? [], links).ivaRetenido;
     }
   }
 

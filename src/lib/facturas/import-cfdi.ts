@@ -5,6 +5,7 @@ import { identidadDesdeCfdi, regimenParaAlta } from "./identidad-receptor";
 import { clasificarCfdi } from "@/lib/fiscal/clasificar-cfdi";
 import { crearActivoDesdeCfdiSiAplica } from "@/lib/fiscal/auto-activo";
 import { derivarVehiculoInline } from "@/lib/automotriz/auto-vehiculo";
+import { registrarSustitucion } from "@/lib/cfdi-sustitucion";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Record a CFDI from an uploaded file as an Invoice (NOT Facturapi-stamped —
@@ -214,6 +215,9 @@ export async function importCfdiFromXml(opts: {
       skipDuplicates: true,
     });
   }
+
+  // Sustitución (TipoRelacion 04), en los dos sentidos — igual que la descarga del SAT.
+  await registrarSustitucion(prisma, companyId, { id: invoice.id, uuid: cfdi.uuid, relacionados: cfdi.relacionados });
 
   return { ok: true, invoiceId: invoice.id, uuid: cfdi.uuid, message: "CFDI registrado." };
 }

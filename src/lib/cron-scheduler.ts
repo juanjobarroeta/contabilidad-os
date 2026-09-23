@@ -124,7 +124,7 @@ const JOBS: Job[] = [
   { name: "sat-rawxml-backfill", everyMs: 6 * HOUR, firstDelayMs: 15 * MIN, minMs: MIN_SAT,
     // El XML recién bajado alimenta impuestos, contraparte y la identidad
     // fiscal del cliente: se derivan ya.
-    encadena: ["invoice-taxes-backfill", "invoice-contraparte-backfill", "cliente-fiscal-backfill", "invoice-descuento-backfill"] },
+    encadena: ["invoice-taxes-backfill", "invoice-contraparte-backfill", "cliente-fiscal-backfill", "invoice-descuento-backfill", "cfdi-sustitucion-backfill"] },
   // Ídem: el workflow de rawxml-backfill encadenaba el desglose de impuestos
   // (parse local del rawXml recién bajado, sin cuota SAT).
   { name: "invoice-taxes-backfill", everyMs: 6 * HOUR, firstDelayMs: 25 * MIN, minMs: MIN_LOCAL },
@@ -136,6 +136,10 @@ const JOBS: Job[] = [
   // (43 mil CFDIs con descuento en el XML y 0 en la fila). Local y gratis;
   // gap-driven: converge y luego cada tick es un no-op.
   { name: "invoice-descuento-backfill", everyMs: 6 * HOUR, firstDelayMs: 45 * MIN, minMs: MIN_LOCAL },
+  // Del mismo rawXml: los CFDIs que otro sustituye (TipoRelacion 04). Un REP
+  // sustituido sin cancelar acreditaba IVA junto con su reemplazo. Local e
+  // idempotente: en régimen, un barrido sin escrituras.
+  { name: "cfdi-sustitucion-backfill", everyMs: 6 * HOUR, firstDelayMs: 50 * MIN, minMs: MIN_LOCAL },
   // Desglosa la contraparte de los movimientos bancarios ya importados. Local
   // y gratis (un regex sobre texto ya guardado), así que va con el piso barato.
   { name: "bancos-contraparte-backfill", everyMs: 6 * HOUR, firstDelayMs: 50 * MIN, minMs: MIN_LOCAL },
