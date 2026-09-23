@@ -19,6 +19,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { normalizarUuid } from "./uuid";
+import { baseNeta } from "./base-neta";
 
 export type InvoiceLike = {
   taxes: { tipo: string; retencion: boolean; importe: number }[];
@@ -71,6 +72,8 @@ export function repIvaTrasladadoDe(
 
 export interface EgresoConTaxes {
   subtotal: number;
+  /** Descuento del comprobante; la base sin desglose es SubTotal − Descuento. */
+  descuento?: unknown; // number o Decimal de prisma
   total: number;
   totalImpuestos: number | null;
   taxes: {
@@ -118,6 +121,8 @@ export function clasificarBasesIvaEgreso(inv: EgresoConTaxes): BasesIvaEgreso {
   let exentos = 0;
 
   const conBase = ivaRows.filter((r) => r.base != null);
+  // Sin Base en las filas, el valor del acto es SubTotal − Descuento (como el SAT).
+  const neta = baseNeta(inv.subtotal, inv.descuento);
   if (conBase.length > 0) {
     for (const row of conBase) {
       if (row.factor === "EXENTO") exentos += row.base!;
@@ -129,15 +134,15 @@ export function clasificarBasesIvaEgreso(inv: EgresoConTaxes): BasesIvaEgreso {
     // Filas sin Base (sintéticas legacy o CFDI 3.3 sin Base a nivel
     // comprobante): se clasifica el subtotal completo por la mejor señal
     // disponible — conservador y documentado.
-    if (iva > 0) base16 = inv.subtotal;
-    else if (ivaRows.every((r) => r.factor === "EXENTO")) exentos = inv.subtotal;
-    else base0 = inv.subtotal; // traslado a tasa 0 sin base
+    if (iva > 0) base16 = neta;
+    else if (ivaRows.every((r) => r.factor === "EXENTO")) exentos = neta;
+    else base0 = neta; // traslado a tasa 0 sin base
   } else {
     // Sin desglose de IVA en absoluto.
-    if (iva > 0) base16 = inv.subtotal; // legacy: totalImpuestos > 0 sin filas
+    if (iva > 0) base16 = neta; // legacy: totalImpuestos > 0 sin filas
     // Conservador: sin traslado de IVA se reporta como EXENTO. El dato no
     // permite separar "exento" de "no objeto" en estas filas legacy.
-    else exentos = inv.subtotal;
+    else exentos = neta;
   }
 
   return {

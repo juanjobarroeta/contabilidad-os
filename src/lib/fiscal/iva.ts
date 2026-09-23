@@ -17,8 +17,12 @@
 // gasto (exclusivo gravado → 100%, exclusivo exento → 0%, mixto → proporción).
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { baseNeta } from "./base-neta";
+
 export interface InvoiceConTaxes {
   subtotal: number;
+  /** Descuento del comprobante; la base sin desglose es SubTotal − Descuento. */
+  descuento?: unknown; // number o Decimal de prisma
   taxes: { tipo: string; factor: string; base: number | null; importe: number; retencion: boolean }[];
 }
 
@@ -51,7 +55,7 @@ export function calcularActosDelPeriodo(facturasIngreso: InvoiceConTaxes[]): Act
       // Filas sin Base (sintéticas legacy o CFDI 3.3 sin Base a nivel
       // comprobante): el comprobante completo se asume gravado — equivale al
       // comportamiento previo (acreditamiento al 100%).
-      gravados += inv.subtotal;
+      gravados += baseNeta(inv.subtotal, inv.descuento);
       continue;
     }
     for (const row of conBase) {

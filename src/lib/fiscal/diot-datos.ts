@@ -150,6 +150,7 @@ export async function cargarProveedoresDiot(
       select: {
         metodoPago: true,
         subtotal: true,
+        descuento: true,
         total: true,
         totalImpuestos: true,
         ivaNoAcreditable: true,
@@ -181,6 +182,7 @@ export async function cargarProveedoresDiot(
           uuid: true,
           metodoPago: true,
           subtotal: true,
+          descuento: true,
           total: true,
           totalImpuestos: true,
           ivaNoAcreditable: true,
@@ -193,6 +195,7 @@ export async function cargarProveedoresDiot(
   const egresos: EgresoDelMes[] = egresosDelMes.map((inv) => ({
     metodoPago: inv.metodoPago,
     subtotal: Number(inv.subtotal),
+    descuento: Number(inv.descuento),
     total: Number(inv.total),
     totalImpuestos: Number(inv.totalImpuestos),
     taxes: inv.taxes.map((t) => ({ ...t, tasa: Number(t.tasa), base: t.base === null ? null : Number(t.base), importe: Number(t.importe) })),
@@ -207,6 +210,7 @@ export async function cargarProveedoresDiot(
       uuid: p.uuid!,
       metodoPago: p.metodoPago,
       subtotal: Number(p.subtotal),
+      descuento: Number(p.descuento),
       total: Number(p.total),
       totalImpuestos: Number(p.totalImpuestos),
       taxes: p.taxes.map((t) => ({ ...t, tasa: Number(t.tasa), base: t.base === null ? null : Number(t.base), importe: Number(t.importe) })),
