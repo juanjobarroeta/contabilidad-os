@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CalendarRange, Check, ChevronDown } from "lucide-react";
 import {
   MESES_CORTOS,
@@ -66,6 +66,31 @@ export function SelectorPeriodo({
 }) {
   const [abierto, setAbierto] = useState(false);
   const contenedor = useRef<HTMLDivElement | null>(null);
+  // Posición horizontal del panel, relativa al contenedor. Antes era
+  // `right-0 w-[320px]`: en el teléfono el disparador mide ~230 px y el panel
+  // colgaba 90 px fuera del borde izquierdo (años y meses cortados). Se prefiere
+  // alinear el borde derecho al del disparador (el look de escritorio) y se
+  // acota al viewport con 12 px de margen; el ancho cede si la pantalla es
+  // más angosta que 320 px.
+  const [pos, setPos] = useState<{ left: number; width: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!abierto) return;
+    const medir = () => {
+      const el = contenedor.current;
+      if (!el) return;
+      const MARGEN = 12;
+      const ANCHO = 320;
+      const rect = el.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const width = Math.min(ANCHO, vw - MARGEN * 2);
+      const deseado = rect.right - width;
+      const x = Math.min(Math.max(deseado, MARGEN), vw - MARGEN - width);
+      setPos({ left: x - rect.left, width });
+    };
+    medir();
+    window.addEventListener("resize", medir);
+    return () => window.removeEventListener("resize", medir);
+  }, [abierto]);
 
   const sinConteos = conteos === undefined;
   const ejercicios = sinConteos
@@ -132,7 +157,8 @@ export function SelectorPeriodo({
         <div
           role="dialog"
           aria-label="Elegir periodo"
-          className="absolute right-0 z-50 mt-1.5 w-[320px] rounded-card border border-cos-line bg-cos-card p-3 shadow-[0_20px_45px_-15px_oklch(0.2_0.05_258_/_0.45)]"
+          style={pos ? { left: pos.left, width: pos.width } : undefined}
+          className={`absolute z-50 mt-1.5 rounded-card border border-cos-line bg-cos-card p-3 shadow-[0_20px_45px_-15px_oklch(0.2_0.05_258_/_0.45)] ${pos ? "" : "right-0 w-[min(320px,calc(100vw-24px))]"}`}
         >
           {/* Todo el historial */}
           {permitirTodo && (
