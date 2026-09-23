@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { DirectorioNav } from "@/components/layout/DirectorioNav";
+import { ExpedienteEnContexto } from "@/components/expediente/ExpedienteEnContexto";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import {
   Users, Plus, Search, Pencil, Trash2, Loader2,
@@ -209,6 +210,16 @@ export default function ClientesPage() {
           Nuevo cliente
         </button>
       </div>
+
+      <ExpedienteEnContexto
+        companyId={activeCompany.id}
+        className="mt-5"
+        titulo="Lo que sabemos de tus clientes"
+        familias={["cliente"]}
+        temas={[]}
+        claves={["cliente.plazo_pago"]}
+        vacio="Nada anotado. Cómo y cuándo pagan tus clientes ayuda a casar cobros con facturas."
+      />
 
       {/* Search */}
       <div className="relative mt-5 max-w-sm">

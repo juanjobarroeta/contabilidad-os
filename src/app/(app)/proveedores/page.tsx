@@ -13,6 +13,7 @@
 
 import Link from "next/link";
 import { DirectorioNav } from "@/components/layout/DirectorioNav";
+import { ExpedienteEnContexto } from "@/components/expediente/ExpedienteEnContexto";
 import { useState, useEffect, useCallback } from "react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import {
@@ -228,6 +229,16 @@ export default function ProveedoresPage() {
           {toast}
         </div>
       )}
+
+      <ExpedienteEnContexto
+        companyId={activeCompany.id}
+        className="mt-5"
+        titulo="Lo que sabemos de tus proveedores"
+        familias={["proveedor"]}
+        temas={[]}
+        claves={["proveedor.moneda"]}
+        vacio="Nada anotado. Cómo te facturan (moneda, anticipos) ayuda a casar pagos con facturas."
+      />
 
       {/* Search */}
       <div className="relative mt-5 max-w-sm">

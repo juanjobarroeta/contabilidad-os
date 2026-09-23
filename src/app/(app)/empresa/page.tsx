@@ -13,6 +13,7 @@ import {
 import { errorRegistroPatronal } from "@/lib/nomina/registro-patronal";
 import { MandatoEfirmaExistente } from "@/components/legal/MandatoEfirmaExistente";
 import { PuntoDePartida } from "@/components/empresa/PuntoDePartida";
+import { ExpedienteEnContexto } from "@/components/expediente/ExpedienteEnContexto";
 import { CsfPrimaryChoice } from "@/components/empresa/CsfPrimaryChoice";
 import {
   refreshCompanyFromCsf,
@@ -879,6 +880,19 @@ export default function EmpresaPage() {
 
       {/* ── Punto de partida: qué hay, qué falta y qué pedir ── */}
       {activeCompany && <PuntoDePartida companyId={activeCompany.id} />}
+
+      {/* ── Lo que sabemos de la operación (expediente) ── */}
+      {activeCompany && (
+        <ExpedienteEnContexto
+          companyId={activeCompany.id}
+          className="mb-5"
+          titulo="Lo que sabemos de la operación"
+          familias={["operacion", "cierre", "contacto"]}
+          temas={["general", "sat", "cumplimiento", "declaraciones", "ce", "nomina"]}
+          claves={["operacion.giro", "operacion.sucursales", "cierre.responsable", "contacto.principal"]}
+          vacio="Nada anotado. El giro, quién lleva el cierre y a quién preguntar le dan contexto al copiloto."
+        />
+      )}
 
       {/* ── Constancia de Situación Fiscal ── */}
       {activeCompany && (
