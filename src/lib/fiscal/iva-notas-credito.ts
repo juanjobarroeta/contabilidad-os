@@ -38,6 +38,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { normalizarUuid, variantesUuid } from "./uuid";
+import { REP_VIGENTE } from "./rep-vigente";
 
 /**
  * TipoRelacion con que una nota E corrige a su padre: 01 nota de crédito,
@@ -176,7 +177,7 @@ export async function padresDeNotasRecibidas(
     prisma.pagoDoctoRelacionado.findMany({
       where: {
         parentUuid: { in: variantesUuid(todos) },
-        pagoInvoice: { companyId, tipo: "PAGO", status: "STAMPED" },
+        pagoInvoice: { companyId, ...REP_VIGENTE },
       },
       select: { parentUuid: true, impPagado: true, fechaPago: true },
     }),

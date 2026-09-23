@@ -6,13 +6,15 @@ import { calcularActosDelPeriodo } from "@/lib/fiscal/iva";
 import { reconciliacionActiva } from "@/lib/fiscal/conciliacion-pue";
 import { aplicarFlujoPue, pagosPueDelPeriodo, puesAnterioresPagadosEnPeriodo, type ModoPue } from "@/lib/fiscal/iva-pue-flujo";
 import { notasRecibidasPorPadre, padresDeNotasRecibidas, reduccionPorNotaRecibida, totalNetoDeNotas } from "@/lib/fiscal/iva-notas-credito";
-import { repIvaAcreditableDe } from "@/lib/impuestos";
-import { repIvaRetenidoDe, revisarRetencionIva } from "@/lib/fiscal/iva-retenciones";
+import { revisarRetencionIva } from "@/lib/fiscal/iva-retenciones";
 import { ivaRetenidoAProveedoresEnPeriodo } from "@/lib/fiscal/iva-retenciones-db";
 import { normalizarUuid, variantesUuid } from "@/lib/fiscal/uuid";
 import { esConceptoExcluido, UMBRAL_MONTO } from "@/lib/fiscal/audit/ingreso-no-facturado";
 import { nombreContraparte, rfcContraparte } from "@/lib/facturas/contraparte";
 import { efosRfcsBloqueados } from "@/lib/fiscal/efos/service";
+import { REP_VIGENTE } from "@/lib/fiscal/rep-vigente";
+import { montosRepDelPadre } from "@/lib/fiscal/rep-tope";
+import { linksVigentesAntesDe } from "@/lib/fiscal/rep-tope-db";
 
 // GET /api/papeles/iva?companyId=xxx&year=2026&month=3[&format=csv]
 //
@@ -112,7 +114,7 @@ export async function GET(req: Request) {
     // Complementos de pago (REP) liquidados en el periodo: definen qué PPD se
     // vuelve acreditable este mes (igual que el motor). parentUuid = UUID del CFDI pagado.
     prisma.pagoDoctoRelacionado.findMany({
-      where: { fechaPago: { gte: from, lt: to }, pagoInvoice: { companyId, tipo: "PAGO", status: "STAMPED" } },
+      where: { fechaPago: { gte: from, lt: to }, pagoInvoice: { companyId, ...REP_VIGENTE } },
       select: { parentUuid: true, impPagado: true, ivaTrasladado: true, ivaDerivado: true, fechaPago: true },
     }),
   ]);
@@ -138,6 +140,12 @@ export async function GET(req: Request) {
       { ...r, impPagado: r.impPagado === null ? null : Number(r.impPagado), ivaTrasladado: r.ivaTrasladado === null ? null : Number(r.ivaTrasladado) },
     ]);
   }
+  // Lo de los REPs se acota por factura, igual que el motor (lib/fiscal/rep-tope):
+  // nunca más IVA (ni retención) que el de la factura, contando lo que ya
+  // tomaron sus pagos de meses anteriores.
+  const repsPrevios = await linksVigentesAntesDe(companyId, repLinksPorParent.keys(), from);
+  const montosRep = (k: string, parent: { taxes: { tipo: string; retencion: boolean; importe: number }[]; totalImpuestos: number | null; total: number }) =>
+    montosRepDelPadre(parent, repsPrevios.get(k) ?? [], repLinksPorParent.get(k) ?? []);
   // Padres INGRESO (de cualquier mes) de los REP cobrados este periodo: su IVA
   // se causa al COBRARSE (flujo), no en la fecha del CFDI — igual que el motor.
   // Por eso el PPD ingreso se arma desde los complementos, no desde la lista por
@@ -290,10 +298,7 @@ export async function GET(req: Request) {
   for (const [parentUuid, links] of repLinksPorParent) {
     const parent = repIngresoByUuid.get(parentUuid);
     if (!parent) continue; // el padre no es INGRESO PPD (será un egreso) → se ignora aquí
-    const iva = links.reduce(
-      (s, l) => s + repIvaAcreditableDe(l, { taxes: parent.taxes, totalImpuestos: parent.totalImpuestos, total: parent.total }),
-      0
-    );
+    const iva = montosRep(parentUuid, { taxes: parent.taxes, totalImpuestos: parent.totalImpuestos, total: parent.total }).iva;
     if (iva <= 0.005) continue;
     const ultimoPago = links.map((l) => l.fechaPago).filter(Boolean).sort().pop() ?? null;
     trasladado.push({
@@ -331,7 +336,7 @@ export async function GET(req: Request) {
             where: {
               parentUuid: { in: variantesUuid(ppdIngresoUuids) },
               fechaPago: { lt: to },
-              pagoInvoice: { companyId, tipo: "PAGO", status: "STAMPED" },
+              pagoInvoice: { companyId, ...REP_VIGENTE },
             },
             select: { parentUuid: true },
           })
@@ -401,14 +406,13 @@ export async function GET(req: Request) {
     const parentLike = { taxes: inv.taxes, totalImpuestos: inv.totalImpuestos, total: inv.total };
     // Retención en flujo (Art. 1-A): PUE completa al emitirse; PPD la parte de
     // cada pago del REP. Sin REP aún no se retiene (ni se entera).
-    const retenidoPPD = esPPD && links ? links.reduce((s, l) => s + repIvaRetenidoDe(l, parentLike), 0) : 0;
+    const montosPPD = esPPD && links && inv.uuid ? montosRep(normalizarUuid(inv.uuid), parentLike) : null;
+    const retenidoPPD = montosPPD?.ivaRetenido ?? 0;
     if (t > 0.005 && inv.tipoSat !== "E") {
       // PPD sólo es acreditable cuando llega su complemento de pago (REP), y por
       // el monto pagado (prorrateado) — exactamente como el motor. Sin REP en el
       // mes: aún no acreditable. PUE: el IVA del CFDI.
-      const acreditadoPPD = esPPD && links
-        ? links.reduce((s, l) => s + repIvaAcreditableDe(l, parentLike), 0)
-        : 0;
+      const acreditadoPPD = montosPPD?.iva ?? 0;
       // El IVA acreditable del mes va NETO de lo retenido (Art. 5-IV LIVA): la
       // parte retenida se acredita el mes siguiente al de su entero. Sin pago
       // (PPD sin REP) mostramos el neto completo, tenue y fuera del total.
@@ -470,9 +474,10 @@ export async function GET(req: Request) {
     const { trasladado: t, retenido: r } = extractIva(parent);
     if (t <= 0.005) continue;
     const parentLike = { taxes: parent.taxes, totalImpuestos: parent.totalImpuestos, total: parent.total };
-    const acreditadoPPD = links.reduce((s, l) => s + repIvaAcreditableDe(l, parentLike), 0);
+    const montosPPD = montosRep(parentUuid, parentLike);
+    const acreditadoPPD = montosPPD.iva;
     if (acreditadoPPD <= 0.005) continue;
-    const retenidoPPD = links.reduce((s, l) => s + repIvaRetenidoDe(l, parentLike), 0);
+    const retenidoPPD = montosPPD.ivaRetenido;
     const ultimoPago = links.map((l) => l.fechaPago).filter(Boolean).sort().pop() ?? null;
     acreditable.push({
       id: `${parent.id}-rep`,

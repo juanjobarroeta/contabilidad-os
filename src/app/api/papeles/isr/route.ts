@@ -9,6 +9,7 @@ import { sumIsrPagar } from "@/lib/isr-provisional";
 import { normalizarUuid, variantesUuid } from "@/lib/fiscal/uuid";
 import { computeTaxPosition } from "@/lib/impuestos";
 import { nombreContraparte, rfcContraparte } from "@/lib/facturas/contraparte";
+import { REP_VIGENTE } from "@/lib/fiscal/rep-vigente";
 import { calculationForApi } from "@/lib/fiscal/regimen-capability-api";
 
 // GET /api/papeles/isr?companyId=xxx&year=2026&month=3[&format=csv]
@@ -92,7 +93,7 @@ export async function GET(req: Request) {
         where: {
           parentUuid: { in: variantesUuid(ppdUuids) },
           fechaPago: { gte: yearFrom, lt: yearTo },
-          pagoInvoice: { companyId, tipo: "PAGO", status: "STAMPED" },
+          pagoInvoice: { companyId, ...REP_VIGENTE },
         },
         select: { parentUuid: true, impPagado: true, fechaPago: true },
       })

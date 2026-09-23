@@ -16,6 +16,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { efosRfcsBloqueados } from "@/lib/fiscal/efos/service";
+import { REP_VIGENTE } from "./rep-vigente";
 import {
   operacionesEgresoFlujo,
   type EgresoDelMes,
@@ -159,7 +160,7 @@ export async function cargarProveedoresDiot(
     prisma.pagoDoctoRelacionado.findMany({
       where: {
         fechaPago: { gte: from, lt: to },
-        pagoInvoice: { companyId, tipo: "PAGO", status: "STAMPED" },
+        pagoInvoice: { companyId, ...REP_VIGENTE },
       },
       select: { parentUuid: true, impPagado: true, ivaTrasladado: true, ivaDerivado: true },
     }).then((rows) => rows.map((l) => ({ ...l, impPagado: l.impPagado === null ? null : Number(l.impPagado), ivaTrasladado: l.ivaTrasladado === null ? null : Number(l.ivaTrasladado) }))),

@@ -30,10 +30,10 @@ describe("amparadoPorReps()", () => {
     expect(m.size).toBe(1);
   });
 
-  it("pide sólo REPs vigentes de la empresa: un cancelado no ampara nada", async () => {
+  it("pide sólo REPs vigentes de la empresa: un cancelado o sustituido no ampara nada", async () => {
     const { db, visto } = dbFalsa([]);
     await amparadoPorReps(db, "c1", [UUID]);
-    expect(visto.where?.pagoInvoice).toEqual({ companyId: "c1", tipo: "PAGO", status: { not: "CANCELLED" } });
+    expect(visto.where?.pagoInvoice).toEqual({ companyId: "c1", tipo: "PAGO", status: { not: "CANCELLED" }, sustituidoPorUuid: null });
   });
 
   it("sin UUIDs no consulta nada", async () => {

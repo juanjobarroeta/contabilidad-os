@@ -19,6 +19,7 @@ import { importarCfdiXml } from "./cfdi-import";
 import { backfillNominaRegimen } from "./nomina/backfill-regimen";
 import { importarNominaHistorica } from "./nomina/historia-import";
 import { revertirDerivadosDeCancelada } from "./automotriz/revertir-cancelada";
+import { liberarSustituidosPor } from "./cfdi-sustitucion";
 import { etiquetaTramo, isoLocal, type Tramo } from "./sat-tramos";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -809,6 +810,9 @@ export async function syncCancelacionesPeriodo(
       where: { id: { in: toCancel.map((t) => t.id) } },
       data: { status: "CANCELLED" },
     });
+    // Un sustituto cancelado deja de sustituir: lo que había reemplazado
+    // (TipoRelacion 04) vuelve a contar.
+    await liberarSustituidosPor(prisma, companyId, toCancel.map((t) => t.uuid));
     // Marcar la factura no deshace lo que derivó. El motor fiscal filtra por
     // status al leer, pero la capa de operación materializa filas —unidades,
     // costos, kardex, órdenes, nómina— y ningún filtro borra una fila escrita.

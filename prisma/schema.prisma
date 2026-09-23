@@ -934,6 +934,11 @@ model Invoice {
   // relacion SAT ("01" = nota de credito de los documentos relacionados).
   cfdiRelacionadoUuid String?
   tipoRelacion        String?
+  // UUID del CFDI vigente que SUSTITUYE a éste (TipoRelacion 04). Un REP
+  // sustituido que el emisor no canceló seguía contando junto con su
+  // reemplazo: el mismo pago acreditaba IVA dos veces. Lo marca
+  // src/lib/cfdi-sustitucion.ts; se limpia si el sustituto se cancela.
+  sustituidoPorUuid   String?
   moneda              String  @default("MXN")
   tipoCambio          Decimal @db.Decimal(18, 6)   @default(1.0)
   subtotal            Decimal @db.Decimal(18, 6)

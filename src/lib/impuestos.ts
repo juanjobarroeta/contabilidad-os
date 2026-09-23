@@ -8,13 +8,16 @@ import { calcularActosDelPeriodo } from "./fiscal/iva";
 import { calcularDepreciacionRegistroPeriodo } from "./fiscal/activos-registro";
 import { efosRfcsBloqueados } from "./fiscal/efos/service";
 import { perdidasDisponibles } from "./fiscal/perdidas";
-import { ivaTrasladadoDe, repIvaTrasladadoDe } from "./fiscal/iva-flujo";
-import { ivaAcreditableNetoDe, ivaRetenidoDe, isrRetenidoDe, repIsrRetenidoDe, repIvaRetenidoDe } from "./fiscal/iva-retenciones";
+import { ivaTrasladadoDe } from "./fiscal/iva-flujo";
+import { ivaAcreditableNetoDe, ivaRetenidoDe, isrRetenidoDe } from "./fiscal/iva-retenciones";
 import { ivaRetenidoAProveedoresEnPeriodo } from "./fiscal/iva-retenciones-db";
 import { aplicarFlujoPue, pagosPueDelPeriodo, puesAnterioresPagadosEnPeriodo, type ModoPue } from "./fiscal/iva-pue-flujo";
 import { notasRecibidasPorPadre, padresDeNotasRecibidas, reduccionPorNotaRecibida, totalNetoDeNotas } from "./fiscal/iva-notas-credito";
 import { reconciliacionActiva } from "./fiscal/conciliacion-pue";
 import { normalizarUuid, variantesUuid } from "./fiscal/uuid";
+import { REP_VIGENTE } from "./fiscal/rep-vigente";
+import { montosRepDelPadre, type LinkRep } from "./fiscal/rep-tope";
+import { linksVigentesAntesDe } from "./fiscal/rep-tope-db";
 import {
   assertMonthlyCompanyCalculationSupported,
   companyRegimenCodesForPeriod,
@@ -62,7 +65,6 @@ export function signoTipoSat(tipoSat: string | null | undefined): 1 | -1 {
 export type { InvoiceLike } from "./fiscal/iva-flujo";
 export { ivaTrasladadoDe, repIvaTrasladadoDe as repIvaAcreditableDe } from "./fiscal/iva-flujo";
 const ivaTrasladado = ivaTrasladadoDe;
-const repIvaTrasladado = repIvaTrasladadoDe;
 
 /**
  * Cumulative income actually collected and deductions actually paid in
@@ -112,7 +114,7 @@ async function flujoEfectivoAcum(
       _sum: { importe: true },
     }),
     prisma.pagoDoctoRelacionado.findMany({
-      where: { fechaPago: { gte: from, lt: to }, pagoInvoice: { companyId, tipo: "PAGO", status: "STAMPED" } },
+      where: { fechaPago: { gte: from, lt: to }, pagoInvoice: { companyId, ...REP_VIGENTE } },
       select: { parentUuid: true, impPagado: true },
     }),
   ]);
@@ -746,7 +748,7 @@ export async function computeTaxPosition(
     prisma.pagoDoctoRelacionado.findMany({
       where: {
         fechaPago: { gte: from, lt: to },
-        pagoInvoice: { companyId, tipo: "PAGO", status: "STAMPED" },
+        pagoInvoice: { companyId, ...REP_VIGENTE },
       },
       select: { parentUuid: true, impPagado: true, ivaTrasladado: true, ivaDerivado: true },
     }).then((rows) => rows.map((l) => ({ ...l, impPagado: l.impPagado === null ? null : Number(l.impPagado), ivaTrasladado: l.ivaTrasladado === null ? null : Number(l.ivaTrasladado) }))),
@@ -796,27 +798,39 @@ export async function computeTaxPosition(
     ? await prisma.invoice.findMany({
         where: { companyId, uuid: { in: repParentUuids }, metodoPago: "PPD", status: "STAMPED" },
         select: { uuid: true, tipo: true, tipoSat: true, total: true, totalImpuestos: true, taxes: true, ivaNoAcreditable: true, ivaNoCausado: true, customer: { select: { rfc: true } } },
-      }).then((rows) => rows.map((p) => ({ ...p, total: Number(p.total), totalImpuestos: Number(p.totalImpuestos), taxes: p.taxes.map((t) => ({ ...t, importe: Number(t.importe) })) })))
+      }).then((rows) => rows.map((p) => ({ ...p, total: Number(p.total), totalImpuestos: p.totalImpuestos === null ? null : Number(p.totalImpuestos), taxes: p.taxes.map((t) => ({ ...t, importe: Number(t.importe) })) })))
     : [];
   const repParentByUuid = new Map(repParents.map((p) => [normalizarUuid(p.uuid!), p]));
   const esEfosBloqueado = (rfc?: string | null) =>
     efosBloqueados.size > 0 && !!rfc && efosBloqueados.has(rfc.toUpperCase().trim());
 
+  // Los pagos del mes, por factura: lo que sus REPs mueven se acota al IVA de la
+  // propia factura menos lo que ya tomaron sus pagos de meses anteriores
+  // (lib/fiscal/rep-tope). Un REP duplicado o que declara el IVA completo en un
+  // pago parcial no acredita más de lo que la factura trae.
+  const repsDelMesPorPadre = new Map<string, LinkRep[]>();
+  for (const link of repCobrosDelMes) {
+    const k = normalizarUuid(link.parentUuid);
+    if (!repParentByUuid.has(k)) continue; // REP references a non-PPD or unknown invoice — skip
+    repsDelMesPorPadre.set(k, [...(repsDelMesPorPadre.get(k) ?? []), link]);
+  }
+  const repsPreviosPorPadre = await linksVigentesAntesDe(companyId, repsDelMesPorPadre.keys(), from);
+
   let ivaTrasladadoPPD = 0;
   let ivaAcreditablePPD = 0;
   let ivaRetenidoProvPPD = 0;
   let isrRetenidoProvPPD = 0;
-  for (const link of repCobrosDelMes) {
-    const parent = repParentByUuid.get(normalizarUuid(link.parentUuid));
-    if (!parent) continue; // REP references a non-PPD or unknown invoice — skip
+  for (const [k, links] of repsDelMesPorPadre) {
+    const parent = repParentByUuid.get(k)!;
     const signo = signoTipoSat(parent.tipoSat);
-    const iva = signo * repIvaTrasladado(link, parent);
+    const m = montosRepDelPadre(parent, repsPreviosPorPadre.get(k) ?? [], links);
+    const iva = signo * m.iva;
     if (parent.tipo === "INGRESO" && !parent.ivaNoCausado) ivaTrasladadoPPD += iva;
     else if (parent.tipo === "EGRESO") {
       // La retención se hace al PAGAR (Art. 1-A): cada REP retiene su parte.
-      const retenido = signo * repIvaRetenidoDe(link, parent);
+      const retenido = signo * m.ivaRetenido;
       ivaRetenidoProvPPD += retenido;
-      isrRetenidoProvPPD += signo * repIsrRetenidoDe(link, parent);
+      isrRetenidoProvPPD += signo * m.isrRetenido;
       // EGRESO de proveedor 69-B definitivo → IVA no acreditable (Art. 69-B).
       // Igual si el contador lo excluyó del acreditamiento (p. ej. no pagado).
       // Lo retenido NO es acreditable este mes (Art. 5-IV): se descuenta.
