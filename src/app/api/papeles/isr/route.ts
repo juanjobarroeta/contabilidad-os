@@ -11,6 +11,7 @@ import { computeTaxPosition } from "@/lib/impuestos";
 import { nombreContraparte, rfcContraparte } from "@/lib/facturas/contraparte";
 import { REP_VIGENTE } from "@/lib/fiscal/rep-vigente";
 import { calculationForApi } from "@/lib/fiscal/regimen-capability-api";
+import { baseNeta, sumaNeta } from "@/lib/fiscal/base-neta";
 
 // GET /api/papeles/isr?companyId=xxx&year=2026&month=3[&format=csv]
 //
@@ -53,16 +54,16 @@ export async function GET(req: Request) {
     prisma.invoice.findMany({
       where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: yearFrom, lt: yearTo } },
       // contraparteNombre/Rfc: respaldo de nombreContraparte sin Customer.
-      select: { id: true, fecha: true, uuid: true, folio: true, serie: true, subtotal: true, total: true, metodoPago: true, contraparteNombre: true, contraparteRfc: true, customer: { select: { razonSocial: true, rfc: true } } },
+      select: { id: true, fecha: true, uuid: true, folio: true, serie: true, subtotal: true, descuento: true, total: true, metodoPago: true, contraparteNombre: true, contraparteRfc: true, customer: { select: { razonSocial: true, rfc: true } } },
       orderBy: { fecha: "asc" },
     }),
     prisma.invoice.aggregate({
       where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: prevYearFrom, lt: prevYearTo } },
-      _sum: { subtotal: true },
+      _sum: { subtotal: true, descuento: true },
     }),
     prisma.invoice.aggregate({
       where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: prevYearFrom, lt: prevYearTo } },
-      _sum: { subtotal: true },
+      _sum: { subtotal: true, descuento: true },
     }),
     prisma.company.findUnique({
       where: { id: companyId },
@@ -116,7 +117,8 @@ export async function GET(req: Request) {
     if (m < 1 || m > month) continue;
     monthlyTotals[m - 1].invoices += 1;
 
-    const subtotal = Number(inv.subtotal);
+    // Ingreso nominal neto de descuento (SubTotal − Descuento), como el SAT.
+    const subtotal = baseNeta(inv.subtotal, inv.descuento);
     const total = Number(inv.total);
     let restante = subtotal;
     const links = inv.uuid ? (linksPorParent.get(normalizarUuid(inv.uuid)) ?? []) : [];
@@ -139,8 +141,8 @@ export async function GET(req: Request) {
   // El coeficiente crudo (ingresos−egresos)/ingresos se muestra como referencia,
   // pero NO es el que se aplica ni el que se sugiere: ambos vienen del motor
   // (computeTaxPosition) para no divergir de la pantalla de Impuestos.
-  const prevIngresosTotal = Number(prevYearIngresos._sum.subtotal ?? 0);
-  const prevGastosTotal = Number(prevYearGastos._sum.subtotal ?? 0);
+  const prevIngresosTotal = sumaNeta(prevYearIngresos._sum);
+  const prevGastosTotal = sumaNeta(prevYearGastos._sum);
   const prevUtilidad = Math.max(0, prevIngresosTotal - prevGastosTotal);
   const coeficienteCalculado = prevIngresosTotal > 0 ? prevUtilidad / prevIngresosTotal : null;
 
@@ -244,7 +246,10 @@ export async function GET(req: Request) {
       folio: inv.folio,
       contraparte: nombreContraparte(inv),
       rfc: rfcContraparte(inv),
-      subtotal: inv.subtotal,
+      // La columna es la base del ISR: neta de descuento, para que el detalle
+      // sume lo mismo que el mes (el descuento va aparte, por transparencia).
+      subtotal: baseNeta(inv.subtotal, inv.descuento),
+      descuento: Number(inv.descuento),
     })),
     calculo: esPfPlataformas && enginePos
       ? {

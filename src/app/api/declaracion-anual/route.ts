@@ -18,6 +18,7 @@ import {
   tipoPersonaFromRfc,
 } from "@/lib/fiscal/regimen-capabilities";
 import { regimenCalculationErrorResponse } from "@/lib/fiscal/regimen-capability-api";
+import { sumaNeta } from "@/lib/fiscal/base-neta";
 
 // GET /api/declaracion-anual?companyId=xxx&ejercicio=2025
 // Aggregates all data for the annual declaration and calculates the result.
@@ -96,7 +97,7 @@ export async function GET(req: Request) {
     // Total CFDI ingresos for the year
     prisma.invoice.aggregate({
       where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: yearStart, lt: yearEndExclusive } },
-      _sum: { subtotal: true, totalImpuestos: true },
+      _sum: { subtotal: true, descuento: true, totalImpuestos: true },
     }),
     // CFDI egresos del ejercicio, AGRUPADOS por naturaleza fiscal: las
     // INVERSION (activo fijo) se deducen vía depreciación —no como compra— y
@@ -104,7 +105,7 @@ export async function GET(req: Request) {
     prisma.invoice.groupBy({
       by: ["naturaleza"],
       where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: yearStart, lt: yearEndExclusive }, ...efosWhere },
-      _sum: { subtotal: true },
+      _sum: { subtotal: true, descuento: true },
     }),
     // Payroll totals for the year
     prisma.payrollItem.aggregate({
@@ -185,7 +186,9 @@ export async function GET(req: Request) {
     ejercicio
   );
 
-  const ingresosCfdis = Number(ingresosAgg._sum.subtotal ?? 0);
+  // Bases netas de descuento (SubTotal − Descuento), como el precargado del SAT.
+  // La nómina (asimilados, arriba) NO: su Descuento son deducciones del trabajador.
+  const ingresosCfdis = sumaNeta(ingresosAgg._sum);
   // Compras/deducciones inmediatas = todo EGRESO salvo INVERSION (se deduce vía
   // depreciación) y SIN_EFECTOS (no deducible). Los CFDIs sin clasificar (legacy
   // null) se tratan como gasto, igual que antes — corre el backfill de naturaleza
@@ -194,15 +197,15 @@ export async function GET(req: Request) {
   const sumaPorNaturaleza = (excluir: string[]) =>
     egresosPorNaturaleza
       .filter((g) => !excluir.includes(g.naturaleza ?? ""))
-      .reduce((s, g) => s + Number(g._sum.subtotal ?? 0), 0);
+      .reduce((s, g) => s + sumaNeta(g._sum), 0);
   const egresosCfdis = sumaPorNaturaleza(["INVERSION", "SIN_EFECTOS"]);
-  const inversionesExcluidas = egresosPorNaturaleza.find((g) => g.naturaleza === "INVERSION")?._sum.subtotal ?? 0;
-  const sinEfectosExcluidos = egresosPorNaturaleza.find((g) => g.naturaleza === "SIN_EFECTOS")?._sum.subtotal ?? 0;
+  const inversionesExcluidas = sumaNeta(egresosPorNaturaleza.find((g) => g.naturaleza === "INVERSION")?._sum);
+  const sinEfectosExcluidos = sumaNeta(egresosPorNaturaleza.find((g) => g.naturaleza === "SIN_EFECTOS")?._sum);
   // 69-B: monto excluido por proveedores definitivos (ya descontado de egresosCfdis).
   const efosExcluidos = efosBloqueados.size > 0
     ? (await prisma.invoice.aggregate({
         where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: yearStart, lt: yearEndExclusive }, customer: { rfc: { in: [...efosBloqueados] } } },
-        _sum: { subtotal: true }, _count: { id: true },
+        _sum: { subtotal: true, descuento: true }, _count: { id: true },
       }))
     : null;
   // Deducción de inversiones del ejercicio: del registro de activo fijo, salvo
@@ -317,7 +320,7 @@ export async function GET(req: Request) {
       },
       sinEfectosExcluidos: { count: "CFDI sin efectos fiscales (no deducible)", monto: sinEfectosExcluidos },
       efosExcluidos: efosExcluidos
-        ? { count: `${efosExcluidos._count.id} CFDI(s) de proveedor 69-B definitivo (no deducible, Art. 69-B)`, monto: efosExcluidos._sum.subtotal ?? 0 }
+        ? { count: `${efosExcluidos._count.id} CFDI(s) de proveedor 69-B definitivo (no deducible, Art. 69-B)`, monto: sumaNeta(efosExcluidos._sum) }
         : { count: "Sin proveedores 69-B definitivos", monto: 0 },
     },
     existingDeclaration: existingAnual ? {

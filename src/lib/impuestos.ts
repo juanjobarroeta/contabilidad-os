@@ -9,6 +9,7 @@ import { calcularDepreciacionRegistroPeriodo } from "./fiscal/activos-registro";
 import { efosRfcsBloqueados } from "./fiscal/efos/service";
 import { perdidasDisponibles } from "./fiscal/perdidas";
 import { ivaTrasladadoDe } from "./fiscal/iva-flujo";
+import { baseNeta, basePagada, sumaNeta } from "./fiscal/base-neta";
 import { ivaAcreditableNetoDe, ivaRetenidoDe, isrRetenidoDe } from "./fiscal/iva-retenciones";
 import { ivaRetenidoAProveedoresEnPeriodo } from "./fiscal/iva-retenciones-db";
 import { aplicarFlujoPue, pagosPueDelPeriodo, puesAnterioresPagadosEnPeriodo, type ModoPue } from "./fiscal/iva-pue-flujo";
@@ -90,7 +91,7 @@ async function flujoEfectivoAcum(
   const [puIngreso, puEgreso, puIngresoIsrRet, repLinks] = await Promise.all([
     prisma.invoice.aggregate({
       where: { companyId, tipo: "INGRESO", status: "STAMPED", metodoPago: "PUE", fecha: { gte: from, lt: to } },
-      _sum: { subtotal: true },
+      _sum: { subtotal: true, descuento: true },
     }),
     prisma.invoice.aggregate({
       // Deducciones inmediatas: excluye INVERSION (se deduce vía depreciación)
@@ -102,7 +103,7 @@ async function flujoEfectivoAcum(
         OR: [{ naturaleza: null }, { naturaleza: { notIn: ["INVERSION", "SIN_EFECTOS"] } }],
         ...efosWhere,
       },
-      _sum: { subtotal: true },
+      _sum: { subtotal: true, descuento: true },
     }),
     // ISR retenido (10% Art. 106) on PUE INGRESO — fully cobrado on emission.
     prisma.invoiceTax.aggregate({
@@ -123,7 +124,7 @@ async function flujoEfectivoAcum(
   const [puIngresoE, puEgresoE] = await Promise.all([
     prisma.invoice.aggregate({
       where: { companyId, tipo: "INGRESO", tipoSat: "E", status: "STAMPED", metodoPago: "PUE", fecha: { gte: from, lt: to } },
-      _sum: { subtotal: true },
+      _sum: { subtotal: true, descuento: true },
     }),
     prisma.invoice.aggregate({
       where: {
@@ -131,7 +132,7 @@ async function flujoEfectivoAcum(
         OR: [{ naturaleza: null }, { naturaleza: { notIn: ["INVERSION", "SIN_EFECTOS"] } }],
         ...efosWhere,
       },
-      _sum: { subtotal: true },
+      _sum: { subtotal: true, descuento: true },
     }),
   ]);
 
@@ -146,12 +147,13 @@ async function flujoEfectivoAcum(
           tipo: true,
           tipoSat: true,
           subtotal: true,
+          descuento: true,
           total: true,
           naturaleza: true,
           customer: { select: { rfc: true } },
           taxes: { where: { tipo: "ISR", retencion: true }, select: { importe: true } },
         },
-      }).then((rows) => rows.map((p) => ({ ...p, subtotal: Number(p.subtotal), total: Number(p.total), taxes: p.taxes.map((t) => ({ ...t, importe: Number(t.importe) })) })))
+      }).then((rows) => rows.map((p) => ({ ...p, subtotal: Number(p.subtotal), descuento: Number(p.descuento), total: Number(p.total), taxes: p.taxes.map((t) => ({ ...t, importe: Number(t.importe) })) })))
     : [];
   const byUuid = new Map(parents.map((p) => [normalizarUuid(p.uuid!), p]));
   const EXCLUIDAS_DEDUCCION = new Set(["INVERSION", "SIN_EFECTOS"]);
@@ -165,7 +167,7 @@ async function flujoEfectivoAcum(
     const p = byUuid.get(normalizarUuid(l.parentUuid));
     if (!p || p.total <= 0 || l.impPagado == null) continue;
     const fraccionPagada = Number(l.impPagado) / p.total;
-    const base = Number(l.impPagado) * (p.subtotal / p.total); // subtotal-equivalent collected/paid
+    const base = basePagada(Number(l.impPagado), p); // base neta de descuento cobrada/pagada
     const signoNota = signoTipoSat(p.tipoSat);
     if (p.tipo === "INGRESO") {
       ppdIngreso += signoNota * base;
@@ -183,8 +185,9 @@ async function flujoEfectivoAcum(
   return {
     // El agregado positivo INCLUYE las notas "E" (+), así que el neto es
     // total − 2·E (una vez para quitarlas, otra para restarlas).
-    ingresosCobrados: Number(puIngreso._sum.subtotal ?? 0) - 2 * Number(puIngresoE._sum.subtotal ?? 0) + ppdIngreso,
-    deduccionesPagadas: Number(puEgreso._sum.subtotal ?? 0) - 2 * Number(puEgresoE._sum.subtotal ?? 0) + ppdEgreso,
+    // Base neta de descuento (SubTotal − Descuento), como el precargado del SAT.
+    ingresosCobrados: sumaNeta(puIngreso._sum) - 2 * sumaNeta(puIngresoE._sum) + ppdIngreso,
+    deduccionesPagadas: sumaNeta(puEgreso._sum) - 2 * sumaNeta(puEgresoE._sum) + ppdEgreso,
     isrRetenidoCobrado: Number(puIngresoIsrRet._sum.importe ?? 0) + ppdIsrRetenido,
   };
 }
@@ -693,23 +696,23 @@ export async function computeTaxPosition(
     prisma.invoice.findMany({
       where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: from, lt: to } },
       include: invoiceInclude,
-    }).then((rows) => rows.map((inv) => ({ ...inv, subtotal: Number(inv.subtotal), totalImpuestos: Number(inv.totalImpuestos), taxes: inv.taxes.map((t) => ({ ...t, importe: Number(t.importe), base: t.base === null ? null : Number(t.base) })) }))),
+    }).then((rows) => rows.map((inv) => ({ ...inv, subtotal: Number(inv.subtotal), descuento: Number(inv.descuento), totalImpuestos: Number(inv.totalImpuestos), taxes: inv.taxes.map((t) => ({ ...t, importe: Number(t.importe), base: t.base === null ? null : Number(t.base) })) }))),
     prisma.invoice.findMany({
       where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: from, lt: to }, ...efosWhere },
       include: invoiceInclude,
-    }).then((rows) => rows.map((inv) => ({ ...inv, subtotal: Number(inv.subtotal), totalImpuestos: Number(inv.totalImpuestos), taxes: inv.taxes.map((t) => ({ ...t, importe: Number(t.importe), base: t.base === null ? null : Number(t.base) })) }))),
+    }).then((rows) => rows.map((inv) => ({ ...inv, subtotal: Number(inv.subtotal), descuento: Number(inv.descuento), totalImpuestos: Number(inv.totalImpuestos), taxes: inv.taxes.map((t) => ({ ...t, importe: Number(t.importe), base: t.base === null ? null : Number(t.base) })) }))),
     prisma.invoice.aggregate({
       where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: prevYearFrom, lt: prevYearTo } },
-      _sum: { subtotal: true },
+      _sum: { subtotal: true, descuento: true },
       _count: { id: true },
     }),
     prisma.invoice.aggregate({
       where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: prevYearFrom, lt: prevYearTo }, ...efosWhere },
-      _sum: { subtotal: true },
+      _sum: { subtotal: true, descuento: true },
     }),
     prisma.invoice.aggregate({
       where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: yearFrom, lt: to } },
-      _sum: { subtotal: true },
+      _sum: { subtotal: true, descuento: true },
     }),
     prisma.taxDeclaration.findMany({
       where: {
@@ -778,15 +781,15 @@ export async function computeTaxPosition(
   const [prevYearIngresosE, prevYearEgresosE, acumuladosE] = await Promise.all([
     prisma.invoice.aggregate({
       where: { companyId, tipo: "INGRESO", tipoSat: "E", status: "STAMPED", fecha: { gte: prevYearFrom, lt: prevYearTo } },
-      _sum: { subtotal: true },
+      _sum: { subtotal: true, descuento: true },
     }),
     prisma.invoice.aggregate({
       where: { companyId, tipo: "EGRESO", tipoSat: "E", status: "STAMPED", fecha: { gte: prevYearFrom, lt: prevYearTo }, ...efosWhere },
-      _sum: { subtotal: true },
+      _sum: { subtotal: true, descuento: true },
     }),
     prisma.invoice.aggregate({
       where: { companyId, tipo: "INGRESO", tipoSat: "E", status: "STAMPED", fecha: { gte: yearFrom, lt: to } },
-      _sum: { subtotal: true },
+      _sum: { subtotal: true, descuento: true },
     }),
   ]);
 
@@ -910,7 +913,7 @@ export async function computeTaxPosition(
       const padres = await prisma.invoice.findMany({
         where: { id: { in: [...anteriores.keys()] }, ivaNoAcreditable: false, ...efosWhere },
         include: invoiceInclude,
-      }).then((rows) => rows.map((inv) => ({ ...inv, subtotal: Number(inv.subtotal), totalImpuestos: Number(inv.totalImpuestos), taxes: inv.taxes.map((t) => ({ ...t, importe: Number(t.importe), base: t.base === null ? null : Number(t.base) })) })));
+      }).then((rows) => rows.map((inv) => ({ ...inv, subtotal: Number(inv.subtotal), descuento: Number(inv.descuento), totalImpuestos: Number(inv.totalImpuestos), taxes: inv.taxes.map((t) => ({ ...t, importe: Number(t.importe), base: t.base === null ? null : Number(t.base) })) })));
       // Una nota con movimiento en el banco (un reembolso) ya restó en su mes.
       const gastos = padres.filter((inv) => inv.tipoSat !== "E");
       const notasDeAnteriores = await notasRecibidasPorPadre(companyId, gastos.map((i) => i.uuid), to, []);
@@ -960,10 +963,11 @@ export async function computeTaxPosition(
   });
 
   // ── ISR provisional — régimen-aware ──────────────────────────────────────
-  const ingresosDelMes = round2(facturasEmitidas.reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * inv.subtotal, 0));
-  const gastosDelMes = round2(facturasEgresos.reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * inv.subtotal, 0));
-  const ingresosAcumulados =
-    Number(ingresosAcumuladosAgg._sum.subtotal ?? 0) - 2 * Number(acumuladosE._sum.subtotal ?? 0);
+  // Bases de ISR NETAS DE DESCUENTO (SubTotal − Descuento, lib/fiscal/base-neta):
+  // el precargado del SAT suma así; el subtotal bruto inflaba ingresos y gastos.
+  const ingresosDelMes = round2(facturasEmitidas.reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * baseNeta(inv.subtotal, inv.descuento), 0));
+  const gastosDelMes = round2(facturasEgresos.reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * baseNeta(inv.subtotal, inv.descuento), 0));
+  const ingresosAcumulados = sumaNeta(ingresosAcumuladosAgg._sum) - 2 * sumaNeta(acumuladosE._sum);
   const isrPagadoAnterior = sumIsrPagar(declaracionesPrevias);
 
   // Avisos que nacen dentro del cálculo de ISR (origen del remanente de
@@ -1154,10 +1158,8 @@ export async function computeTaxPosition(
   } else {
     // The capability gate narrows this final branch to 601 PM only. RESICO PM
     // and every other PM regimen fail before any fiscal data is queried.
-    const prevIngresosTotal =
-      Number(prevYearIngresos._sum.subtotal ?? 0) - 2 * Number(prevYearIngresosE._sum.subtotal ?? 0);
-    const prevGastosTotal =
-      Number(prevYearEgresos._sum.subtotal ?? 0) - 2 * Number(prevYearEgresosE._sum.subtotal ?? 0);
+    const prevIngresosTotal = sumaNeta(prevYearIngresos._sum) - 2 * sumaNeta(prevYearIngresosE._sum);
+    const prevGastosTotal = sumaNeta(prevYearEgresos._sum) - 2 * sumaNeta(prevYearEgresosE._sum);
     const prevUtilidad = Math.max(0, prevIngresosTotal - prevGastosTotal);
     const coeficienteCalculado = prevIngresosTotal > 0 ? prevUtilidad / prevIngresosTotal : null;
 
@@ -1344,7 +1346,7 @@ export async function computeTaxPosition(
     const [aggExcl, ivaExcl] = await Promise.all([
       prisma.invoice.aggregate({
         where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: from, lt: to }, customer: { rfc: { in: rfcs } } },
-        _sum: { subtotal: true },
+        _sum: { subtotal: true, descuento: true },
         _count: { id: true },
       }),
       prisma.invoiceTax.aggregate({
@@ -1358,7 +1360,7 @@ export async function computeTaxPosition(
     efos = {
       rfcsBloqueados: rfcs,
       cfdisExcluidos: aggExcl._count.id,
-      subtotalExcluido: round2(Number(aggExcl._sum.subtotal ?? 0)),
+      subtotalExcluido: round2(sumaNeta(aggExcl._sum)),
       ivaAcreditableExcluido: round2(Number(ivaExcl._sum.importe ?? 0)),
     };
   }
