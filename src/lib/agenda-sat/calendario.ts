@@ -142,6 +142,37 @@ export function venceEntregable(entregable: Entregable, periodo: string, rfc: st
 }
 
 /**
+ * El vencimiento que el SAT imprime en el acuse («Vencimiento Obligación:
+ * 23/09/2026»). Es la única fuente de las PRÓRROGAS: en ago-2026 el SAT movió
+ * la mensual del 17 al 23 de septiembre y ninguna regla del CFF lo predice.
+ */
+export function vencimientoDelAcuse(texto: string): Dia | null {
+  const m = /Vencimiento\s+Obligaci[óo]n:\s*(\d{2})\/(\d{2})\/(\d{4})/i.exec(texto);
+  if (!m) return null;
+  const d = { y: Number(m[3]), m: Number(m[2]), d: Number(m[1]) };
+  return d.m >= 1 && d.m <= 12 && d.d >= 1 && d.d <= 31 ? d : null;
+}
+
+/** ¿`a` es posterior a `b`? */
+export function diaPosterior(a: Dia, b: Dia): boolean {
+  return diasEntre(b, a) > 0;
+}
+
+/**
+ * El vencimiento con la prórroga del SAT, si la hay. La prórroga se aprende
+ * del acuse de una persona MORAL (el de una física ya trae su propia facilidad
+ * del sexto dígito y no vale para las demás): a la moral se le aplica tal
+ * cual; a la física, la más tardía entre la suya y la prórroga general.
+ * CUMPLIMIENTO se recorre con la declaración (+3 hábiles).
+ */
+export function venceConProrroga(entregable: Entregable, periodo: string, rfc: string, prorroga: Dia | null): Dia {
+  const propio = venceEntregable(entregable, periodo, rfc);
+  if (!prorroga || entregable === "BALANZA_CE") return propio;
+  const decl = entregable === "CUMPLIMIENTO" ? diaDeDate(addBusinessDays(dateDeDia(prorroga), 3)) : prorroga;
+  return diaPosterior(decl, propio) ? decl : propio;
+}
+
+/**
  * La primera revisión. Declaración y balanza: una temprana, 3 días hábiles
  * antes a las 21:00 (quien presenta antes se ve antes y el cierre tiene datos
  * del SAT días antes), y luego la noche del vencimiento. Cumplimiento: a las

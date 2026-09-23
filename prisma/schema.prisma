@@ -10008,3 +10008,23 @@ model AgendaSat {
   @@unique([companyId, entregable, periodo])
   @@index([estado, proximaRevision])
 }
+
+/// PRÓRROGAS DEL SAT, aprendidas de los acuses. El SAT imprime el vencimiento
+/// real en cada acuse («Vencimiento Obligación: 23/09/2026»); cuando es más
+/// tardío que el que calcula el CFF, es una prórroga general del periodo. La
+/// agenda del SAT la usa para no acusar de tarde a nadie antes de tiempo.
+model ProrrogaSat {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  /// "DECLARACION_MENSUAL"
+  entregable String
+  /// "2026-08"
+  periodo    String
+  vence      DateTime @db.Date
+  /// De dónde se aprendió: "acuse:<RFC>" o "manual".
+  fuente     String
+
+  @@unique([entregable, periodo])
+}
+
