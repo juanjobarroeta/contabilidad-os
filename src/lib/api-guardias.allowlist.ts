@@ -22,6 +22,14 @@ export type EntradaAllowlist = {
  */
 export const RUTAS_PUBLICAS: EntradaAllowlist[] = [
   {
+    ruta: "api/health/route.ts",
+    razon: "OPS-001 public liveness probe: fixed status only, no database, authentication, tenant data, or provider access.",
+  },
+  {
+    ruta: "api/ready/route.ts",
+    razon: "OPS-001 Railway readiness probe: bounded, single-flight SELECT 1; fixed 200/503 status only, no tenant reads or error details.",
+  },
+  {
     ruta: "api/auth/[...nextauth]/route.ts",
     razon:
       "Handler de NextAuth (login/logout/session). El rate limit del login vive dentro de authorize() en src/lib/auth.ts.",
