@@ -63,6 +63,14 @@ sólo baja los años de las balanzas que la agenda revisará en las próximas
 `AGENDA_HORAS` (24) más el bootstrap de empresas sin ninguna balanza. Su cron
 de Railway debe correr al menos una vez al día (idealmente cada 6 h).
 
+Prórrogas: el SAT imprime el vencimiento real en el acuse («Vencimiento
+Obligación: 23/09/2026» en agosto 2026, cuando el CFF decía 17-sep). Al
+encontrar el acuse de una persona moral, la agenda lo lee; si es más tardío,
+lo guarda en `ProrrogaSat`, recorre las filas del periodo (declaración y
+cumplimiento; la física se queda con la más tardía entre su sexto dígito y la
+prórroga) y regresa a PENDIENTE las que se marcaron TARDE antes de tiempo,
+cerrando su pendiente.
+
 Pendiente: complementarias (el importador es gap-driven y no vuelve a bajar
 un periodo que ya tiene PDF), la anual, y el censo de CFDIs.
 

@@ -25,14 +25,20 @@ import { persistComplianceResult } from "@/lib/fiscal/cumplimiento/persist";
 import { SatGoClient } from "@/lib/fiscal/cumplimiento/satgo/client";
 import { SatGoComplianceProvider } from "@/lib/fiscal/cumplimiento/satgo/provider";
 import { importarDeclaracionesSatGo } from "@/lib/fiscal/cumplimiento/satgo/declaraciones";
+import { textoDePdf } from "@/lib/fiscal/fuentes/texto";
 import {
+  diaPosterior,
+  esPersonaFisica,
+  esTarde,
   ESTADOS_ACTIVOS,
   fechaCorta,
   periodoLargo,
   periodosCerrados,
   primeraRevision,
   siguienteRevision,
+  venceConProrroga,
   venceEntregable,
+  vencimientoDelAcuse,
   type Dia,
   type Entregable,
   type EstadoAgenda,
@@ -82,6 +88,7 @@ export async function sembrar(ahora: Date = new Date()): Promise<number> {
       })
     ).map((g) => g.companyId),
   );
+  const prorrogas = await prorrogasDe(periodosCerrados(ahora, 1, 3));
   const filas: {
     companyId: string;
     entregable: Entregable;
@@ -95,7 +102,7 @@ export async function sembrar(ahora: Date = new Date()): Promise<number> {
       if (entregable === "BALANZA_CE" && !conCe.has(c.id)) continue;
       const { desde, n } = PERIODOS[entregable];
       for (const periodo of periodosCerrados(ahora, desde, n)) {
-        const vence = venceEntregable(entregable, periodo, c.rfc);
+        const vence = venceConProrroga(entregable, periodo, c.rfc, prorrogas.get(periodo) ?? null);
         filas.push({
           companyId: c.id,
           entregable,
@@ -110,6 +117,74 @@ export async function sembrar(ahora: Date = new Date()): Promise<number> {
   if (filas.length === 0) return 0;
   const r = await prisma.agendaSat.createMany({ data: filas, skipDuplicates: true });
   return r.count;
+}
+
+/** Las prórrogas aprendidas de la declaración mensual, por periodo. */
+async function prorrogasDe(periodos: string[]): Promise<Map<string, Dia>> {
+  const filas = await prisma.prorrogaSat.findMany({
+    where: { entregable: "DECLARACION_MENSUAL", periodo: { in: periodos } },
+    select: { periodo: true, vence: true },
+  });
+  return new Map(filas.map((f) => [f.periodo, deFechaDb(f.vence)]));
+}
+
+/**
+ * Aprende la prórroga del SAT del acuse que acaba de aparecer. Sólo de una
+ * persona MORAL: el acuse de una física trae su propia facilidad del sexto
+ * dígito, que no vale para las demás. Si el SAT imprime un vencimiento más
+ * tardío que el del CFF, se guarda y se recorre a todas las filas del periodo;
+ * las que ya estaban TARDE y con la prórroga todavía no lo están vuelven a
+ * PENDIENTE y se cierra el pendiente que se abrió antes de tiempo.
+ */
+async function aprenderProrroga(f: Fila, ahora: Date): Promise<Dia | null> {
+  if (esPersonaFisica(f.company.rfc)) return null;
+  const decl = await prisma.taxDeclaration.findFirst({
+    where: { companyId: f.companyId, periodo: f.periodo, acusePdf: { not: null } },
+    select: { acusePdf: true },
+  });
+  if (!decl?.acusePdf) return null;
+  let visto: Dia | null = null;
+  try {
+    visto = vencimientoDelAcuse(await textoDePdf(Buffer.from(decl.acusePdf)));
+  } catch {
+    return null;
+  }
+  if (!visto || !diaPosterior(visto, venceEntregable("DECLARACION_MENSUAL", f.periodo, f.company.rfc))) return null;
+  const previa = await prisma.prorrogaSat.findUnique({
+    where: { entregable_periodo: { entregable: "DECLARACION_MENSUAL", periodo: f.periodo } },
+    select: { vence: true },
+  });
+  if (previa && !diaPosterior(visto, deFechaDb(previa.vence))) return null;
+  await prisma.prorrogaSat.upsert({
+    where: { entregable_periodo: { entregable: "DECLARACION_MENSUAL", periodo: f.periodo } },
+    create: { entregable: "DECLARACION_MENSUAL", periodo: f.periodo, vence: aFechaDb(visto), fuente: `acuse:${f.company.rfc}` },
+    update: { vence: aFechaDb(visto), fuente: `acuse:${f.company.rfc}` },
+  });
+
+  const filas = await prisma.agendaSat.findMany({
+    where: { periodo: f.periodo, entregable: { in: ["DECLARACION_MENSUAL", "CUMPLIMIENTO"] } },
+    select: { id: true, companyId: true, entregable: true, vence: true, estado: true, intentos: true, notaPendienteId: true, company: { select: { rfc: true } } },
+  });
+  for (const r of filas) {
+    const entregable = r.entregable as Entregable;
+    const nuevo = venceConProrroga(entregable, f.periodo, r.company.rfc, visto);
+    if (!diaPosterior(nuevo, deFechaDb(r.vence))) continue;
+    const vuelveAPendiente = r.estado === "TARDE" && !esTarde(nuevo, ahora);
+    if (vuelveAPendiente && r.notaPendienteId) await resolverNota(r.companyId, r.notaPendienteId, { cuando: ahora });
+    await prisma.agendaSat.update({
+      where: { id: r.id },
+      data: {
+        vence: aFechaDb(nuevo),
+        motivo: `prórroga del SAT: vence el ${fechaCorta(nuevo)}`,
+        ...(vuelveAPendiente ? { estado: "PENDIENTE", notaPendienteId: null } : {}),
+        // Un cumplimiento que aún no se pedía espera a su nueva fecha.
+        ...(entregable === "CUMPLIMIENTO" && r.intentos === 0 && ESTADOS_ACTIVOS.includes(r.estado as EstadoAgenda)
+          ? { proximaRevision: primeraRevision("CUMPLIMIENTO", nuevo) }
+          : {}),
+      },
+    });
+  }
+  return visto;
 }
 
 interface Fila {
@@ -226,6 +301,10 @@ export async function registrarResultado(
       ...(d.estado === "ENCONTRADO" ? { encontradoAt: ahora } : {}),
     },
   });
+  if (entregable === "DECLARACION_MENSUAL" && d.estado === "ENCONTRADO") {
+    // Best-effort: una prórroga que no se pudo leer no tumba la revisión.
+    await aprenderProrroga(f, ahora).catch(() => null);
+  }
   return d.estado;
 }
 

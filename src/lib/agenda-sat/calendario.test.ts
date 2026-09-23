@@ -5,7 +5,9 @@ import {
   periodosCerrados,
   primeraRevision,
   siguienteRevision,
+  venceConProrroga,
   venceEntregable,
+  vencimientoDelAcuse,
   type EstadoRevision,
 } from "./calendario";
 
@@ -135,5 +137,26 @@ describe("periodosCerrados", () => {
   });
   it("cruza el año", () => {
     expect(periodosCerrados(mx(2027, 1, 10, 12), 1, 2)).toEqual(["2026-12", "2026-11"]);
+  });
+});
+
+describe("prórrogas del SAT", () => {
+  const texto = "Ejercicio: 2026 Fecha y hora de presentación: 17/09/2026 18:06\nMedio de presentación: Internet Vencimiento Obligación: 23/09/2026";
+  it("lee el vencimiento impreso en el acuse", () => {
+    expect(vencimientoDelAcuse(texto)).toEqual({ y: 2026, m: 9, d: 23 });
+    expect(vencimientoDelAcuse("sin fecha")).toBeNull();
+  });
+  it("la moral toma la prórroga; el cumplimiento se recorre con ella", () => {
+    const p = { y: 2026, m: 9, d: 23 };
+    expect(venceConProrroga("DECLARACION_MENSUAL", "2026-08", PM, p)).toEqual(p);
+    expect(venceConProrroga("CUMPLIMIENTO", "2026-08", PM, p)).toEqual({ y: 2026, m: 9, d: 28 });
+    expect(venceConProrroga("BALANZA_CE", "2026-08", PM, p)).toEqual({ y: 2026, m: 10, d: 5 });
+  });
+  it("la física se queda con la más tardía entre su sexto dígito y la prórroga", () => {
+    expect(venceConProrroga("DECLARACION_MENSUAL", "2026-08", PF_1, { y: 2026, m: 9, d: 23 })).toEqual({ y: 2026, m: 9, d: 23 });
+    expect(venceConProrroga("DECLARACION_MENSUAL", "2026-08", PF_1, { y: 2026, m: 9, d: 17 })).toEqual({ y: 2026, m: 9, d: 18 });
+  });
+  it("sin prórroga, el cálculo de siempre", () => {
+    expect(venceConProrroga("DECLARACION_MENSUAL", "2026-08", PM, null)).toEqual({ y: 2026, m: 9, d: 17 });
   });
 });
