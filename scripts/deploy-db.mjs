@@ -19,6 +19,7 @@
 
 import { execSync } from "node:child_process";
 import pkg from "@prisma/client";
+import { deployDatabase } from "./lib/deploy-database.mjs";
 
 const { PrismaClient } = pkg;
 
@@ -28,34 +29,7 @@ function run(cmd) {
 }
 
 async function main() {
-  const prisma = new PrismaClient();
-  let tieneEsquema = false;
-  let tieneHistorial = false;
-  try {
-    const filas = await prisma.$queryRawUnsafe(
-      `SELECT
-         EXISTS (SELECT 1 FROM information_schema.tables
-                 WHERE table_schema = 'public' AND table_name = 'Company')   AS esquema,
-         EXISTS (SELECT 1 FROM information_schema.tables
-                 WHERE table_schema = 'public' AND table_name = '_prisma_migrations') AS historial`
-    );
-    tieneEsquema = Boolean(filas?.[0]?.esquema);
-    tieneHistorial = Boolean(filas?.[0]?.historial);
-  } finally {
-    await prisma.$disconnect();
-  }
-
-  console.log(
-    `[deploy-db] esquema existente: ${tieneEsquema} · historial de migraciones: ${tieneHistorial}`
-  );
-
-  if (tieneEsquema && !tieneHistorial) {
-    console.log("[deploy-db] Base existente sin historial — aplicando baseline 0_init (resolve, no toca el esquema).");
-    run("npx prisma migrate resolve --applied 0_init");
-  }
-
-  run("npx prisma migrate deploy");
-  console.log("[deploy-db] Esquema al día.");
+  await deployDatabase(new PrismaClient(), run);
 }
 
 main().catch((err) => {

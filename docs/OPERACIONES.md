@@ -81,3 +81,16 @@ la llave vieja y la nueva).
 - **SAT sync detenido**: la insignia de vigencia en /empresa y la fecha de
   última sincronización; `GET /api/sat/sync/requests` lista las solicitudes
   con estado y error por empresa.
+
+## 5. Health and readiness (OPS-001)
+
+`GET /api/health` checks only that the web process can respond. `GET /api/ready`
+also requires a read-only database probe through the shared application pool;
+it returns `503` on failure or a two-second deadline. Both are public, uncached,
+and expose only a fixed status, never customer or connection details.
+
+Railway's deployment check targets `/api/ready` with a 120-second window, after
+the mandatory migration command succeeds. This is a promotion gate, not a
+continuous uptime monitor. The separate seven-day Phase 0 observation remains
+open. Failure-path tests, rollout evidence, and rollback instructions are in
+[the OPS-001 record](./operations/ops-001-readiness-2026-09-23.md).
