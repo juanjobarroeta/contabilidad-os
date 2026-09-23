@@ -30,7 +30,28 @@ Railway documents that an unsuccessful pre-deploy command prevents deployment, a
 - Full local unit suite on main baseline `701064d7`: 436 files / 4,719 passing tests. Production dependency audit remains 0 critical, 0 high, and 1 tracked moderate.
 - Local production-server smoke passed: GET/HEAD health and ready return 200/no-store; unsupported POST returns 405; login returns 200; invoices redirect to login; invoice and PPD APIs remain 401 without authentication. Stopping only the disposable fixture database changes readiness to 503 (6 ms) while liveness stays 200; restarting it restores readiness to 200 (17 ms). No customer database or external provider is involved.
 - `npx tsc --noEmit` and the refreshed production build pass, including all 391 static pages; both new endpoints are dynamic routes.
-- Pending: PR CI, exact production deployment/configuration, and deployment-attributed HTTP smoke.
+- [PR #1172 CI](https://github.com/juanjobarroeta/contabilidad-os/actions/runs/35827431823) passes all five checks on Node 22: test 1m26s, build 3m48s, real-Postgres 1m4s, migration drift 54s, and secrets 7s. CI includes concurrent main-branch changes beyond the local baseline: 436 passing test files plus 2 skipped, 4,740 passing tests plus 14 existing XSD tests skipped because `xmllint` is absent, and all 31 real-Postgres tests passing. Those XSD tests pass locally; no new OPS-001 contract is skipped.
+- [PR #1172](https://github.com/juanjobarroeta/contabilidad-os/pull/1172) merged at `2026-09-23T06:39:28Z` as `332caf77b6e2dad9417a55acf36a70544799b614`.
+
+## Production acceptance
+
+- Railway deployment `42c81e50-ae16-4a3e-b800-caf0f1b1d00c` reached `SUCCESS` for exact merge `332caf77b6e2dad9417a55acf36a70544799b614`.
+- Its resolved file configuration contains `/api/ready`, a 120-second healthcheck window, and the unchanged mandatory `node scripts/deploy-db.mjs` pre-deploy command. This is verified deployment configuration, not merely a committed JSON file.
+- Startup at `2026-09-23T06:44:39Z` found 144 migrations with none pending. The server was ready in 761 ms and production observability reported the exact merge SHA.
+- Railway's own log records `Path: /api/ready`, `Retry window: 2m0s`, and a successful healthcheck at `2026-09-23T06:44:59.517Z`.
+- Public smoke at `2026-09-23T06:45:35Z`–`06:45:37Z` passed all responses below. Railway HTTP logs attribute every one to this exact deployment.
+
+| Production request | Result |
+|---|---|
+| GET/HEAD `/api/health` | `200`, `Cache-Control: no-store`; GET body `{"status":"ok"}`, HEAD body empty |
+| GET/HEAD `/api/ready` | `200`, `Cache-Control: no-store`; GET body `{"status":"ready"}`, HEAD body empty |
+| GET `/login` | `200` |
+| GET `/facturas` | `307` to `/login` |
+| GET `/api/facturas` | `401` without authentication |
+| GET `/api/impuestos/asignaciones-regimen/ppd` | `401` without authentication |
+| GET `/_next/static/css/25decd6982fa1035.css` | `200`, CSS content type, 63,398 bytes |
+
+The initial exact-deployment HTTP error check returned no 5xx rows. The CE-worker deployment for the same SHA remains build-only with no HTTP healthcheck; no worker configuration or credential was changed. This closes OPS-001's endpoint/promotion-gate implementation and rollout acceptance. The seven-day Phase 0 observation, continuous monitoring, hosted SAT staging workflows, and fiscal acceptance are not claimed complete. Database outage/recovery was tested only on the disposable local fixture, never by interrupting production.
 
 ## Rollback and observation
 
