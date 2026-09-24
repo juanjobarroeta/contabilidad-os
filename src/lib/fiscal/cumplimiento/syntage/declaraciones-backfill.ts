@@ -100,6 +100,23 @@ export function fileRefDe(tr: Record<string, unknown>): string | null {
   return null;
 }
 
+export type TipoMensual = "IVA_MENSUAL" | "ISR_PROVISIONAL" | "IEPS_MENSUAL";
+
+/**
+ * Los tipos que la empresa necesitaba de este periodo y que el acuse, ya leído
+ * y pagado, NO trae. Son los que hay que marcar como presentados-sin-importe:
+ * de otro modo el periodo sigue "faltando" y el mismo PDF se vuelve a pagar en
+ * cada corrida. Caso real (sep-2026): una empresa con obligación de IEPS cuyos
+ * acuses sólo traen IVA e ISR — 33 acuses × 4 corridas al día, todos los días,
+ * ~12 USD diarios, con las filas de IVA e ISR ya creadas desde la primera vez.
+ */
+export function tiposSinDato(
+  need: Record<TipoMensual, boolean>,
+  tiene: Record<TipoMensual, boolean>,
+): TipoMensual[] {
+  return (Object.keys(need) as TipoMensual[]).filter((tipo) => need[tipo] && !tiene[tipo]);
+}
+
 /** Avance parcial de una corrida (para mostrar progreso mientras corre). */
 export interface AvanceBackfill {
   acusesParseados: number;
@@ -193,13 +210,15 @@ export async function backfillDeclaracionesMensuales(
     // adjunto y acuseParseadoAt — la misma disciplina que el caso Canales en
     // las anuales. Sólo los fallos de red (no pagados) se dejan reintentar.
     const crearMarcadores = async (pdfBytes: Uint8Array<ArrayBuffer> | null) => {
-      const pares: [boolean, "IVA_MENSUAL" | "ISR_PROVISIONAL" | "IEPS_MENSUAL"][] = [
+      const pares: [boolean, TipoMensual][] = [
         [needIva, "IVA_MENSUAL"],
         [needIsr, "ISR_PROVISIONAL"],
         [needIeps, "IEPS_MENSUAL"],
       ];
       for (const [need, tipo] of pares) {
-        if (!need) continue;
+        // `have` y no sólo `need`: al final de un parseo con datos parciales
+        // ya se crearon las filas con importe, y sólo faltan las otras.
+        if (!need || have.has(`${tipo}:${periodo}`)) continue;
         await prisma.taxDeclaration.create({
           data: {
             companyId, tipo, periodo, status: "FILED", isHistorical: true,
@@ -298,6 +317,18 @@ export async function backfillDeclaracionesMensuales(
       });
       have.add(`IEPS_MENSUAL:${periodo}`);
       mesesCreados++;
+    }
+    // Lo que la empresa necesitaba y este acuse no trae (p. ej. IEPS en un
+    // acuse que sólo desglosa IVA e ISR) queda marcado como presentado sin
+    // importe, igual que el acuse sin un solo dato. Sin esto el periodo seguía
+    // "faltando" y el mismo PDF se pagaba en cada corrida, para siempre.
+    const faltantes = tiposSinDato(
+      { IVA_MENSUAL: needIva, ISR_PROVISIONAL: needIsr, IEPS_MENSUAL: needIeps },
+      { IVA_MENSUAL: tieneDatosIva, ISR_PROVISIONAL: tieneDatosIsr, IEPS_MENSUAL: tieneDatosIeps },
+    );
+    if (faltantes.length > 0) {
+      await crearMarcadores(pdf);
+      console.warn(`${etiqueta}: ${periodo} acuse sin importe de ${faltantes.join("/")}; marcado para no volver a pagarlo`);
     }
     avisar(periodo);
     } catch (e) {

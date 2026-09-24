@@ -25,6 +25,11 @@ describe("llmCostMicroUsd", () => {
     expect(llmCostMicroUsd("claude-fable-5", 0, 1_000_000)).toBe(50_000_000);
     expect(llmCostMicroUsd("claude-opus-4-8", 1_000_000, 0)).toBe(5_000_000);
   });
+  it("prices a dated id at its undated model's rate (claude-haiku-4-5-20251001 is Haiku, not the default)", () => {
+    // 1M in × $1/Mtok = 1,000,000 µUSD; al default (Sonnet) serían 3,000,000.
+    expect(llmCostMicroUsd("claude-haiku-4-5-20251001", 1_000_000, 0)).toBe(1_000_000);
+    expect(llmCostMicroUsd("claude-sonnet-4-5-20250929", 0, 1_000_000)).toBe(15_000_000);
+  });
   it("is zero for zero tokens", () => {
     expect(llmCostMicroUsd("claude-sonnet-4-5", 0, 0)).toBe(0);
   });

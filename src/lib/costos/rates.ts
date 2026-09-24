@@ -33,6 +33,16 @@ export const ANTHROPIC_PRICES_USD_PER_MTOK: Record<string, { in: number; out: nu
 const DEFAULT_MODEL = "claude-sonnet-4-5";
 
 /**
+ * Un id con fecha ("claude-haiku-4-5-20251001", como AI_RESUMEN_MODEL) es el
+ * mismo modelo que su renglón sin fecha. Sin esto caía al default: 40 597
+ * resúmenes de Haiku (11-sep-2026) quedaron registrados a precio de Sonnet,
+ * 214 USD en la tabla contra 73 en la factura real.
+ */
+function sinFecha(model: string): string {
+  return model.replace(/-\d{8}$/, "");
+}
+
+/**
  * Multiplicadores de prompt caching sobre el precio de entrada (lista Anthropic):
  * escribir en caché cuesta 1.25× la entrada; leer de caché 0.1×. Los tokens de
  * caché vienen en `usage.cache_creation_input_tokens` / `cache_read_input_tokens`
@@ -43,7 +53,7 @@ export const CACHE_READ_MULT = 0.1;
 
 /** ¿El modelo tiene tarifa propia? Un id desconocido cae al default (Sonnet 4.5). */
 export function modeloConTarifa(model: string): boolean {
-  return model in ANTHROPIC_PRICES_USD_PER_MTOK;
+  return model in ANTHROPIC_PRICES_USD_PER_MTOK || sinFecha(model) in ANTHROPIC_PRICES_USD_PER_MTOK;
 }
 
 /**
@@ -58,7 +68,10 @@ export function llmCostMicroUsd(
   outputTokens: number,
   cache: { cacheWriteTokens?: number; cacheReadTokens?: number } = {},
 ): number {
-  const p = ANTHROPIC_PRICES_USD_PER_MTOK[model] ?? ANTHROPIC_PRICES_USD_PER_MTOK[DEFAULT_MODEL];
+  const p =
+    ANTHROPIC_PRICES_USD_PER_MTOK[model] ??
+    ANTHROPIC_PRICES_USD_PER_MTOK[sinFecha(model)] ??
+    ANTHROPIC_PRICES_USD_PER_MTOK[DEFAULT_MODEL];
   const cw = cache.cacheWriteTokens ?? 0;
   const cr = cache.cacheReadTokens ?? 0;
   return Math.round(
