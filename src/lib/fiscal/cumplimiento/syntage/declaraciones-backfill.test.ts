@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mesDePeriodo, fileRefDe } from "./declaraciones-backfill";
+import { mesDePeriodo, fileRefDe, tiposSinDato } from "./declaraciones-backfill";
 
 describe("mesDePeriodo (Syntage `period` → mes 1-12)", () => {
   it("parses Spanish month names (with/without accents, case-insensitive)", () => {
@@ -62,5 +62,32 @@ describe("fileRefDe (acuse ref from tax-return files[])", () => {
       { "@id": "/files/xlsx", type: "tax_return.financial_statements", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
     ];
     expect(fileRefDe({ files })).toBe("/files/xlsx");
+  });
+});
+
+describe("tiposSinDato (lo que la empresa necesitaba y el acuse no trae)", () => {
+  it("devuelve sólo los tipos necesitados sin importe — el caso IEPS que se re-pagaba cada corrida", () => {
+    expect(
+      tiposSinDato(
+        { IVA_MENSUAL: true, ISR_PROVISIONAL: true, IEPS_MENSUAL: true },
+        { IVA_MENSUAL: true, ISR_PROVISIONAL: true, IEPS_MENSUAL: false },
+      ),
+    ).toEqual(["IEPS_MENSUAL"]);
+  });
+  it("no marca lo que no se necesitaba aunque falte, ni lo que sí trae", () => {
+    expect(
+      tiposSinDato(
+        { IVA_MENSUAL: true, ISR_PROVISIONAL: false, IEPS_MENSUAL: false },
+        { IVA_MENSUAL: true, ISR_PROVISIONAL: false, IEPS_MENSUAL: false },
+      ),
+    ).toEqual([]);
+  });
+  it("con datos parciales marca cada tipo que faltó", () => {
+    expect(
+      tiposSinDato(
+        { IVA_MENSUAL: true, ISR_PROVISIONAL: true, IEPS_MENSUAL: false },
+        { IVA_MENSUAL: false, ISR_PROVISIONAL: false, IEPS_MENSUAL: false },
+      ),
+    ).toEqual(["IVA_MENSUAL", "ISR_PROVISIONAL"]);
   });
 });
