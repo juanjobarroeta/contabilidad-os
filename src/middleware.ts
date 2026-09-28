@@ -1,10 +1,9 @@
 /**
- * CORS middleware for cross-origin API clients (construccion-admin,
- * fleet-maintenance, marketing-zionx, etc.).
+ * Narrow API CORS plus the explicit legacy workspace redirects.
  *
  * Scoped narrowly: only the endpoints those clients actually need. The rest
- * of the app — UI routes, NextAuth callbacks, and any route not listed in
- * the matcher — is unaffected and stays same-origin only.
+ * of the app — NextAuth callbacks and any route not listed in the matcher —
+ * is unaffected and stays same-origin only. UI redirects never receive CORS.
  *
  * Allowed origins come from the `API_ALLOWED_ORIGINS` env var, comma-
  * separated (e.g. `https://construccion-admin.vercel.app,http://localhost:5173`).
@@ -17,6 +16,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { legacyWorkspaceRedirect } from "@/lib/security/legacy-redirects";
 
 const ALLOWED = (process.env.API_ALLOWED_ORIGINS ?? "")
   .split(",")
@@ -54,6 +54,11 @@ function withCors(res: NextResponse, origin: string | null): NextResponse {
 }
 
 export function middleware(req: NextRequest) {
+  // Unlike Next 15's next.config redirects, middleware redirects retain the
+  // headers() baseline. Keep the existing 307 destinations and period params.
+  const redirect = legacyWorkspaceRedirect(req);
+  if (redirect) return redirect;
+
   const origin = req.headers.get("origin");
 
   // Preflight: respond 204 with CORS headers, never hit the route handler.
@@ -71,12 +76,19 @@ export function middleware(req: NextRequest) {
 }
 
 /**
- * Matcher: only run on routes cross-origin clients are expected to hit.
- * Everything else (UI pages, NextAuth /api/auth/[...nextauth], signup, etc.)
- * is untouched.
+ * Only the eight exact legacy UI paths and existing satellite API surface.
+ * Other UI pages and NextAuth callbacks stay outside middleware.
  */
 export const config = {
   matcher: [
+    "/declaracion",
+    "/declaraciones",
+    "/declaracion-anual",
+    "/impuestos/detalle",
+    "/impuestos/cierre",
+    "/bancos/detalle",
+    "/activos",
+    "/nomina/detalle",
     // :path* para cubrir también /api/auth/token/refresh — ver AUTOMOTRIZ-4 en
     // Sentry: sin la subruta, el preflight de la renovación de sesión no lleva
     // Access-Control-Allow-Origin y Safari tira el fetch con «Load failed» sin

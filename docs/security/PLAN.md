@@ -116,6 +116,13 @@ body con auth de `CRON_SECRET`.
   frame-ancestors, Referrer-Policy, Permissions-Policy; CSP en report-only
   primero. Verificar que requests malformados no regresan stack traces.
 
+  Update 2026-09-28: SEC-001 implements the enforced navigation/framing
+  baseline, HSTS, content-type/referrer/permissions headers and removal of
+  `x-powered-by`. Acceptance and boundaries are tracked in
+  [SEC-001 evidence](./sec-001-browser-baseline-2026-09-28.md). A strict
+  nonce-based script/fetch CSP still needs a separate report-only rollout;
+  this baseline does not close general XSS or error-hygiene work.
+
 ### P1 — observabilidad
 
 - **P1-1 · Sentry.** Migrar a `@sentry/nextjs` (hoy el browser no captura
