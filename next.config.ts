@@ -2,6 +2,44 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
+  poweredByHeader: false,
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            // Navigation/framing baseline, NOT a script/XSS allowlist. A strict
+            // script-src needs a separately tested nonce rollout for Next's
+            // inline hydration and our theme bootstrap. Same-origin frames
+            // preserve the in-app PDF viewers; satellite API fetches use CORS.
+            value: "base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'",
+          },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          {
+            key: "Permissions-Policy",
+            // The hub does not use these capabilities. This does not restrict
+            // the separate satellite documents that fetch our bearer APIs.
+            // Leave web-share enabled for the installed-PWA PDF download flow.
+            value: "camera=(), microphone=(), geolocation=()",
+          },
+        ],
+      },
+      ...(process.env.NODE_ENV === "production"
+        ? [{
+            source: "/:path*",
+            // Railway terminates TLS and supplies this header. Do not send
+            // HSTS on plain HTTP/local development or opt other hosts into
+            // includeSubDomains/preload without a separate domain audit.
+            has: [{ type: "header" as const, key: "x-forwarded-proto", value: "https" }],
+            headers: [{ key: "Strict-Transport-Security", value: "max-age=31536000" }],
+          }]
+        : []),
+    ];
+  },
   // El release del navegador tiene que ser EL MISMO que el del servidor para
   // que un error de React y la excepción que lo causó caigan en el mismo
   // deploy. Railway expone el SHA; aquí lo horneamos al bundle del cliente.
@@ -30,28 +68,8 @@ const nextConfig: NextConfig = {
     // Sentry se carga nativo (usa hooks de require para instrumentar).
     "@sentry/node",
   ],
-  // El flujo fiscal mensual ahora vive en el hub de Impuestos (/impuestos), con
-  // pestañas Del mes / Historial / Anual. Las rutas antiguas redirigen a la
-  // pestaña correspondiente. Next.js conserva los query params (month/year) al
-  // redirigir, así que los enlaces profundos siguen funcionando. Los papeles
-  // imprimibles (/impuestos/papeles) se mantienen como herramienta de detalle.
-  async redirects() {
-    return [
-      { source: "/declaracion", destination: "/impuestos?tab=del-mes", permanent: false },
-      { source: "/declaraciones", destination: "/impuestos?tab=historial", permanent: false },
-      { source: "/declaracion-anual", destination: "/impuestos?tab=anual", permanent: false },
-      { source: "/impuestos/detalle", destination: "/impuestos?tab=del-mes", permanent: false },
-      { source: "/impuestos/cierre", destination: "/impuestos?tab=del-mes", permanent: false },
-      // The Detalle view is now inlined into the unified /bancos page.
-      { source: "/bancos/detalle", destination: "/bancos", permanent: false },
-      // Activo fijo now lives as a tab inside the Contabilidad hub.
-      { source: "/activos", destination: "/contabilidad?tab=activo-fijo", permanent: false },
-      // El workspace de nómina ahora es la pestaña Corridas del hub /nomina
-      // (Resumen / Corridas / Empleados / Cumplimiento). El cockpit multi-RFC
-      // (/nomina/cockpit) sigue siendo página propia.
-      { source: "/nomina/detalle", destination: "/nomina?tab=corridas", permanent: false },
-    ];
-  },
+  // Legacy workspace redirects live in middleware: Next 15's config-redirect
+  // response drops previously matched headers(), including the security baseline.
 };
 
 // withSentryConfig envuelve la config para: (a) subir los source maps al
