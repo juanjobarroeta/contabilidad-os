@@ -38,7 +38,7 @@ This does not claim control of Railway-generated responses or Next's pre-routing
 - Real local production server: all 22 public response checks pass, including 204/403 middleware preflights and 307 redirects. Plain HTTP omits HSTS; an explicit simulated HTTPS proxy header enables the host-only policy.
 - Full Chromium (not headless-shell): generated fixture credentials log in successfully, theme selection survives reload, the bank workspace opens and visibly renders the synthetic PDF in its native iframe viewer, and a fetch downloads valid PDF bytes. No page errors or unexpected CSP violations occur on that flow.
 - A second loopback origin cannot frame the login page; the browser reports `frame-ancestors` blocking. That same allowlisted fixture origin can still fetch the protected API with bearer/trace headers and read its 401 authentication response.
-- Production deployment acceptance is pending. No authenticated production workflow, installed iOS PWA, or long-running observation is claimed by these local results.
+- [PR #1184 CI](https://github.com/juanjobarroeta/contabilidad-os/actions/runs/36473768963) passes all five checks: unit/audit, production build, real-Postgres authorization, migration drift, and secrets. CI reports 4,818 passing tests plus 14 existing XSD skips (`xmllint` absent); all 4,832 pass locally. The 46 new security contracts are not skipped.
 
 Repeat the read-only HTTP checks after each candidate deployment:
 
@@ -49,6 +49,17 @@ node scripts/smoke-browser-security.mjs https://contabilidad-os-production.up.ra
 Set `SECURITY_SMOKE_CORS_ORIGIN` to an **already configured** satellite origin to include allowed preflight and authenticated-boundary checks. Without it, the script explicitly reports that positive CORS was not checked. It never supplies credentials or customer IDs, follows redirects, mutates data, or prints response bodies/session cookies. It verifies HTML, JavaScript/CSS, PWA assets, auth errors, rejected file tokens, unknown paths, health/readiness GET/HEAD, legacy redirects, and rejected preflights. Every HTTPS response checked must carry host-only HSTS and omit `x-powered-by`.
 
 Authenticated/PDF browser checks use a disposable loopback-only PostgreSQL fixture with generated local credentials, synthetic PDF bytes, provider-free company data, disabled cron, and disabled Sentry. The shared Railway SAT staging service is not repurposed. This does not replace a production authenticated/PWA compatibility check or a long-running observation window.
+
+## Production acceptance
+
+- [PR #1184](https://github.com/juanjobarroeta/contabilidad-os/pull/1184) merged as `e1b4a10999839483c659783faf8c7cb8814252dd`. Exact Railway deployment `744b1e7f-9a93-4b3a-a762-242447bc69e9` reached `SUCCESS` and was the sole active web deployment at verification.
+- Startup found 146 migrations with none pending, was ready in 727 ms, and reported the exact merge SHA as its observability release. Resolved file configuration still uses `/api/ready`, its 120-second promotion window, and mandatory `node scripts/deploy-db.mjs`; this change does not weaken OPS-001.
+- All 22 HTTPS response checks pass. Railway HTTP logs attribute every request bearing `ContabilidadOS-SEC-001-Smoke` in the `2026-09-28T23:05:07Z`–`23:05:11Z` run to this exact deployment. Use explicit server timestamps when retrieving these logs: the workstation clock and remote log clock were not aligned.
+- Each checked response has the complete header contract and no `x-powered-by`, including the 307 fiscal redirect, 401 protected APIs/PDF endpoint, 403 invalid file token, 404 page, static JS/CSS, service worker, manifest, and 204/403 CORS preflights. GET/HEAD health/readiness remain 200/no-store.
+- Positive CORS uses the already configured `https://bartiz.vercel.app` origin: preflight is 204 with authorization/trace headers allowed; unauthenticated GET remains 401 and readable by that origin. The untrusted origin remains 403 without an allow-origin response header. No allowlist/configuration changes were made.
+- Public Chromium checks against production pass: login renders/hydrates, theme selection survives reload, and a separate loopback origin cannot frame it. No unexpected CSP violations or page errors occur. Railway attributes all 37 browser HTTP requests to the same deployment, including a successful cached 304 login reload; none returns 5xx.
+
+SEC-001's browser-header baseline is complete. Authenticated PDF compatibility is verified locally, not with a customer production document. Installed iOS-PWA behavior, strict nonce-based script CSP, general error hygiene, independent penetration testing, and the separate seven-day readiness observation remain outside this completion claim. No customer/provider credentials or live fiscal writes were exercised.
 
 ## Rollback
 
