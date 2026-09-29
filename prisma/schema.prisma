@@ -518,6 +518,7 @@ model CompanyMember {
   /// Páginas visibles del satélite Hospital (rejilla de Usuarios); mismo
   /// contrato que automotrizPaginas: [] = ve todas.
   hospitalPaginas String[] @default([])
+  hospitalPermisos String[] @default([])
 
   /// Sólo para el satélite SALAMERÍA: páginas visibles del ERP. Mismo
   /// contrato que automotrizPaginas: [] = ve todas.
@@ -7648,6 +7649,11 @@ model HospTarifa {
 /// ingreso del hospital: `supplierId` liga al proveedor que factura al
 /// hospital (dispersión); `employeeId` si además está en nómina.
 model HospMedico {
+  userId String?
+  credencialVerificadaAt DateTime?
+  credencialVerificadaPor String?
+  credencialEvidencia String?
+  @@unique([companyId, userId])
   id        String   @id @default(cuid())
   companyId String
   createdAt DateTime @default(now())
@@ -8238,6 +8244,8 @@ model HospInsumo {
 /// Una fila por LOTE, no por producto: la caducidad y la existencia viven
 /// aquí. `existencia` es el saldo materializado del kardex del lote.
 model HospLote {
+  bloqueado Boolean @default(false)
+  bloqueoMotivo String?
   id        String   @id @default(cuid())
   companyId String
   insumoId  String
@@ -10028,3 +10036,28 @@ model ProrrogaSat {
   @@unique([entregable, periodo])
 }
 
+
+// Durable request identity. Patient data is not copied into the replay record.
+model HospAplicacionSolicitud {
+  companyId String
+  clave String
+  hash String
+  cargoId String
+  movimientoId String
+  notaId String
+  loteId String
+  createdAt DateTime @default(now())
+  @@id([companyId, clave])
+}
+
+// Append-only facility/clinical control history; documents remain at their controlled source.
+model HospControlEvento {
+  id String @id @default(cuid())
+  companyId String
+  tipo String
+  referencia String
+  actorId String
+  datos Json
+  createdAt DateTime @default(now())
+  @@index([companyId, tipo, createdAt])
+}

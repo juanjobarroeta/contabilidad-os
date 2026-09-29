@@ -19,6 +19,7 @@ import { aFecha, bitacora, errorZod, fechaSchema, usuarioDe } from "@/lib/hospit
 import { aplicarInsumo } from "@/lib/hospital/aplicar-insumo";
 
 const schema = z.object({
+  solicitudId: z.string().uuid(),
   insumoId: z.string().min(1),
   loteId: z.string().nullable().optional(),
   cantidad: z.number().positive().max(100000),
@@ -46,6 +47,7 @@ export const POST = withHospital(async (req: Request, ctx: { params: Promise<{ i
   const usuario = usuarioDe(user);
 
   const resultado = await aplicarInsumo(prisma, {
+    solicitudId: d.solicitudId,
     companyId: ep.companyId,
     episodioId: ep.id,
     insumoId: d.insumoId,

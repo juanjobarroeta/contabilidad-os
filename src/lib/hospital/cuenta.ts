@@ -111,6 +111,9 @@ export interface Cuenta {
     aseguradora: number;
     requiereAutorizacion: boolean;
     topeAutorizacion: number | null;
+    ivaPaciente?: number;
+    ivaAseguradora?: number;
+    totalHospital?: number;
   };
 }
 
@@ -258,9 +261,14 @@ export function calcularCuenta(args: {
   // sin ser ingreso del hospital: se separan para que el resultado no mienta.
   const honorarios = r2(vivos.filter((r) => r.categoria === "HONORARIO").reduce((s, r) => s + r.total, 0));
 
+  const hospitalVivos = vivos.filter(r => r.categoria !== "HONORARIO");
+  const hospitalTotales = sumarTotales(hospitalVivos);
+  const reparto = calcularReparto(hospitalTotales.subtotal, pagador, args.config);
+  const ivaPaciente = r2(hospitalTotales.subtotal > 0 ? hospitalTotales.iva * reparto.paciente / hospitalTotales.subtotal : 0);
+  const ivaAseguradora = r2(hospitalTotales.iva - ivaPaciente);
   return {
     grupos,
     totales: { subtotal, iva, total, honorarios, hospital: r2(total - honorarios) },
-    reparto: calcularReparto(subtotal, pagador, args.config),
+    reparto: { ...reparto, paciente: r2(reparto.paciente + ivaPaciente), aseguradora: r2(reparto.aseguradora + ivaAseguradora), ivaPaciente, ivaAseguradora, totalHospital: hospitalTotales.total },
   };
 }

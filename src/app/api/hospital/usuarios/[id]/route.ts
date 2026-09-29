@@ -1,3 +1,4 @@
+import { PERMISOS_CLINICOS } from "@/lib/hospital/permisos";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
@@ -12,6 +13,7 @@ const patchSchema = z.discriminatedUnion("action", [
     action: z.literal("permisos"),
     role: z.enum(["ADMIN", "ACCOUNTANT", "VIEWER"]),
     // Llaves de página del satélite; [] = ve todas.
+    permisosClinicos: z.array(z.enum(PERMISOS_CLINICOS)).optional(),
     paginas: z.array(z.string().trim().min(1).max(40)).max(64).default([]),
   }),
   z.object({
@@ -90,7 +92,7 @@ export const PATCH = withAuthz(async (req: Request, ctx: Params) => {
       }
       const updated = await prisma.companyMember.update({
         where: { id },
-        data: { role: data.role, hospitalPaginas: data.paginas },
+        data: { role: data.role, hospitalPaginas: data.paginas, hospitalPermisos: data.permisosClinicos },
       });
       registrarBitacora({
         companyId: target.companyId,
@@ -104,6 +106,7 @@ export const PATCH = withAuthz(async (req: Request, ctx: Params) => {
           rolAnterior: target.role,
           rol: updated.role,
           paginas: updated.hospitalPaginas,
+          permisosClinicos: updated.hospitalPermisos,
           origen: "hospital",
         },
         req,
@@ -112,6 +115,7 @@ export const PATCH = withAuthz(async (req: Request, ctx: Params) => {
         ok: true,
         role: updated.role,
         paginas: updated.hospitalPaginas,
+          permisosClinicos: updated.hospitalPermisos,
         sinRestriccion: updated.hospitalPaginas.length === 0,
       });
     }

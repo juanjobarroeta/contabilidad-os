@@ -56,7 +56,7 @@ export const POST = withHospital(async (req: Request) => {
 
   try {
     const registros = await proveedor.buscarPorDatos({ nombres: q.nombres, primerApellido: q.primerApellido, segundoApellido: q.segundoApellido ?? null, fechaNacimiento: q.fechaNacimiento, sexo, entidadClave });
-    registrarAcceso({ companyId, accion: "CONSULTA_RENAPO", detalle: `Búsqueda por datos · ${proveedor.nombre} · ${registros.length} registro(s)`, user, req });
+    await registrarAcceso({ companyId, accion: "CONSULTA_RENAPO", detalle: `Búsqueda por datos · ${proveedor.nombre} · ${registros.length} registro(s)`, user, req });
     return NextResponse.json({
       disponible: true,
       registros: registros.map(datosRenapo),
@@ -68,7 +68,7 @@ export const POST = withHospital(async (req: Request) => {
     });
   } catch (e) {
     if (!(e instanceof RenapoError)) throw e;
-    registrarAcceso({ companyId, accion: "CONSULTA_RENAPO", detalle: `Búsqueda por datos · ${proveedor.nombre} · ${e.codigo}`, user, req });
+    await registrarAcceso({ companyId, accion: "CONSULTA_RENAPO", detalle: `Búsqueda por datos · ${proveedor.nombre} · ${e.codigo}`, user, req });
     if (e.codigo === "NOT_FOUND") return NextResponse.json({ disponible: true, registros: [], multiple: false, proveedor: proveedor.nombre, motivo: e.message, ...base });
     if (e.codigo === "MULTIPLE_MATCHES") return NextResponse.json({ disponible: true, registros: [], multiple: true, proveedor: proveedor.nombre, motivo: e.message, ...base });
     if (e.codigo === "INVALID_FORMAT") return error(e.message, 400);

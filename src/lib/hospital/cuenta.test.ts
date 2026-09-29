@@ -70,18 +70,18 @@ describe("calcularCuenta — la cuenta de M. F. Ortega (lámina 8)", () => {
     });
   });
 
-  it("reparte sobre el subtotal: deducible + coaseguro al paciente, el resto a GNP", () => {
-    // 8,500 + 10 % × (50,572 − 8,500) = 8,500 + 4,207.20
+  it("separa honorarios y reparte el hospital con IVA, sin duplicar emisores", () => {
+    // Hospital: 24,072 pre-tax; patient pre-tax = 8,500 + 1,557.20.
     expect(cuenta.reparto).toMatchObject({
-      base: 50572,
+      base: 24072,
       deducible: 8500,
-      coaseguro: 4207.2,
-      paciente: 12707.2,
-      aseguradora: 37864.8,
+      coaseguro: 1557.2,
+      paciente: 11601.38,
+      aseguradora: 16166.62,
       requiereAutorizacion: false,
       topeAutorizacion: 60000,
     });
-    expect(cuenta.reparto.paciente + cuenta.reparto.aseguradora).toBeCloseTo(cuenta.reparto.base, 2);
+    expect(cuenta.reparto.paciente + cuenta.reparto.aseguradora).toBeCloseTo(cuenta.totales.hospital, 2);
   });
 
   it("las cifras de la propuesta (9,860 / 1,360) salen de la misma fórmula con base 22,100", () => {
@@ -96,7 +96,7 @@ describe("calcularCuenta — casos del reparto", () => {
 
   it("sin pagador todo al paciente", () => {
     const c = calcularCuenta({ cargos });
-    expect(c.reparto).toMatchObject({ pagador: null, base: 10000, paciente: 10000, aseguradora: 0, deducible: 0, coaseguro: 0 });
+    expect(c.reparto).toMatchObject({ pagador: null, base: 10000, paciente: 11600, aseguradora: 0, deducible: 0, coaseguro: 0 });
   });
 
   it("PARTICULAR todo al paciente aunque el convenio traiga deducible", () => {
@@ -104,7 +104,7 @@ describe("calcularCuenta — casos del reparto", () => {
       cargos,
       pagador: { nombre: "Particular", tipo: "PARTICULAR", deducible: 5000, coaseguroPct: 0.1, plazoDias: 0, topeAutorizacion: null },
     });
-    expect(c.reparto).toMatchObject({ paciente: 10000, aseguradora: 0 });
+    expect(c.reparto).toMatchObject({ paciente: 11600, aseguradora: 0 });
   });
 
   it("EMPRESA sin deducible ni coaseguro paga todo", () => {
@@ -112,7 +112,7 @@ describe("calcularCuenta — casos del reparto", () => {
       cargos,
       pagador: { nombre: "Textil del Valle", tipo: "EMPRESA", deducible: null, coaseguroPct: 0, plazoDias: 30, topeAutorizacion: null },
     });
-    expect(c.reparto).toMatchObject({ paciente: 0, aseguradora: 10000 });
+    expect(c.reparto).toMatchObject({ paciente: 0, aseguradora: 11600 });
   });
 
   it("el deducible no rebasa la base", () => {
@@ -120,7 +120,7 @@ describe("calcularCuenta — casos del reparto", () => {
       cargos,
       pagador: { nombre: "AXA", tipo: "ASEGURADORA", deducible: 12000, coaseguroPct: 0.1, plazoDias: 60, topeAutorizacion: null },
     });
-    expect(c.reparto).toMatchObject({ deducible: 10000, coaseguro: 0, paciente: 10000, aseguradora: 0 });
+    expect(c.reparto).toMatchObject({ deducible: 10000, coaseguro: 0, paciente: 11600, aseguradora: 0 });
   });
 
   it("requiereAutorizacion usa el tope del convenio y, si no hay, el de la empresa", () => {

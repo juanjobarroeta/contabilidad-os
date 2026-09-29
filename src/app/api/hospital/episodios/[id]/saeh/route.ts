@@ -42,7 +42,7 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
 
   const { user } = await requireMembership(base.companyId, undefined, req);
   await requireModule(base.companyId, "HOSPITAL", req);
-  registrarAcceso({ companyId: base.companyId, accion: "LECTURA_EXPEDIENTE", episodioId: base.id, pacienteId: base.pacienteId, detalle: `Hoja SAEH ${base.folio}`, user, req });
+  await registrarAcceso({ companyId: base.companyId, accion: "LECTURA_EXPEDIENTE", episodioId: base.id, pacienteId: base.pacienteId, detalle: `Hoja SAEH ${base.folio}`, user, req });
 
   const fuente = await cargarFuenteSaeh(prisma, id);
   if (!fuente) throw new AuthzError(404, "Episodio no encontrado");

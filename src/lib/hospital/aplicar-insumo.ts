@@ -28,6 +28,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { HospIvaContexto, PrismaClient } from "@prisma/client";
+import { createHash } from "node:crypto";
+import { claveDia } from "./tz";
 import { HospitalError } from "./errores";
 import { esActivo, r2 } from "./util";
 import { exigeLibroControl, nombreReceta } from "./controlados";
@@ -36,6 +38,7 @@ import { hashNota } from "./notas";
 import { asentarSalidaFarmacia } from "./asientos";
 
 export interface AplicarInsumoArgs {
+  solicitudId?: string;
   companyId: string;
   episodioId: string;
   insumoId: string;
@@ -70,6 +73,22 @@ export async function aplicarInsumo(db: PrismaClient, args: AplicarInsumoArgs) {
   const fecha = args.fecha ?? new Date();
 
   return db.$transaction(async (tx) => {
+    const requestHash = createHash("sha256").update(JSON.stringify({ ...args, fecha: args.fecha?.toISOString() ?? null })).digest("hex");
+    if (args.solicitudId) {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`aplicacion:${args.companyId}:${args.solicitudId}`}))`;
+      const previous = await tx.hospAplicacionSolicitud.findUnique({ where: { companyId_clave: { companyId: args.companyId, clave: args.solicitudId } } });
+      if (previous) {
+        if (previous.hash !== requestHash) throw new HospitalError(409, "La solicitud ya fue usada con otro contenido");
+        const [cargo, movimiento, nota, lote] = await Promise.all([
+          tx.hospCargo.findUniqueOrThrow({ where: { id: previous.cargoId } }),
+          tx.hospMovimientoInsumo.findUniqueOrThrow({ where: { id: previous.movimientoId } }),
+          tx.hospNota.findUniqueOrThrow({ where: { id: previous.notaId } }),
+          tx.hospLote.findUniqueOrThrow({ where: { id: previous.loteId } }),
+        ]);
+        return { cargo, movimiento, nota, lote };
+      }
+    }
+    const hoy = new Date(`${claveDia(new Date())}T00:00:00.000Z`);
     const [episodio, insumo, config, medico] = await Promise.all([
       tx.hospEpisodio.findUnique({ where: { id: args.episodioId }, select: { id: true, companyId: true, estado: true, folio: true, tipo: true } }),
       tx.hospInsumo.findUnique({
@@ -115,7 +134,7 @@ export async function aplicarInsumo(db: PrismaClient, args: AplicarInsumoArgs) {
     const lote = args.loteId
       ? await tx.hospLote.findUnique({ where: { id: args.loteId } })
       : await tx.hospLote.findFirst({
-          where: { insumoId: insumo.id, existencia: { gt: 0 } },
+          where: { insumoId: insumo.id, existencia: { gt: 0 }, bloqueado: false, caducidad: { gte: hoy } },
           orderBy: [{ caducidad: { sort: "asc", nulls: "last" } }, { recibidoAt: "asc" }],
         });
     if (!lote || lote.insumoId !== insumo.id || lote.companyId !== args.companyId) {
@@ -123,6 +142,9 @@ export async function aplicarInsumo(db: PrismaClient, args: AplicarInsumoArgs) {
         args.loteId ? 404 : 409,
         args.loteId ? "Lote no encontrado para ese insumo" : `${insumo.nombre}: sin existencia en farmacia`
       );
+    }
+    if (lote.bloqueado || !lote.caducidad || lote.caducidad < hoy) {
+      throw new HospitalError(409, "Lote no elegible: bloqueado, caducado o sin caducidad verificada");
     }
     const existencia = Number(lote.existencia);
     if (existencia < cantidad) {
@@ -136,7 +158,7 @@ export async function aplicarInsumo(db: PrismaClient, args: AplicarInsumoArgs) {
     // Descuento atómico: si otra aplicación se adelantó y ya no alcanza, el
     // WHERE no coincide y no se descuenta de más.
     const descontado = await tx.hospLote.updateMany({
-      where: { id: lote.id, existencia: { gte: cantidad } },
+      where: { id: lote.id, existencia: { gte: cantidad }, bloqueado: false, caducidad: { gte: hoy } },
       data: { existencia: { decrement: cantidad } },
     });
     if (descontado.count !== 1) {
@@ -235,6 +257,10 @@ export async function aplicarInsumo(db: PrismaClient, args: AplicarInsumoArgs) {
     });
 
     const loteActualizado = await tx.hospLote.findUniqueOrThrow({ where: { id: lote.id } });
+    if (args.solicitudId) await tx.hospAplicacionSolicitud.create({ data: {
+      companyId: args.companyId, clave: args.solicitudId, hash: requestHash,
+      cargoId: cargo.id, movimientoId: movimiento.id, notaId: nota.id, loteId: lote.id,
+    } });
     return { cargo, movimiento, nota, lote: loteActualizado };
   });
 }

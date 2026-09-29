@@ -25,7 +25,7 @@ export const GET = withHospital(async (req: Request) => {
   const companyId = searchParams.get("companyId");
   if (!companyId) return error("companyId requerido");
 
-  await requireMembership(companyId, undefined, req);
+  const { membership } = await requireMembership(companyId, undefined, req);
   await requireModule(companyId, "HOSPITAL", req);
 
   const todos = searchParams.get("todos") === "1";
@@ -54,6 +54,7 @@ export const GET = withHospital(async (req: Request) => {
   return NextResponse.json(
     medicos.map(({ _count, ...m }) => ({
       ...m,
+      credencialEvidencia: ["OWNER", "ADMIN"].includes(membership.role) ? m.credencialEvidencia : undefined,
       episodiosActivos: _count.episodios,
       honorariosMes: r2(porMedico.get(m.id) ?? 0),
       // SAEH exige CURP, apellidos separados y cédula del médico responsable.

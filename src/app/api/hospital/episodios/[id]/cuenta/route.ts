@@ -24,9 +24,9 @@ export const GET = withHospital(async (req: Request, ctx: { params: Promise<{ id
   const base = await prisma.hospEpisodio.findUnique({ where: { id }, select: { id: true, companyId: true, folio: true, pacienteId: true } });
   if (!base) throw new AuthzError(404, "Episodio no encontrado");
 
-  const { user } = await requireMembership(base.companyId, undefined, req);
+  const { user, membership } = await requireMembership(base.companyId, undefined, req);
   await requireModule(base.companyId, "HOSPITAL", req);
-  registrarAcceso({ companyId: base.companyId, accion: "LECTURA_CUENTA", episodioId: base.id, pacienteId: base.pacienteId, detalle: `Cuenta ${base.folio}`, user, req });
+  await registrarAcceso({ companyId: base.companyId, accion: "LECTURA_CUENTA", episodioId: base.id, pacienteId: base.pacienteId, detalle: `Cuenta ${base.folio}`, user, req });
 
   await asegurarCargosEstancia(prisma, id, new Date());
 
@@ -110,8 +110,10 @@ export const GET = withHospital(async (req: Request, ctx: { params: Promise<{ id
     });
   }
   const vivas = [...facturas.values()].filter((f) => f.status !== "CANCELLED");
-  const facturado = r2(vivas.reduce((s, f) => s + f.total, 0));
+  const facturado = r2(ep.cargos.filter(c => !c.cancelado && c.categoria !== "HONORARIO" && c.invoice && c.invoice.status !== "CANCELLED").reduce((s, c) => s + r2(Number(c.importe) + r2(Number(c.importe) * Number(c.ivaTasa ?? 0))), 0));
 
+  const member = await prisma.companyMember.findUnique({ where: { userId_companyId: { userId: user.id, companyId: ep.companyId } }, select: { hospitalPermisos: true } });
+  const puedeLeerNotas = ["OWNER", "ADMIN"].includes(membership.role) || member?.hospitalPermisos.includes("CLINICA_LEER");
   const cargosSinNota = ep.cargos.filter((c) => !c.cancelado && (c.origen === "EXPEDIENTE" || c.origen === "FARMACIA") && !c.nota);
   const notasSinCargo = ep.notas.filter((n) => !n.reemplazadaPor);
 
@@ -138,7 +140,7 @@ export const GET = withHospital(async (req: Request, ctx: { params: Promise<{ id
     saldoNeto, // P3c
     facturacion: {
       facturado,
-      porFacturar: r2(Math.max(0, cuenta.totales.total - facturado)),
+      porFacturar: r2(Math.max(0, cuenta.totales.hospital - facturado)),
       facturas: [...facturas.values()],
     },
     conciliacion: {
@@ -146,7 +148,7 @@ export const GET = withHospital(async (req: Request, ctx: { params: Promise<{ id
       notasSinCargo: notasSinCargo.length,
       detalle: {
         cargosSinNota: cargosSinNota.map((c) => ({ id: c.id, fecha: c.fecha, descripcion: c.descripcion, importe: r2(Number(c.importe)), origen: c.origen })),
-        notasSinCargo: notasSinCargo.map((n) => ({ id: n.id, fecha: n.fecha, tipo: n.tipo, texto: n.texto })),
+        notasSinCargo: notasSinCargo.map((n) => ({ id: n.id, fecha: n.fecha, tipo: n.tipo, texto: puedeLeerNotas ? n.texto : "Contenido clínico restringido" })),
       },
     },
   });

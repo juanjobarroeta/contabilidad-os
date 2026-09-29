@@ -23,22 +23,25 @@ export const PATCH = withHospital(async (req: Request, ctx: { params: Promise<{ 
   const { user } = await requireWriter(cita.companyId, req);
   await requireModule(cita.companyId, "HOSPITAL", req);
 
-  const inicio = d.inicio ? new Date(d.inicio) : cita.inicio;
-  const fin = d.fin ? new Date(d.fin) : cita.fin;
+  const actualizada = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`agenda:${cita.companyId}`}))`;
+    const citaActual = await tx.hospCita.findUniqueOrThrow({ where: { id } });
+  const inicio = d.inicio ? new Date(d.inicio) : citaActual.inicio;
+  const fin = d.fin ? new Date(d.fin) : citaActual.fin;
   if (fin.getTime() <= inicio.getTime()) return error("La hora de fin debe ser posterior a la de inicio");
 
-  const v = await validarVinculosCita(prisma, cita.companyId, d);
+  const v = await validarVinculosCita(tx, citaActual.companyId, d);
   if (v.error != null) return error(v.error);
 
-  const recursoId = d.recursoId ?? cita.recursoId;
-  const estado = d.estado ?? cita.estado;
-  const seMueve = d.recursoId !== undefined || d.inicio !== undefined || d.fin !== undefined || (d.estado !== undefined && d.estado !== cita.estado);
+  const recursoId = d.recursoId ?? citaActual.recursoId;
+  const estado = d.estado ?? citaActual.estado;
+  const seMueve = d.recursoId !== undefined || d.inicio !== undefined || d.fin !== undefined || (d.estado !== undefined && d.estado !== citaActual.estado);
   if (seMueve && estado !== "CANCELADA" && estado !== "NO_ASISTIO") {
-    const choque = await citaEmpalmada(prisma, { recursoId, inicio, fin, excluirId: id });
+    const choque = await citaEmpalmada(tx, { recursoId, inicio, fin, excluirId: id });
     if (choque) return error(describirEmpalme(choque), 409);
   }
 
-  const actualizada = await prisma.hospCita.update({
+  return tx.hospCita.update({
     where: { id },
     data: {
       ...(d.recursoId ? { recursoId: d.recursoId } : {}),
@@ -55,6 +58,9 @@ export const PATCH = withHospital(async (req: Request, ctx: { params: Promise<{ 
     },
     include: incluyeCita,
   });
+
+  });
+  if (actualizada instanceof Response) return actualizada;
 
   bitacora(user, req, {
     companyId: cita.companyId,

@@ -62,20 +62,22 @@ export const POST = withHospital(async (req: Request) => {
   const { user } = await requireWriter(companyId, req);
   await requireModule(companyId, "HOSPITAL", req);
 
+  const cita = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`agenda:${companyId}`}))`;
   const inicio = new Date(d.inicio);
   const fin = new Date(d.fin);
   if (fin.getTime() <= inicio.getTime()) return error("La hora de fin debe ser posterior a la de inicio");
 
-  const v = await validarVinculosCita(prisma, companyId, d);
+  const v = await validarVinculosCita(tx, companyId, d);
   if (v.error != null) return error(v.error);
 
   const estado = d.estado ?? "PROGRAMADA";
   if (estado !== "CANCELADA" && estado !== "NO_ASISTIO") {
-    const choque = await citaEmpalmada(prisma, { recursoId: d.recursoId, inicio, fin });
+    const choque = await citaEmpalmada(tx, { recursoId: d.recursoId, inicio, fin });
     if (choque) return error(describirEmpalme(choque), 409);
   }
 
-  const cita = await prisma.hospCita.create({
+  return tx.hospCita.create({
     data: {
       companyId,
       recursoId: d.recursoId,
@@ -94,12 +96,15 @@ export const POST = withHospital(async (req: Request) => {
     include: incluyeCita,
   });
 
+  });
+  if (cita instanceof Response) return cita;
+
   bitacora(user, req, {
     companyId,
     accion: "hospital.cita.crear",
     entidad: "HospCita",
     entidadId: cita.id,
-    detalle: { recurso: v.recurso?.nombre ?? d.recursoId, titulo: cita.titulo, inicio: inicio.toISOString(), fin: fin.toISOString(), estado },
+    detalle: { recurso: d.recursoId, titulo: cita.titulo, inicio: cita.inicio.toISOString(), fin: cita.fin.toISOString(), estado: cita.estado },
   });
   return NextResponse.json(serializarCita(cita), { status: 201 });
 });

@@ -106,7 +106,7 @@ export const GET = withHospital(async (req: Request) => {
       }
     });
     const detalle = `SAEH ${nombre} · ${seleccion.length} egresos${incluirIncompletos ? ` (${seleccion.filter((c) => !c.completo).length} incompletos)` : ""}`;
-    registrarAcceso({ companyId, accion: "EXPORTACION", detalle, user, req });
+    await registrarAcceso({ companyId, accion: "EXPORTACION", detalle, user, req });
     bitacora(user, req, {
       companyId,
       accion: "hospital.saeh.exportar",

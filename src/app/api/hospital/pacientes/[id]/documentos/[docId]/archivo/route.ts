@@ -71,7 +71,7 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
   const conArchivo = await prisma.hospDocumento.findUnique({ where: { id: docId }, select: { archivo: true } });
   if (!conArchivo?.archivo || !doc.mime) return error("El documento no tiene archivo", 404);
 
-  registrarAcceso({
+  await registrarAcceso({
     companyId: doc.companyId,
     accion: "EXPORTACION",
     episodioId: doc.episodioId,

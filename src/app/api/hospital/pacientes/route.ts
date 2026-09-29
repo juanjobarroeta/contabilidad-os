@@ -57,8 +57,12 @@ export const GET = withHospital(async (req: Request) => {
   const q = searchParams.get("q")?.trim();
   const activo = searchParams.get("activo");
 
-  const pacientes = await prisma.hospPaciente.findMany({
-    where: {
+  const paginated = searchParams.has("page");
+  const requestedPage = Number(searchParams.get("page") ?? 1);
+  if (paginated && (!Number.isSafeInteger(requestedPage) || requestedPage < 1 || requestedPage > 100000)) return error("Página inválida", 400);
+  const page = requestedPage;
+  const pageSize = 50;
+  const where: import("@prisma/client").Prisma.HospPacienteWhereInput = {
       companyId,
       ...(activo === "1" || activo === "true" ? { activo: true } : activo === "0" || activo === "false" ? { activo: false } : {}),
       ...(q
@@ -74,7 +78,10 @@ export const GET = withHospital(async (req: Request) => {
             ],
           }
         : {}),
-    },
+    };
+  const total = paginated ? await prisma.hospPaciente.count({ where }) : null;
+  const pacientes = await prisma.hospPaciente.findMany({
+    where,
     include: {
       pagador: { select: { id: true, nombre: true, tipo: true } },
       customer: { select: { id: true, razonSocial: true, rfc: true } },
@@ -85,8 +92,9 @@ export const GET = withHospital(async (req: Request) => {
         select: { id: true, folio: true, tipo: true, estado: true, fechaIngreso: true, fechaAlta: true },
       },
     },
-    orderBy: [{ apellidoPaterno: "asc" }, { nombre: "asc" }],
-    take: 500,
+    orderBy: [{ apellidoPaterno: "asc" }, { nombre: "asc" }, { id: "asc" }],
+    take: paginated ? pageSize : 500,
+    ...(paginated ? { skip: (page - 1) * pageSize } : {}),
   });
 
   // Saldo = cuenta viva de los episodios abiertos, sumada por paciente en una
@@ -103,8 +111,7 @@ export const GET = withHospital(async (req: Request) => {
   }
 
   const hoy = new Date();
-  return NextResponse.json(
-    pacientes.map((p) => {
+  const items = pacientes.map((p) => {
       const { pagador, customer, _count, episodios, ...resto } = p;
       return {
         ...resto,
@@ -116,8 +123,8 @@ export const GET = withHospital(async (req: Request) => {
         saldo: totalesCargos(porPaciente.get(p.id) ?? []).total,
         curpVerificada: p.curpOrigen === "RENAPO",
       };
-    })
-  );
+    });
+  return NextResponse.json(paginated ? { pacientes: items, total, page, pageSize } : items);
 });
 
 const createSchema = pacienteSchema.extend({ companyId: z.string().min(1) });
