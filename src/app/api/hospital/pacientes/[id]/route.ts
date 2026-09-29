@@ -93,7 +93,7 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
   const { user } = await requireMembership(paciente.companyId, undefined, req);
   await requireModule(paciente.companyId, "HOSPITAL", req);
 
-  registrarAcceso({
+  await registrarAcceso({
     companyId: paciente.companyId,
     accion: "LECTURA_FICHA",
     pacienteId: paciente.id,

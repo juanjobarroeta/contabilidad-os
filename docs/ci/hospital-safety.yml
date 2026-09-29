@@ -1,0 +1,69 @@
+name: Hospital safety regression
+on:
+  pull_request:
+    paths:
+      - 'src/app/api/hospital/**'
+      - 'src/lib/hospital/**'
+      - 'src/lib/authz.ts'
+      - 'prisma/**'
+      - 'package*.json'
+      - 'scripts/hospital-safety-regression.ts'
+      - '.github/workflows/hospital-safety.yml'
+permissions:
+  contents: read
+jobs:
+  hospital-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: synthetic-ci
+          POSTGRES_DB: hospitalos_audit_20260929
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd 'pg_isready -U postgres'
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:synthetic-ci@localhost:5432/hospitalos_audit_20260929
+      AUTH_TRUST_HOST: 'true'
+      API_ALLOWED_ORIGINS: http://localhost:5177
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Generate ephemeral test-only secrets
+        run: |
+          node <<'NODE'
+          const { randomBytes } = require('node:crypto');
+          const { appendFileSync } = require('node:fs');
+          appendFileSync(process.env.GITHUB_ENV, 'AUTH_SECRET=' + randomBytes(32).toString('hex') + '\nCREDENTIALS_ENCRYPTION_KEY=' + randomBytes(32).toString('base64') + '\n');
+          NODE
+      - name: Migrate and prepare synthetic hospital
+        run: |
+          psql "$DATABASE_URL" -c 'CREATE EXTENSION IF NOT EXISTS vector'
+          npx prisma migrate deploy
+          npx prisma generate
+          npx tsx scripts/hospital-catalogos.ts
+          npx tsx scripts/seed-hospital-demo.ts --user ci@hospitalos.test --password "$(openssl rand -hex 24)"
+      - run: npm run build
+      - name: Run real HTTP and database regression against production build
+        run: |
+          npm run start -- --hostname 127.0.0.1 --port 3017 > /tmp/hospital-server.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3017/api/health > /dev/null; then break; fi
+            sleep 2
+          done
+          npx tsx scripts/hospital-safety-regression.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hospital-safety-results
+          path: /tmp/hospital-safety-regression.json
+          if-no-files-found: warn

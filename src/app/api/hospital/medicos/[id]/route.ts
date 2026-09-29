@@ -48,6 +48,7 @@ export const PATCH = withHospital(async (req: Request, ctx: { params: Promise<{ 
     where: { id },
     data: {
       ...d,
+      ...((d.cedula !== undefined || d.nombre !== undefined) ? { credencialVerificadaAt: null, credencialVerificadaPor: null, credencialEvidencia: null } : {}),
       ...(d.nombre ? { nombre: d.nombre.trim() } : {}),
       ...(d.rfc !== undefined ? { rfc: d.rfc?.trim().toUpperCase() || null } : {}),
       ...(d.paisNacimientoClave !== undefined ? { paisNacimientoClave: d.paisNacimientoClave ? d.paisNacimientoClave.padStart(3, "0") : null } : {}),

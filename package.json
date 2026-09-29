@@ -51,7 +51,7 @@
     "test:db": "vitest run -c vitest.integration.config.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.82.0",
+    "@anthropic-ai/sdk": "^0.92.0",
     "@auth/prisma-adapter": "^2.11.3",
     "@jspawn/qpdf-wasm": "^0.0.2",
     "@nodecfdi/credentials": "^3.2.0",

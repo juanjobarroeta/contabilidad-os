@@ -38,7 +38,7 @@ type Tab = (typeof TABS)[number];
 
 const GRUPOS = ["I", "II", "III", "IV", "V", "VI"] as const;
 
-type EstadoLote = "EN_NIVEL" | "CADUCA" | "CADUCADO";
+type EstadoLote = "EN_NIVEL" | "CADUCA" | "CADUCADO" | "SIN_VERIFICAR";
 type EstadoInsumo = "EN_NIVEL" | "BAJO_MINIMO" | "SIN_EXISTENCIA";
 
 export const GET = withAuthz(async (req: Request) => {
@@ -78,7 +78,7 @@ export const GET = withAuthz(async (req: Request) => {
         claveProdServ: true, derivadoDeCfdi: true, activo: true, updatedAt: true,
         lotes: {
           where: { existencia: { gt: 0 } },
-          select: { id: true, lote: true, caducidad: true, existencia: true, costoUnitario: true, recibidoAt: true, invoiceId: true },
+          select: { id: true, lote: true, caducidad: true, existencia: true, costoUnitario: true, recibidoAt: true, invoiceId: true, bloqueado: true, bloqueoMotivo: true },
           orderBy: [{ caducidad: { sort: "asc", nulls: "last" } }],
         },
       },
@@ -95,7 +95,7 @@ export const GET = withAuthz(async (req: Request) => {
   const existenciaDe = new Map(existencias.map((e) => [e.insumoId, r2(Number(e._sum.cantidad ?? 0))]));
 
   const estadoLote = (caducidad: Date | null): { dias: number | null; estado: EstadoLote } => {
-    if (!caducidad) return { dias: null, estado: "EN_NIVEL" };
+    if (!caducidad) return { dias: null, estado: "SIN_VERIFICAR" };
     const dias = diasDesde(hoy, caducidad);
     if (dias < 0) return { dias, estado: "CADUCADO" };
     if (dias <= diasAlerta) return { dias, estado: "CADUCA" };
@@ -122,7 +122,7 @@ export const GET = withAuthz(async (req: Request) => {
         recibidoAt: l.recibidoAt,
         invoiceId: l.invoiceId,
         diasParaCaducar: dias,
-        estado: estadoL,
+        estado: estadoL, bloqueado: l.bloqueado, bloqueoMotivo: l.bloqueoMotivo,
       };
     });
     const banderas = banderasControl(i.grupoControl);

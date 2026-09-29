@@ -1,3 +1,4 @@
+import { PERMISOS_CLINICOS } from "@/lib/hospital/permisos";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
@@ -33,6 +34,7 @@ export const GET = withAuthz(async (req: Request) => {
       role: m.role,
       // Vacío = ve TODAS las páginas del satélite (default compatible).
       paginas: m.hospitalPaginas,
+      permisosClinicos: m.hospitalPermisos,
       sinRestriccion: m.hospitalPaginas.length === 0,
       createdAt: m.createdAt,
     }))
@@ -47,7 +49,8 @@ const createSchema = z.object({
   // ACCOUNTANT escribe (expediente, cuenta, farmacia); VIEWER sólo lee.
   role: z.enum(["ACCOUNTANT", "VIEWER"]).default("ACCOUNTANT"),
   // Llaves de página del satélite; [] = todas. Strings opacos para el hub.
-  paginas: z.array(z.string().trim().min(1).max(40)).max(64).default([]),
+  permisosClinicos: z.array(z.enum(PERMISOS_CLINICOS)).default([]),
+    paginas: z.array(z.string().trim().min(1).max(40)).max(64).default([]),
 });
 
 // POST /api/hospital/usuarios — crea un usuario-empleado y su membresía en un
@@ -63,7 +66,7 @@ export const POST = withAuthz(async (req: Request) => {
     const first = parsed.error.issues[0]?.message ?? "Datos inválidos";
     return NextResponse.json({ error: first }, { status: 400 });
   }
-  const { companyId, nombre, email, password, role, paginas } = parsed.data;
+  const { companyId, nombre, email, password, role, paginas, permisosClinicos } = parsed.data;
 
   const { user: actor } = await requireMembership(companyId, ["OWNER", "ADMIN"], req);
   await requireModule(companyId, "HOSPITAL", req);
@@ -97,6 +100,7 @@ export const POST = withAuthz(async (req: Request) => {
         role,
         allowedModules: ["HOSPITAL"],
         hospitalPaginas: paginas,
+        hospitalPermisos: permisosClinicos,
       },
       include: { user: { select: { id: true, name: true, email: true } } },
     });
@@ -121,6 +125,7 @@ export const POST = withAuthz(async (req: Request) => {
       email: member.user.email,
       role: member.role,
       paginas: member.hospitalPaginas,
+      permisosClinicos: member.hospitalPermisos,
       sinRestriccion: member.hospitalPaginas.length === 0,
     },
     { status: 201 }

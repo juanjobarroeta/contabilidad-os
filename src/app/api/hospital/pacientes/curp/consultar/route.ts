@@ -47,7 +47,7 @@ export const POST = withHospital(async (req: Request) => {
 
   try {
     const r = await proveedor.consultarPorCurp(curp);
-    registrarAcceso({ companyId, accion: "CONSULTA_RENAPO", detalle: `Consulta por CURP · ${proveedor.nombre} · ${r.estatusCurp || "sin estatus"}`, user, req });
+    await registrarAcceso({ companyId, accion: "CONSULTA_RENAPO", detalle: `Consulta por CURP · ${proveedor.nombre} · ${r.estatusCurp || "sin estatus"}`, user, req });
     return NextResponse.json({
       disponible: true,
       encontrada: true,
@@ -63,7 +63,7 @@ export const POST = withHospital(async (req: Request) => {
     });
   } catch (e) {
     if (!(e instanceof RenapoError)) throw e;
-    registrarAcceso({ companyId, accion: "CONSULTA_RENAPO", detalle: `Consulta por CURP · ${proveedor.nombre} · ${e.codigo}`, user, req });
+    await registrarAcceso({ companyId, accion: "CONSULTA_RENAPO", detalle: `Consulta por CURP · ${proveedor.nombre} · ${e.codigo}`, user, req });
     if (e.codigo === "NOT_FOUND") {
       return NextResponse.json({ disponible: true, encontrada: false, estatus: null, activa: null, datos: null, proveedor: proveedor.nombre, referencia: null, motivo: e.message, duplicado });
     }

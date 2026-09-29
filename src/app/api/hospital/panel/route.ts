@@ -52,6 +52,9 @@ const DIAS_ALTAS_P1 = 7;
 
 type Atencion = {
   tipo:
+    | "CONFIGURACION_PENDIENTE"
+    | "INGRESO_INCOMPLETO"
+    | "LOTE_SIN_VERIFICAR"
     | "LOTE_CADUCA"
     | "BAJO_MINIMO"
     | "EGRESO_PENDIENTE"
@@ -113,7 +116,7 @@ export const GET = withAuthz(async (req: Request) => {
   const calculation = await calculationForApi(Promise.all([
     prisma.hospConfig.findUnique({
       where: { companyId },
-      select: { diasAlertaCaducidad: true, topeAutorizacion: true },
+      select: { diasAlertaCaducidad: true, topeAutorizacion: true, responsableSanitarioCedula: true, licenciaSanitaria: true, avisoPrivacidadVersion: true, avisoPrivacidadUrl: true, oidRaiz: true },
     }),
     prisma.hospRecurso.groupBy({
       by: ["estado"],
@@ -279,6 +282,15 @@ export const GET = withAuthz(async (req: Request) => {
   const topeDefault = config?.topeAutorizacion == null ? null : Number(config.topeAutorizacion);
   const existenciaDe = new Map(existencias.map((x) => [x.insumoId, Number(x._sum.cantidad ?? 0)]));
   const atencion: Atencion[] = [];
+  for (const [key, label] of [["responsableSanitarioCedula", "Cédula del responsable sanitario"], ["licenciaSanitaria", "Licencia sanitaria"], ["avisoPrivacidadVersion", "Versión del aviso de privacidad"], ["avisoPrivacidadUrl", "Aviso de privacidad"], ["oidRaiz", "OID registrado"]] as const) {
+    if (!config?.[key]) atencion.push({ tipo: "CONFIGURACION_PENDIENTE", titulo: `${label}: sin configurar`, detalle: "Captura y verifica la evidencia aplicable en Configuración y Cumplimiento", href: "/configuracion", refId: key });
+  }
+  const sinFecha = await prisma.hospLote.count({ where: { companyId, existencia: { gt: 0 }, caducidad: null } });
+  if (sinFecha) atencion.push({ tipo: "LOTE_SIN_VERIFICAR", titulo: `${sinFecha} lotes sin caducidad verificada`, detalle: "No elegibles para aplicación; revisar recepción física y fecha", href: "/farmacia", refId: "lotes-sin-fecha" });
+  for (const e of activos.filter(e => e.estado !== "ALTA" && (!e.medico || (e.tipo === "HOSPITALIZACION" && !e.recurso))).slice(0, MAX_POR_ALERTA)) {
+    atencion.push({ tipo: "INGRESO_INCOMPLETO", titulo: `${e.folio}: ingreso incompleto`, detalle: [!e.medico ? "Sin médico tratante" : "", e.tipo === "HOSPITALIZACION" && !e.recurso ? "Sin cama asignada" : ""].filter(Boolean).join(" · "), href: `/episodios/${e.id}`, refId: e.id });
+  }
+
 
   const lotes = lotesDb.filter((l) => l.caducidad && diasDesde(hoy, l.caducidad) <= diasAlerta);
   for (const l of lotes.slice(0, MAX_POR_ALERTA)) {
@@ -482,6 +494,7 @@ export const GET = withAuthz(async (req: Request) => {
   );
 
   return NextResponse.json({
+    consultadoAt: hoy, alcanceAlertas: "Ventanas de tiempo limitadas; máximo 10 filas por categoría acotada. No certifica preparación integral.",
     hoy: fechaIso(hoy),
     ocupacion: {
       ocupadas,

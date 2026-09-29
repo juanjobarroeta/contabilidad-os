@@ -3,12 +3,11 @@
 //
 // AuditLog ya lleva las escrituras; esto registra las LECTURAS: quién abrió
 // qué expediente, ficha o cuenta, cuándo y desde dónde, y las salidas del
-// sistema (exportación, impresión, descarga de un documento). Fire-and-forget
-// igual que registrarBitacora: nunca lanza y nunca detiene la respuesta —
-// un insert fallido se loguea y la lectura sigue su curso.
+// sistema. La lectura sólo se entrega después de persistir la bitácora.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { HospAccesoAccion } from "@prisma/client";
+import { AuthzError } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 import { ipDeRequest } from "@/lib/audit";
 
@@ -28,26 +27,17 @@ export interface RegistrarAccesoArgs {
   ip?: string | null;
 }
 
-export function registrarAcceso(args: RegistrarAccesoArgs): void {
+export async function registrarAcceso(args: RegistrarAccesoArgs): Promise<void> {
   try {
-    void prisma.hospAcceso
-      .create({
-        data: {
-          companyId: args.companyId,
-          episodioId: args.episodioId ?? null,
-          pacienteId: args.pacienteId ?? null,
-          userId: args.user?.id ?? null,
-          userEmail: args.user?.email ?? null,
-          accion: args.accion,
-          detalle: args.detalle ?? null,
-          ip: args.ip ?? ipDeRequest(args.req),
-        },
-      })
-      .catch((e) => {
-        console.error(`[hospital.acceso] no se pudo registrar ${args.accion}:`, e);
-      });
-  } catch (e) {
-    console.error(`[hospital.acceso] error inesperado registrando ${args.accion}:`, e);
+    await prisma.hospAcceso.create({ data: {
+      companyId: args.companyId, episodioId: args.episodioId ?? null,
+      pacienteId: args.pacienteId ?? null, userId: args.user?.id ?? null,
+      userEmail: args.user?.email ?? null, accion: args.accion,
+      detalle: args.detalle ?? null, ip: args.ip ?? ipDeRequest(args.req),
+    } });
+  } catch {
+    console.error("[hospital.acceso] audit persistence failed", { accion: args.accion });
+    throw new AuthzError(503, "No se pudo registrar el acceso. Reintenta cuando se restablezca la bitácora.");
   }
 }
 

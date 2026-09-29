@@ -208,6 +208,7 @@ export async function crearEpisodio(db: PrismaClient, args: CrearEpisodioArgs) {
       }
       if (cotizacion) {
         if (cotizacion.episodio) throw new HospitalError(409, `La cotización ${cotizacion.folio} ya se convirtió en el episodio ${cotizacion.episodio.folio}`);
+        if (cotizacion.vigenciaHasta && cotizacion.vigenciaHasta < new Date()) throw new HospitalError(409, "La cotización venció; revisa y renueva su vigencia antes de convertirla");
         if (cotizacion.estado === "CANCELADA" || cotizacion.estado === "VENCIDA") {
           throw new HospitalError(409, `La cotización ${cotizacion.folio} está ${cotizacion.estado.toLowerCase()}`);
         }

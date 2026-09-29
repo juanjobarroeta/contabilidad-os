@@ -1,0 +1,32 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+const { member, find, membership } = vi.hoisted(() => ({ member: { role: 'ACCOUNTANT', hospitalPaginas: [] as string[], hospitalPermisos: [] as string[] }, find: vi.fn(), membership: vi.fn() }));
+vi.mock('@/lib/prisma', () => ({ prisma: { companyMember: { findUnique: find } } }));
+vi.mock('@/lib/authz', () => ({ requireMembership: membership, AuthzError: class extends Error { constructor(public status: number, message: string) { super(message) } } }));
+import { enforceHospitalAccess } from './permisos';
+beforeEach(() => { member.role = 'ACCOUNTANT'; member.hospitalPaginas = []; member.hospitalPermisos = []; find.mockResolvedValue(member); membership.mockResolvedValue({ membership: member }); });
+const request = (path: string, method = 'GET') => new Request(`https://local.test/api/hospital/${path}`, { method });
+describe('hospital server permission matrix', () => {
+  it('enforces page scope even if the user has a clinical grant', async () => {
+    member.hospitalPaginas = ['mantenimiento']; member.hospitalPermisos = ['CLINICA_LEER'];
+    await expect(enforceHospitalAccess('company', 'user', request('episodios/one'))).rejects.toMatchObject({ status: 403 });
+  });
+  it.each(['farmacia/kardex', 'farmacia/libro-control', 'censo', 'panel', 'registros'])('protects patient-bearing report %s', async path => {
+    await expect(enforceHospitalAccess('company', 'user', request(path))).rejects.toMatchObject({ status: 403 });
+    member.hospitalPermisos = ['CLINICA_LEER'];
+    await expect(enforceHospitalAccess('company', 'user', request(path))).resolves.toBeUndefined();
+  });
+  it('separates clinical administration from financial writes', async () => {
+    member.hospitalPermisos = ['CLINICA_ESCRIBIR', 'ADMINISTRAR'];
+    await expect(enforceHospitalAccess('company', 'user', request('episodios/one/cargos', 'POST'))).rejects.toMatchObject({ status: 403 });
+    member.hospitalPermisos.push('FINANZAS_ESCRIBIR');
+    await expect(enforceHospitalAccess('company', 'user', request('episodios/one/cargos', 'POST'))).resolves.toBeUndefined();
+  });
+  it('viewer cannot gain write access through a stale grant', async () => {
+    member.role = 'VIEWER'; member.hospitalPermisos = ['CLINICA_ESCRIBIR'];
+    await expect(enforceHospitalAccess('company', 'user', request('episodios/one/notas', 'POST'))).rejects.toMatchObject({ status: 403 });
+  });
+  it('quotation conversion requires clinical authority', async () => {
+    member.hospitalPaginas = ['cotizaciones']; member.hospitalPermisos = ['FINANZAS_ESCRIBIR'];
+    await expect(enforceHospitalAccess('company', 'user', request('cotizaciones/one/convertir', 'POST'))).rejects.toMatchObject({ status: 403 });
+  });
+});

@@ -61,12 +61,12 @@ export const POST = withHospital(async (req: Request, ctx: { params: Promise<{ i
     registro = await proveedor.consultarPorCurp(local.curp);
   } catch (e) {
     if (!(e instanceof RenapoError)) throw e;
-    registrarAcceso({ companyId: paciente.companyId, accion: "CONSULTA_RENAPO", pacienteId: paciente.id, detalle: `Verificación · ${proveedor.nombre} · ${e.codigo}`, user, req });
+    await registrarAcceso({ companyId: paciente.companyId, accion: "CONSULTA_RENAPO", pacienteId: paciente.id, detalle: `Verificación · ${proveedor.nombre} · ${e.codigo}`, user, req });
     if (e.codigo === "NOT_FOUND") return error(`RENAPO no tiene registrada la CURP ${local.curp}: revísala con el documento del paciente`, 409);
     if (e.codigo === "INVALID_FORMAT") return error(e.message, 400);
     return error(e.message, 502);
   }
-  registrarAcceso({ companyId: paciente.companyId, accion: "CONSULTA_RENAPO", pacienteId: paciente.id, detalle: `Verificación · ${proveedor.nombre} · ${registro.estatusCurp || "sin estatus"}`, user, req });
+  await registrarAcceso({ companyId: paciente.companyId, accion: "CONSULTA_RENAPO", pacienteId: paciente.id, detalle: `Verificación · ${proveedor.nombre} · ${registro.estatusCurp || "sin estatus"}`, user, req });
 
   const comparacion = compararConRenapo(
     {

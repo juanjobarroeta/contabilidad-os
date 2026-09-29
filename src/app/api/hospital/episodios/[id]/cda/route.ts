@@ -105,7 +105,7 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
     });
   }
 
-  registrarAcceso({
+  await registrarAcceso({
     companyId: ep.companyId,
     accion: "EXPORTACION",
     episodioId: ep.id,

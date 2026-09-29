@@ -27,6 +27,6 @@ export const GET = withHospital(async (req: Request, ctx: { params: Promise<{ id
   const r = await compararPlanConCuenta(prisma, id);
   if (!r) throw new AuthzError(404, `El episodio ${base.folio} no tiene plan de tratamiento`);
 
-  registrarAcceso({ companyId: base.companyId, accion: "LECTURA_CUENTA", episodioId: base.id, pacienteId: base.pacienteId, detalle: `Plan vs cuenta ${base.folio}`, user, req });
+  await registrarAcceso({ companyId: base.companyId, accion: "LECTURA_CUENTA", episodioId: base.id, pacienteId: base.pacienteId, detalle: `Plan vs cuenta ${base.folio}`, user, req });
   return NextResponse.json(r);
 });

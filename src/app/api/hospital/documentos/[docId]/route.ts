@@ -25,7 +25,7 @@ export const GET = withHospital(async (req: Request, ctx: { params: Promise<{ do
 
   const conImagen = new URL(req.url).searchParams.get("firmas") === "1";
   if (conImagen && doc.firmas.length) {
-    registrarAcceso({
+    await registrarAcceso({
       companyId: doc.companyId,
       accion: "LECTURA_FICHA",
       pacienteId: doc.pacienteId,

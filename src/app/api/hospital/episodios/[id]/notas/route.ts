@@ -11,6 +11,8 @@
  * deja constancia de la captura asistida (HospNota.asistencia; no entra al hash).
  */
 
+import { requirePractitioner, requireClinicalPermission } from "@/lib/hospital/permisos";
+import { PLANTILLAS_NOTA } from "@/lib/hospital/notas";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -53,6 +55,10 @@ export const POST = withHospital(async (req: Request, ctx: { params: Promise<{ i
   await requireModule(ep.companyId, "HOSPITAL", req);
   if (ep.estado === "CANCELADO") return error(`El episodio ${ep.folio} está cancelado`, 409);
 
+  if (d.tipo === "MEDICAMENTO_APLICADO") return error("Registra la administración desde Aplicar insumo", 400);
+  if (d.tipo === "INDICACION") await requireClinicalPermission(ep.companyId, user.id, "PRESCRIBIR");
+  const autor = PLANTILLAS_NOTA[d.tipo].medica ? await requirePractitioner(ep.companyId, user.id, d.medicoId) : null;
+  if (d.autorCedula && d.autorCedula !== autor?.cedula) return error("La cédula debe corresponder al autor verificado", 403);
   const nota = await crearNota(prisma, {
     companyId: ep.companyId,
     episodioId: ep.id,
@@ -60,8 +66,8 @@ export const POST = withHospital(async (req: Request, ctx: { params: Promise<{ i
     texto: d.texto,
     secciones: d.secciones ?? null,
     fecha: aFecha(d.fecha),
-    medicoId: d.medicoId ?? null,
-    autorCedula: d.autorCedula ?? null,
+    medicoId: autor?.id ?? null,
+    autorCedula: autor?.cedula ?? null,
     reemplazaId: d.reemplazaId ?? null,
     asistencia: normalizarAsistencia(d.asistencia ?? null),
     usuario: usuarioDe(user),

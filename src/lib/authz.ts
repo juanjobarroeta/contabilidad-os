@@ -426,6 +426,11 @@ export async function requireModule(
   if (req) {
     const user = await requireUser(req);
 
+    if (modulo === "HOSPITAL" && new URL(req.url).pathname.startsWith("/api/hospital/")) {
+      const { enforceHospitalAccess } = await import("@/lib/hospital/permisos");
+      await enforceHospitalAccess(companyId, user.id, req);
+    }
+
     // Operador de plataforma: acceso total a módulos contratados.
     if (await isOperador(user.id)) return row;
 
