@@ -91,7 +91,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
 
-  const result = await aprobarSugerencia(txId, familia as FamiliaConcepto);
+  // Lo decide una persona en la mesa: un traspaso sin evidencia se permite y queda en el rastro.
+  const result = await aprobarSugerencia(txId, familia as FamiliaConcepto, { actor: "usuario", actorId: session.user.id, motor: "mesa" });
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status });
   }

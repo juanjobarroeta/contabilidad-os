@@ -31,6 +31,9 @@ import { cuentaTieneIngestExterno, ERROR_CUENTA_PUENTE } from "@/lib/bancos/fuen
 import { primeraReglaQueEmpata, signoDeMonto, type FamiliaConcepto } from "@/lib/bancos/categorizar-concepto";
 import { decodificarEstadoDeCuenta, esExcelBinario } from "@/lib/bancos/decodificar";
 import { clasificarCargoBancario } from "./clasificar-cargo";
+import { evidenciaTraspaso, motivoSinEvidencia, type ContextoTraspaso } from "./traspaso-evidencia";
+import { contextoTraspaso } from "./traspaso-evidencia-db";
+import { registrarDecisiones, type EntradaDecision } from "@/lib/decisiones";
 import { camposContraparte, parseSpei } from "@/lib/bancos/spei-descripcion";
 import { nombresPorRfc } from "@/lib/bancos/contraparte-nombre";
 import { kickCron } from "@/lib/cron-scheduler";
@@ -223,6 +226,13 @@ export async function persistTransactions(opts: {
       ? await nombresPorRfc(companyId, rfcsSinNombre).catch(() => new Map<string, string>())
       : new Map<string, string>();
 
+  // TRASPASO PROPIO SÓLO CON EVIDENCIA (lib/bancos/traspaso-evidencia). Una
+  // regla del usuario o un patrón que diga «traspaso» no basta: si el dinero no
+  // viene de (o va a) una cuenta de la empresa, es un cobro o un pago a un
+  // tercero y se queda pendiente para la mesa. El contexto se carga una vez.
+  let ctxTraspaso: ContextoTraspaso | null | undefined;
+  const traspasosSinEvidencia: { id: string; motivo: string; origen: string }[] = [];
+
   for (let i = 0; i < transactions.length; i++) {
     const tx = transactions[i];
 
@@ -261,7 +271,28 @@ export async function persistTransactions(opts: {
       campos.contraparteNombre = nombresResueltos.get(campos.contraparteRfc) ?? null;
     }
 
-    await prisma.bankTransaction.create({
+    let sinEvidencia: { motivo: string; origen: string } | null = null;
+    if (status === "IGNORED" && notes === "INTERNAL_TRANSFER") {
+      if (ctxTraspaso === undefined) {
+        ctxTraspaso = await contextoTraspaso(companyId, transactions.map((t) => t.fecha)).catch(() => null);
+      }
+      const ev = ctxTraspaso
+        ? evidenciaTraspaso(
+            { id: "", bankAccountId, fecha: tx.fecha, monto: tx.monto, descripcion: desc, ...campos },
+            ctxTraspaso,
+          )
+        : null;
+      if (!ev?.tiene) {
+        status = "UNMATCHED";
+        notes = null;
+        sinEvidencia = {
+          motivo: ev ? motivoSinEvidencia(ev) : "no se pudo comprobar el traspaso",
+          origen: reglaMatch ? `regla del usuario «${reglaMatch.pattern}»` : "patrón del concepto",
+        };
+      }
+    }
+
+    const creado = await prisma.bankTransaction.create({
       data: {
         companyId,
         bankAccountId,
@@ -281,8 +312,23 @@ export async function persistTransactions(opts: {
         importBatchId: batch.id,
         ...campos,
       },
+      select: { id: true },
     });
+    if (sinEvidencia) traspasosSinEvidencia.push({ id: creado.id, ...sinEvidencia });
     imported++;
+  }
+
+  if (traspasosSinEvidencia.length) {
+    const decisiones: EntradaDecision[] = traspasosSinEvidencia.map((t) => ({
+      companyId,
+      entidad: "BankTransaction",
+      entidadId: t.id,
+      motor: "import",
+      accion: "rechazo",
+      resultado: { etiquetaPropuesta: "INTERNAL_TRANSFER", status: "UNMATCHED" },
+      razones: [{ regla: "traspaso.sin-evidencia", detalle: `${t.origen} decía traspaso entre cuentas propias; ${t.motivo}` }],
+    }));
+    registrarDecisiones(decisiones);
   }
 
   // Sella el hitCount de cada regla que categorizó movimientos en este lote

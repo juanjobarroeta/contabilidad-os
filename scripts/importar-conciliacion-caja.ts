@@ -48,6 +48,8 @@ import * as XLSX from "xlsx";
 import { prisma } from "../src/lib/prisma";
 import { checkInvoiceMatchGuard, mergePagosConciliados } from "../src/lib/conciliacion";
 import { NOTA_DE_CAJA, etiquetaDeNaturaleza } from "../src/lib/bancos/naturaleza-caja";
+import { evidenciaTraspaso, motivoSinEvidencia, type ContextoTraspaso } from "../src/lib/bancos/traspaso-evidencia";
+import { contextoTraspaso } from "../src/lib/bancos/traspaso-evidencia-db";
 
 const PAT_AFILIACION = /\b(\d{7,})([CD])\b/;
 /** Ventana para casar el depósito del Excel con el movimiento del banco. */
@@ -222,6 +224,7 @@ async function main() {
     where: { companyId: empresa.id, monto: { gt: 0 } },
     select: {
       id: true, fecha: true, descripcion: true, monto: true, status: true, invoiceId: true, notes: true,
+      bankAccountId: true, contraparteNombre: true, contraparteRfc: true, contraparteClabe: true,
       invoice: { select: { uuid: true } },
       conciliacionDetalles: { select: { id: true, invoice: { select: { uuid: true } } } },
     },
@@ -244,6 +247,8 @@ async function main() {
   const usados = new Set<string>();
   let listos = 0, yaEstaban = 0, sinMovimiento = 0, rechazados = 0, escritos = 0;
   let naturaleza = 0, malMarcados = 0, clasificados = 0;
+  let sinEvidencia = 0;
+  let ctxTraspaso: ContextoTraspaso | null = null;
   let montoListo = 0, montoSobrante = 0;
 
   // ── Pase previo: deshacer lo que contradice al archivo ───────────────────
@@ -323,7 +328,20 @@ async function main() {
       // Lo que caja escribe hay que TRADUCIRLO, y lo que no se pueda traducir
       // se queda pendiente para una persona.
       if (clasificar) {
-        const tag = etiquetaDeNaturaleza(d.naturaleza);
+        let tag = etiquetaDeNaturaleza(d.naturaleza);
+        // Caja escribe «TRASPASO» o «nómina» también para lo que llega de
+        // cuentas de PERSONAS (devoluciones de empleados, pagos): en agosto 2026
+        // fueron 17 abonos por 29,766.80. Traspaso propio sólo con evidencia
+        // (lib/bancos/traspaso-evidencia); si no, queda pendiente para la mesa.
+        if (tag === "INTERNAL_TRANSFER") {
+          ctxTraspaso ??= await contextoTraspaso(empresa.id, movs.map((m) => m.fecha));
+          const ev = ctxTraspaso ? evidenciaTraspaso({ ...mov, monto: Number(mov.monto) }, ctxTraspaso) : null;
+          if (!ev?.tiene) {
+            sinEvidencia++;
+            console.log(`  ? ${etiqueta}  «${d.naturaleza}» dice traspaso, pero ${ev ? motivoSinEvidencia(ev) : "no se pudo comprobar"} — queda pendiente`);
+            tag = null;
+          }
+        }
         const puestoPorEsteScript = (mov.notes ?? "").startsWith(NOTA_DE_CAJA);
 
         if (tag && mov.status !== "IGNORED") {
@@ -424,6 +442,7 @@ async function main() {
   console.log(`  rechazados por guard  : ${String(rechazados).padStart(3)}`);
   console.log(`  sin factura (traspaso…): ${String(naturaleza).padStart(3)}${malMarcados ? `   de los cuales ${malMarcados} estaban mal conciliados` : ""}`);
   if (clasificar) console.log(`  marcados «no es cobro» : ${String(clasificados).padStart(3)}`);
+  if (clasificar && sinEvidencia) console.log(`  «traspaso» sin evidencia: ${String(sinEvidencia).padStart(3)}  (pendientes para la mesa)`);
   if (aplicar) console.log(`  ESCRITOS              : ${String(escritos).padStart(3)}`);
   else console.log(`\n  (dry-run — con --aplicar se escriben)`);
 }

@@ -27,6 +27,9 @@ import {
   type SugerenciaCategoria,
 } from "./categorizar-concepto";
 import { sugerirCategoriaConceptoLLM } from "./categorizar-llm";
+import { motivoSinEvidencia } from "./traspaso-evidencia";
+import { evidenciaTraspasoPorIds } from "./traspaso-evidencia-db";
+import { registrarDecision, type ActorDecision } from "@/lib/decisiones";
 
 export interface MovimientoConSugerencia {
   transaction: {
@@ -168,7 +171,21 @@ async function construirAsiento(
 
 export type AprobarResult =
   | { ok: true; created: boolean; entries: number }
-  | { ok: false; error: string; status: number };
+  | { ok: false; error: string; status: number; sinEvidencia?: boolean };
+
+export interface OpcionesAprobar {
+  /**
+   * Quién decide. Una persona en la mesa puede etiquetar un traspaso sin
+   * evidencia (es su decisión y queda en el rastro); el motor —una regla
+   * aplicada a otros movimientos— no.
+   */
+  actor?: ActorDecision;
+  actorId?: string | null;
+  /** Exigir evidencia de traspaso propio (lib/bancos/traspaso-evidencia). */
+  exigirEvidencia?: boolean;
+  /** Para el rastro: qué camino categorizó («mesa», «regla-retroactiva», «copiloto»…). */
+  motor?: string;
+}
 
 /**
  * Aprueba una sugerencia para un movimiento: escribe el asiento (fuente BANCO)
@@ -182,6 +199,7 @@ export type AprobarResult =
 export async function aprobarSugerencia(
   txId: string,
   familia: FamiliaConcepto,
+  opts: OpcionesAprobar = {},
 ): Promise<AprobarResult> {
   const tx = await prisma.bankTransaction.findUnique({
     where: { id: txId },
@@ -204,6 +222,37 @@ export async function aprobarSugerencia(
     return { ok: false, error: "El movimiento no tiene importe", status: 422 };
   }
 
+  // TRASPASO PROPIO: la evidencia decide si el motor puede etiquetarlo; si lo
+  // etiqueta una persona, su decisión queda en el rastro con o sin evidencia.
+  let rastroTraspaso: (() => void) | null = null;
+  if (familia === "INTERNAL_TRANSFER") {
+    const ev = (await evidenciaTraspasoPorIds(companyId, [txId])).get(txId);
+    const actor = opts.actor ?? "motor";
+    if (opts.exigirEvidencia && !ev?.tiene) {
+      return {
+        ok: false,
+        error: `Sin evidencia de traspaso entre cuentas propias: ${ev ? motivoSinEvidencia(ev) : "no se pudo comprobar"}`,
+        status: 422,
+        sinEvidencia: true,
+      };
+    }
+    // Se escribe sólo si la categorización se aplica (abajo, en cada éxito).
+    rastroTraspaso = () => registrarDecision({
+      companyId,
+      entidad: "BankTransaction",
+      entidadId: txId,
+      motor: opts.motor ?? "categorizar",
+      actor,
+      actorId: opts.actorId ?? null,
+      accion: "categorizar",
+      resultado: { etiqueta: "INTERNAL_TRANSFER", conEvidencia: !!ev?.tiene },
+      razones: ev?.tiene
+        ? ev.razones
+        : [{ regla: "traspaso.sin-evidencia", detalle: `etiquetado como traspaso propio por decisión ${actor === "usuario" ? "de una persona" : `del ${actor}`}; ${ev ? motivoSinEvidencia(ev) : "sin evidencia"}` }],
+      refs: ev?.espejoId ? [ev.espejoId] : [],
+    });
+  }
+
   // No escribir en periodos ya cerrados.
   const period = await prisma.accountingPeriod.findUnique({
     where: { companyId_year_month: { companyId, year, month } },
@@ -223,6 +272,7 @@ export async function aprobarSugerencia(
       where: { id: txId },
       data: { status: "IGNORED", invoiceId: null, notes: familia },
     });
+    rastroTraspaso?.();
     return { ok: true, created: false, entries: existing };
   }
 
@@ -270,5 +320,6 @@ export async function aprobarSugerencia(
     });
   });
 
+  rastroTraspaso?.();
   return { ok: true, created: true, entries: renglones.length };
 }

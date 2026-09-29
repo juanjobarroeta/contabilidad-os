@@ -14,6 +14,9 @@ import {
   statusTrasDesconciliar,
 } from "@/lib/conciliacion-impuestos";
 import { registrarBitacora } from "@/lib/audit";
+import { registrarDecision } from "@/lib/decisiones";
+import { motivoSinEvidencia } from "@/lib/bancos/traspaso-evidencia";
+import { evidenciaTraspasoPorIds } from "@/lib/bancos/traspaso-evidencia-db";
 import { validarParDevolucion } from "@/lib/bancos/devoluciones";
 
 type Params = { params: Promise<{ txId: string }> };
@@ -564,6 +567,25 @@ export async function PATCH(req: Request, { params }: Params) {
         }),
         ...revertDeclIgnore,
       ]);
+      // Traspaso propio marcado a mano: la persona decide, pero queda en el
+      // rastro con la evidencia que había (o que no había). Best-effort.
+      if (notes === "INTERNAL_TRANSFER") {
+        const ev = (await evidenciaTraspasoPorIds(tx.companyId, [txId]).catch(() => null))?.get(txId);
+        registrarDecision({
+          companyId: tx.companyId,
+          entidad: "BankTransaction",
+          entidadId: txId,
+          motor: "mesa",
+          actor: "usuario",
+          actorId: user.id,
+          accion: "ignorar",
+          resultado: { etiqueta: "INTERNAL_TRANSFER", conEvidencia: !!ev?.tiene },
+          razones: ev?.tiene
+            ? ev.razones
+            : [{ regla: "traspaso.sin-evidencia", detalle: `marcado como traspaso propio por una persona; ${ev ? motivoSinEvidencia(ev) : "sin evidencia"}` }],
+          refs: ev?.espejoId ? [ev.espejoId] : [],
+        });
+      }
       break;
     }
     case "unignore":
