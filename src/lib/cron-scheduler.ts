@@ -178,6 +178,11 @@ const JOBS: Job[] = [
   // acotado en cuanto Syntage termina; esta cadencia es la red de seguridad si
   // un redeploy mató ese seguimiento — por eso 1 h y no 6.
   { name: "declaraciones-backfill", everyMs: HOUR, firstDelayMs: 20 * MIN, minMs: MIN_CARO },
+  // Red de seguridad de las cancelaciones: lo que una factura cancelada dejó
+  // vivo —inventario, costos, y el cobro bancario que la conciliaba (pasa a la
+  // sustituta o vuelve a la mesa)—. vigencia-sync y cancel-sync ya lo revierten
+  // al detectar; esto limpia lo que se les haya escapado. Local y barato.
+  { name: "revertir-canceladas", everyMs: 24 * HOUR, firstDelayMs: 50 * MIN, minMs: MIN_LOCAL },
   // LA AGENDA DEL SAT (lib/agenda-sat): acuse mensual, opinión 32-D/CSF y
   // balanza de CE por empresa y periodo, con la cadencia de un contador — la
   // noche del vencimiento, el día siguiente, a diario, cada tanto, y un
