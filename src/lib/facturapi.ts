@@ -232,7 +232,37 @@ export async function provisionFacturapiOrg(companyId: string): Promise<Provisio
 // sincronizado con Facturapi» — un callejón sin salida sin arreglo en la UI
 // (reporte del owner). Aquí se sincroniza cuando de verdad se necesita y se
 // persiste el id; el error, cuando lo hay, dice QUÉ falta.
+//
+// Y el id guardado NO se cree a ciegas. Facturapi organiza por ORGANIZACIÓN, y
+// al reconectar una empresa se emite una organización NUEVA: los ids de la
+// anterior siguen en nuestra tabla pero ya no existen para la llave de hoy.
+// Timbrar entonces moría con «No se encontró el cliente» y el aviso decía
+// «Vuelve a sincronizar el cliente» — una instrucción sin botón que la
+// cumpliera. Medido el 29-sep-2026: SOLUCIONES DE MOVILIDAD POBLANA tenía a
+// PUBLICO EN GENERAL con un id del 1-abr contra una organización del 7-abr, y
+// no podía facturar. Ahora un 404 no es el final: se descarta el id muerto y se
+// vuelve a crear el cliente, que es lo que el aviso pedía a mano.
 // ─────────────────────────────────────────────────────────────────────────────
+/**
+ * ¿El cliente sigue existiendo para esta llave? `true` si sí, `false` SÓLO
+ * cuando Facturapi contesta 404 (id de otra organización o cliente borrado).
+ *
+ * Ante cualquier otro fallo —red caída, 500, 429— devuelve `true`: no se puede
+ * distinguir «no existe» de «no pude preguntar», y tratar un timeout como
+ * cliente muerto duplicaría clientes en Facturapi en cada tropiezo de red. El
+ * timbrado que venga detrás ya fallará con su propio mensaje.
+ */
+async function facturapiCustomerVigente(apiKey: string, facturapiId: string): Promise<boolean> {
+  try {
+    await getFacturapiClient(apiKey).customers.retrieve(facturapiId);
+    return true;
+  } catch (e) {
+    const err = e as { status?: number; response?: { status?: number } };
+    const status = err?.status ?? err?.response?.status;
+    return status !== 404;
+  }
+}
+
 export async function ensureFacturapiCustomer(
   facturapiApiKey: string,
   customer: {
@@ -247,7 +277,14 @@ export async function ensureFacturapiCustomer(
     codigoPostal: string | null;
   },
 ): Promise<{ ok: true; facturapiId: string } | { ok: false; error: string }> {
-  if (customer.facturapiId) return { ok: true, facturapiId: customer.facturapiId };
+  // El id guardado vale MIENTRAS viva en la organización de la llave actual.
+  // Se confirma con una lectura barata; si Facturapi dice 404, el id es de una
+  // organización anterior y se tira para volver a crear al cliente abajo.
+  if (customer.facturapiId) {
+    const vigente = await facturapiCustomerVigente(facturapiApiKey, customer.facturapiId);
+    if (vigente) return { ok: true, facturapiId: customer.facturapiId };
+    await prisma.customer.update({ where: { id: customer.id }, data: { facturapiId: null } });
+  }
   let codigoPostal = customer.codigoPostal;
   if (!codigoPostal) {
     // El CP del padrón vive en nuestros propios CFDIs (DomicilioFiscalReceptor
