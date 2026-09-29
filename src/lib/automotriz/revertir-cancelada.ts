@@ -35,6 +35,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { PrismaClient } from "@prisma/client";
+import { liberarCobrosDeCancelada, type CobrosDeCancelada } from "@/lib/bancos/cobros-de-cancelada";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -49,6 +50,8 @@ export interface ReversionCancelada {
   refacciones: { movimientos: number };
   servicios: { borrados: number };
   nomina: { borrados: number };
+  /** Cobros/pagos bancarios que la conciliaban: pasan a la sustituta o vuelven a la mesa. */
+  cobros: CobrosDeCancelada;
   /** true si algo cambió — sirve para no reportar reversiones vacías. */
   huboCambios: boolean;
 }
@@ -110,6 +113,7 @@ export async function revertirDerivadosDeCancelada(
     refacciones: { movimientos: 0 },
     servicios: { borrados: 0 },
     nomina: { borrados: 0 },
+    cobros: { movidos: 0, liberados: 0, monto: 0, sustitutaId: null },
     huboCambios: false,
   };
 
@@ -173,7 +177,15 @@ export async function revertirDerivadosDeCancelada(
     res.nomina.borrados = nom.count;
   });
 
+  // El banco, fuera de la transacción del inventario: cada movimiento se
+  // actualiza por su cuenta y es idempotente (sin ligas, no hace nada). Sin
+  // esto el cobro de una factura cancelada desaparecía del estado de cuenta y
+  // nunca volvía a la mesa (lib/bancos/cobros-de-cancelada).
+  res.cobros = await liberarCobrosDeCancelada(db, invoiceId);
+
   res.huboCambios =
+    res.cobros.movidos > 0 ||
+    res.cobros.liberados > 0 ||
     res.compras.unidades > 0 ||
     res.ventas.unidades > 0 ||
     res.costos.borrados > 0 ||
@@ -206,6 +218,9 @@ export async function canceladasConEfectosVivos(
         { refaccionMovimientos: { some: {} } },
         { servicioVenta: { isNot: null } },
         { nominaCosto: { isNot: null } },
+        // Cobros/pagos que siguen conciliados contra la cancelada.
+        { bankTransactions: { some: { status: "MATCHED" } } },
+        { conciliacionDetalles: { some: {} } },
       ],
     },
     select: { id: true },

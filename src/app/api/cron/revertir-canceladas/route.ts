@@ -7,7 +7,8 @@ import {
 } from "@/lib/automotriz/revertir-cancelada";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST (o GET) /api/cron/revertir-canceladas?companyId=<id>[&limit=N][&dryRun=1]
+// POST (o GET) /api/cron/revertir-canceladas[?companyId=<id>][&limit=N][&dryRun=1]
+// Sin companyId barre todas las empresas activas (así corre en el scheduler).
 //
 // Deuda histórica: cancelar un CFDI sólo cambiaba `Invoice.status`, y la capa de
 // operación materializa filas que ningún filtro por status deshace. En MARGOM
@@ -46,8 +47,7 @@ async function handle(req: Request) {
   if (!isAuthorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const params = new URL(req.url).searchParams;
-  const companyId = params.get("companyId");
-  if (!companyId) return NextResponse.json({ error: "companyId requerido" }, { status: 400 });
+  const soloEmpresa = params.get("companyId");
   const dryRun = params.get("dryRun") === "1";
   const limitParam = parseInt(params.get("limit") ?? "", 10);
   const limit = Number.isFinite(limitParam)
@@ -55,7 +55,17 @@ async function handle(req: Request) {
     : DEFAULT_LIMIT;
   const startedAt = Date.now();
 
-  const candidatas = await canceladasConEfectosVivos(prisma, companyId, limit);
+  // Sin companyId, barre todas las empresas activas (así corre en el
+  // scheduler): cada una es una consulta por existencia, barata cuando no hay
+  // nada vivo.
+  const empresas = soloEmpresa
+    ? [soloEmpresa]
+    : (await prisma.company.findMany({ where: { isActive: true }, select: { id: true } })).map((c) => c.id);
+  const candidatas: string[] = [];
+  for (const companyId of empresas) {
+    if (candidatas.length >= limit) break;
+    candidatas.push(...(await canceladasConEfectosVivos(prisma, companyId, limit - candidatas.length)));
+  }
 
   const totales = {
     unidadesDescompradas: 0,
@@ -70,6 +80,9 @@ async function handle(req: Request) {
     movimientosRefaccion: 0,
     servicios: 0,
     nomina: 0,
+    cobrosMovidosASustituta: 0,
+    cobrosDevueltosALaMesa: 0,
+    montoCobros: 0,
   };
   const detalle: Array<Record<string, unknown>> = [];
   const errores: Array<{ invoiceId: string; error: string }> = [];
@@ -98,6 +111,9 @@ async function handle(req: Request) {
       totales.movimientosRefaccion += rev.refacciones.movimientos;
       totales.servicios += rev.servicios.borrados;
       totales.nomina += rev.nomina.borrados;
+      totales.cobrosMovidosASustituta += rev.cobros.movidos;
+      totales.cobrosDevueltosALaMesa += rev.cobros.liberados;
+      totales.montoCobros = r2(totales.montoCobros + rev.cobros.monto);
       // Sólo las 25 más ruidosas: el resumen es lo que se audita, no la lista.
       // `rev` ya trae invoiceId.
       if (detalle.length < 25) detalle.push({ ...rev });
@@ -106,13 +122,15 @@ async function handle(req: Request) {
     }
   }
 
-  const restantes = dryRun
-    ? candidatas.length
-    : (await canceladasConEfectosVivos(prisma, companyId, MAX_LIMIT)).length;
+  let restantes = candidatas.length;
+  if (!dryRun) {
+    restantes = 0;
+    for (const companyId of empresas) restantes += (await canceladasConEfectosVivos(prisma, companyId, MAX_LIMIT)).length;
+  }
 
   const summary = {
     ok: true,
-    companyId,
+    companyId: soloEmpresa ?? "todas",
     dryRun,
     candidatas: candidatas.length,
     procesadas,

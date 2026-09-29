@@ -65,6 +65,13 @@ function fakeDb(seed: {
     refaccionMovimiento: tabla(() => movimientos, (v) => { movimientos = v; }),
     servicioVenta: tabla(() => servicios, (v) => { servicios = v; }),
     nominaCosto: tabla(() => nomina, (v) => { nomina = v; }),
+    // El banco (lib/bancos/cobros-de-cancelada): sin movimientos ligados.
+    invoice: {
+      findUnique: async () => ({ companyId: "co", uuid: "UUID-CANCELADA", tipo: "INGRESO", sustituidoPorUuid: null }),
+      findFirst: async () => null,
+    },
+    bankTransaction: { findMany: async () => [] },
+    conciliacionDetalle: { findMany: async () => [] },
     $transaction: async (fn: any) => fn(db),
   };
   return db;
