@@ -123,6 +123,50 @@ describe("Facturapi SDK application contract", () => {
     expect(db.customer.update).toHaveBeenCalledWith({ where: { id: "local-customer" }, data: { facturapiId: "customer-fixture" } });
   });
 
+  // ── El id guardado puede ser de una organización anterior ────────────────
+  // Facturapi organiza por ORGANIZACIÓN. Al reconectar una empresa se emite una
+  // nueva, y los ids de la anterior siguen en nuestra tabla apuntando a nada.
+  // Caso real (29-sep-2026): SOLUCIONES DE MOVILIDAD POBLANA no podía facturar
+  // porque PUBLICO EN GENERAL tenía un id del 1-abr contra una org del 7-abr.
+  it("reuses the stored PAC identifier when the customer is still alive", async () => {
+    reply({ id: "customer-vivo", legal_name: "CLIENTE DE PRUEBA" });
+    const result = await ensureFacturapiCustomer(key, {
+      id: "local-customer", facturapiId: "customer-vivo", razonSocial: "CLIENTE DE PRUEBA", rfc: "XAXX010101000",
+      regimenFiscal: "616", email: null, phone: null, domicilio: null, codigoPostal: "06000",
+    });
+    expect(result).toEqual({ ok: true, facturapiId: "customer-vivo" });
+    expect(requestAt().url.pathname).toBe("/v2/customers/customer-vivo");
+    expect(fetchMock).toHaveBeenCalledTimes(1); // no se recrea nada
+    expect(db.customer.update).not.toHaveBeenCalled();
+  });
+
+  it("discards an identifier from a previous organization and registers the customer again", async () => {
+    reply({ message: "No se encontró el cliente.", code: "customer_not_found" }, { status: 404 });
+    reply({ id: "customer-nuevo" });
+    const result = await ensureFacturapiCustomer(key, {
+      id: "local-customer", facturapiId: "customer-de-otra-org", razonSocial: "PUBLICO EN GENERAL", rfc: "XAXX010101000",
+      regimenFiscal: "616", email: null, phone: null, domicilio: null, codigoPostal: "72830",
+    });
+    expect(result).toEqual({ ok: true, facturapiId: "customer-nuevo" });
+    expect(requestAt(0).url.pathname).toBe("/v2/customers/customer-de-otra-org");
+    expect(requestAt(1).url.pathname).toBe("/v2/customers");
+    // Primero se borra el id muerto, luego se guarda el vivo: nunca queda a medias.
+    expect(db.customer.update).toHaveBeenNthCalledWith(1, { where: { id: "local-customer" }, data: { facturapiId: null } });
+    expect(db.customer.update).toHaveBeenNthCalledWith(2, { where: { id: "local-customer" }, data: { facturapiId: "customer-nuevo" } });
+  });
+
+  it("keeps the stored identifier when Facturapi fails for any reason other than 404", async () => {
+    // Un 500 o un timeout no son prueba de que el cliente no exista. Tirar el id
+    // ahí duplicaría clientes en Facturapi en cada tropiezo de red.
+    reply({ message: "Internal error" }, { status: 500 });
+    const result = await ensureFacturapiCustomer(key, {
+      id: "local-customer", facturapiId: "customer-vivo", razonSocial: "CLIENTE DE PRUEBA", rfc: "XAXX010101000",
+      regimenFiscal: "616", email: null, phone: null, domicilio: null, codigoPostal: "06000",
+    });
+    expect(result).toEqual({ ok: true, facturapiId: "customer-vivo" });
+    expect(db.customer.update).not.toHaveBeenCalled();
+  });
+
   it("uploads the original CSD bytes as multipart data and persists the returned encrypted key", async () => {
     const certificate = Buffer.from("fixture certificate bytes");
     const privateKey = Buffer.from("fixture private key bytes");
