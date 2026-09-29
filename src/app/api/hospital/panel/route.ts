@@ -11,7 +11,9 @@
  * P1 normativa en «Requiere atención»: ambulatorios que llegan a las 12 h
  * (NOM-026), urgencias sin triage (NOM-027), altas sin CIE/motivo de egreso
  * (SAEH), ambulatorios sin llamada de seguimiento, pacientes con episodio
- * abierto sin CURP o sin aviso de privacidad aceptado (NOM-024 / LFPDPPP).
+ * abierto sin CURP o sin aviso de privacidad aceptado (NOM-024 / LFPDPPP),
+ * y egresos del mes que se entrega y del mes en curso con la hoja SAEH sin
+ * terminar (SINBA).
  */
 
 import { NextResponse } from "next/server";
@@ -38,7 +40,9 @@ import {
 } from "@/lib/hospital/formato";
 import { identidadCompleta } from "@/lib/hospital/episodio";
 import { DESVIACION_ALERTA_PCT, desviacionPct } from "@/lib/hospital/plan";
-import { horaLocal } from "@/lib/hospital/tz";
+import { horaLocal, partesLocales } from "@/lib/hospital/tz";
+import { whereEgresosDelMes } from "@/lib/hospital/saeh/periodo";
+import { vencimientoSeul } from "@/lib/hospital/saeh/vencimiento";
 import { calculationForApi } from "@/lib/fiscal/regimen-capability-api";
 
 const DIA_MS = 24 * 60 * 60 * 1000;
@@ -49,6 +53,7 @@ const MAX_POR_ALERTA = 10;
 const MINUTOS_AVISO_AMBULATORIO = 120;
 /** Ventana de revisión de las altas para los pendientes normativos. */
 const DIAS_ALTAS_P1 = 7;
+const MESES_SAEH = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 
 type Atencion = {
   tipo:
@@ -64,7 +69,8 @@ type Atencion = {
     | "IDENTIDAD_PENDIENTE"
     | "AVISO_PRIVACIDAD_PENDIENTE"
     | "PLAN_SIN_AUTORIZACION"
-    | "CUENTA_FUERA_DE_PLAN";
+    | "CUENTA_FUERA_DE_PLAN"
+    | "SAEH_INCOMPLETO";
   titulo: string;
   detalle: string;
   href: string;
@@ -477,6 +483,33 @@ export const GET = withAuthz(async (req: Request) => {
     });
   }
 
+  // Hojas SAEH sin terminar (SINBA): el mes anterior, que es el que se
+  // entrega, y el mes en curso para que no se acumule. Cuenta por el estado
+  // guardado de la hoja —sin hoja = pendiente— sin revalidar: la validación
+  // completa corre en /saeh/egresos; aquí sólo se avisa que hay que ir.
+  const local = partesLocales(hoy);
+  const mesAnterior = local.m === 1 ? { anio: local.y - 1, mes: 12 } : { anio: local.y, mes: local.m - 1 };
+  let egresosSaehIncompletos = 0;
+  for (const { anio, mes } of [mesAnterior, { anio: local.y, mes: local.m }]) {
+    const pendientes = await prisma.hospEpisodio.count({
+      where: {
+        companyId,
+        ...whereEgresosDelMes(anio, mes),
+        NOT: { egresoSaeh: { is: { estado: { in: ["COMPLETO", "EXPORTADO"] } } } },
+      },
+    });
+    if (!pendientes) continue;
+    egresosSaehIncompletos += pendientes;
+    const v = vencimientoSeul(anio, mes, hoy);
+    atencion.push({
+      tipo: "SAEH_INCOMPLETO",
+      titulo: `${pendientes} ${pendientes === 1 ? "egreso" : "egresos"} de ${MESES_SAEH[mes - 1]} ${anio} con hoja SAEH sin terminar`,
+      detalle: `${v.vencido ? "VENCIDO · " : ""}${v.texto} · SINBA`,
+      href: `/saeh?anio=${anio}&mes=${mes}`,
+      refId: `${anio}-${String(mes).padStart(2, "0")}`,
+    });
+  }
+
   const totalSat = r2(
     Math.max(fiscal.iva.pagar, 0) + Math.max(fiscal.isr.isrPagar ?? 0, 0) + retenciones.aEnterar
   );
@@ -535,6 +568,7 @@ export const GET = withAuthz(async (req: Request) => {
       pacientesSinAviso: sinAviso.size,
       planesSinAutorizacion: planesSinAutorizacion.length,
       cuentasFueraDePlan: cuentasFueraDePlan.length,
+      egresosSaehIncompletos,
     },
   });
 });
