@@ -15,7 +15,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { prisma } from "@/lib/prisma";
-import { aprobarSugerencia } from "./sugerencias-concepto";
+import { aprobarSugerencia, type OpcionesAprobar } from "./sugerencias-concepto";
 import {
   FAMILIA_META,
   type CompanyRule,
@@ -91,6 +91,11 @@ export interface LoteResult {
   creados: number;
   /** Movimientos que no se pudieron categorizar (ya conciliados, periodo cerrado…). */
   errores: number;
+  /**
+   * Traspasos propios que NO se etiquetaron por falta de evidencia (sólo
+   * cuando la categorización la hace el motor): se quedan para la mesa.
+   */
+  sinEvidencia: number;
 }
 
 /**
@@ -101,13 +106,16 @@ export interface LoteResult {
 export async function aprobarSugerenciasEnLote(
   txIds: string[],
   familia: FamiliaConcepto,
+  opts: OpcionesAprobar = {},
 ): Promise<LoteResult> {
-  const res: LoteResult = { aprobados: 0, creados: 0, errores: 0 };
+  const res: LoteResult = { aprobados: 0, creados: 0, errores: 0, sinEvidencia: 0 };
   for (const txId of txIds) {
-    const r = await aprobarSugerencia(txId, familia);
+    const r = await aprobarSugerencia(txId, familia, opts);
     if (r.ok) {
       res.aprobados++;
       if (r.created) res.creados++;
+    } else if (r.sinEvidencia) {
+      res.sinEvidencia++;
     } else {
       res.errores++;
     }
@@ -169,7 +177,10 @@ export async function aplicarReglaRetroactiva(
   signo?: SignoMovimiento | null,
 ): Promise<LoteResult> {
   const ids = await idsSimilaresSinConciliar(companyId, patron, signo);
-  return aprobarSugerenciasEnLote(ids, familia);
+  // Aplicar una regla a OTROS movimientos es decisión del motor: un traspaso
+  // propio sólo se etiqueta con evidencia (el patrón «TRASPASO» también empata
+  // las transferencias de terceros).
+  return aprobarSugerenciasEnLote(ids, familia, { actor: "motor", motor: "regla-retroactiva", exigirEvidencia: true });
 }
 
 /**

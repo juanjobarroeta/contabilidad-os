@@ -311,7 +311,8 @@ async function ejecutar(
         select: { id: true },
       });
       if (!tx) return { ok: false, error: "El movimiento ya no existe." };
-      const r = await aprobarSugerencia(pa.payload.txId, pa.payload.familia);
+      // Propuesta del copiloto que una persona confirmó: su decisión, en el rastro.
+      const r = await aprobarSugerencia(pa.payload.txId, pa.payload.familia, { actor: "usuario", actorId: confirmingUserId, motor: "copiloto" });
       if (!r.ok) return { ok: false, error: r.error };
       return {
         ok: true,
@@ -345,6 +346,7 @@ async function ejecutar(
         message:
           `${res.aprobados} movimiento(s) categorizados` +
           `${res.errores > 0 ? ` (${res.errores} no se pudieron)` : ""}` +
+          `${res.sinEvidencia > 0 ? ` (${res.sinEvidencia} no se marcaron como traspaso propio: sin evidencia de que el dinero sea de una cuenta de la empresa; quedan en la mesa)` : ""}` +
           `${crearRegla !== false ? " y la regla quedó guardada para futuros estados de cuenta." : "."}`,
       };
     }

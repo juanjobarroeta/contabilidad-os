@@ -118,7 +118,9 @@ export async function POST(req: Request) {
   const signoV = (signo as SignoMovimiento | undefined) ?? undefined;
 
   // 1) Categoriza los movimientos seleccionados.
-  const lote = await aprobarSugerenciasEnLote(ids, familiaV);
+  // Los que la persona SELECCIONÓ: su decisión (queda en el rastro). La regla
+  // aplicada a otros movimientos (abajo) sí exige evidencia de traspaso.
+  const lote = await aprobarSugerenciasEnLote(ids, familiaV, { actor: "usuario", actorId: session.user.id, motor: "mesa-lote" });
 
   // 2) Recuerda la regla (upsert) si se pidió.
   let regla: { id: string; created: boolean } | null = null;
