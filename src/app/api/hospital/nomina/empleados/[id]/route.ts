@@ -1,4 +1,6 @@
 /**
+ * GET   /api/hospital/nomina/empleados/[id]
+ *       Ficha editable completa (los campos que acepta el PATCH, más identidad).
  * PATCH /api/hospital/nomina/empleados/[id] { campos a cambiar…, skipImssMovimiento? }
  *
  * Edición parcial con la misma regla que PATCH /api/empleados
@@ -11,13 +13,32 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireModule, requireWriter } from "@/lib/authz";
+import { requireMembership, requireModule, requireWriter } from "@/lib/authz";
 import { withHospital } from "@/lib/hospital/with-hospital";
 import { bitacora, error } from "@/lib/hospital/http";
 import { assertPuedeEscribir } from "@/lib/subscription";
 import { actualizarEmpleado } from "@/lib/nomina/empleados";
 
 type Ctx = { params: Promise<{ id: string }> };
+
+export const GET = withHospital(async (req: Request, ctx: Ctx) => {
+  const { id } = await ctx.params;
+  const empleado = await prisma.employee.findUnique({
+    where: { id },
+    select: {
+      id: true, companyId: true, numEmpleado: true, nombre: true, apellidoPaterno: true, apellidoMaterno: true,
+      rfc: true, curp: true, nss: true, codigoPostal: true, email: true, fechaIngreso: true, fechaBaja: true, isActive: true,
+      tipoContrato: true, tipoJornada: true, tipoRegimen: true, periodicidadPago: true, riesgoPuesto: true, claveEntFed: true,
+      registroPatronal: true, puesto: true, departamento: true, salarioDiario: true, salarioDiarioIntegrado: true,
+      creditoInfonavit: true, tipoDescuentoInfonavit: true, descuentoInfonavit: true, creditoFonacot: true, descuentoFonacot: true,
+      pensionAlimenticiaTipo: true, pensionAlimenticiaValor: true, clabe: true, banco: true,
+    },
+  });
+  if (!empleado) return error("Empleado no encontrado", 404);
+  await requireMembership(empleado.companyId, undefined, req);
+  await requireModule(empleado.companyId, "HOSPITAL", req);
+  return NextResponse.json(empleado);
+});
 
 export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
   const { id } = await ctx.params;

@@ -21,6 +21,12 @@ describe("editar empleado", () => {
     expect(m.imss.mock.calls[0][0].data).toMatchObject({ tipo: "MODIFICACION_SALARIO", sbcAnterior: 525 });
     expect(m.update.mock.calls[0][0].data.salarioDiario).toBe(600);
   });
+  it("el mismo salario (Decimal en la base) no genera aviso al IMSS", async () => {
+    m.find.mockResolvedValueOnce({ ...empleado, salarioDiario: { toString: () => "500", valueOf: () => 500 } });
+    await actualizarEmpleado("c", "e1", { salarioDiario: 500, puesto: "Enfermera" });
+    expect(m.imss).not.toHaveBeenCalled();
+    expect(m.update.mock.calls[0][0].data.salarioDiario).toBeUndefined();
+  });
   it("skipImssMovimiento corrige sin aviso al IMSS", async () => {
     await actualizarEmpleado("c", "e1", { salarioDiario: 600, skipImssMovimiento: true });
     expect(m.imss).not.toHaveBeenCalled();

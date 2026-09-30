@@ -177,7 +177,9 @@ export async function actualizarEmpleado(
 
   // Salary change → triggers IMSS modificación UNLESS skipImssMovimiento is set
   // (use skipImssMovimiento: true for data corrections that don't represent a real raise)
-  if (fields.salarioDiario != null && fields.salarioDiario !== employee.salarioDiario) {
+  // salarioDiario es Decimal: se compara como número (un objeto nunca es === a
+  // un número, y todo PATCH con salario generaba un aviso al IMSS falso).
+  if (fields.salarioDiario != null && Number(fields.salarioDiario) !== Number(employee.salarioDiario)) {
     const newSalario = Number(fields.salarioDiario);
     data.salarioDiario = newSalario;
     data.salarioDiarioIntegrado = fields.salarioDiarioIntegrado
