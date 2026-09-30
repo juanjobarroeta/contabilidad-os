@@ -788,11 +788,33 @@ Rutas ↔ endpoints:
 5. `POST /api/hospital/farmacia/derivar` para poblar farmacia desde el
    archivo de CFDIs.
 
+## Facturación desde el satélite
+
+El satélite factura con el motor del hub, detrás de su propia puerta:
+`requireModule(HOSPITAL)` aplica la página (`facturacion`, `caja` o `cuentas`)
+y, para escribir —timbrar incluido—, `FINANZAS_ESCRIBIR`. Las rutas genéricas
+`/api/facturas/*` sólo miran el rol de la empresa, así que el satélite no las
+usa para escribir. Se construye por pasos:
+
+1. **Prefacturas** (hecho). `GET/POST /api/hospital/facturacion/prefacturas`,
+   `GET/PUT/POST/DELETE …/prefacturas/[id]` (`{ accion: "timbrar" | "enviar" }`).
+   Misma lógica que `/api/facturas/borradores` (`lib/facturas/prefacturas.ts`):
+   el draft de Facturapi no consume timbre, editar crea un draft nuevo en la
+   misma fila y timbrar promueve exactamente ese draft. El receptor se
+   sincroniza con Facturapi al vuelo (antes: 422 «créalo en la app primero»).
+2. Prefactura desde la cuenta del episodio (parte del pagador y del paciente;
+   honorarios fuera: hoy los factura cada médico — «a cuenta de terceros»
+   queda como opción) y liga de los cargos al timbrar.
+3. Cancelación (motivos 01-04, sustitución).
+4. Complementos de pago (REP) de las facturas PPD.
+5. Nómina: alta y edición de empleados, cancelación de recibos, baja,
+   aguinaldo y PTU.
+
 ## Lo que NO hace (por diseño, v1)
 
 - No postea al mayor: la cuenta es WIP; el asiento nace con el CFDI.
-- No emite el CFDI desde el módulo: la factura partida (pagador/paciente) se
-  arma con los cargos y se timbra con `POST /api/facturas` del hub (fase 2).
+- Todavía no ARMA la factura partida (pagador/paciente) desde los cargos del
+  episodio (paso 2 de «Facturación desde el satélite», abajo).
 - No firma con e.firma: la firma de las notas es la del sistema (hash + sello
   de tiempo); el PDF firmado del consentimiento se resguarda como archivo del
   documento, sin validación de firma electrónica.
