@@ -38,4 +38,13 @@ describe('hospital server permission matrix', () => {
     member.hospitalPaginas = ['farmacia'];
     await expect(enforceHospitalAccess('company', 'user', request('facturacion/prefacturas'))).rejects.toMatchObject({ status: 403 });
   });
+  it('payroll writes need the nomina page and FINANZAS_ESCRIBIR', async () => {
+    member.hospitalPaginas = ['nomina'];
+    await expect(enforceHospitalAccess('company', 'user', request('nomina/aguinaldo'))).resolves.toBeUndefined();
+    await expect(enforceHospitalAccess('company', 'user', request('nomina/empleados', 'POST'))).rejects.toMatchObject({ status: 403 });
+    member.hospitalPermisos = ['FINANZAS_ESCRIBIR'];
+    await expect(enforceHospitalAccess('company', 'user', request('nomina/empleados', 'POST'))).resolves.toBeUndefined();
+    member.hospitalPaginas = ['caja'];
+    await expect(enforceHospitalAccess('company', 'user', request('nomina/aguinaldo'))).rejects.toMatchObject({ status: 403 });
+  });
 });

@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
-import { calcularFiniquito } from "@/lib/nomina/finiquito";
+import { darDeBaja } from "@/lib/nomina/baja";
 
 // POST /api/nomina/baja
 // Deactivates an employee, creates IMSS Baja movement, and optionally
-// calculates finiquito/liquidación.
+// calculates finiquito/liquidación (regla en lib/nomina/baja.ts).
 //
 // Body: { companyId, employeeId, fechaBaja, motivo, diasSalarioPendiente? }
 // motivo: "VOLUNTARIA" | "JUSTIFICADA" | "INJUSTIFICADA"
@@ -27,51 +26,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
 
-  const employee = await prisma.employee.findFirst({
-    where: { id: employeeId, companyId, isActive: true },
-  });
-  if (!employee) {
-    return NextResponse.json({ error: "Empleado no encontrado o ya dado de baja" }, { status: 404 });
-  }
-
-  const fechaBajaDate = new Date(fechaBaja);
-
-  // 1. Deactivate employee
-  await prisma.employee.update({
-    where: { id: employeeId },
-    data: { isActive: false, fechaBaja: fechaBajaDate },
-  });
-
-  // 2. Create IMSS Baja movement
-  await prisma.imssMovimiento.create({
-    data: {
-      companyId,
-      employeeId,
-      tipo: "BAJA",
-      fechaMovimiento: fechaBajaDate,
-      sbcAnterior: employee.salarioDiarioIntegrado ?? employee.salarioDiario,
-      motivo: `Baja ${motivo.toLowerCase()}: ${employee.nombre} ${employee.apellidoPaterno}`,
-    },
-  });
-
-  // 3. Calculate finiquito/liquidación
-  const finiquito = calcularFiniquito({
-    salarioDiario: Number(employee.salarioDiario),
-    salarioDiarioIntegrado: Number(employee.salarioDiarioIntegrado ?? employee.salarioDiario),
-    fechaIngreso: employee.fechaIngreso,
-    fechaBaja: fechaBajaDate,
-    motivo: motivo as "VOLUNTARIA" | "JUSTIFICADA" | "INJUSTIFICADA",
-    diasSalarioPendiente: diasSalarioPendiente ? Number(diasSalarioPendiente) : 0,
-  });
-
-  return NextResponse.json({
-    ok: true,
-    employee: {
-      id: employee.id,
-      nombre: `${employee.nombre} ${employee.apellidoPaterno}`,
-    },
-    imssMovimiento: "BAJA creada (pendiente de presentar en IDSE)",
-    finiquito: finiquito.desglose,
-    aniosAntiguedad: finiquito.aniosAntiguedad,
-  });
+  const r = await darDeBaja({ companyId, employeeId, fechaBaja, motivo: String(motivo), diasSalarioPendiente });
+  return NextResponse.json(r.body, { status: r.status });
 }

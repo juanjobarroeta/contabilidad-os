@@ -173,7 +173,9 @@ hecho contable, hasta que se factura.
 6. **Impuestos del mes.** IVA a cargo/acreditable e ISR retenido a médicos
    (personas físicas con honorarios) salen del motor fiscal del hub.
 7. **Nómina.** Empleados y corridas se leen de `/api/nomina/*` (CORS ya
-   abierto para satélites).
+   abierto para satélites); alta, edición, baja, cancelación de recibos,
+   aguinaldo y PTU van por `/api/hospital/nomina/*` (paso 5 de «Facturación
+   desde el satélite»).
 
 ## Reglas de negocio que viven en `src/lib/hospital/`
 
@@ -850,8 +852,27 @@ usa para escribir. Se construye por pasos:
    REP sugerido (monto, fecha de operación y forma de pago SAT del cobro).
    `POST …/complementos` `{ invoiceId, cobroId? | monto/fechaPago/formaPago, preview? }`.
    El REP se cancela con `…/facturas/[id]/cancelar`.
-5. Nómina: alta y edición de empleados, cancelación de recibos, baja,
-   aguinaldo y PTU.
+5. **Nómina** (hecho). Las corridas, incidencias, timbrado y dispersión ya se
+   operaban desde `/api/nomina/*` (bearer + CORS). Lo que sólo tenía sesión
+   del hub pasa a una regla compartida y se expone detrás de la puerta del
+   hospital (página `nomina`; escribir exige `FINANZAS_ESCRIBIR`):
+   - Alta y edición de empleados: `lib/nomina/empleados.ts` (la usa también
+     `/api/empleados`). `POST /api/hospital/nomina/empleados`,
+     `PATCH …/empleados/[id]`. Un cambio de salario registra la modificación
+     al IMSS en la misma transacción que la edición (y ya no queda huérfana si
+     otro campo es inválido), salvo `skipImssMovimiento`.
+   - Baja: `lib/nomina/baja.ts` (la usa `/api/nomina/baja`).
+     `POST …/empleados/[id]/baja { fechaBaja, motivo, diasSalarioPendiente?, preview? }`:
+     desactiva y crea la BAJA al IMSS juntos; `preview` sólo calcula el
+     finiquito (liquidación si es INJUSTIFICADA).
+   - Cancelar un recibo: `lib/nomina/cancelar-recibo.ts` (la usa
+     `/api/nomina/recibos/cancelar`). `POST …/recibos/[payrollItemId]/cancelar
+     { motivo, sustituyeUuid? }`: cancela ante el SAT y deja al empleado listo
+     para retimbrar (la corrida vuelve a CALCULATED).
+   - Aguinaldo y PTU: `GET/POST /api/hospital/nomina/aguinaldo` y `…/ptu`
+     (vista previa y crear la corrida, con el motor de
+     `lib/nomina/corridas-especiales.ts`); la corrida sigue el flujo normal
+     de revisión y timbrado.
 
 ## Lo que NO hace (por diseño, v1)
 
