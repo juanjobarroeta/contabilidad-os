@@ -44,7 +44,7 @@ export const GET = withHospital(async (req: Request) => {
     orderBy: { fecha: "desc" },
     take,
     select: {
-      id: true, uuid: true, serie: true, folio: true, fecha: true, total: true, metodoPago: true, formaPago: true, usoCfdi: true,
+      id: true, uuid: true, serie: true, folio: true, fecha: true, total: true, metodoPago: true, formaPago: true, usoCfdi: true, facturapiId: true,
       status: true, cancelEstadoSat: true, cancelMotivo: true, cancelSustituyeUuid: true, cancelSolicitadaAt: true,
       tipoRelacion: true, cfdiRelacionadoUuid: true,
       customer: { select: { id: true, razonSocial: true, rfc: true } },
