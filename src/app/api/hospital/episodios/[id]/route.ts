@@ -14,10 +14,12 @@
  * tratante. `seguimiento` registra la llamada posterior al alta.
  */
 
+import { TRANSICIONES, ESTADO_TEXTO, mensajeTransicion } from "@/lib/hospital/flujo";
+import { altaDatosSchema, consultarAlta, exigirAlta } from "@/lib/hospital/alta-autorizacion";
 import { demoText, isDemoPatient } from "@/lib/hospital/demo";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import type { HospAccesoAccion, HospEpisodioEstado } from "@prisma/client";
+import type { HospAccesoAccion, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, requireMembership, requireModule, requireWriter } from "@/lib/authz";
 import { withHospital } from "@/lib/hospital/with-hospital";
@@ -103,8 +105,19 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
         }
       : null;
 
+  const member = await prisma.companyMember.findUnique({ where: { userId_companyId: { userId: user.id, companyId: e.companyId } } });
+  const puedeEscribir = member?.role !== "VIEWER" && !!member?.hospitalPermisos.includes("CLINICA_ESCRIBIR");
+  const puedeRegistrarSalida = puedeEscribir && !!member?.hospitalPermisos.includes("ALTA");
+  let puedeAutorizarAlta = false;
+  if (puedeRegistrarSalida) {
+    try { await requirePractitioner(e.companyId, user.id, undefined, e.pacienteId); puedeAutorizarAlta = true; }
+    catch (err) { if (!(err instanceof AuthzError) || err.status !== 403) throw err; }
+  }
   return NextResponse.json({
     ...datos,
+    estadosPermitidos: puedeEscribir ? TRANSICIONES[e.estado] : [],
+    acciones: { puedeAutorizarAlta, puedeRegistrarSalida, puedeEscribir },
+    altaAutorizada: await consultarAlta(prisma, e),
     esDemostracion: await isDemoPatient(e.companyId, e.pacienteId),
     paciente: {
       ...paciente,
@@ -139,19 +152,6 @@ const MOTIVOS_EGRESO = ["CURACION", "MEJORIA", "TRASLADO", "DEFUNCION", "VOLUNTA
 const EGRESOS_SIN_ALDRETE = new Set<string>(["DEFUNCION", "TRASLADO", "FUGA", "VOLUNTARIA"]);
 const ALDRETE_MINIMO = 9;
 
-/** Transiciones clínicas permitidas por `action: "estado"`. ALTA y CANCELADO tienen su acción. */
-const TRANSICIONES: Record<HospEpisodioEstado, HospEpisodioEstado[]> = {
-  PROGRAMADO: ["EN_VALORACION", "PREOPERATORIO", "HOSPITALIZADO"],
-  EN_VALORACION: ["PREOPERATORIO", "HOSPITALIZADO"],
-  PREOPERATORIO: ["EN_QUIROFANO"],
-  EN_QUIROFANO: ["POSTOPERATORIO"],
-  POSTOPERATORIO: ["HOSPITALIZADO"],
-  // Un hospitalizado puede volver a quirófano (segundo tiempo quirúrgico).
-  HOSPITALIZADO: ["PREOPERATORIO"],
-  ALTA: [],
-  CANCELADO: [],
-};
-
 const datosSchema = z.object({
   medicoId: z.string().nullable().optional(),
   pagadorId: z.string().nullable().optional(),
@@ -183,6 +183,9 @@ const patchSchema = z.discriminatedUnion("action", [
     /** Plan de manejo e instrucciones de egreso: van en la nota de egreso (NOM-004 §8.10). */
     instrucciones: z.string().max(8000).nullable().optional(),
   }),
+  altaDatosSchema.extend({ action: z.literal("autorizar_alta") }),
+  z.object({ action: z.literal("registrar_salida"), autorizacionId: z.string().min(1), fechaAlta: fechaSchema.nullable().optional() }).strict(),
+  z.object({ action: z.literal("revocar_alta"), motivo: z.string().trim().min(5).max(500) }),
   datosSchema.extend({ action: z.literal("datos") }),
   z.object({ action: z.literal("cancelar"), motivo: z.string().min(1).max(500) }),
   z.object({ action: z.literal("seguimiento"), seguimientoAt: fechaSchema.nullable().optional(), seguimientoNota: z.string().min(1).max(4000) }),
@@ -193,7 +196,7 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
   const body = await req.json().catch(() => null);
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) return errorZod(parsed.error);
-  const d = parsed.data;
+  let command = parsed.data;
 
   const ep = await prisma.hospEpisodio.findUnique({
     where: { id },
@@ -214,24 +217,45 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
   const registrar = (accion: string, detalle: Record<string, unknown>) =>
     bitacora(user, req, { companyId: ep.companyId, accion, entidad: "HospEpisodio", entidadId: id, detalle: { folio: ep.folio, ...detalle } });
 
+  const bloquearEpisodio = async (tx: Prisma.TransactionClient) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`episodio:${id}`}))`;
+    await tx.$executeRaw`SELECT id FROM "HospEpisodio" WHERE id = ${id} FOR UPDATE`;
+    const fresh = await tx.hospEpisodio.findUniqueOrThrow({ where: { id } });
+    if (fresh.updatedAt.getTime() !== ep.updatedAt.getTime()) throw new AuthzError(409, "El episodio cambió; actualiza el expediente antes de continuar.");
+    return fresh;
+  };
+
+  let autorizacionPrevia: Awaited<ReturnType<typeof exigirAlta>> | null = null;
+  if (command.action === "registrar_salida") {
+    await requireClinicalPermission(ep.companyId, user.id, "ALTA");
+    autorizacionPrevia = await exigirAlta(prisma, ep, command.autorizacionId, ahora);
+    command = { action: "alta", ...autorizacionPrevia.datos, fechaAlta: command.fechaAlta };
+  }
+  if (command.action === "revocar_alta") {
+    await requireClinicalPermission(ep.companyId, user.id, "ALTA");
+    const motivo = command.motivo;
+    await prisma.$transaction(async tx => {
+      const fresh = await bloquearEpisodio(tx);
+      if (!esActivo(fresh.estado)) throw new AuthzError(409, "El episodio ya está cerrado.");
+      await tx.hospControlEvento.create({ data: { companyId: ep.companyId, referencia: id, tipo: "ALTA_REVOCACION", actorId: user.id, datos: { motivo } } });
+    });
+    return NextResponse.json({ revocada: true });
+  }
+
+  const d = command;
   // ── estado ──
   if (d.action === "estado") {
-    if (d.estado === "ALTA") return error("El alta se registra con action: \"alta\"", 400);
-    if (d.estado === "CANCELADO") return error("La cancelación se registra con action: \"cancelar\"", 400);
+    if (d.estado === "ALTA") return error("Utiliza Autorizar alta o Registrar salida para dar de alta al paciente.", 400);
+    if (d.estado === "CANCELADO") return error("Utiliza Cancelar ingreso e indica el motivo.", 400);
     if (!esActivo(ep.estado)) return error(`El episodio ${ep.folio} está ${ep.estado === "ALTA" ? "dado de alta" : "cancelado"}`, 409);
-    if (d.estado === "EN_QUIROFANO") {
-      await requirePractitioner(ep.companyId, user.id, undefined, ep.pacienteId);
-
-    }
-    if (d.estado === ep.estado) return error(`El episodio ya está ${ep.estado}`, 409);
+    if (d.estado === ep.estado) return error(`El paciente ya está ${ESTADO_TEXTO[ep.estado]}.`, 409);
     if (!TRANSICIONES[ep.estado].includes(d.estado)) {
-      return error(`De ${ep.estado} no se pasa a ${d.estado} (permitido: ${TRANSICIONES[ep.estado].join(", ") || "ninguno"})`, 409);
+      return error(mensajeTransicion(ep.estado, d.estado), 409);
     }
     // Si un programado llega antes de la hora, el ingreso es ahora.
     const adelantado = ep.estado === "PROGRAMADO" && ep.fechaIngreso.getTime() > ahora.getTime();
     const actualizado = await prisma.$transaction(async tx => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`episodio:${id}`}))`;
-      const fresh = await tx.hospEpisodio.findUniqueOrThrow({ where: { id } });
+      const fresh = await bloquearEpisodio(tx);
       if (fresh.estado !== ep.estado) throw new AuthzError(409, "El episodio cambió; actualiza antes de continuar");
       if (d.estado === "EN_QUIROFANO") {
         const preparacion = await exigirPreparacionQuirurgica(tx, ep.companyId, id);
@@ -252,6 +276,7 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
     if (!nuevo.activo || nuevo.estado !== "LIBRE") return error(describirRecursoNoLibre(nuevo), 409);
 
     const actualizado = await prisma.$transaction(async (tx) => {
+      await bloquearEpisodio(tx);
       const tomada = await tx.hospRecurso.updateMany({ where: { id: nuevo.id, estado: "LIBRE" }, data: { estado: "OCUPADA" } });
       if (tomada.count !== 1) throw new AuthzError(409, describirRecursoNoLibre({ ...nuevo, estado: "OCUPADA" }));
       if (ep.recursoId) {
@@ -278,12 +303,14 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
   }
 
   // ── alta ──
-  if (d.action === "alta") {
+  if (d.action === "alta" || d.action === "autorizar_alta") {
     await requireClinicalPermission(ep.companyId, user.id, "ALTA");
-    const autorAlta = await requirePractitioner(ep.companyId, user.id, undefined, ep.pacienteId);
+    const autorAlta = autorizacionPrevia ? null : await requirePractitioner(ep.companyId, user.id, undefined, ep.pacienteId);
     if (!esActivo(ep.estado)) return error(`El episodio ${ep.folio} ya está ${ep.estado === "ALTA" ? "dado de alta" : "cancelado"}`, 409);
     if (ep.estado === "PROGRAMADO") return error("Un episodio programado se cancela, no se da de alta", 409);
-    const fechaAlta = aFecha(d.fechaAlta) ?? ahora;
+    const fechaAlta = d.action === "alta" ? aFecha(d.fechaAlta) ?? ahora : ahora;
+    if (fechaAlta > ahora) return error("La salida no puede registrarse con una fecha futura.");
+    if (autorizacionPrevia && fechaAlta < autorizacionPrevia.autorizadoAt) return error("La salida debe ocurrir después de la autorización médica.");
     if (fechaAlta.getTime() < ep.fechaIngreso.getTime()) return error("La fecha de alta no puede ser anterior al ingreso");
 
     const egreso = await resolverCie(prisma, "CIE10", d.diagnosticoEgresoCie10, { etiqueta: "El diagnóstico de egreso", paciente: ep.paciente, hoy: fechaAlta });
@@ -304,12 +331,29 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
     const nota = d.nota?.trim() || null;
     const instrucciones = d.instrucciones?.trim() || null;
     if (!nota || !instrucciones) return error("La nota de egreso lleva el plan de manejo e instrucciones de egreso (instrucciones), NOM-004 §8.10");
-    if (nota && !ep.medicoId) return error("Para la nota de egreso el episodio necesita médico tratante con cédula: asígnalo con action: \"datos\"", 409);
 
+
+    const autorizarSolo = d.action === "autorizar_alta";
+    const datosAlta = { motivoEgreso: d.motivoEgreso, diagnosticoEgresoCie10: egreso.codigo, procedimientoCie9: procedimiento, aldreteEgreso: aldrete, nota, instrucciones };
     const actualizado = await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`episodio:${id}`}))`;
-      const fresh = await tx.hospEpisodio.findUniqueOrThrow({ where: { id } });
+      const fresh = await bloquearEpisodio(tx);
       if (fresh.estado !== ep.estado || fresh.recursoId !== ep.recursoId) throw new AuthzError(409, "El episodio cambió; actualiza antes de dar de alta");
+      if (autorizacionPrevia) await exigirAlta(tx, fresh, autorizacionPrevia.id);
+      if (fresh.updatedAt.getTime() !== ep.updatedAt.getTime()) throw new AuthzError(409, "El expediente cambió; actualiza antes de continuar con el alta.");
+      if (autorizarSolo && autorAlta) {
+        const autorizacionAt = new Date();
+        const notaAutorizada = await crearNota(tx, {
+          companyId: ep.companyId, episodioId: id, tipo: "EGRESO",
+          texto: demoText(`Alta médica autorizada; salida del paciente pendiente.\n\n${nota}`, autorAlta.soloDemostracion),
+          secciones: { diagnosticoEgreso: `${egreso.codigo} ${egreso.nombre}`, motivoEgreso: datosAlta.motivoEgreso, evolucion: nota, planManejo: instrucciones, ...(aldrete != null ? { aldrete } : {}) },
+          medicoId: autorAlta.id, usuario, fecha: autorizacionAt,
+        });
+        await tx.hospControlEvento.create({ data: {
+          companyId: ep.companyId, referencia: id, tipo: "ALTA_AUTORIZACION", actorId: user.id,
+          datos: { episodioVersion: fresh.updatedAt.toISOString(), medicoId: autorAlta.id, medicoNombre: autorAlta.nombre, notaId: notaAutorizada.id, venceAt: new Date(autorizacionAt.getTime() + 24 * 3600_000).toISOString(), datos: datosAlta },
+        } });
+        return fresh;
+      }
       // Las noches hasta el alta se cobran ANTES de soltar la cama.
       await asegurarCargosEstancia(tx, id, fechaAlta);
       // P3: el plan de tratamiento del episodio se cierra con el alta.
@@ -324,12 +368,12 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
           tipo: "ALTA",
           deRecursoId: ep.recursoId,
           deRecursoNombre: ep.recurso?.nombre ?? null,
-          nota: nota ? "Alta con nota de egreso" : null,
+          nota: autorizacionPrevia ? `Salida registrada con autorización médica ${autorizacionPrevia.id}` : "Alta con nota de egreso",
           usuarioId: usuario.id,
           usuarioNombre: usuario.nombre,
         },
       });
-      if (nota && instrucciones) {
+      if (nota && instrucciones && autorAlta) {
         await crearNota(tx, {
           companyId: ep.companyId,
           episodioId: id,
@@ -337,7 +381,7 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
           texto: demoText(nota, autorAlta.soloDemostracion),
           secciones: {
             diagnosticoEgreso: `${egreso.codigo} ${egreso.nombre}`,
-            motivoEgreso: d.motivoEgreso,
+            motivoEgreso: datosAlta.motivoEgreso,
             evolucion: nota,
             planManejo: instrucciones,
             diasEstancia: diaDeEstancia(ep.fechaIngreso, fechaAlta),
@@ -349,6 +393,7 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
           ahora,
         });
       }
+      await tx.hospControlEvento.create({ data: { companyId: ep.companyId, referencia: id, tipo: "ALTA_EJECUTADA", actorId: user.id, datos: { autorizacionId: autorizacionPrevia?.id ?? null, medicoId: autorizacionPrevia?.medicoId ?? autorAlta!.id, registradoPor: usuario.nombre, fechaAlta: fechaAlta.toISOString() } } });
       // ── Contabilidad (P3c): honorarios devengados por médico → retenciones ISR/IVA
       // contra el pasivo con el médico (fuente HOSPITAL; sólo con contabilidadActiva). ──
       await asentarHonorarios(tx, { id, companyId: ep.companyId, folio: ep.folio, fechaAlta });
@@ -359,7 +404,7 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
           estado: "ALTA",
           fechaAlta,
           recursoId: null,
-          motivoEgreso: d.motivoEgreso,
+          motivoEgreso: datosAlta.motivoEgreso,
           diagnosticoEgresoCie10: egreso.codigo,
           procedimientoCie9: procedimiento,
           aldreteEgreso: aldrete,
@@ -367,11 +412,11 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
         include: { recurso: true, medico: { select: { id: true, nombre: true } } },
       });
     });
-    registrar("hospital.episodio.alta", {
+    registrar(autorizarSolo ? "hospital.episodio.autorizar_alta" : "hospital.episodio.alta", {
       fechaAlta: fechaAlta.toISOString(),
       cama: ep.recurso?.nombre ?? null,
       conNota: !!nota,
-      motivoEgreso: d.motivoEgreso,
+      motivoEgreso: datosAlta.motivoEgreso,
       diagnosticoEgresoCie10: egreso.codigo,
       aldreteEgreso: aldrete,
     });
@@ -430,10 +475,13 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
         return (antes instanceof Date ? antes.getTime() : antes) !== (despues instanceof Date ? despues.getTime() : despues);
       })
       .map(([campo, nuevo]) => ({ campo, antes: anterior[campo] ?? null, despues: nuevo ?? null }));
-    const actualizado = await prisma.hospEpisodio.update({
+    const actualizado = await prisma.$transaction(async tx => {
+      await bloquearEpisodio(tx);
+      return tx.hospEpisodio.update({
       where: { id },
       data: campos,
       include: { medico: true, pagador: true, customer: { select: { id: true, razonSocial: true, rfc: true } } },
+      });
     });
     if (cambios.length) registrar("hospital.episodio.editar", { cambios });
     return NextResponse.json({
@@ -452,6 +500,7 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
   }
   const vivos = ep.cargos.filter((c) => !c.cancelado).map((c) => c.id);
   const actualizado = await prisma.$transaction(async (tx) => {
+    await bloquearEpisodio(tx);
     if (ep.recursoId) {
       // Si nunca llegó, la cama queda libre; si la ocupó, pasa por limpieza.
       await tx.hospRecurso.update({ where: { id: ep.recursoId }, data: { estado: ep.estado === "PROGRAMADO" ? "LIBRE" : "LIMPIEZA" } });

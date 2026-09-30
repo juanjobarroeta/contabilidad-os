@@ -25,10 +25,10 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
 });
 export const POST = withHospital(async (req: Request, ctx: Ctx) => {
   const { ep, user } = await context(req, ctx);
-  const medico = await requirePractitioner(ep.companyId, user.id, undefined, ep.pacienteId);
   const d = schema.safeParse(await req.json());
   if (!d.success) return errorZod(d.error);
-  if (medico.soloDemostracion && d.data.tipo === "URGENCIA_QUIRURGICA") throw new AuthzError(403, "La excepción de urgencia requiere dos médicos con identidad profesional verificada. En la demostración utiliza la preparación ordinaria.");
+  const medico = d.data.tipo === "URGENCIA_QUIRURGICA" ? await requirePractitioner(ep.companyId, user.id, undefined, ep.pacienteId) : null;
+  if (medico?.soloDemostracion && d.data.tipo === "URGENCIA_QUIRURGICA") throw new AuthzError(403, "La excepción de urgencia requiere dos médicos con identidad profesional verificada. En la demostración utiliza la preparación ordinaria.");
   if (!["PREOPERATORIO", "EN_VALORACION", "HOSPITALIZADO"].includes(ep.estado)) throw new AuthzError(409, "La preparación se registra antes del ingreso a quirófano");
   const event = await prisma.$transaction(async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`preparacion:${ep.id}`}))`;
@@ -39,7 +39,7 @@ export const POST = withHospital(async (req: Request, ctx: Ctx) => {
       if (same.some(e => e.actorId === user.id)) throw new AuthzError(409, "Tu atestación ya está registrada; debe intervenir un segundo médico");
       if (same.some(e => (e.datos as Record<string, unknown>).riesgoDemora !== urgencia.riesgoDemora)) throw new AuthzError(409, "Ambos médicos deben revisar el mismo motivo de urgencia");
     }
-    return tx.hospControlEvento.create({ data: { companyId: ep.companyId, referencia: ep.id, tipo: d.data.tipo, actorId: user.id, datos: { ...d.data, medicoId: medico.id, cedula: medico.cedula, soloDemostracion: medico.soloDemostracion } } });
+    return tx.hospControlEvento.create({ data: { companyId: ep.companyId, referencia: ep.id, tipo: d.data.tipo, actorId: user.id, datos: { ...d.data, registradoPor: user.name ?? user.email ?? "Personal autorizado", ...(medico ? { medicoId: medico.id, cedula: medico.cedula, soloDemostracion: medico.soloDemostracion } : {}) } } });
   });
   return Response.json(event, { status: 201 });
 });
