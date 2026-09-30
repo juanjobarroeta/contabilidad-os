@@ -62,16 +62,32 @@ export interface CargoFacturable {
   servicio?: { claveProdServ: string | null; claveUnidad: string | null } | null;
   lote?: { insumo?: { claveProdServ: string | null } | null } | null;
   prefactura?: { status: string } | null;
+  invoice?: { status: string } | null;
 }
+
+/**
+ * Un CFDI cancelado ya no ampara nada: su cargo vuelve a estar libre, sea
+ * quien sea que lo haya marcado CANCELLED (la cancelación del hospital, el
+ * cron de vigencia del SAT o la sincronización). Por eso se DERIVA aquí y no
+ * se «suelta» el cargo en una sola ruta.
+ */
+export const facturaVigente = (c: Pick<CargoFacturable, "invoiceId" | "invoice">) =>
+  Boolean(c.invoiceId) && c.invoice?.status !== "CANCELLED";
 
 export function estadoFacturacion(c: CargoFacturable): EstadoFacturacion {
   if (c.cancelado) return "CANCELADO";
-  if (c.invoiceId) return "FACTURADO";
-  if (c.categoria === "HONORARIO") return "HONORARIO";
+  // Una prefactura PENDIENTE manda aunque el cargo siga amparado por un CFDI:
+  // es la sustitución en curso (el CFDI nuevo reemplazará al viejo).
   if (c.prefacturaId && (!c.prefactura || c.prefactura.status === "PENDIENTE")) return "EN_PREFACTURA";
+  if (facturaVigente(c)) return "FACTURADO";
+  if (c.categoria === "HONORARIO") return "HONORARIO";
   if (c.publicoGeneral) return "PUBLICO_GENERAL";
   return "PENDIENTE";
 }
+
+/** Condición de BD equivalente a «libre»: sin CFDI vigente ni prefactura pendiente. */
+const SIN_CFDI_VIGENTE = { OR: [{ invoiceId: null }, { invoice: { is: { status: "CANCELLED" as const } } }] };
+const SIN_PREFACTURA_PENDIENTE = { OR: [{ prefacturaId: null }, { prefactura: { is: { status: { not: "PENDIENTE" } } } }] };
 
 /** Puede entrar a una prefactura (o marcarse para la global). */
 export const esLibre = (c: CargoFacturable) => estadoFacturacion(c) === "PENDIENTE";
@@ -285,8 +301,9 @@ export async function prefacturaDesdeCargos(
 
   const prefacturaId = (r.body as { id: string }).id;
   const tomados = await prisma.hospCargo.updateMany({
-    where: { id: { in: cargos.map((c) => c.id) }, prefacturaId: null, invoiceId: null, cancelado: false, publicoGeneral: false },
-    data: { prefacturaId },
+    where: { id: { in: cargos.map((c) => c.id) }, cancelado: false, publicoGeneral: false, AND: [SIN_CFDI_VIGENTE, SIN_PREFACTURA_PENDIENTE] },
+    // El CFDI cancelado que traía se suelta: al timbrar, el cargo amparará el nuevo.
+    data: { prefacturaId, invoiceId: null },
   });
   if (tomados.count !== cargos.length) {
     await liberarYDescartar(prefacturaId, args.actor, args.req);
@@ -310,7 +327,7 @@ export async function marcarPublicoGeneral(db: Db, companyId: string, episodioId
     if (ajenos.length) throw new HospitalError(409, `Sólo se regresan cargos marcados para la global: ${ajenos.map((c) => `«${c.descripcion}»`).join(", ")}.`);
   }
   const r = await db.hospCargo.updateMany({
-    where: { id: { in: cargos.map((c) => c.id) }, invoiceId: null, prefacturaId: null, cancelado: false },
+    where: { id: { in: cargos.map((c) => c.id) }, cancelado: false, AND: [SIN_CFDI_VIGENTE, SIN_PREFACTURA_PENDIENTE] },
     data: { publicoGeneral: valor },
   });
   return { actualizados: r.count };
@@ -380,7 +397,7 @@ export async function dividirCargo(
 export async function cargosGlobales(db: Db, companyId: string, anio: number, mes: number) {
   const { desde, hasta } = rangoMesLocal(anio, mes);
   const cargos = await db.hospCargo.findMany({
-    where: { companyId, publicoGeneral: true, invoiceId: null, prefacturaId: null, cancelado: false, fecha: { gte: desde, lt: hasta } },
+    where: { companyId, publicoGeneral: true, cancelado: false, fecha: { gte: desde, lt: hasta }, AND: [SIN_CFDI_VIGENTE, SIN_PREFACTURA_PENDIENTE] },
     include: { ...incluyeCargo, episodio: { select: { folio: true } } },
     orderBy: { fecha: "asc" },
   });
@@ -419,12 +436,70 @@ export async function prefacturaGlobal(
   if (r.status !== 201) return r;
   const prefacturaId = (r.body as { id: string }).id;
   const tomados = await prisma.hospCargo.updateMany({
-    where: { id: { in: cargos.map((c) => c.id) }, prefacturaId: null, invoiceId: null, cancelado: false, publicoGeneral: true },
-    data: { prefacturaId },
+    where: { id: { in: cargos.map((c) => c.id) }, cancelado: false, publicoGeneral: true, AND: [SIN_CFDI_VIGENTE, SIN_PREFACTURA_PENDIENTE] },
+    data: { prefacturaId, invoiceId: null },
   });
   if (tomados.count !== cargos.length) {
     await liberarYDescartar(prefacturaId, args.actor, args.req);
     throw new HospitalError(409, "Cambiaron los cargos del mes mientras se armaba la global. Vuelve a intentarlo.");
+  }
+  return r;
+}
+
+// ── Sustitución (cancelación con motivo 01) ─────────────────────────────────
+
+/**
+ * Prefactura que SUSTITUYE a un CFDI de la cuenta: los mismos cargos, el mismo
+ * receptor y los mismos datos de pago (salvo que se cambien), con la relación
+ * 04 al UUID viejo. Los cargos siguen amparados por el CFDI viejo mientras la
+ * prefactura está pendiente —si se descarta, no pierden su factura—; al
+ * timbrar pasan al nuevo, y entonces el viejo se cancela con motivo 01 y el
+ * UUID nuevo. Es el orden que pide el SAT: primero el que sustituye.
+ */
+export async function prefacturaSustituta(args: {
+  companyId: string;
+  invoiceId: string;
+  datos?: Partial<DatosCfdi>;
+  customerId?: string;
+  actor: Actor;
+  req: Request;
+}) {
+  const vieja = await prisma.invoice.findUnique({
+    where: { id: args.invoiceId },
+    select: { id: true, companyId: true, uuid: true, status: true, customerId: true, formaPago: true, metodoPago: true, usoCfdi: true, customer: { select: { rfc: true } } },
+  });
+  if (!vieja || vieja.companyId !== args.companyId) throw new HospitalError(404, "Factura no encontrada");
+  if (vieja.status !== "STAMPED" || !vieja.uuid) throw new HospitalError(409, "Sólo se sustituye un CFDI timbrado y vigente");
+  if (vieja.customer?.rfc === RFC_PUBLICO_GENERAL) throw new HospitalError(409, "La factura global no se sustituye desde aquí: cancélala con motivo 02 y vuelve a armar la global del mes.");
+
+  const cargos = await prisma.hospCargo.findMany({ where: { companyId: args.companyId, invoiceId: vieja.id, cancelado: false }, include: incluyeCargo });
+  if (!cargos.length) throw new HospitalError(409, "Esta factura no ampara cargos de una cuenta: sustitúyela desde Facturación → Nueva prefactura con «sustituye al CFDI».");
+  const enCurso = cargos.filter((c) => estadoFacturacion(c) === "EN_PREFACTURA");
+  if (enCurso.length) throw new HospitalError(409, "Ya hay una prefactura que sustituye a esta factura: tímbrala o descártala.");
+
+  const { items, sinClave } = conceptosDeCargos(cargos);
+  if (sinClave.length) throw new HospitalError(422, `Falta la clave SAT de: ${sinClave.map((c) => `«${c.descripcion}»`).join(", ")}.`);
+  const metodoPago = args.datos?.metodoPago ?? (vieja.metodoPago === "PPD" ? "PPD" : "PUE");
+  const input: StampInput = {
+    companyId: args.companyId,
+    customerId: args.customerId ?? vieja.customerId!,
+    formaPago: args.datos?.formaPago ?? vieja.formaPago ?? (metodoPago === "PPD" ? "99" : "03"),
+    metodoPago,
+    usoCfdi: args.datos?.usoCfdi ?? vieja.usoCfdi ?? "D01",
+    notes: args.datos?.notes,
+    items,
+    relations: { relationship: "04", documents: [vieja.uuid] },
+  };
+  const r = await crearPrefactura(input, args.actor, args.req);
+  if (r.status !== 201) return r;
+  const prefacturaId = (r.body as { id: string }).id;
+  const tomados = await prisma.hospCargo.updateMany({
+    where: { id: { in: cargos.map((c) => c.id) }, invoiceId: vieja.id, cancelado: false, AND: [SIN_PREFACTURA_PENDIENTE] },
+    data: { prefacturaId },
+  });
+  if (tomados.count !== cargos.length) {
+    await liberarYDescartar(prefacturaId, args.actor, args.req);
+    throw new HospitalError(409, "Cambiaron los cargos de esta factura mientras se armaba la sustitución. Vuelve a intentarlo.");
   }
   return r;
 }

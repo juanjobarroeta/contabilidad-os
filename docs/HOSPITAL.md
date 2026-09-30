@@ -825,7 +825,22 @@ usa para escribir. Se construye por pasos:
    - Honorarios fuera: hoy los factura cada médico; «a cuenta de terceros»
      queda como opción. Cómo presentar deducible y coaseguro en la factura de
      la aseguradora está por definir con los pagadores.
-3. Cancelación (motivos 01-04, sustitución).
+3. **Cancelación** (hecho). `lib/facturas/cancelar.ts` es la regla (la usa
+   también `DELETE /api/facturas/[id]`): motivos 01-04, 01 exige el UUID que
+   sustituye, no se cancela con complementos de pago vivos, y sólo se marca
+   CANCELLED cuando el SAT lo confirma («En proceso» si el receptor debe
+   aceptar). `GET /api/hospital/facturacion/facturas` (lista con estado de
+   cancelación y relación), `POST …/facturas/[id]/cancelar`.
+   - Un CFDI cancelado suelta sus cargos, lo haya marcado quien lo haya
+     marcado (esta ruta, el cron de vigencia o la sincronización con el SAT):
+     el estado se DERIVA del status del CFDI, no de quién lo canceló.
+   - Sustitución (motivo 01): `POST …/facturas/[id]/sustituir` arma la
+     prefactura con los mismos cargos y la relación 04 al UUID viejo
+     (`StampInput.relations`, nuevo; se guarda en `Invoice.tipoRelacion` /
+     `cfdiRelacionadoUuid`). Mientras está pendiente, los cargos siguen con el
+     CFDI viejo; al timbrarla pasan al nuevo, y el viejo se cancela con 01 y el
+     UUID nuevo (el timbrado devuelve `sustituye` para ofrecerlo). La factura
+     global no se sustituye: se cancela con 02 y se vuelve a armar.
 4. Complementos de pago (REP) de las facturas PPD.
 5. Nómina: alta y edición de empleados, cancelación de recibos, baja,
    aguinaldo y PTU.

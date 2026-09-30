@@ -21,10 +21,14 @@ export async function cancelarCargo(
 ) {
   const cargo = await tx.hospCargo.findUnique({
     where: { id: cargoId },
-    include: { movimientoInsumo: { select: { id: true, insumoId: true, loteId: true, cantidad: true, costoUnitario: true, asientoAt: true } } },
+    include: {
+      movimientoInsumo: { select: { id: true, insumoId: true, loteId: true, cantidad: true, costoUnitario: true, asientoAt: true } },
+      invoice: { select: { status: true } },
+    },
   });
   if (!cargo) throw new HospitalError(404, "Cargo no encontrado");
-  if (cargo.invoiceId) {
+  // Un CFDI ya cancelado no ampara el cargo: se puede cancelar.
+  if (cargo.invoiceId && cargo.invoice?.status !== "CANCELLED") {
     throw new HospitalError(409, "El cargo ya está en una factura: cancela primero el CFDI");
   }
   if (cargo.cancelado) throw new HospitalError(409, "El cargo ya estaba cancelado");

@@ -105,6 +105,8 @@ export async function listarPrefacturas(companyId: string) {
     pdfUrl: pdfUrlCliente(companyId, b.draftId),
     // Armada desde la cuenta de un episodio: no se edita a mano (ver editarPrefactura).
     cargosHospital: b._count.hospCargos,
+    // Sustitución (relación 04): el UUID del CFDI que reemplazará.
+    sustituyeUuid: (b.payload as { relations?: { relationship?: string; documents?: string[] } } | null)?.relations?.documents?.[0] ?? null,
   }));
 }
 
@@ -200,8 +202,10 @@ export async function timbrarPrefactura(borrador: Borrador, actor: Actor, req: R
   // Los cargos del hospital que tomó esta prefactura quedan amparados por el
   // CFDI (un cargo, un CFDI): la cuenta los ve facturados y la contabilidad
   // los reparte por categoría. Sin cargos ligados, no hace nada.
+  // En una sustitución (relación 04) los cargos todavía traen el CFDI viejo:
+  // pasan al nuevo aquí, y el viejo se cancela después con motivo 01.
   await prisma.hospCargo.updateMany({
-    where: { prefacturaId: borrador.id, invoiceId: null },
+    where: { prefacturaId: borrador.id },
     data: { invoiceId: result.invoiceId },
   });
   registrarBitacora({
@@ -214,7 +218,13 @@ export async function timbrarPrefactura(borrador: Borrador, actor: Actor, req: R
     detalle: { invoiceId: result.invoiceId, uuid: result.uuid, total: result.total },
     req,
   });
-  return { status: 200, body: { ok: true, invoiceId: result.invoiceId, uuid: result.uuid, total: result.total } };
+  // Si sustituye a otro CFDI, se devuelve cuál: el siguiente paso es cancelar
+  // ése con motivo 01 y el UUID recién timbrado.
+  const uuidViejo = input.relations?.relationship === "04" ? input.relations.documents[0]?.toUpperCase() : undefined;
+  const vieja = uuidViejo
+    ? await prisma.invoice.findFirst({ where: { companyId: borrador.companyId, uuid: uuidViejo }, select: { id: true, uuid: true, status: true } })
+    : null;
+  return { status: 200, body: { ok: true, invoiceId: result.invoiceId, uuid: result.uuid, total: result.total, sustituye: vieja } };
 }
 
 /** Manda el PDF del borrador al correo vía Facturapi (sin SMTP propio). */
@@ -252,8 +262,9 @@ export async function descartarPrefactura(borrador: Borrador, actor: Actor, req:
   if (bloqueo) return bloqueo;
   await discardDraft(borrador.companyId, borrador.draftId);
   await prisma.facturaBorrador.update({ where: { id: borrador.id }, data: { status: "DESCARTADA" } });
-  // Los cargos del hospital que tomó vuelven a estar libres para facturarse.
-  await prisma.hospCargo.updateMany({ where: { prefacturaId: borrador.id, invoiceId: null }, data: { prefacturaId: null } });
+  // Los cargos del hospital que tomó quedan como estaban: libres o, si era una
+  // sustitución, amparados todavía por el CFDI que iba a reemplazar.
+  await prisma.hospCargo.updateMany({ where: { prefacturaId: borrador.id }, data: { prefacturaId: null } });
   registrarBitacora({
     companyId: borrador.companyId,
     userId: actor.id,

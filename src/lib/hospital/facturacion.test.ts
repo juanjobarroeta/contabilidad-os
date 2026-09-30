@@ -6,8 +6,9 @@ const m = vi.hoisted(() => ({
   crear: vi.fn(),
   cargar: vi.fn(),
   descartar: vi.fn(),
+  invoice: vi.fn(),
 }));
-vi.mock("@/lib/prisma", () => ({ prisma: { hospCargo: { findMany: m.findMany, updateMany: m.updateMany } } }));
+vi.mock("@/lib/prisma", () => ({ prisma: { hospCargo: { findMany: m.findMany, updateMany: m.updateMany }, invoice: { findUnique: m.invoice } } }));
 vi.mock("@/lib/facturas/prefacturas", () => ({ crearPrefactura: m.crear, cargarPrefactura: m.cargar, descartarPrefactura: m.descartar }));
 
 import {
@@ -17,6 +18,7 @@ import {
   dividirCargo,
   estadoFacturacion,
   prefacturaDesdeCargos,
+  prefacturaSustituta,
   type CargoFacturable,
 } from "./facturacion";
 
@@ -41,8 +43,13 @@ const cargo = (p: Partial<CargoFacturable> = {}): CargoFacturable => ({
 describe("estado de facturación de un cargo", () => {
   it("prioriza cancelado, facturado y honorario sobre lo demás", () => {
     expect(estadoFacturacion(cargo({ cancelado: true, invoiceId: "i" }))).toBe("CANCELADO");
-    expect(estadoFacturacion(cargo({ invoiceId: "i", prefacturaId: "p" }))).toBe("FACTURADO");
+    expect(estadoFacturacion(cargo({ invoiceId: "i", prefacturaId: "p", prefactura: { status: "TIMBRADA" }, invoice: { status: "STAMPED" } }))).toBe("FACTURADO");
     expect(estadoFacturacion(cargo({ categoria: "HONORARIO" }))).toBe("HONORARIO");
+  });
+  it("un CFDI cancelado suelta el cargo; una sustitución en curso lo muestra en prefactura", () => {
+    expect(estadoFacturacion(cargo({ invoiceId: "i", invoice: { status: "CANCELLED" } }))).toBe("PENDIENTE");
+    expect(estadoFacturacion(cargo({ invoiceId: "i", invoice: { status: "CANCELLED" }, publicoGeneral: true }))).toBe("PUBLICO_GENERAL");
+    expect(estadoFacturacion(cargo({ invoiceId: "i", invoice: { status: "STAMPED" }, prefacturaId: "p2", prefactura: { status: "PENDIENTE" } }))).toBe("EN_PREFACTURA");
   });
   it("una prefactura descartada o timbrada no retiene el cargo", () => {
     expect(estadoFacturacion(cargo({ prefacturaId: "p", prefactura: { status: "PENDIENTE" } }))).toBe("EN_PREFACTURA");
@@ -123,7 +130,9 @@ describe("prefactura desde cargos", () => {
     m.updateMany.mockResolvedValue({ count: 1 });
     const r = await prefacturaDesdeCargos(args);
     expect(r.status).toBe(201);
-    expect(m.updateMany.mock.calls[0][0]).toMatchObject({ data: { prefacturaId: "pre1" }, where: { prefacturaId: null, invoiceId: null } });
+    const call = m.updateMany.mock.calls[0][0]
+    expect(call.data).toEqual({ prefacturaId: "pre1", invoiceId: null });
+    expect(JSON.stringify(call.where)).toContain('"CANCELLED"');
   });
   it("si otro usuario tomó un cargo en ese instante, descarta el borrador y contesta 409", async () => {
     m.updateMany.mockResolvedValue({ count: 0 });
@@ -136,6 +145,35 @@ describe("prefactura desde cargos", () => {
     await expect(prefacturaDesdeCargos(args)).rejects.toMatchObject({ status: 409 });
     m.findMany.mockResolvedValue([cargo({ servicio: null })]);
     await expect(prefacturaDesdeCargos(args)).rejects.toMatchObject({ status: 422 });
+    expect(m.crear).not.toHaveBeenCalled();
+  });
+});
+
+describe("sustitución (motivo 01)", () => {
+  const args = { companyId: "co", invoiceId: "old", actor: { id: "u" }, req: new Request("https://x.test") };
+  const vieja = { id: "old", companyId: "co", uuid: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA", status: "STAMPED", customerId: "cu", formaPago: "03", metodoPago: "PUE", usoCfdi: "D01", customer: { rfc: "PEJJ800101AB1" } };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    m.invoice.mockResolvedValue(vieja);
+    m.findMany.mockResolvedValue([cargo({ invoiceId: "old", invoice: { status: "STAMPED" }, prefacturaId: "pv", prefactura: { status: "TIMBRADA" } })]);
+    m.crear.mockResolvedValue({ status: 201, body: { id: "pre2" } });
+    m.updateMany.mockResolvedValue({ count: 1 });
+  });
+  it("arma la prefactura con relación 04 y toma los cargos SIN soltar el CFDI viejo", async () => {
+    await prefacturaSustituta(args);
+    expect(m.crear.mock.calls[0][0]).toMatchObject({ customerId: "cu", formaPago: "03", relations: { relationship: "04", documents: [vieja.uuid] } });
+    const call = m.updateMany.mock.calls[0][0];
+    expect(call.where).toMatchObject({ invoiceId: "old" });
+    expect(call.data).toEqual({ prefacturaId: "pre2" });
+  });
+  it("no sustituye una global, un CFDI no vigente ni una factura sin cargos", async () => {
+    m.invoice.mockResolvedValue({ ...vieja, customer: { rfc: "XAXX010101000" } });
+    await expect(prefacturaSustituta(args)).rejects.toMatchObject({ status: 409 });
+    m.invoice.mockResolvedValue({ ...vieja, status: "CANCELLED" });
+    await expect(prefacturaSustituta(args)).rejects.toMatchObject({ status: 409 });
+    m.invoice.mockResolvedValue(vieja);
+    m.findMany.mockResolvedValue([]);
+    await expect(prefacturaSustituta(args)).rejects.toMatchObject({ status: 409 });
     expect(m.crear).not.toHaveBeenCalled();
   });
 });
