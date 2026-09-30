@@ -91,7 +91,7 @@ export async function listarPrefacturas(companyId: string) {
     where: { companyId, status: "PENDIENTE" },
     orderBy: { createdAt: "desc" },
     take: 50,
-    include: { customer: { select: { razonSocial: true, rfc: true, email: true } } },
+    include: { customer: { select: { razonSocial: true, rfc: true, email: true } }, _count: { select: { hospCargos: true } } },
   });
   return borradores.map((b) => ({
     id: b.id,
@@ -103,6 +103,8 @@ export async function listarPrefacturas(companyId: string) {
     enviadaAt: b.enviadaAt,
     createdAt: b.createdAt,
     pdfUrl: pdfUrlCliente(companyId, b.draftId),
+    // Armada desde la cuenta de un episodio: no se edita a mano (ver editarPrefactura).
+    cargosHospital: b._count.hospCargos,
   }));
 }
 
