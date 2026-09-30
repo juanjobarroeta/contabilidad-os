@@ -470,7 +470,10 @@ del límite o pasado de él), `TRIAGE_PENDIENTE` (urgencias sin triage),
 `ALTA_SIN_CIE` (altas de los últimos 7 días sin motivo o sin CIE-10 de egreso),
 `SEGUIMIENTO_PENDIENTE` (ambulatorio con alta > 24 h sin llamada de
 seguimiento), `IDENTIDAD_PENDIENTE` (paciente con episodio abierto sin CURP ni
-motivo) y `AVISO_PRIVACIDAD_PENDIENTE`; `resumenAtencion` trae sus conteos.
+motivo), `AVISO_PRIVACIDAD_PENDIENTE` y `SAEH_INCOMPLETO` (uno por mes, el
+anterior y el en curso: egresos hospitalarios sin hoja SAEH o con hoja
+PENDIENTE, con el vencimiento SEUL; `href` = `/saeh?anio=&mes=`);
+`resumenAtencion` trae sus conteos (`egresosSaehIncompletos` suma ambos meses).
 
 ### P2 identidad, admisión firmada, SAEH y CDA
 
