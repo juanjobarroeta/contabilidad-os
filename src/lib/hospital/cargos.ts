@@ -6,6 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { Prisma } from "@prisma/client";
+import { asentarMovimientoKardex } from "./asientos";
 import { HospitalError } from "./errores";
 
 export interface UsuarioAccion {
@@ -20,7 +21,7 @@ export async function cancelarCargo(
 ) {
   const cargo = await tx.hospCargo.findUnique({
     where: { id: cargoId },
-    include: { movimientoInsumo: { select: { id: true, insumoId: true, loteId: true, cantidad: true, costoUnitario: true } } },
+    include: { movimientoInsumo: { select: { id: true, insumoId: true, loteId: true, cantidad: true, costoUnitario: true, asientoAt: true } } },
   });
   if (!cargo) throw new HospitalError(404, "Cargo no encontrado");
   if (cargo.invoiceId) {
@@ -56,6 +57,14 @@ export async function cancelarCargo(
       },
     });
     await tx.hospLote.update({ where: { id: mov.loteId }, data: { existencia: { increment: cantidad } } });
+    // Contabilidad: si la aplicación llegó al libro, la devolución la reversa
+    // (inventario de vuelta, costo fuera). No-op con la contabilidad apagada.
+    await asentarMovimientoKardex(tx, {
+      ...dev,
+      descripcion: `devolución del cargo ${cargo.id}`,
+      cargo: { ivaContexto: cargo.ivaContexto, ivaTasa: cargo.ivaTasa == null ? null : Number(cargo.ivaTasa) },
+      origenAsentado: !!mov.asientoAt,
+    });
     devolucion = { id: dev.id, cantidad };
   }
 

@@ -98,6 +98,9 @@ const PISTAS: Record<ClaveMotor, Pistas> = {
   FONDOS_EN_TRANSITO: { dice: ["transito", "fondos"], tope: "PARECIDA" },
   COMISION_TERMINAL: { dice: ["comisiones bancarias", "comision"], evita: ["ventas"], tope: "PARECIDA" },
   IVA_ACREDITABLE: { dice: ["iva acreditable pagado", "iva acreditable"], evita: ["importacion", "pendiente"] },
+  MERMA_FARMACIA: { dice: ["merma", "caducidad", "faltante"], prefiere: ["farmacia", "inventario"], tope: "PARECIDA" },
+  SOBRANTE_INVENTARIO: { dice: ["sobrante", "otros productos"], prefiere: ["inventario"], tope: "PARECIDA" },
+  IVA_TRASLADADO_COBRADO: { dice: ["iva trasladado cobrado", "iva cobrado", "iva trasladado"], evita: ["no cobrado", "pendiente", "por cobrar"] },
 };
 
 /** Sin acentos, en minúsculas y sin signos: «Almacén Farmacia 16%» → «almacen farmacia 16». */

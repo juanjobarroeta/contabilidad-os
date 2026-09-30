@@ -124,7 +124,7 @@ const JOBS: Job[] = [
   { name: "sat-rawxml-backfill", everyMs: 6 * HOUR, firstDelayMs: 15 * MIN, minMs: MIN_SAT,
     // El XML recién bajado alimenta impuestos, contraparte y la identidad
     // fiscal del cliente: se derivan ya.
-    encadena: ["invoice-taxes-backfill", "invoice-contraparte-backfill", "cliente-fiscal-backfill", "invoice-descuento-backfill", "cfdi-sustitucion-backfill"] },
+    encadena: ["invoice-taxes-backfill", "invoice-contraparte-backfill", "cliente-fiscal-backfill", "invoice-descuento-backfill", "cfdi-sustitucion-backfill", "hospital-cfdi-vincular"] },
   // Ídem: el workflow de rawxml-backfill encadenaba el desglose de impuestos
   // (parse local del rawXml recién bajado, sin cuota SAT).
   { name: "invoice-taxes-backfill", everyMs: 6 * HOUR, firstDelayMs: 25 * MIN, minMs: MIN_LOCAL },
@@ -190,6 +190,10 @@ const JOBS: Job[] = [
   // agenda pone horas exactas (22:00, 10:00); sin filas vencidas es un no-op.
   // Corre EN PARALELO con declaraciones-backfill/compliance-sync de Syntage
   // hasta el corte de octubre (docs/SATGO.md): ambos son gap-fill.
+  // HospitalOS: los cargos de un episodio vivo con el CFDI que los cobró, y el
+  // depósito con su CFDI de anticipo (lib/hospital/episodios-vivos-cfdi). Local;
+  // además se encadena tras sat-rawxml-backfill. Sin empresas hospital, no-op.
+  { name: "hospital-cfdi-vincular", everyMs: 6 * HOUR, firstDelayMs: 52 * MIN, minMs: MIN_LOCAL },
   { name: "agenda-sat", everyMs: 15 * MIN, firstDelayMs: 18 * MIN, minMs: MIN_CARO },
   // Inventario automotriz: deriva unidades de los CFDIs recién bajados (parse
   // local del rawXml, sin cuota SAT). Desfasado del rawxml-backfill para

@@ -72,6 +72,9 @@ export const CLAVES_MOTOR = [
   "CLIENTES",
   "COMISION_TERMINAL",
   "IVA_ACREDITABLE",
+  "MERMA_FARMACIA",
+  "SOBRANTE_INVENTARIO",
+  "IVA_TRASLADADO_COBRADO",
 ] as const;
 
 export type ClaveMotor = (typeof CLAVES_MOTOR)[number];
@@ -110,6 +113,14 @@ export const MAPA_DEFAULT: Record<ClaveMotor, DefinicionClave> = {
   CLIENTES: { clave: "CLIENTES", descripcion: "Clientes (cuenta por cobrar del paciente o pagador)", cuentaSAT: "105.01", tipo: "ACTIVO" },
   COMISION_TERMINAL: { clave: "COMISION_TERMINAL", descripcion: "Comisión del adquirente por cobros con terminal", cuentaSAT: "701.10", tipo: "GASTO" },
   IVA_ACREDITABLE: { clave: "IVA_ACREDITABLE", descripcion: "IVA acreditable pagado (comisión de la terminal)", cuentaSAT: "118.01", tipo: "ACTIVO" },
+  // Kardex que no es venta: la merma, la caducidad y el faltante de un conteo
+  // salen del inventario a un costo que no es de venta; el sobrante entra
+  // como otro producto. Sin esto 115.01 no bajaba nunca por esas salidas.
+  MERMA_FARMACIA: { clave: "MERMA_FARMACIA", descripcion: "Merma, caducidad y faltantes de inventario de farmacia", cuentaSAT: "501.08", tipo: "COSTO" },
+  SOBRANTE_INVENTARIO: { clave: "SOBRANTE_INVENTARIO", descripcion: "Sobrantes de inventario de farmacia (conteo físico)", cuentaSAT: "704.23", tipo: "INGRESO" },
+  // El IVA del depósito cobrado sin CFDI de anticipo (Art. 1-B LIVA): se causa
+  // al cobro. Sólo se usa si HospConfig.ivaAnticiposTasa está definida.
+  IVA_TRASLADADO_COBRADO: { clave: "IVA_TRASLADADO_COBRADO", descripcion: "IVA trasladado cobrado en depósitos de pacientes sin CFDI de anticipo", cuentaSAT: "208.01", tipo: "PASIVO" },
 };
 
 export function esClaveMotor(s: unknown): s is ClaveMotor {
@@ -130,6 +141,10 @@ export const CUENTAS_HOSPITAL: CatalogAccount[] = [
   { cuentaSAT: "206", subcuenta: "206.01", nombre: "Anticipo de cliente nacional", tipo: "PASIVO", nivel: 3 },
   { cuentaSAT: "216", subcuenta: "216.10", nombre: "Impuestos retenidos de IVA", tipo: "PASIVO", nivel: 3 },
   { cuentaSAT: "401", subcuenta: "401.04", nombre: "Ventas y/o servicios gravados al 0%", tipo: "INGRESO", nivel: 3 },
+  { cuentaSAT: "501", subcuenta: "501.08", nombre: "Otros conceptos de costo", tipo: "COSTO", nivel: 3 },
+  // 704 es ingreso: sin declararlo, el tipo por el primer dígito lo haría gasto.
+  { cuentaSAT: "704", subcuenta: null, nombre: "Otros productos", tipo: "INGRESO", nivel: 2 },
+  { cuentaSAT: "704", subcuenta: "704.23", nombre: "Otros productos", tipo: "INGRESO", nivel: 3 },
 ];
 
 // ─── Cargo → clave ───────────────────────────────────────────────────────────
@@ -220,17 +235,20 @@ export interface ConfigContable {
   cuentas: ConfigCuentas;
   /** RFC de la empresa: sólo una persona MORAL retiene a los médicos (Art. 106 LISR). */
   empresaRetiene: boolean;
+  /** HospConfig.ivaAnticiposTasa: con qué tasa se parte el IVA de un depósito sin CFDI de anticipo; null = no se parte. */
+  ivaAnticiposTasa?: number | null;
 }
 
 export async function cargarConfigContable(db: Db, companyId: string): Promise<ConfigContable> {
   const [config, company] = await Promise.all([
-    db.hospConfig.findUnique({ where: { companyId }, select: { contabilidadActiva: true, cuentasContables: true } }),
+    db.hospConfig.findUnique({ where: { companyId }, select: { contabilidadActiva: true, cuentasContables: true, ivaAnticiposTasa: true } }),
     db.company.findUnique({ where: { id: companyId }, select: { rfc: true } }),
   ]);
   return {
     activa: config?.contabilidadActiva ?? false,
     cuentas: leerConfigCuentas(config?.cuentasContables),
     empresaRetiene: (company?.rfc ?? "").trim().length === 12,
+    ivaAnticiposTasa: config?.ivaAnticiposTasa == null ? null : Number(config.ivaAnticiposTasa),
   };
 }
 

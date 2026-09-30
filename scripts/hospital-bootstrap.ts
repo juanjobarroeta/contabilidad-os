@@ -34,6 +34,7 @@ import { clasificarInsumo, derivarInsumosBackfill, etiquetarControlados } from "
 // la misma regla en el script y en la derivación de expedientes.
 import { categoriaDe, nombreDePaciente, nombrePropio, normalizarDescripcion, partirNombre } from "../src/lib/hospital/cfdi-texto";
 import { derivarEpisodiosDeCfdi, type ReporteEpisodiosCfdi } from "../src/lib/hospital/episodios-cfdi";
+import { vincularCfdisVivos } from "../src/lib/hospital/episodios-vivos-cfdi";
 
 const prisma = new PrismaClient();
 
@@ -308,6 +309,11 @@ async function main() {
   // Lo hace la lib (episodios-cfdi.ts): lee por páginas, escribe una
   // transacción por episodio y se reconecta sola si el proxy corta.
   if (!soloFarmacia) {
+    // Antes de reconstruir: los CFDIs que ya son de un episodio VIVO se ligan
+    // a sus cargos; si no, la reconstrucción les fabricaría un episodio
+    // duplicado (lib/hospital/episodios-vivos-cfdi).
+    const vivos = await vincularCfdisVivos(prisma, cid, { dry });
+    console.log(`  ✓ episodios vivos: ${vivos.vinculados.length} CFDIs ligados · ${vivos.cfdisPendientes.length} por revisar · ${vivos.depositosLigados} depósitos con su CFDI de anticipo`);
     const expedientes = await derivarEpisodiosDeCfdi(prisma, cid, {
       dry,
       desde: aFecha(arg("--desde")),
