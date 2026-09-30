@@ -653,6 +653,7 @@ GET  /api/hospital/liquidaciones?companyId=[&desde&hasta&afiliacionId] · POST {
        ivaComision, neto, bankTransactionId?, notas? } → 201; rechaza el lote que no cierra o cuyos cobros no suman el bruto, y marca sus cobros DEPOSITADOS
 GET  /api/hospital/liquidaciones/sugerencias?companyId=&afiliacionId=&neto=[&fecha&dias] → { pendientes, dias: [{ dia, cobroIds, bruto, netoEsperado, distancia }] }
        · agrupa lo pendiente por día de operación y lo ordena por cercanía al depósito. PROPONE, no asigna: el lote lo confirma una persona
+       · páginas Caja o Bancos (escribir exige FINANZAS_ESCRIBIR); la pantalla es «Depósitos de la terminal» en Bancos del satélite
 GET  /api/hospital/contabilidad/apertura?companyId= → { apertura: { fecha, cuentas: [{ codigo, nombre, tipo, naturaleza, saldo }], total } | null, catalogo }
 POST /api/hospital/contabilidad/apertura/leer-balanza  multipart { archivo xlsx/csv } (o JSON { base64, nombre }) → { columnas, lineas: [{ fila, codigo, nombre, saldoDeudor,
        saldoAcreedor, saldo (signo natural, listo para POST apertura), agrupadora, cuentaSugerida, confianza: EXACTA|PREFIJO|NOMBRE|null }], sinMapear,
@@ -918,6 +919,12 @@ flujo de efectivo en `src/lib/hospital/flujo-efectivo.ts`; padrón en
   de bancos (último corte) + cobranza esperada (plazo del convenio o 30 d) −
   órdenes por pagar − facturas de proveedor sin orden (30 d) − nómina estimada,
   por semana. Sin presupuestos ni impuestos.
+
+Usuarios guarda los permisos en dos grupos (`PATCH /usuarios/[id]/clinica { permisos, grupo }`): `clinicos`
+(con la identidad médica) y `operacion` (`FINANZAS_ESCRIBIR`, `COMPRAS_AUTORIZAR`, `PAGOS_AUTORIZAR`,
+`TESORERIA_PAGAR`). Guardar un grupo conserva el otro. `medicoId` ausente, o igual al profesional ya vinculado y
+verificado, no toca la identidad médica: sólo un profesional distinto pasa por la verificación (evidencia y otro
+administrador).
 
 ## Lo que NO hace (por diseño, v1)
 
