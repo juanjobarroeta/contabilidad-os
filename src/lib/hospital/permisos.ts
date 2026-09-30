@@ -5,6 +5,32 @@ import { DEMO_CEDULA, demoMedicalGrant, isDemoPatient } from "./demo";
 export const PERMISOS_CLINICOS = ["CLINICA_LEER", "CLINICA_ESCRIBIR", "ADMINISTRAR", "ALTA", "PRESCRIBIR", "FINANZAS_ESCRIBIR", "COMPRAS_AUTORIZAR", "PAGOS_AUTORIZAR", "TESORERIA_PAGAR"] as const;
 export type PermisoClinico = typeof PERMISOS_CLINICOS[number];
 
+// Dos grupos que se administran por separado en Usuarios: lo clínico (va con
+// la identidad médica verificada) y lo de operación (dinero, compras, pagos).
+// Guardar un grupo nunca toca el otro.
+export const PERMISOS_OPERACION = ["FINANZAS_ESCRIBIR", "COMPRAS_AUTORIZAR", "PAGOS_AUTORIZAR", "TESORERIA_PAGAR"] as const satisfies readonly PermisoClinico[];
+export type GrupoPermisos = "clinicos" | "operacion";
+
+export function permisosDelGrupo(grupo: GrupoPermisos): PermisoClinico[] {
+  const op = new Set<string>(PERMISOS_OPERACION);
+  return PERMISOS_CLINICOS.filter((p) => (grupo === "operacion") === op.has(p));
+}
+
+/**
+ * Reemplaza sólo las llaves de `grupo`; las del otro grupo se conservan tal
+ * como están. Sin grupo, `nuevos` es la lista completa (compatibilidad).
+ * Lanza 400 si `nuevos` trae una llave de otro grupo.
+ */
+export function combinarPermisos(actuales: readonly string[], nuevos: readonly PermisoClinico[], grupo?: GrupoPermisos): PermisoClinico[] {
+  if (!grupo) return [...new Set(nuevos)];
+  const delGrupo = new Set<string>(permisosDelGrupo(grupo));
+  const ajena = nuevos.find((p) => !delGrupo.has(p));
+  if (ajena) throw new AuthzError(400, `El permiso ${ajena} no pertenece a este grupo`);
+  const validos = new Set<string>(PERMISOS_CLINICOS);
+  const conservados = actuales.filter((p) => validos.has(p) && !delGrupo.has(p)) as PermisoClinico[];
+  return [...new Set([...conservados, ...nuevos])];
+}
+
 const ACCION_POR_PERMISO: Record<PermisoClinico, string> = {
   CLINICA_LEER: "consultar expedientes clínicos",
   CLINICA_ESCRIBIR: "escribir o modificar información clínica",
@@ -30,7 +56,7 @@ const paginas: Record<string, string[]> = {
   mantenimiento: ["mantenimiento"], compras: ["compras"], caja: ["caja"],
   usuarios: ["usuarios"], config: ["configuracion"], cumplimiento: ["cumplimiento"],
   contabilidad: ["contabilidad"], fiscal: ["impuestos"], bancos: ["bancos"], nomina: ["nomina"],
-  cartera: ["cuentas", "panel"], facturacion: ["facturacion", "caja", "cuentas"], contactos: ["clientes", "proveedores"], liquidaciones: ["medicos"], depositos: ["cuentas", "caja"], cobros: ["caja"], afiliaciones: ["convenios", "pacientes"], empleados: ["nomina"], buscar: ["pacientes", "episodios"], "validar-curp": ["pacientes", "medicos"],
+  cartera: ["cuentas", "panel"], facturacion: ["facturacion", "caja", "cuentas"], contactos: ["clientes", "proveedores"], liquidaciones: ["caja", "bancos"], depositos: ["cuentas", "caja"], cobros: ["caja"], afiliaciones: ["convenios", "pacientes", "caja", "bancos"], empleados: ["nomina"], buscar: ["pacientes", "episodios"], "validar-curp": ["pacientes", "medicos"],
   proveedores: ["proveedores", "compras", "requisiciones", "tesoreria", "medicos"],
   requisiciones: ["requisiciones", "compras", "tesoreria"], ordenes: ["requisiciones", "compras", "tesoreria"],
   tesoreria: ["tesoreria"], flujo: ["tesoreria", "panel"],
