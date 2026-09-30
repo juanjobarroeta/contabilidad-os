@@ -1,3 +1,4 @@
+import { isDemoPatient } from '@/lib/hospital/demo';
 import { prisma } from '@/lib/prisma';
 import { AuthzError, requireMembership, requireModule } from '@/lib/authz';
 import { withHospital } from '@/lib/hospital/with-hospital';
@@ -32,7 +33,7 @@ export const POST = withHospital(async (req: Request, ctx: Ctx) => {
   const parsed = gestionSchema.safeParse(await req.json());
   if (!parsed.success) return errorZod(parsed.error);
   const d = parsed.data;
-  if (['RESUMEN_ENTREGA', 'VOLUNTAD_ANTICIPADA'].includes(d.tipo)) await requirePractitioner(p.companyId, user.id);
+  if (['RESUMEN_ENTREGA', 'VOLUNTAD_ANTICIPADA'].includes(d.tipo)) await requirePractitioner(p.companyId, user.id, undefined, p.id);
   if (['RETENCION', 'ARCO_RESOLUCION', 'PRIVACIDAD_EXCEPCION'].includes(d.tipo) && !['OWNER', 'ADMIN'].includes(membership.role)) throw new AuthzError(403, 'Esta resolución requiere al responsable administrativo autorizado');
   if (d.tipo === 'PRIVACIDAD_CONSENTIMIENTO') {
     const config = await prisma.hospConfig.findUnique({ where: { companyId: p.companyId } });
@@ -46,7 +47,7 @@ export const POST = withHospital(async (req: Request, ctx: Ctx) => {
       const linked = await tx.hospControlEvento.findFirst({ where: { id: linkedId, companyId: p.companyId, referencia: p.id, tipo: expected } });
       if (!linked) throw new AuthzError(400, 'La solicitud o consentimiento no corresponde a este paciente');
     }
-    return tx.hospControlEvento.create({ data: { companyId: p.companyId, referencia: p.id, tipo: `GESTION_${d.tipo}`, actorId: user.id, datos: d } });
+    return tx.hospControlEvento.create({ data: { companyId: p.companyId, referencia: p.id, tipo: `GESTION_${d.tipo}`, actorId: user.id, datos: { ...d, soloDemostracion: await isDemoPatient(p.companyId, p.id) } } });
   });
   return Response.json(event, { status: 201 });
 });

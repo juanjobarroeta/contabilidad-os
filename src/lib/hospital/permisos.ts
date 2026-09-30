@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { AuthzError, requireMembership } from "@/lib/authz";
+import { DEMO_CEDULA, demoMedicalGrant, isDemoPatient } from "./demo";
 
 export const PERMISOS_CLINICOS = ["CLINICA_LEER", "CLINICA_ESCRIBIR", "ADMINISTRAR", "ALTA", "PRESCRIBIR", "FINANZAS_ESCRIBIR"] as const;
 export type PermisoClinico = typeof PERMISOS_CLINICOS[number];
@@ -67,10 +68,17 @@ export async function requireClinicalPermission(companyId: string, userId: strin
   }
 }
 
-export async function requirePractitioner(companyId: string, userId: string, requestedId?: string | null) {
+export async function requirePractitioner(companyId: string, userId: string, requestedId?: string | null, pacienteId?: string) {
   const medico = await prisma.hospMedico.findUnique({ where: { companyId_userId: { companyId, userId } } });
-  if (!medico?.activo || !medico.credencialVerificadaAt || !medico.credencialEvidencia || !medico.cedula || (requestedId && requestedId !== medico.id)) {
+  if (medico?.activo && medico.cedula === DEMO_CEDULA && (!requestedId || requestedId === medico.id)) {
+    const grant = await demoMedicalGrant(companyId, userId);
+    if (pacienteId && grant?.medicoId === medico.id && grant.pacienteIds.includes(pacienteId) && await isDemoPatient(companyId, pacienteId)) {
+      return { ...medico, soloDemostracion: true };
+    }
+    throw new AuthzError(403, "Tu acceso médico de demostración sólo permite firmar en el paciente DEMO habilitado. Abre su expediente para continuar la demostración. Para atender pacientes reales, un administrador debe verificar tu identidad profesional.");
+  }
+  if (!medico?.activo || medico.cedula === DEMO_CEDULA || !medico.credencialVerificadaAt || !medico.credencialEvidencia || !medico.cedula || (requestedId && requestedId !== medico.id)) {
     throw new AuthzError(403, "No puedes firmar como médico con este usuario. Un administrador debe vincular tu cuenta a tu perfil médico y verificar tu cédula en Usuarios. Si ya tienes un perfil verificado, debes firmar con tu propia identidad.");
   }
-  return medico;
+  return { ...medico, soloDemostracion: false };
 }

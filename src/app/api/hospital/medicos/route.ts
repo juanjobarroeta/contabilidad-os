@@ -10,6 +10,7 @@
  * el hub los parte por heurística (sin pisar valores explícitos).
  */
 
+import { DEMO_CEDULA, demoMedicalGrant } from "@/lib/hospital/demo";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -25,7 +26,7 @@ export const GET = withHospital(async (req: Request) => {
   const companyId = searchParams.get("companyId");
   if (!companyId) return error("companyId requerido");
 
-  const { membership } = await requireMembership(companyId, undefined, req);
+  const { membership, user } = await requireMembership(companyId, undefined, req);
   await requireModule(companyId, "HOSPITAL", req);
 
   const todos = searchParams.get("todos") === "1";
@@ -49,11 +50,14 @@ export const GET = withHospital(async (req: Request) => {
       _sum: { importe: true },
     }),
   ]);
+  const demoGrant = await demoMedicalGrant(companyId, user.id);
   const porMedico = new Map(honorarios.map((h) => [h.medicoId, Number(h._sum.importe ?? 0)]));
 
   return NextResponse.json(
     medicos.map(({ _count, ...m }) => ({
       ...m,
+      soloDemostracion: m.cedula === DEMO_CEDULA,
+      pacientesDemostracion: m.userId === user.id && demoGrant?.medicoId === m.id ? demoGrant.pacienteIds : [],
       credencialEvidencia: ["OWNER", "ADMIN"].includes(membership.role) ? m.credencialEvidencia : undefined,
       episodiosActivos: _count.episodios,
       honorariosMes: r2(porMedico.get(m.id) ?? 0),
