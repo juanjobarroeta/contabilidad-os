@@ -60,11 +60,14 @@ export const POST = withHospital(async (req: Request, ctx: { params: Promise<{ i
   if (d.tipo === "INDICACION") await requireClinicalPermission(ep.companyId, user.id, "PRESCRIBIR");
   const autor = PLANTILLAS_NOTA[d.tipo].medica ? await requirePractitioner(ep.companyId, user.id, d.medicoId, ep.pacienteId) : null;
   if (d.autorCedula && d.autorCedula !== autor?.cedula) return error("La cédula debe corresponder al autor verificado", 403);
-  const nota = await crearNota(prisma, {
+  const esDemo = await isDemoPatient(ep.companyId, ep.pacienteId);
+  const nota = await prisma.$transaction(async tx => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`episodio:${id}`}))`;
+    return crearNota(tx, {
     companyId: ep.companyId,
     episodioId: ep.id,
     tipo: d.tipo,
-    texto: demoText(d.texto, await isDemoPatient(ep.companyId, ep.pacienteId)),
+    texto: demoText(d.texto, esDemo),
     secciones: d.secciones ?? null,
     fecha: aFecha(d.fecha),
     medicoId: autor?.id ?? null,
@@ -72,6 +75,7 @@ export const POST = withHospital(async (req: Request, ctx: { params: Promise<{ i
     reemplazaId: d.reemplazaId ?? null,
     asistencia: normalizarAsistencia(d.asistencia ?? null),
     usuario: usuarioDe(user),
+    });
   });
 
   bitacora(user, req, {

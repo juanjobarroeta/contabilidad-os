@@ -26,5 +26,9 @@ export async function exigirPreparacionQuirurgica(db: Prisma.TransactionClient, 
     const verified = await db.hospMedico.count({ where: { companyId, userId: { in: ids }, activo: true, credencialVerificadaAt: { not: null } } });
     if (verified >= 2) return { modalidad: "URGENCIA", faltantes: faltan, evidencias: group.map(e => e.id) };
   }
-  throw new HospitalError(409, `Preparación incompleta: ${faltan.join(", ")}. En urgencia documenta la excepción con dos médicos autorizados.`);
+  const etiquetas: Record<string, string> = {
+    CONSENTIMIENTO_CIRUGIA: "consentimiento de cirugía firmado", CONSENTIMIENTO_ANESTESIA: "consentimiento de anestesia firmado",
+    VERIFICACION_IDENTIDAD_PROCEDIMIENTO_ALERGIAS: "verificación reciente de identidad, procedimiento y alergias",
+  };
+  throw new HospitalError(409, `Antes de registrar el ingreso a quirófano, completa: ${faltan.map(f => etiquetas[f]).join(", ")}. El personal autorizado puede registrar la verificación en Preparación quirúrgica. Si existe una urgencia, dos médicos deben documentar la excepción.`);
 }
