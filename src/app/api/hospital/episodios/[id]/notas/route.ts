@@ -12,6 +12,7 @@
  */
 
 import { requirePractitioner, requireClinicalPermission } from "@/lib/hospital/permisos";
+import { demoText, isDemoPatient } from "@/lib/hospital/demo";
 import { PLANTILLAS_NOTA } from "@/lib/hospital/notas";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -48,7 +49,7 @@ export const POST = withHospital(async (req: Request, ctx: { params: Promise<{ i
   if (!parsed.success) return errorZod(parsed.error);
   const d = parsed.data;
 
-  const ep = await prisma.hospEpisodio.findUnique({ where: { id }, select: { id: true, companyId: true, estado: true, folio: true, medicoId: true } });
+  const ep = await prisma.hospEpisodio.findUnique({ where: { id }, select: { id: true, companyId: true, estado: true, folio: true, medicoId: true, pacienteId: true } });
   if (!ep) throw new AuthzError(404, "Episodio no encontrado");
 
   const { user } = await requireWriter(ep.companyId, req);
@@ -57,13 +58,13 @@ export const POST = withHospital(async (req: Request, ctx: { params: Promise<{ i
 
   if (d.tipo === "MEDICAMENTO_APLICADO") return error("Registra la administración desde Aplicar insumo", 400);
   if (d.tipo === "INDICACION") await requireClinicalPermission(ep.companyId, user.id, "PRESCRIBIR");
-  const autor = PLANTILLAS_NOTA[d.tipo].medica ? await requirePractitioner(ep.companyId, user.id, d.medicoId) : null;
+  const autor = PLANTILLAS_NOTA[d.tipo].medica ? await requirePractitioner(ep.companyId, user.id, d.medicoId, ep.pacienteId) : null;
   if (d.autorCedula && d.autorCedula !== autor?.cedula) return error("La cédula debe corresponder al autor verificado", 403);
   const nota = await crearNota(prisma, {
     companyId: ep.companyId,
     episodioId: ep.id,
     tipo: d.tipo,
-    texto: d.texto,
+    texto: demoText(d.texto, await isDemoPatient(ep.companyId, ep.pacienteId)),
     secciones: d.secciones ?? null,
     fecha: aFecha(d.fecha),
     medicoId: autor?.id ?? null,

@@ -14,6 +14,7 @@
  * tratante. `seguimiento` registra la llamada posterior al alta.
  */
 
+import { demoText, isDemoPatient } from "@/lib/hospital/demo";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import type { HospAccesoAccion, HospEpisodioEstado } from "@prisma/client";
@@ -104,6 +105,7 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
 
   return NextResponse.json({
     ...datos,
+    esDemostracion: await isDemoPatient(e.companyId, e.pacienteId),
     paciente: {
       ...paciente,
       ...pacienteResumen(paciente, hoy),
@@ -218,7 +220,7 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
     if (d.estado === "CANCELADO") return error("La cancelación se registra con action: \"cancelar\"", 400);
     if (!esActivo(ep.estado)) return error(`El episodio ${ep.folio} está ${ep.estado === "ALTA" ? "dado de alta" : "cancelado"}`, 409);
     if (d.estado === "EN_QUIROFANO") {
-      await requirePractitioner(ep.companyId, user.id);
+      await requirePractitioner(ep.companyId, user.id, undefined, ep.pacienteId);
 
     }
     if (d.estado === ep.estado) return error(`El episodio ya está ${ep.estado}`, 409);
@@ -278,7 +280,7 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
   // ── alta ──
   if (d.action === "alta") {
     await requireClinicalPermission(ep.companyId, user.id, "ALTA");
-    const autorAlta = await requirePractitioner(ep.companyId, user.id);
+    const autorAlta = await requirePractitioner(ep.companyId, user.id, undefined, ep.pacienteId);
     if (!esActivo(ep.estado)) return error(`El episodio ${ep.folio} ya está ${ep.estado === "ALTA" ? "dado de alta" : "cancelado"}`, 409);
     if (ep.estado === "PROGRAMADO") return error("Un episodio programado se cancela, no se da de alta", 409);
     const fechaAlta = aFecha(d.fechaAlta) ?? ahora;
@@ -332,7 +334,7 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
           companyId: ep.companyId,
           episodioId: id,
           tipo: "EGRESO",
-          texto: nota,
+          texto: demoText(nota, autorAlta.soloDemostracion),
           secciones: {
             diagnosticoEgreso: `${egreso.codigo} ${egreso.nombre}`,
             motivoEgreso: d.motivoEgreso,
