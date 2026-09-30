@@ -3,6 +3,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, requireModule, requireWriter, withAuthz } from "@/lib/authz";
 import { registrarBitacora } from "@/lib/audit";
+import { HospitalError } from "@/lib/hospital/errores";
+import { partidaRecibible, validarCantidadRecibida } from "@/lib/hospital/requisiciones";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/hospital/farmacia/lotes
@@ -42,6 +44,9 @@ const schema = z.object({
   supplierId: z.string().min(1).nullable().optional(),
   fecha: fechaIso.optional(),
   nota: z.string().trim().max(300).optional(),
+  // Recepción contra la línea de una orden de compra autorizada: suma a lo
+  // recibido de esa línea y el lote hereda el proveedor de la orden.
+  solicitudPartidaId: z.string().min(1).nullable().optional(),
 });
 
 export const POST = withAuthz(async (req: Request) => {
@@ -54,7 +59,8 @@ export const POST = withAuthz(async (req: Request) => {
   const { companyId, insumoId, lote: nombreLote, cantidad, costoUnitario, nota } = parsed.data;
   const caducidad = parsed.data.caducidad ?? null;
   const invoiceId = parsed.data.invoiceId ?? null;
-  const supplierId = parsed.data.supplierId ?? null;
+  let supplierId = parsed.data.supplierId ?? null;
+  const solicitudPartidaId = parsed.data.solicitudPartidaId ?? null;
   const fecha = parsed.data.fecha ?? new Date();
 
   const { user } = await requireWriter(companyId, req);
@@ -72,6 +78,19 @@ export const POST = withAuthz(async (req: Request) => {
   if (!insumo) throw new AuthzError(404, "Insumo no encontrado");
   if (invoiceId && !invoice) throw new AuthzError(404, "CFDI no encontrado en esta empresa");
   if (supplierId && !supplier) throw new AuthzError(404, "Proveedor no encontrado en esta empresa");
+  let folioOrden: string | null = null;
+  if (solicitudPartidaId) {
+    try {
+      const partida = await partidaRecibible(prisma, solicitudPartidaId, companyId);
+      if (partida.hospInsumoId !== insumoId) throw new HospitalError(409, "La línea de la orden es de otro insumo");
+      validarCantidadRecibida(partida, cantidad);
+      supplierId = supplierId ?? partida.solicitud.supplierId ?? null;
+      folioOrden = partida.solicitud.folio;
+    } catch (e) {
+      if (e instanceof HospitalError) return NextResponse.json({ error: e.message }, { status: e.status });
+      throw e;
+    }
+  }
 
   const usuarioNombre = user.name ?? user.email ?? null;
   const refCfdi = invoice ? ([invoice.serie, invoice.folio].filter(Boolean).join("-") || invoice.uuid || invoice.id) : null;
@@ -101,6 +120,7 @@ export const POST = withAuthz(async (req: Request) => {
 
     const referencia = [
       previo ? `Recepción adicional al lote ${nombreLote}` : `Recepción del lote ${nombreLote}`,
+      folioOrden ? `orden ${folioOrden}` : null,
       nota || null,
     ]
       .filter(Boolean)
@@ -120,7 +140,7 @@ export const POST = withAuthz(async (req: Request) => {
       movimiento = await tx.hospMovimientoInsumo.update({
         where: { id: derivado.id },
         data: {
-          loteId: lote.id, cantidad, costoUnitario, fecha,
+          loteId: lote.id, cantidad, costoUnitario, fecha, solicitudPartidaId,
           referencia: `${referencia} · CFDI ${refCfdi} (${r2(Number(derivado.cantidad))} facturados)`,
           usuarioId: user.id, usuarioNombre,
         },
@@ -128,7 +148,7 @@ export const POST = withAuthz(async (req: Request) => {
     } else {
       movimiento = await tx.hospMovimientoInsumo.create({
         data: {
-          companyId, insumoId, loteId: lote.id, tipo: "ENTRADA_COMPRA", cantidad, costoUnitario, fecha,
+          companyId, insumoId, loteId: lote.id, tipo: "ENTRADA_COMPRA", cantidad, costoUnitario, fecha, solicitudPartidaId,
           // El invoiceId sólo puede vivir en UNA entrada por insumo: si ya lo
           // tiene otro lote de este CFDI, aquí va en texto.
           invoiceId: derivado ? null : invoiceId,
@@ -138,6 +158,11 @@ export const POST = withAuthz(async (req: Request) => {
       });
     }
 
+    if (solicitudPartidaId) {
+      // Condicionada a lo que falta: dos recepciones simultáneas no pasan de lo pedido.
+      const n = await tx.$executeRaw`UPDATE "SolicitudPartida" SET "cantidadRecibida" = "cantidadRecibida" + ${cantidad} WHERE id = ${solicitudPartidaId} AND "cantidadRecibida" + ${cantidad} <= cantidad + 0.000001`;
+      if (n !== 1) throw new AuthzError(409, "La línea de la orden ya no tiene esa cantidad por recibir");
+    }
     await tx.hospInsumo.update({ where: { id: insumoId }, data: { ultimoCosto: costoUnitario } });
     const existencia = await tx.hospMovimientoInsumo.aggregate({ where: { insumoId }, _sum: { cantidad: true } });
     return { lote, movimiento, adoptadoDeCfdi, existencia: r2(Number(existencia._sum.cantidad ?? 0)), sumadoALote: !!previo };
@@ -152,7 +177,7 @@ export const POST = withAuthz(async (req: Request) => {
     entidadId: resultado.lote.id,
     detalle: {
       insumoId, clave: insumo.clave, lote: nombreLote, cantidad, costoUnitario,
-      caducidad: caducidad?.toISOString() ?? null, invoiceId, adoptadoDeCfdi: resultado.adoptadoDeCfdi,
+      caducidad: caducidad?.toISOString() ?? null, invoiceId, adoptadoDeCfdi: resultado.adoptadoDeCfdi, solicitudPartidaId,
     },
     req,
   });

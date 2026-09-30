@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { AuthzError, requireMembership } from "@/lib/authz";
 import { DEMO_CEDULA, demoMedicalGrant, isDemoPatient } from "./demo";
 
-export const PERMISOS_CLINICOS = ["CLINICA_LEER", "CLINICA_ESCRIBIR", "ADMINISTRAR", "ALTA", "PRESCRIBIR", "FINANZAS_ESCRIBIR"] as const;
+export const PERMISOS_CLINICOS = ["CLINICA_LEER", "CLINICA_ESCRIBIR", "ADMINISTRAR", "ALTA", "PRESCRIBIR", "FINANZAS_ESCRIBIR", "COMPRAS_AUTORIZAR", "PAGOS_AUTORIZAR", "TESORERIA_PAGAR"] as const;
 export type PermisoClinico = typeof PERMISOS_CLINICOS[number];
 
 const ACCION_POR_PERMISO: Record<PermisoClinico, string> = {
@@ -12,6 +12,9 @@ const ACCION_POR_PERMISO: Record<PermisoClinico, string> = {
   ALTA: "dar de alta a pacientes",
   PRESCRIBIR: "registrar indicaciones médicas",
   FINANZAS_ESCRIBIR: "registrar o modificar operaciones financieras",
+  COMPRAS_AUTORIZAR: "autorizar requisiciones de compra",
+  PAGOS_AUTORIZAR: "autorizar pagos a proveedores",
+  TESORERIA_PAGAR: "registrar pagos de tesorería",
 };
 function mensajeSinPermiso(permission: PermisoClinico) {
   return `Tu usuario no tiene permiso para ${ACCION_POR_PERMISO[permission]} en este hospital. Pide a un administrador que habilite este acceso en Usuarios.`;
@@ -28,6 +31,9 @@ const paginas: Record<string, string[]> = {
   usuarios: ["usuarios"], config: ["configuracion"], cumplimiento: ["cumplimiento"],
   contabilidad: ["contabilidad"], fiscal: ["impuestos"], bancos: ["bancos"], nomina: ["nomina"],
   cartera: ["cuentas", "panel"], facturacion: ["facturacion", "caja", "cuentas"], contactos: ["clientes", "proveedores"], liquidaciones: ["medicos"], depositos: ["cuentas", "caja"], cobros: ["caja"], afiliaciones: ["convenios", "pacientes"], empleados: ["nomina"], buscar: ["pacientes", "episodios"], "validar-curp": ["pacientes", "medicos"],
+  proveedores: ["proveedores", "compras", "requisiciones", "tesoreria", "medicos"],
+  requisiciones: ["requisiciones", "compras", "tesoreria"], ordenes: ["requisiciones", "compras", "tesoreria"],
+  tesoreria: ["tesoreria"], flujo: ["tesoreria", "panel"],
   panel: ["panel", "alertas"], alertas: ["alertas"], servicios: ["convenios", "cotizaciones", "cuentas"],
   catalogos: ["episodios", "pacientes", "saeh", "medicos"],
 };
@@ -48,7 +54,7 @@ export async function enforceHospitalAccess(companyId: string, userId: string, r
   if (["usuarios", "cumplimiento"].includes(root) || (root === "config" && writing)) {
     if (!admin) throw new AuthzError(403, "Sólo un administrador del hospital puede realizar esta acción. Contacta al administrador de tu hospital.");
   }
-  if (writing && ["cuentas", "caja", "depositos", "cobros", "bancos", "contabilidad", "liquidaciones", "facturacion", "nomina"].includes(root)) {
+  if (writing && ["cuentas", "caja", "depositos", "cobros", "bancos", "contabilidad", "liquidaciones", "facturacion", "nomina", "tesoreria"].includes(root)) {
     if (membership.role === "VIEWER" || !member?.hospitalPermisos.includes("FINANZAS_ESCRIBIR")) throw new AuthzError(403, mensajeSinPermiso("FINANZAS_ESCRIBIR"));
   }
   const clinical = ["pacientes", "episodios", "documentos", "saeh", "buscar", "censo", "citas", "planes", "panel", "registros"].includes(root) || (root === "farmacia" && ["kardex", "libro-control"].includes(path[1]));

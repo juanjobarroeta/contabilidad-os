@@ -3329,6 +3329,15 @@ model SolicitudCompra {
   // When paid, link to the BankTransaction that funded it
   bankTransactionId String? @unique
 
+  // Hospital (requisiciones desde HospitalOS). `origen` separa las del
+  // hospital de las de obra; `area` es quién pide (Enfermería, Quirófano…).
+  // Rechazo: quién, cuándo y por qué (la requisición no se borra).
+  origen          String?
+  area            String?
+  rechazadaPorId  String?
+  rechazadaAt     DateTime?
+  rechazoMotivo   String?
+
   proyecto        Proyecto?                   @relation(fields: [proyectoId], references: [id])
   supplier        Supplier?                   @relation(fields: [supplierId], references: [id])
   company         Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -3375,9 +3384,17 @@ model SolicitudPartida {
   cotizacionGanadoraId String?
   cotizacionGanadora   SolicitudCompraCotizacion? @relation("PartidaAdjudicada", fields: [cotizacionGanadoraId], references: [id], onDelete: SetNull)
 
+  // Hospital: insumo del catálogo de farmacia (el `insumoId` de arriba es el
+  // catálogo de obra) y lo recibido contra esta línea (lotes de farmacia o
+  // recepción manual de lo que no es insumo).
+  hospInsumoId     String?
+  hospInsumo       HospInsumo? @relation(fields: [hospInsumoId], references: [id], onDelete: SetNull)
+  cantidadRecibida Decimal     @default(0) @db.Decimal(18, 6)
+
   solicitud    SolicitudCompra              @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
   insumo       Insumo?                      @relation(fields: [insumoId], references: [id])
   cotizaciones SolicitudCotizacionPartida[]
+  hospMovimientos HospMovimientoInsumo[]
 }
 
 // ─── Cotizaciones (multi-vendor quotes for a requisición) ────────────────────
@@ -3451,7 +3468,10 @@ model SolicitudAdjudicacion {
   // movimientos bancarios: el banco se llena sólo con el CSV importado.
   estado             String    @default("POR_PAGAR") // POR_PAGAR | PARCIAL | PAGADA | CONCILIADA
   // Cuándo admin la mandó a tesorería para pago (workflow de cuentas por pagar).
+  // En el hospital es la AUTORIZACIÓN DE PAGO: quién la dio y para cuándo.
   enviadaTesoreriaAt DateTime?
+  pagoAutorizadoPorId String?
+  fechaProgramada    DateTime?
   pagadaAt           DateTime? // cuándo se registró el pago (comprobante)
   conciliadaAt       DateTime? // cuándo se empató con el movimiento bancario real
   referenciaPago     String? // referencia/folio SPEI capturado al registrar el pago
@@ -8252,6 +8272,7 @@ model HospInsumo {
   lotes       HospLote[]
   movimientos HospMovimientoInsumo[]
   protocoloInsumos HospProtocoloInsumo[]
+  solicitudPartidas SolicitudPartida[]
 
   @@unique([companyId, clave])
   @@index([companyId, categoria])
@@ -8327,16 +8348,20 @@ model HospMovimientoInsumo {
   asientoAt DateTime?
   prescriptorNombre String?
   prescriptorCedula String?
+  /// Recepción contra una línea de requisición autorizada (orden de compra).
+  solicitudPartidaId String?
 
   insumo   HospInsumo    @relation(fields: [insumoId], references: [id], onDelete: Cascade)
   lote     HospLote?     @relation(fields: [loteId], references: [id])
   episodio HospEpisodio? @relation(fields: [episodioId], references: [id])
   cargo    HospCargo?    @relation(fields: [cargoId], references: [id])
   invoice  Invoice?      @relation(fields: [invoiceId], references: [id])
+  solicitudPartida SolicitudPartida? @relation(fields: [solicitudPartidaId], references: [id], onDelete: SetNull)
 
   @@unique([insumoId, invoiceId, tipo])
   @@index([companyId, fecha])
   @@index([loteId])
+  @@index([solicitudPartidaId])
 }
 
 // ─── Mantenimiento ────────────────────────────────────────────────────────────

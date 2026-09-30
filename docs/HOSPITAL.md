@@ -874,6 +874,51 @@ usa para escribir. Se construye por pasos:
      `lib/nomina/corridas-especiales.ts`); la corrida sigue el flujo normal
      de revisión y timbrado.
 
+## Compras con control y tesorería
+
+Requisición → autorización → orden → recepción → CFDI → autorización de pago →
+tesorería → conciliación, sobre el motor de compras de obra (`SolicitudCompra`,
+`SolicitudAdjudicacion`, `PagoProveedor`/`PagoAplicacion`, `SupplierTerms`) con
+`SolicitudCompra.origen = "HOSPITAL"`. Reglas en `src/lib/hospital/requisiciones.ts`;
+flujo de efectivo en `src/lib/hospital/flujo-efectivo.ts`; padrón en
+`src/lib/hospital/proveedores.ts`. Migración aditiva
+`20261008_hospital_requisiciones_tesoreria`.
+
+- **Proveedores** (`/api/hospital/proveedores`, `…/[id]`): el `Supplier` del hub
+  (uno por RFC). Alta desde la requisición; CLABE, banco y crédito exigen
+  `FINANZAS_ESCRIBIR` y un cambio de CLABE queda en bitácora enmascarado.
+- **Requisición** (`/api/hospital/requisiciones`): un proveedor, líneas con
+  insumo del catálogo (`SolicitudPartida.hospInsumoId`) o texto libre, folio
+  `REQ-AAAA-NNNN`. Se guarda como una sola oferta adjudicada completa. Nace
+  PENDIENTE: **toda compra se autoriza**. Editable mientras está pendiente o
+  rechazada; se cancela, nunca se borra.
+- **Autorizar / rechazar** (`…/[id]/aprobar`, `…/[id]/rechazar`): permiso
+  `COMPRAS_AUTORIZAR`; nadie autoriza ni rechaza la suya. Al autorizar,
+  `generateAdjudicaciones` crea la **orden de compra** (una adjudicación con el
+  crédito del proveedor).
+- **Recepción**: insumos con su lote en Farmacia (`/farmacia/lotes` +
+  `solicitudPartidaId`: suma a `cantidadRecibida`, el lote hereda el proveedor
+  y el movimiento queda ligado a la línea); lo demás con
+  `/ordenes/[id]/recibir`. No se recibe de más (update condicionado).
+- **CFDI** (`/ordenes/[id]/cfdi`): candidatos del mismo RFC sin ligar, por
+  cercanía al total; el vínculo es `ConstruccionCfdiVinculo`
+  (`targetTipo = "ADJUDICACION"`). Compras marca cada CFDI con su orden y
+  cuenta los que no tienen (`totales.sinOrden`).
+- **Vencimiento**: factura más vieja ligada (o la autorización) + días de
+  crédito. **Etapa**: POR_RECIBIR → POR_FACTURAR → POR_AUTORIZAR_PAGO →
+  EN_TESORERIA → PAGADA → CONCILIADA (el banco ya mostró la salida contra la
+  factura).
+- **Autorizar pago** (`/ordenes/[id]/autorizar-pago`): `PAGOS_AUTORIZAR`, no
+  quien pidió; fecha programada opcional; se retira mientras no haya pagos.
+- **Pagar** (`/ordenes/[id]/pagar`): `TESORERIA_PAGAR`, sólo lo autorizado y no
+  quien lo autorizó. Crea el `PagoProveedor` aplicado (parciales). No toca
+  bancos ni mayor: se paga en el portal y se concilia después en el hub.
+- **Tesorería** (`/api/hospital/tesoreria`): por pagar autorizado, por
+  autorizar y pagado por conciliar. **Flujo** (`/api/hospital/flujo`): saldo
+  de bancos (último corte) + cobranza esperada (plazo del convenio o 30 d) −
+  órdenes por pagar − facturas de proveedor sin orden (30 d) − nómina estimada,
+  por semana. Sin presupuestos ni impuestos.
+
 ## Lo que NO hace (por diseño, v1)
 
 - No postea al mayor: la cuenta es WIP; el asiento nace con el CFDI.
