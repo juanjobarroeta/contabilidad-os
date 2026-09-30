@@ -28,8 +28,9 @@ import { costoPeriodico } from "./inventario-periodico";
 import { classifyInvoice } from "./classify-egreso";
 import { esComprobanteDeEgreso, espejo, signoDeComprobante } from "./nota-credito";
 import { cargarContextoTaller, costoCompraRefacciones, piernasIngresoTaller } from "./taller";
-import { cargarContextoHospital, piernasIngresoHospital, piernasResultadosHospital } from "./hospital";
+import { cargarComprasHospital, cargarContextoHospital, piernasIngresoHospital, piernasResultadosHospital } from "./hospital";
 import { esVentaAlCosto } from "./intercambio";
+import { baseNeta } from "../fiscal/base-neta";
 import { cargarReglasSerie, reglaDeSerie } from "./serie-cuenta";
 import {
   cargarIndiceFamilia,
@@ -528,7 +529,13 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       fecha: { gte: start, lt: end },
     },
   });
-  const ingresos = ingresosRows.map((i) => ({ ...i, subtotal: Number(i.subtotal), total: Number(i.total) }));
+  // BASE CONTABLE = SubTotal − Descuento. El libro registra la venta o la
+  // compra al precio pactado; con el subtotal bruto, el descuento se quedaba en
+  // ventas/gasto y el delta (total − subtotal) lo restaba del IVA. Desde aquí
+  // `subtotal` es la base neta en todo el asiento (piernas, delta, costos).
+  // El ISR del pago provisional PM sí va en bruto (#1180): eso vive en el
+  // motor fiscal, no en la contabilidad.
+  const ingresos = ingresosRows.map((i) => ({ ...i, subtotal: baseNeta(i.subtotal, i.descuento), total: Number(i.total) }));
 
   // FASE 2 (plan propio por FAMILIA): si el CFDI ampara una unidad NUEVA de
   // venta, la venta cae en la subcuenta de su familia (4101-00XX) y el costo
@@ -806,11 +813,12 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     },
     include: {
       items: {
-        select: { claveProdServ: true, importe: true },
+        select: { claveProdServ: true, descripcion: true, importe: true, descuento: true },
       },
     },
   });
-  const egresos = egresosRows.map((i) => ({ ...i, subtotal: Number(i.subtotal), total: Number(i.total) }));
+  // Base contable neta de descuento (ver postMonth).
+  const egresos = egresosRows.map((i) => ({ ...i, subtotal: baseNeta(i.subtotal, i.descuento), total: Number(i.total) }));
 
   // CFDIs clasificados INVERSION: el cargo va al ACTIVO FIJO (15x), no a
   // gasto — de otro modo la compra se duplicaría contra la depreciación.
@@ -843,6 +851,9 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
   // cancela el pasivo 205.06 que dejó el CFDI del paciente, en vez de ser otro
   // gasto (vacío salvo contabilidadActiva). Ver hospital-honorarios.ts.
   const honorariosHosp = await cargarHonorariosHospital(companyId, { start, end });
+  // Hospital: la parte de insumos del CFDI va a INVENTARIO_FARMACIA, la misma
+  // cuenta que abona la salida al paciente (contabilidad/hospital.ts).
+  const comprasHosp = await cargarComprasHospital(companyId, egresos);
 
   for (const inv of egresos) {
     const ref = inv.uuid ?? inv.id;
@@ -923,11 +934,26 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
           `facturados al paciente pendientes de cancelar; se registró como gasto.`,
       );
     }
-    if (inv.subtotal - montoRefa - aPasivoMedico > 0.005) {
+    // Insumos del hospital: después de la decisión humana, del activo fijo, de
+    // la unidad, de las refacciones y del honorario; antes de la clasificación.
+    const compraHosp =
+      !inv.overrideCuenta && inv.naturaleza !== "INVERSION" && !ctaInvFam ? comprasHosp.get(inv.id) : undefined;
+    const montoInsumos = compraHosp
+      ? Math.min(compraHosp.monto, Math.max(0, inv.subtotal - montoRefa - aPasivoMedico))
+      : 0;
+    if (compraHosp && montoInsumos > 0.005) {
+      drafts.push({
+        ...base,
+        chartAccountId: compraHosp.cuenta.id,
+        monto: montoInsumos,
+        tipo: espejo("CARGO", esEgreso),
+      });
+    }
+    if (inv.subtotal - montoRefa - aPasivoMedico - montoInsumos > 0.005) {
       drafts.push({
         ...base,
         chartAccountId: gastoAccountId,
-        monto: inv.subtotal - montoRefa - aPasivoMedico,
+        monto: inv.subtotal - montoRefa - aPasivoMedico - montoInsumos,
         tipo: espejo("CARGO", esEgreso),
       });
     }
@@ -1107,8 +1133,9 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
   const invoicesConciliadas = idsConciliados.length
     ? (await prisma.invoice.findMany({
         where: { id: { in: idsConciliados } },
-        select: { id: true, uuid: true, tipo: true, total: true, subtotal: true, customerId: true },
-      })).map((i) => ({ ...i, total: Number(i.total), subtotal: Number(i.subtotal) }))
+        select: { id: true, uuid: true, tipo: true, total: true, subtotal: true, descuento: true, customerId: true },
+        // Base neta: la reclasificación del IVA al flujo usa el MISMO delta que el devengo.
+      })).map((i) => ({ ...i, total: Number(i.total), subtotal: baseNeta(i.subtotal, i.descuento) }))
     : [];
   const invoicePorId = new Map(invoicesConciliadas.map((i) => [i.id, i]));
   // FASE 2i: la contraparte de cada factura liquidada, para que el pago abone
@@ -2034,9 +2061,10 @@ export async function balanzaPreview(
   // ── INGRESO (mismas reglas que postMonth) ────────────────────────────────
   const ingresosRows = await prisma.invoice.findMany({
     where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: start, lt: end } },
-    select: { id: true, subtotal: true, total: true, tipoSat: true, serie: true, customerId: true },
+    select: { id: true, subtotal: true, descuento: true, total: true, tipoSat: true, serie: true, customerId: true },
   });
-  const ingresos = ingresosRows.map((i) => ({ ...i, subtotal: Number(i.subtotal), total: Number(i.total) }));
+  // Base contable neta de descuento (ver postMonth).
+  const ingresos = ingresosRows.map((i) => ({ ...i, subtotal: baseNeta(i.subtotal, i.descuento), total: Number(i.total) }));
   // FASE 2: mismas reglas de familia que postMonth (venta a 4101-00XX y costo
   // DR 5101-00XX / CR 1301-00XX), para que la balanza preliminar no difiera
   // del cierre.
@@ -2120,12 +2148,14 @@ export async function balanzaPreview(
   // ── EGRESO ────────────────────────────────────────────────────────────────
   const egresosRows = await prisma.invoice.findMany({
     where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: start, lt: end } },
-    include: { items: { select: { claveProdServ: true, importe: true } } },
+    include: { items: { select: { claveProdServ: true, descripcion: true, importe: true, descuento: true } } },
   });
-  const egresos = egresosRows.map((i) => ({ ...i, subtotal: Number(i.subtotal), total: Number(i.total) }));
+  // Base contable neta de descuento (ver postMonth).
+  const egresos = egresosRows.map((i) => ({ ...i, subtotal: baseNeta(i.subtotal, i.descuento), total: Number(i.total) }));
   const comprasUnidad = await unidadesAmparadas(companyId, egresos.map((i) => i.id), "compra");
   const tallerCompras = await cargarContextoTaller(companyId, egresos.map((i) => i.id));
   const honorariosHosp = await cargarHonorariosHospital(companyId, { start, end });
+  const comprasHosp = await cargarComprasHospital(companyId, egresos);
   const accCache = new Map<string, string | null>();
   async function resolveCachedSafe(code: string): Promise<string | null> {
     if (accCache.has(code)) return accCache.get(code) ?? null;
@@ -2166,7 +2196,15 @@ export async function balanzaPreview(
         ? Math.min(honorariosHosp.porInvoice.get(inv.id) ?? 0, Math.max(0, inv.subtotal - montoRefa))
         : 0;
     if (aPasivoMedico > 0.005) addMov(honorariosHosp.cuenta!.id, "CARGO", aPasivoMedico);
-    if (inv.subtotal - montoRefa - aPasivoMedico > 0.005) addMov(gastoId, espejo("CARGO", esEgreso), inv.subtotal - montoRefa - aPasivoMedico);
+    // Insumos del hospital a INVENTARIO_FARMACIA, igual que postMonth.
+    const compraHosp =
+      !inv.overrideCuenta && inv.naturaleza !== "INVERSION" && !ctaInvFam ? comprasHosp.get(inv.id) : undefined;
+    const montoInsumos = compraHosp
+      ? Math.min(compraHosp.monto, Math.max(0, inv.subtotal - montoRefa - aPasivoMedico))
+      : 0;
+    if (compraHosp && montoInsumos > 0.005) addMov(compraHosp.cuenta.id, espejo("CARGO", esEgreso), montoInsumos);
+    if (inv.subtotal - montoRefa - aPasivoMedico - montoInsumos > 0.005)
+      addMov(gastoId, espejo("CARGO", esEgreso), inv.subtotal - montoRefa - aPasivoMedico - montoInsumos);
     if (delta > 0.005) addMov(accIvaAcreditable.id, espejo("CARGO", esEgreso), delta);
     else if (delta < -0.005) addMov(accIsrRetenidoHonorarios.id, espejo("ABONO", esEgreso), -delta);
     addMov(
@@ -2427,9 +2465,10 @@ export async function estadoResultadosPreview(
   // ── INGRESO → Ventas (subtotal) ──────────────────────────────────────────
   const ingresosRows = await prisma.invoice.findMany({
     where: { companyId, tipo: "INGRESO", status: "STAMPED", fecha: { gte: start, lt: end } },
-    select: { id: true, subtotal: true, tipoSat: true, serie: true },
+    select: { id: true, subtotal: true, descuento: true, tipoSat: true, serie: true },
   });
-  const ingresos = ingresosRows.map((i) => ({ ...i, subtotal: Number(i.subtotal) }));
+  // Base contable neta de descuento (ver postMonth).
+  const ingresos = ingresosRows.map((i) => ({ ...i, subtotal: baseNeta(i.subtotal, i.descuento) }));
   // FASE 2: la venta de una unidad aporta a la cuenta de su FAMILIA y su costo
   // de compra aporta al COSTO de la familia (5101-00XX) — el preview refleja
   // la utilidad bruta real de unidades, no ingreso sin costo.
@@ -2502,9 +2541,10 @@ export async function estadoResultadosPreview(
   // ── EGRESO → cuenta de gasto clasificada (subtotal) ──────────────────────
   const egresosRows = await prisma.invoice.findMany({
     where: { companyId, tipo: "EGRESO", status: "STAMPED", fecha: { gte: start, lt: end } },
-    include: { items: { select: { claveProdServ: true, importe: true } } },
+    include: { items: { select: { claveProdServ: true, descripcion: true, importe: true, descuento: true } } },
   });
-  const egresos = egresosRows.map((i) => ({ ...i, subtotal: Number(i.subtotal) }));
+  // Base contable neta de descuento (ver postMonth).
+  const egresos = egresosRows.map((i) => ({ ...i, subtotal: baseNeta(i.subtotal, i.descuento) }));
 
   // Cache de cuentas resueltas; omite (best-effort) egresos cuya clasificación
   // apunte a una cuenta inexistente, sin abortar todo el preview.
@@ -2524,6 +2564,9 @@ export async function estadoResultadosPreview(
   // FASE 2: la compra de una unidad NUEVA es inventario (activo), no gasto —
   // no aporta al estado de resultados. Su costo aparece al VENDER (arriba).
   const comprasUnidad = await unidadesAmparadas(companyId, egresos.map((i) => i.id), "compra");
+  // Hospital: los insumos comprados son inventario (INVENTARIO_FARMACIA), no
+  // gasto; su costo aparece al aplicarse o con el conteo del Cierre.
+  const comprasHosp = await cargarComprasHospital(companyId, egresos);
 
   for (const inv of egresos) {
     const unidadComprada =
@@ -2531,6 +2574,9 @@ export async function estadoResultadosPreview(
     if (unidadComprada && cuentaDeFamilia(idxFamilia, MOTOR_INVENTARIO_UNIDAD, unidadComprada.sufijo)) {
       continue;
     }
+    const compraHosp = !inv.overrideCuenta && inv.naturaleza !== "INVERSION" ? comprasHosp.get(inv.id) : undefined;
+    const montoGasto = inv.subtotal - (compraHosp ? Math.min(compraHosp.monto, inv.subtotal) : 0);
+    if (montoGasto <= 0.005) continue;
     const classification = inv.overrideCuenta
       ? { cuenta: inv.overrideCuenta }
       : classifyInvoice(
@@ -2543,7 +2589,7 @@ export async function estadoResultadosPreview(
       cuentaSAT: acc.cuentaSAT,
       subcuenta: acc.subcuenta,
       nombre: acc.nombre,
-      monto: signoDeComprobante(esComprobanteDeEgreso(inv)) * inv.subtotal,
+      monto: signoDeComprobante(esComprobanteDeEgreso(inv)) * montoGasto,
     });
   }
 

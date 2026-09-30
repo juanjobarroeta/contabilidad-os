@@ -240,6 +240,8 @@ export interface ConceptoXml {
   cantidad: number;
   valorUnitario: number;
   importe: number;
+  /** Descuento del concepto (atributo Descuento): el costo real es importe − descuento. */
+  descuento: number;
 }
 
 const CONCEPTO_RE = /<(?:[\w-]+:)?Concepto\b([^>]*?)(?:\/>|>)/gi;
@@ -257,6 +259,7 @@ export function extraerConceptosCfdi(rawXml: string): ConceptoXml[] {
     const cantidad = Number(attr(attrs, "Cantidad") ?? "1");
     const valorUnitario = Number(attr(attrs, "ValorUnitario") ?? "0");
     const importe = Number(attr(attrs, "Importe") ?? "0");
+    const descuento = Number(attr(attrs, "Descuento") ?? "0");
     out.push({
       noIdentificacion: attr(attrs, "NoIdentificacion"),
       claveProdServ: attr(attrs, "ClaveProdServ"),
@@ -265,6 +268,7 @@ export function extraerConceptosCfdi(rawXml: string): ConceptoXml[] {
       cantidad: Number.isFinite(cantidad) ? cantidad : 1,
       valorUnitario: Number.isFinite(valorUnitario) ? valorUnitario : 0,
       importe: Number.isFinite(importe) ? importe : 0,
+      descuento: Number.isFinite(descuento) ? descuento : 0,
     });
   }
   return out;
@@ -279,6 +283,8 @@ export interface LineaCfdiInsumo {
   claveProdServ?: string | null;
   valorUnitario: number;
   importe: number;
+  /** Descuento del concepto. El costo de la entrada es el importe MENOS esto. */
+  descuento?: number | null;
   /** Lo trae el XML, no InvoiceItem; si viene undefined se busca en rawXml. */
   noIdentificacion?: string | null;
 }
@@ -317,6 +323,7 @@ function prepararLineas(items: LineaCfdiInsumo[], rawXml: string | null | undefi
     cantidad: Number(it.cantidad),
     valorUnitario: Number(it.valorUnitario),
     importe: Number(it.importe),
+    descuento: Number(it.descuento ?? 0) || 0,
   }));
   if (!rawXml) return lineas;
   const conceptos = extraerConceptosCfdi(rawXml);
@@ -328,6 +335,7 @@ function prepararLineas(items: LineaCfdiInsumo[], rawXml: string | null | undefi
       claveProdServ: c.claveProdServ,
       valorUnitario: c.valorUnitario,
       importe: c.importe,
+      descuento: c.descuento,
       noIdentificacion: c.noIdentificacion,
     }));
   }
@@ -342,6 +350,16 @@ function prepararLineas(items: LineaCfdiInsumo[], rawXml: string | null | undefi
       ? l
       : { ...l, noIdentificacion: porLlave.get(llaveLinea(l.descripcion, l.cantidad, l.importe)) ?? null }
   );
+}
+
+/**
+ * Lo que costó una línea: cantidad × valor unitario (o el importe) MENOS el
+ * descuento del concepto. Sin restarlo, el lote entraba al kardex —y salía al
+ * paciente como costo de farmacia— por arriba de lo que se pagó.
+ */
+export function costoDeLinea(l: Pick<LineaCfdiInsumo, "valorUnitario" | "cantidad" | "importe" | "descuento">): number {
+  const bruto = l.valorUnitario > 0 ? l.valorUnitario * l.cantidad : l.importe;
+  return Math.max(0, bruto - (Number(l.descuento ?? 0) || 0));
 }
 
 interface AgregadoCompra {
@@ -385,7 +403,7 @@ async function derivarCompra(
     if (!esInsumo) continue;
     const clave = claveDeInsumo(l.noIdentificacion, l.descripcion);
     if (!clave) continue;
-    const monto = l.valorUnitario > 0 ? l.valorUnitario * l.cantidad : l.importe;
+    const monto = costoDeLinea(l);
     const prev = porClave.get(clave);
     if (prev) {
       prev.cantidad += l.cantidad;
@@ -535,7 +553,7 @@ async function derivarVenta(
       c.claves.map((k) => porClave.get(k)).find((i) => i != null) ??
       (c.nombreNorm ? porNombre.get(c.nombreNorm) : undefined);
     if (!insumo) continue;
-    const monto = c.linea.valorUnitario > 0 ? c.linea.valorUnitario * c.linea.cantidad : c.linea.importe;
+    const monto = costoDeLinea(c.linea);
     const prev = porInsumo.get(insumo.id);
     if (prev) {
       prev.cantidad += c.linea.cantidad;
@@ -741,6 +759,7 @@ export async function derivarInsumosBackfill(
             claveProdServ: true,
             valorUnitario: true,
             importe: true,
+            descuento: true,
           },
         },
       },
@@ -776,6 +795,7 @@ export async function derivarInsumosBackfill(
           claveProdServ: it.claveProdServ,
           valorUnitario: Number(it.valorUnitario),
           importe: Number(it.importe),
+          descuento: Number(it.descuento),
         })),
         rawXml: xml.get(inv.id) ?? null,
       });
