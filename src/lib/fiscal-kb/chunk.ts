@@ -373,10 +373,20 @@ export function chunkLaw(cleanText: string): LawChunk[] {
 
 // ─── RMF (reglas) ────────────────────────────────────────────────────────────
 
-// Reglas are 4-level decimal numbers at the start of a line, e.g. "2.7.1.32."
-// Capítulo/sección headers ("2.7. Comprobantes…") seed the breadcrumb.
-const REGLA_RE = /^\s*(\d+\.\d+\.\d+\.\d+)\.?\s/gm;
-const RMF_HEADING_RE = /^\s*(\d+\.(?:\d+\.){0,2})\s+[A-ZÁÉÍÓÚ]/;
+// Las reglas NO tienen todas la misma profundidad. Los títulos con capítulo y
+// sección numeran a cuatro niveles («2.7.1.32.»), pero los que sólo tienen
+// capítulo numeran a TRES («4.1.1.», IVA; «5.2.27.», IEPS). Exigir cuatro
+// dejaba fuera 849 de 1 112 reglas de la RMF 2026 —todo el IVA, todo el IEPS,
+// los decretos y los servicios digitales— mientras el documento figuraba como
+// cargado: peor que no tenerlo, porque el copiloto buscaba «en la RMF» y no
+// encontraba nada de IVA.
+//
+// Distinguir regla de encabezado es limpio porque el DOF los escribe distinto:
+// un capítulo lleva la palabra delante («Capítulo 4.1. Disposiciones
+// generales»), una regla empieza con el número pelón («4.2.2. La enajenación
+// de billetes…»). Por eso el ancla del número exige principio de línea.
+const REGLA_RE = /^\s*(\d+\.\d+\.\d+(?:\.\d+)?)\.?\s/gm;
+const RMF_HEADING_RE = /^\s*(?:T[íi]tulo|Cap[íi]tulo|Secci[óo]n)\s+[\d.]+\.?\s+\S/i;
 
 /**
  * Chunk a Resolución Miscelánea Fiscal by regla number. Falls back to the

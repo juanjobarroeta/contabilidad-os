@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chunkLaw, cleanLawText, corregirNotasPegadas } from "./chunk";
+import { chunkLaw, cleanLawText, corregirNotasPegadas, chunkRegla } from "./chunk";
 
 const ley = (cuerpo: string) => `LEY DE PRUEBA\n\nTÍTULO I\nDISPOSICIONES GENERALES\n${cuerpo}\n`;
 
@@ -159,5 +159,50 @@ describe("chunkLaw — encabezados con tabuladores (Chihuahua, Querétaro, Sonor
     expect(chunks[0].texto).toContain("ARTÍCULO 479. Los autos dictados en audiencia");
     expect(chunks[0].texto).not.toContain("\t");
     expect(chunks[1].texto).toContain("I. No admita una prueba.");
+  });
+});
+
+// La RMF 2026 traía 1 112 reglas y sólo entraron 258: el patrón exigía cuatro
+// niveles de numeración y los títulos sin sección numeran a tres. Faltaba TODO
+// el IVA y TODO el IEPS, con el documento marcado como cargado.
+describe("chunkRegla: la RMF no numera todo igual", () => {
+  const rmf = [
+    "Título 2. Código Fiscal de la Federación",
+    "Capítulo 2.6. De los controles volumétricos",
+    "2.6.1.1. Para los efectos del artículo 28, fracción I, los contribuyentes deberán llevar controles.",
+    "2.6.1.2. Para los efectos del artículo 28, fracción I, apartado B, se entenderá por equipo.",
+    "Título 4. Impuesto al valor agregado",
+    "Capítulo 4.1. Disposiciones generales",
+    "4.1.1. Para los efectos del artículo 1o.-A, fracción II, inciso b) de la Ley del IVA, la retención.",
+    "4.2.2. La enajenación de billetes y demás comprobantes que permitan participar en loterías.",
+    "Título 5. Impuesto especial sobre producción y servicios",
+    "5.2.27. Los productores e importadores de tabacos labrados deberán informar trimestralmente.",
+    "12.1.1. Para los efectos del artículo 18-B de la Ley del IVA, los servicios digitales.",
+  ].join("\n");
+
+  it("toma las reglas de tres niveles, no sólo las de cuatro", () => {
+    const reglas = chunkRegla(rmf).map((c) => c.articulo);
+    expect(reglas).toContain("2.6.1.1"); // cuatro niveles
+    expect(reglas).toContain("4.1.1"); // IVA, tres niveles
+    expect(reglas).toContain("5.2.27"); // IEPS, tres niveles
+    expect(reglas).toContain("12.1.1"); // servicios digitales
+  });
+
+  it("no confunde un capítulo con una regla", () => {
+    // «Capítulo 4.1.» lleva la palabra delante; «4.1.1.» empieza con el número.
+    const reglas = chunkRegla(rmf).map((c) => c.articulo);
+    expect(reglas).not.toContain("4.1");
+    expect(reglas).not.toContain("2.6");
+  });
+
+  it("el capítulo alimenta la miga de pan de sus reglas", () => {
+    const iva = chunkRegla(rmf).find((c) => c.articulo === "4.1.1");
+    expect(iva?.contexto).toMatch(/Cap[íi]tulo 4\.1/);
+  });
+
+  it("cada regla se queda con su propio texto", () => {
+    const c = chunkRegla(rmf).find((x) => x.articulo === "4.2.2");
+    expect(c?.texto).toContain("billetes");
+    expect(c?.texto).not.toContain("tabacos labrados");
   });
 });
