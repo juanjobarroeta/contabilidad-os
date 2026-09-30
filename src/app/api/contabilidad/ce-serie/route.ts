@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, withAuthz } from "@/lib/authz";
+import { assertPaginaHospitalEnApi } from "@/lib/hospital/permisos";
 
 // GET /api/contabilidad/ce-serie?companyId=…
 //
@@ -19,7 +20,8 @@ export const GET = withAuthz(async (req: Request) => {
   if (!companyId) {
     return NextResponse.json({ error: "companyId requerido" }, { status: 400 });
   }
-  await requireMembership(companyId, undefined, req);
+  const { user } = await requireMembership(companyId, undefined, req);
+  await assertPaginaHospitalEnApi(companyId, user.id, req, ["estado-resultados", "balance"]);
 
   // ?periodos=1 — los períodos PRESENTADOS (para el selector del panel: sólo
   // se puede elegir lo que existe, no un calendario abstracto).

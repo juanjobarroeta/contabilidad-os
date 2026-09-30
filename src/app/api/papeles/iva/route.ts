@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
+import { assertPaginaHospitalEnApi } from "@/lib/hospital/permisos";
 import { toCsv, type CsvRow } from "@/lib/csv";
 import { calcularActosDelPeriodo } from "@/lib/fiscal/iva";
 import { reconciliacionActiva } from "@/lib/fiscal/conciliacion-pue";
@@ -69,6 +70,12 @@ export async function GET(req: Request) {
 
   const member = await getEffectiveCompanyMembership(usuario.id, companyId);
   if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
+  try {
+    await assertPaginaHospitalEnApi(companyId, usuario.id, req, ["impuestos"]);
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 
   // Mismos límites del mes que el motor (computeTaxPosition): hora LOCAL del
   // servidor, no UTC. Con UTC aquí y local allá, un REP con FechaPago en las
