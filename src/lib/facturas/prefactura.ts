@@ -20,6 +20,9 @@ export const itemSchema = z.object({
     product_key: z.string(),
     price: z.number().positive(),
     unit_key: z.string().default("E48"),
+    // NoIdentificacion del concepto. En la factura global a público en
+    // general lleva el folio del ticket (en el hospital, el del episodio).
+    sku: z.string().max(100).optional(),
     tax_included: z.boolean().default(false),
     taxes: z
       .array(

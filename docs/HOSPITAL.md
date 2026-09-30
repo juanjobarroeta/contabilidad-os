@@ -802,9 +802,29 @@ usa para escribir. Se construye por pasos:
    el draft de Facturapi no consume timbre, editar crea un draft nuevo en la
    misma fila y timbrar promueve exactamente ese draft. El receptor se
    sincroniza con Facturapi al vuelo (antes: 422 «créalo en la app primero»).
-2. Prefactura desde la cuenta del episodio (parte del pagador y del paciente;
-   honorarios fuera: hoy los factura cada médico — «a cuenta de terceros»
-   queda como opción) y liga de los cargos al timbrar.
+2. **Facturar la cuenta del episodio** (hecho; `lib/hospital/facturacion.ts`).
+   La unidad es el cargo, y la regla sigue siendo un cargo ↔ un CFDI
+   (`HospCargo.invoiceId`): el «facturado», la contabilidad por categoría, el
+   vinculador de CFDIs y el candado de cancelar dependen de ella.
+   - `GET /api/hospital/facturacion/episodios/[id]`: cada cargo con su estado
+     (pendiente, en prefactura, a la global, facturado, honorario, cancelado),
+     sus claves SAT y los receptores sugeridos.
+   - `POST …/episodios/[id]` `{ accion: "prefactura", customerId, cargoIds, … }`:
+     prefactura con esos cargos a ese receptor. Los cargos quedan tomados
+     (`HospCargo.prefacturaId`); al timbrar reciben `invoiceId`, al descartar
+     se liberan. Una prefactura así no se edita a mano: se descarta y se
+     vuelve a generar. Sin clave SAT (tarifario o insumo) contesta 422.
+   - `{ accion: "dividir", cargoId, cantidad | importe }`: parte un cargo en dos
+     que suman lo mismo, para mandar cada parte a otro receptor. No divide
+     cargos amarrados a su movimiento de kardex.
+   - `{ accion: "publico-general", cargoIds, valor }` y
+     `GET/POST /api/hospital/facturacion/global` (mes): lo cobrado sin factura
+     individual va a la factura global a público en general (XAXX010101000,
+     S01, 01010101 · ACT · «Venta», un concepto por episodio y tasa con el
+     folio como NoIdentificacion).
+   - Honorarios fuera: hoy los factura cada médico; «a cuenta de terceros»
+     queda como opción. Cómo presentar deducible y coaseguro en la factura de
+     la aseguradora está por definir con los pagadores.
 3. Cancelación (motivos 01-04, sustitución).
 4. Complementos de pago (REP) de las facturas PPD.
 5. Nómina: alta y edición de empleados, cancelación de recibos, baja,

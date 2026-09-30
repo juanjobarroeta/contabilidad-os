@@ -23,7 +23,8 @@
 //     pendientes con el porqué. Tampoco se parte un episodio entre dos
 //     facturas de pagadores distintos (aseguradora + coaseguro): los cargos
 //     llevan UNA factura, y ése lo asigna una persona.
-// Idempotente: sólo mira cargos con invoiceId null y CFDIs sin cargos.
+// Idempotente: sólo mira cargos con invoiceId null (y que no estén en una
+// prefactura armada desde la cuenta) y CFDIs sin cargos.
 //
 // Y el depósito del paciente con su CFDI de anticipo: mismo receptor, total a
 // ±$1 del monto, a ±7 días. Sin él el depósito es IVA causado sin comprobante
@@ -196,7 +197,7 @@ export async function vincularCfdisVivos(
       customerId: true,
       paciente: { select: { customerId: true } },
       pagador: { select: { customerId: true } },
-      cargos: { where: { invoiceId: null, cancelado: false }, select: { id: true, fecha: true, importe: true, ivaTasa: true } },
+      cargos: { where: { invoiceId: null, prefacturaId: null, cancelado: false }, select: { id: true, fecha: true, importe: true, ivaTasa: true } },
       depositos: { where: { estado: { not: "CANCELADO" }, invoiceAnticipoId: null }, select: { id: true, fecha: true, monto: true, estado: true, aplicadoAt: true } },
     },
   });

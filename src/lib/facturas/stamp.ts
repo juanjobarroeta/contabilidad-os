@@ -20,6 +20,8 @@ export interface StampItem {
     product_key: string;
     price: number;
     unit_key?: string;
+    /** NoIdentificacion (p. ej. el folio del ticket en la factura global). */
+    sku?: string;
     tax_included?: boolean;
     taxes?: Array<{ type: string; rate: number; factor: string; withholding?: boolean }>;
     /**

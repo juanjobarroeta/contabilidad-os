@@ -9,6 +9,8 @@ const m = vi.hoisted(() => ({
   createDraft: vi.fn(),
   discard: vi.fn(),
   stamp: vi.fn(),
+  cargosCount: vi.fn(),
+  cargosUpdate: vi.fn(),
 }));
 
 vi.mock("@/lib/prisma", () => ({
@@ -16,6 +18,7 @@ vi.mock("@/lib/prisma", () => ({
     company: { findUnique: m.company },
     customer: { findUnique: m.customer },
     facturaBorrador: { create: m.borradorCreate, update: m.borradorUpdate },
+    hospCargo: { count: m.cargosCount, updateMany: m.cargosUpdate },
   },
 }));
 vi.mock("@/lib/facturapi", () => ({ ensureFacturapiCustomer: m.ensure, getFacturapiClient: vi.fn() }));
@@ -45,6 +48,7 @@ beforeEach(() => {
   m.ensure.mockResolvedValue({ ok: true, facturapiId: "fp1" });
   m.createDraft.mockResolvedValue({ ok: true, draftId: "d-new" });
   m.borradorCreate.mockResolvedValue({ id: "b1" });
+  m.cargosCount.mockResolvedValue(0);
 });
 
 describe("prefacturas", () => {
@@ -94,5 +98,18 @@ describe("prefacturas", () => {
     expect(m.stamp).toHaveBeenCalledWith(input, "d-old");
     expect(m.borradorUpdate).toHaveBeenCalledWith({ where: { id: "b1" }, data: { status: "TIMBRADA", invoiceId: "inv1" } });
     expect(r).toEqual({ status: 200, body: { ok: true, invoiceId: "inv1", uuid: "UUID", total: 116 } });
+  });
+
+  it("links the hospital charges the prefactura took to the stamped CFDI", async () => {
+    m.stamp.mockResolvedValue({ ok: true, invoiceId: "inv1", uuid: "UUID", total: 116 });
+    await timbrarPrefactura(borrador(), actor, req);
+    expect(m.cargosUpdate).toHaveBeenCalledWith({ where: { prefacturaId: "b1", invoiceId: null }, data: { invoiceId: "inv1" } });
+  });
+
+  it("will not hand-edit a prefactura built from an episode account", async () => {
+    m.cargosCount.mockResolvedValue(2);
+    const r = await editarPrefactura(borrador(), input, actor, req);
+    expect(r.status).toBe(409);
+    expect(m.createDraft).not.toHaveBeenCalled();
   });
 });

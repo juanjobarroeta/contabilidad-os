@@ -1358,6 +1358,8 @@ model FacturaBorrador {
 
   company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  /// Cargos de un episodio del hospital que esta prefactura factura.
+  hospCargos HospCargo[]
 
   @@index([companyId, status])
   // FK sin índice: Prisma no los crea en PostgreSQL (sí en MySQL). Sin esto
@@ -8041,6 +8043,12 @@ model HospCargo {
   loteId     String?
   medicoId   String?
   invoiceId  String?
+  /// Prefactura (borrador de CFDI) armada desde la cuenta que lleva este cargo.
+  /// Mientras esté PENDIENTE el cargo no entra a otra prefactura; al timbrar
+  /// se escribe `invoiceId`, al descartar se libera.
+  prefacturaId String?
+  /// Sin factura individual: va a la factura global del mes a público en general.
+  publicoGeneral Boolean @default(false)
   /// Fecha en que el módulo asentó este cargo en el libro (honorarios por pagar). Null = sin asentar.
   asientoAt DateTime?
 
@@ -8055,6 +8063,7 @@ model HospCargo {
   lote     HospLote?     @relation(fields: [loteId], references: [id])
   medico   HospMedico?   @relation(fields: [medicoId], references: [id])
   invoice  Invoice?      @relation(fields: [invoiceId], references: [id])
+  prefactura FacturaBorrador? @relation(fields: [prefacturaId], references: [id], onDelete: SetNull)
 
   nota              HospNota?
   movimientoInsumo  HospMovimientoInsumo?
@@ -8062,6 +8071,7 @@ model HospCargo {
   @@index([episodioId, fecha])
   @@index([companyId, categoria, fecha])
   @@index([invoiceId])
+  @@index([prefacturaId])
 }
 
 enum HospCitaTipo {

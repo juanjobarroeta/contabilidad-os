@@ -28,6 +28,12 @@ export async function cancelarCargo(
     throw new HospitalError(409, "El cargo ya está en una factura: cancela primero el CFDI");
   }
   if (cargo.cancelado) throw new HospitalError(409, "El cargo ya estaba cancelado");
+  if (cargo.prefacturaId) {
+    const pre = await tx.facturaBorrador.findUnique({ where: { id: cargo.prefacturaId }, select: { status: true } });
+    if (pre?.status === "PENDIENTE") {
+      throw new HospitalError(409, "El cargo está en una prefactura pendiente: descártala primero y vuelve a generarla sin él");
+    }
+  }
 
   const fecha = args.fecha ?? new Date();
   const actualizado = await tx.hospCargo.update({

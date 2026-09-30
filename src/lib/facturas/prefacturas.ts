@@ -136,6 +136,12 @@ const noPendiente = (b: Borrador): Resultado | null =>
 export async function editarPrefactura(borrador: Borrador, input: StampInput, actor: Actor, req: Request): Promise<Resultado> {
   const bloqueo = noPendiente(borrador);
   if (bloqueo) return bloqueo;
+  // Una prefactura armada desde la cuenta de un episodio no se edita a mano:
+  // sus conceptos SON los cargos que tomó, y editarlos desamarraría la cuenta
+  // del CFDI. Se descarta (los cargos se liberan) y se vuelve a generar.
+  if (await prisma.hospCargo.count({ where: { prefacturaId: borrador.id } })) {
+    return { status: 409, body: { error: "Esta prefactura se armó desde la cuenta de un episodio: descártala y vuelve a generarla desde la cuenta." } };
+  }
   // La empresa no se edita: una prefactura no se «muda» de emisor.
   if (input.companyId !== borrador.companyId) {
     return { status: 422, body: { error: "La empresa de la prefactura no coincide" } };
@@ -189,6 +195,13 @@ export async function timbrarPrefactura(borrador: Borrador, actor: Actor, req: R
     where: { id: borrador.id },
     data: { status: "TIMBRADA", invoiceId: result.invoiceId },
   });
+  // Los cargos del hospital que tomó esta prefactura quedan amparados por el
+  // CFDI (un cargo, un CFDI): la cuenta los ve facturados y la contabilidad
+  // los reparte por categoría. Sin cargos ligados, no hace nada.
+  await prisma.hospCargo.updateMany({
+    where: { prefacturaId: borrador.id, invoiceId: null },
+    data: { invoiceId: result.invoiceId },
+  });
   registrarBitacora({
     companyId: borrador.companyId,
     userId: actor.id,
@@ -237,6 +250,8 @@ export async function descartarPrefactura(borrador: Borrador, actor: Actor, req:
   if (bloqueo) return bloqueo;
   await discardDraft(borrador.companyId, borrador.draftId);
   await prisma.facturaBorrador.update({ where: { id: borrador.id }, data: { status: "DESCARTADA" } });
+  // Los cargos del hospital que tomó vuelven a estar libres para facturarse.
+  await prisma.hospCargo.updateMany({ where: { prefacturaId: borrador.id, invoiceId: null }, data: { prefacturaId: null } });
   registrarBitacora({
     companyId: borrador.companyId,
     userId: actor.id,
