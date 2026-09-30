@@ -4,6 +4,18 @@ import { AuthzError, requireMembership } from "@/lib/authz";
 export const PERMISOS_CLINICOS = ["CLINICA_LEER", "CLINICA_ESCRIBIR", "ADMINISTRAR", "ALTA", "PRESCRIBIR", "FINANZAS_ESCRIBIR"] as const;
 export type PermisoClinico = typeof PERMISOS_CLINICOS[number];
 
+const ACCION_POR_PERMISO: Record<PermisoClinico, string> = {
+  CLINICA_LEER: "consultar expedientes clínicos",
+  CLINICA_ESCRIBIR: "escribir o modificar información clínica",
+  ADMINISTRAR: "registrar la aplicación de medicamentos o insumos",
+  ALTA: "dar de alta a pacientes",
+  PRESCRIBIR: "registrar indicaciones médicas",
+  FINANZAS_ESCRIBIR: "registrar o modificar operaciones financieras",
+};
+function mensajeSinPermiso(permission: PermisoClinico) {
+  return `Tu usuario no tiene permiso para ${ACCION_POR_PERMISO[permission]} en este hospital. Pide a un administrador que habilite este acceso en Usuarios.`;
+}
+
 const paginas: Record<string, string[]> = {
   registros: ["registros", "episodios"],
   pacientes: ["pacientes", "episodios"], episodios: ["episodios"], documentos: ["episodios", "pacientes"],
@@ -30,35 +42,35 @@ export async function enforceHospitalAccess(companyId: string, userId: string, r
   const admin = ["OWNER", "ADMIN"].includes(membership.role);
   const writing = !["GET", "HEAD", "OPTIONS"].includes(req.method);
   if (!(root === "config" && !writing) && member?.hospitalPaginas.length && !(paginas[root] ?? [root]).some(p => member.hospitalPaginas.includes(p))) {
-    throw new AuthzError(403, "Sin acceso a esta función del hospital");
+    throw new AuthzError(403, "Tu usuario no tiene acceso a esta sección del hospital. Pide a un administrador que habilite esta sección en Usuarios.");
   }
   if (["usuarios", "cumplimiento"].includes(root) || (root === "config" && writing)) {
-    if (!admin) throw new AuthzError(403, "Esta función requiere administración del hospital");
+    if (!admin) throw new AuthzError(403, "Sólo un administrador del hospital puede realizar esta acción. Contacta al administrador de tu hospital.");
   }
   if (writing && ["cuentas", "caja", "depositos", "cobros", "bancos", "contabilidad", "liquidaciones"].includes(root)) {
-    if (membership.role === "VIEWER" || !member?.hospitalPermisos.includes("FINANZAS_ESCRIBIR")) throw new AuthzError(403, "Falta permiso de operaciones financieras: FINANZAS_ESCRIBIR");
+    if (membership.role === "VIEWER" || !member?.hospitalPermisos.includes("FINANZAS_ESCRIBIR")) throw new AuthzError(403, mensajeSinPermiso("FINANZAS_ESCRIBIR"));
   }
   const clinical = ["pacientes", "episodios", "documentos", "saeh", "buscar", "censo", "citas", "planes", "panel", "registros"].includes(root) || (root === "farmacia" && ["kardex", "libro-control"].includes(path[1]));
   if (clinical) {
     const permission = writing ? (path.includes("aplicar-insumo") ? "ADMINISTRAR" : "CLINICA_ESCRIBIR") : "CLINICA_LEER";
     if (!(admin && !writing) && !member?.hospitalPermisos.includes(permission)) {
-      throw new AuthzError(403, `Falta permiso clínico: ${permission}`);
+      throw new AuthzError(403, mensajeSinPermiso(permission));
     }
-    if (writing && membership.role === "VIEWER") throw new AuthzError(403, "Cuenta de sólo lectura");
+    if (writing && membership.role === "VIEWER") throw new AuthzError(403, "Tu usuario sólo puede consultar información. Para guardar cambios, pide acceso de escritura al administrador de tu hospital.");
   }
 }
 
 export async function requireClinicalPermission(companyId: string, userId: string, permission: PermisoClinico) {
   const member = await prisma.companyMember.findUnique({ where: { userId_companyId: { userId, companyId } } });
   if (!member || member.role === "VIEWER" || !member.hospitalPermisos.includes(permission)) {
-    throw new AuthzError(403, `Falta permiso clínico: ${permission}`);
+    throw new AuthzError(403, mensajeSinPermiso(permission));
   }
 }
 
 export async function requirePractitioner(companyId: string, userId: string, requestedId?: string | null) {
   const medico = await prisma.hospMedico.findUnique({ where: { companyId_userId: { companyId, userId } } });
   if (!medico?.activo || !medico.credencialVerificadaAt || !medico.credencialEvidencia || !medico.cedula || (requestedId && requestedId !== medico.id)) {
-    throw new AuthzError(403, "La autoría médica requiere un profesional activo, vinculado a tu usuario y con credencial verificada");
+    throw new AuthzError(403, "No puedes firmar como médico con este usuario. Un administrador debe vincular tu cuenta a tu perfil médico y verificar tu cédula en Usuarios. Si ya tienes un perfil verificado, debes firmar con tu propia identidad.");
   }
   return medico;
 }
