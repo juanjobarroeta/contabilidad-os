@@ -21,6 +21,8 @@ import {
 } from "./auxiliar-contraparte";
 import { COE_CODES } from "./catalog";
 import { esDepositoEnEfectivo } from "../bancos/deposito-efectivo";
+import { cargarContextoCobroBancoHospital, partirCobroHospital } from "./hospital-cobro-banco";
+import { cargarHonorariosHospital } from "./hospital-honorarios";
 import { naturalezaPorTipo, saldosCoe } from "./coe-saldos";
 import { costoPeriodico } from "./inventario-periodico";
 import { classifyInvoice } from "./classify-egreso";
@@ -837,6 +839,10 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
   // ingresos), no al comprar.
   const comprasUnidad = await unidadesAmparadas(companyId, egresos.map((i) => i.id), "compra");
   const tallerCompras = await cargarContextoTaller(companyId, egresos.map((i) => i.id));
+  // HOSPITAL: el CFDI con que el médico le factura sus honorarios al hospital
+  // cancela el pasivo 205.06 que dejó el CFDI del paciente, en vez de ser otro
+  // gasto (vacío salvo contabilidadActiva). Ver hospital-honorarios.ts.
+  const honorariosHosp = await cargarHonorariosHospital(companyId, { start, end });
 
   for (const inv of egresos) {
     const ref = inv.uuid ?? inv.id;
@@ -903,11 +909,25 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
         tipo: espejo("CARGO", esEgreso),
       });
     }
-    if (inv.subtotal - montoRefa > 0.005) {
+    // Honorarios del médico que el hospital ya tiene en el pasivo: cancelan
+    // 205.06; lo que exceda sigue a gasto (y se avisa).
+    const aPasivoMedico =
+      !esEgreso && honorariosHosp.cuenta
+        ? Math.min(honorariosHosp.porInvoice.get(inv.id) ?? 0, Math.max(0, inv.subtotal - montoRefa))
+        : 0;
+    if (aPasivoMedico > 0.005) {
+      drafts.push({ ...base, chartAccountId: honorariosHosp.cuenta!.id, monto: aPasivoMedico, tipo: "CARGO" });
+    } else if (honorariosHosp.sinPasivo.has(inv.id)) {
+      warnings.push(
+        `${inv.fecha.toISOString().slice(0, 10)} ${base.descripcion.slice(0, 40)}: CFDI de un médico sin honorarios ` +
+          `facturados al paciente pendientes de cancelar; se registró como gasto.`,
+      );
+    }
+    if (inv.subtotal - montoRefa - aPasivoMedico > 0.005) {
       drafts.push({
         ...base,
         chartAccountId: gastoAccountId,
-        monto: inv.subtotal - montoRefa,
+        monto: inv.subtotal - montoRefa - aPasivoMedico,
         tipo: espejo("CARGO", esEgreso),
       });
     }
@@ -1019,6 +1039,9 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       devolucionPor: { select: { id: true } },
     },
   })).map((t) => ({ ...t, monto: Number(t.monto) }));
+  // HOSPITAL: lo que la caja del hospital ya asentó (107.05 / CAJA contra
+  // CLIENTES) se descuenta del abono del depósito. Ver hospital-cobro-banco.ts.
+  const cobroBancoHosp = await cargarContextoCobroBancoHospital(companyId, { year, month, start, end }, REGENERATED_SOURCES);
 
 
   // Subcuentas de banco: con 2+ cuentas, cada una postea en su subcuenta
@@ -1292,16 +1315,36 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
           ...base,
           descripcion: `Traspaso caja a bancos · ${base.descripcion}`.slice(0, 200),
         };
-        for (const pata of patasDeCobro({
-          enEfectivo: esDepositoEnEfectivo(tx.descripcion),
-          ctaBancoId: ctaBanco(tx).id,
-          ctaCajaId: accCaja.id,
-          ctaCobroId,
-          ctaAnticiposId: accAnticiposClientes.id,
+        const enEfectivo = esDepositoEnEfectivo(tx.descripcion);
+        // Con la caja del hospital operando, lo que ella ya abonó a CLIENTES
+        // (o a ANTICIPOS) sale ahora de 107.05 / CAJA, no de CLIENTES otra vez.
+        const cuentaCajaHosp = enEfectivo ? "caja" : "transito";
+        const cuentaHosp = cobroBancoHosp.activa ? cobroBancoHosp.cuentas[cuentaCajaHosp] : null;
+        const cubierto =
+          cuentaHosp && cobroBancoHosp.disponible
+            ? cobroBancoHosp.disponible.cubrir(cuentaCajaHosp, tx.fecha, Math.min(absAmount, asignado + sobrante))
+            : 0;
+        const hosp = partirCobroHospital({
           absAmount,
           asignado,
           sobrante,
-        })) {
+          cubierto,
+          ctaBancoId: ctaBanco(tx).id,
+          ctaCajaHospitalId: cuentaHosp?.id ?? accCaja.id,
+        });
+        for (const pata of hosp.patas) drafts.push({ ...base, ...pata });
+        const patasResto =
+          hosp.resto.absAmount > 0.005
+            ? patasDeCobro({
+                enEfectivo,
+                ctaBancoId: ctaBanco(tx).id,
+                ctaCajaId: accCaja.id,
+                ctaCobroId,
+                ctaAnticiposId: accAnticiposClientes.id,
+                ...hosp.resto,
+              })
+            : [];
+        for (const pata of patasResto) {
           const { traspaso, ...resto } = pata;
           drafts.push({ ...(traspaso ? baseTraspaso : base), ...resto });
         }
@@ -2082,6 +2125,7 @@ export async function balanzaPreview(
   const egresos = egresosRows.map((i) => ({ ...i, subtotal: Number(i.subtotal), total: Number(i.total) }));
   const comprasUnidad = await unidadesAmparadas(companyId, egresos.map((i) => i.id), "compra");
   const tallerCompras = await cargarContextoTaller(companyId, egresos.map((i) => i.id));
+  const honorariosHosp = await cargarHonorariosHospital(companyId, { start, end });
   const accCache = new Map<string, string | null>();
   async function resolveCachedSafe(code: string): Promise<string | null> {
     if (accCache.has(code)) return accCache.get(code) ?? null;
@@ -2117,7 +2161,12 @@ export async function balanzaPreview(
         : null;
     const montoRefa = costoRefa?.reduce((a, p) => a + p.monto, 0) ?? 0;
     for (const pierna of costoRefa ?? []) addMov(pierna.cuenta.id, espejo("CARGO", esEgreso), pierna.monto);
-    if (inv.subtotal - montoRefa > 0.005) addMov(gastoId, espejo("CARGO", esEgreso), inv.subtotal - montoRefa);
+    const aPasivoMedico =
+      !esEgreso && honorariosHosp.cuenta
+        ? Math.min(honorariosHosp.porInvoice.get(inv.id) ?? 0, Math.max(0, inv.subtotal - montoRefa))
+        : 0;
+    if (aPasivoMedico > 0.005) addMov(honorariosHosp.cuenta!.id, "CARGO", aPasivoMedico);
+    if (inv.subtotal - montoRefa - aPasivoMedico > 0.005) addMov(gastoId, espejo("CARGO", esEgreso), inv.subtotal - montoRefa - aPasivoMedico);
     if (delta > 0.005) addMov(accIvaAcreditable.id, espejo("CARGO", esEgreso), delta);
     else if (delta < -0.005) addMov(accIsrRetenidoHonorarios.id, espejo("ABONO", esEgreso), -delta);
     addMov(

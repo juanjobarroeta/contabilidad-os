@@ -128,38 +128,16 @@ describe("honorarios al alta", () => {
     expect(retencionesPorMedico([{ id: "k1", medicoId: "m1", importe: 18000, ivaTasa: null, medico: vega }], false)).toEqual([]);
   });
 
-  it("planes: cargo al pasivo del médico, abono a la retención, a la fecha del alta", () => {
-    const planes = planesHonorarios({ id: "e1", folio: "HOSP-2026-0418", fechaAlta: F("2026-09-05T18:00:00Z") }, [
+  it("el alta ya no asienta retenciones: la fuente única es el CFDI del médico (contabilidad/hospital-honorarios)", async () => {
+    expect(planesHonorarios({ id: "e1", folio: "HOSP-2026-0418", fechaAlta: F("2026-09-05T18:00:00Z") }, [
       { id: "k1", medicoId: "m1", importe: 18000, ivaTasa: null, medico: vega },
-      { id: "k2", medicoId: "m1", importe: 2000, ivaTasa: 0.16, medico: vega },
-    ], true);
-    expect(planes.map((p) => [p.referenciaTipo, p.cargo, p.abono, p.monto, p.referencia])).toEqual([
-      [TIPO_ASIENTO.HONORARIOS_RET_ISR, "HONORARIOS_POR_CUENTA_DE_TERCEROS", "RETENCION_ISR_HONORARIOS", 2000, "e1:m1"],
-      [TIPO_ASIENTO.HONORARIOS_RET_IVA, "HONORARIOS_POR_CUENTA_DE_TERCEROS", "RETENCION_IVA_HONORARIOS", 213.33, "e1:m1"],
-    ]);
-    expect(planes[0].fecha.toISOString()).toBe("2026-09-05T18:00:00.000Z");
-    expect(planes[0].descripcion).toContain("HOSP-2026-0418");
-  });
-
-  it("asentarHonorarios: por médico, crea 205.06/216.04 del catálogo, marca los cargos y es idempotente", async () => {
+    ], true)).toEqual([]);
     const db = conCatalogo();
-    db.medicos.push(vega, lab);
+    db.medicos.push(vega);
     db.episodios.push({ id: "e1", companyId: "c1", folio: "HOSP-1", estado: "ALTA", fechaAlta: F("2026-09-05T18:00:00Z") });
-    db.cargos.push(
-      { id: "k1", companyId: "c1", episodioId: "e1", categoria: "HONORARIO", medicoId: "m1", importe: 18000, ivaTasa: null, cancelado: false, asientoAt: null },
-      { id: "k2", companyId: "c1", episodioId: "e1", categoria: "HONORARIO", medicoId: "m2", importe: 5000, ivaTasa: 0.16, cancelado: false, asientoAt: null },
-      { id: "k3", companyId: "c1", episodioId: "e1", categoria: "HONORARIO", medicoId: "m1", importe: 999, ivaTasa: null, cancelado: true, asientoAt: null },
-      { id: "k4", companyId: "c1", episodioId: "e1", categoria: "QUIROFANO", medicoId: "m1", importe: 12000, ivaTasa: 0.16, cancelado: false, asientoAt: null }
-    );
-    const ep = { id: "e1", companyId: "c1", folio: "HOSP-1", fechaAlta: F("2026-09-05T18:00:00Z") };
-    expect(await asentarHonorarios(comoDb(db), ep)).toBe(1);
-    expect(db.pares()).toEqual([{ referencia: "e1:m1", referenciaTipo: "HOSP_HONORARIOS_RET_ISR", monto: 1800, cargo: "205.06", abono: "216.04", year: 2026, month: 9 }]);
-    expect(db.cargos.find((c) => c.id === "k1")!.asientoAt).toBeInstanceOf(Date);
-    // La PM no se marca (no hay nada que retener) y el cancelado tampoco.
-    expect(db.cargos.find((c) => c.id === "k2")!.asientoAt).toBeNull();
-    expect(db.cargos.find((c) => c.id === "k3")!.asientoAt).toBeNull();
-    expect(await asentarHonorarios(comoDb(db), ep)).toBe(0);
-    expect(db.asientos).toHaveLength(2);
+    db.cargos.push({ id: "k1", companyId: "c1", episodioId: "e1", categoria: "HONORARIO", medicoId: "m1", importe: 18000, ivaTasa: null, cancelado: false, asientoAt: null });
+    expect(await asentarHonorarios(comoDb(db), { id: "e1", companyId: "c1", folio: "HOSP-1", fechaAlta: F("2026-09-05T18:00:00Z") })).toBe(0);
+    expect(db.asientos).toHaveLength(0);
   });
 
   it("apagada → nada", async () => {
@@ -284,13 +262,12 @@ describe("mes: previewMes() y asentarMes()", () => {
     expect(antes.asientos.map((a) => [a.referenciaTipo, a.monto, a.asentado, a.cargo.codigo, a.abono.codigo])).toEqual([
       ["HOSP_DEPOSITO_RECIBIDO", 3000, false, "107.05", "206.01"],
       ["HOSP_FARMACIA_SALIDA", 200, false, "501.01", "115.01"],
-      ["HOSP_HONORARIOS_RET_ISR", 1000, false, "205.06", "216.04"],
     ]);
     expect(db.cuentaPorCodigo("206.01")).toBeNull();
 
     const r = await asentarMes(comoDb(db), "c1", 2026, 9);
-    expect(r).toEqual({ asentados: 3, revisados: 3 });
-    expect(db.pares().map((p) => p.referenciaTipo)).toEqual(["HOSP_DEPOSITO_RECIBIDO", "HOSP_FARMACIA_SALIDA", "HOSP_HONORARIOS_RET_ISR"]);
+    expect(r).toEqual({ asentados: 2, revisados: 2 });
+    expect(db.pares().map((p) => p.referenciaTipo)).toEqual(["HOSP_DEPOSITO_RECIBIDO", "HOSP_FARMACIA_SALIDA"]);
     // La aplicación del depósito es de octubre: no se toca en septiembre.
     expect(db.pares().every((p) => p.month === 9)).toBe(true);
 
@@ -299,7 +276,6 @@ describe("mes: previewMes() y asentarMes()", () => {
     expect(despues.asientos.map((a) => [a.referenciaTipo, a.asentado])).toEqual([
       ["HOSP_DEPOSITO_RECIBIDO", true],
       ["HOSP_FARMACIA_SALIDA", true],
-      ["HOSP_HONORARIOS_RET_ISR", true],
     ]);
 
     // Octubre: sólo la aplicación del depósito.
@@ -311,7 +287,7 @@ describe("mes: previewMes() y asentarMes()", () => {
     const db = armarMes(false);
     const p = await previewMes(comoDb(db), "c1", 2026, 9);
     expect(p.activa).toBe(false);
-    expect(p.asientos).toHaveLength(3);
+    expect(p.asientos).toHaveLength(2);
     await expect(asentarMes(comoDb(db), "c1", 2026, 9)).rejects.toMatchObject({ status: 409 });
     expect(db.asientos).toHaveLength(0);
   });

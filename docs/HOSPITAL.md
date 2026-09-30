@@ -658,8 +658,7 @@ Motor: `src/lib/contabilidad/hospital.ts` (patrón taller.ts) parte el ingreso d
 `ivaContexto`; los honorarios facturados por el hospital van a HONORARIOS_POR_CUENTA_DE_TERCEROS (pasivo), no a ingreso. Fuente HOSPITAL
 (`src/lib/accounting/postings.ts`, postBalancedEntry): salida de farmacia a un episodio = COSTO_FARMACIA_16 o COSTO_FARMACIA_0 (la misma regla de IVA del
 ingreso, leída del cargo que ampara la salida: ingreso y costo nunca caen en lados distintos de la tasa) contra INVENTARIO_FARMACIA al costo del lote;
-alta del episodio = retenciones de ISR 10 % e IVA 2/3 de los honorarios de cada médico persona física con RFC, sólo cuando el hospital es persona moral
-(HONORARIOS_POR_CUENTA_DE_TERCEROS contra 216.04/216.10; el saldo del pasivo es lo neto a pagar); depósito RECIBIDO = CAJA (efectivo) o FONDOS_EN_TRANSITO
+alta del episodio = NADA de honorarios (antes asentaba una retención estimada; ver «Honorarios» abajo); depósito RECIBIDO = CAJA (efectivo) o FONDOS_EN_TRANSITO
 (tarjeta, transferencia, cheque) contra ANTICIPOS_PACIENTES; APLICADO = ANTICIPOS_PACIENTES contra CLIENTES; DEVUELTO = al revés.
 Cobro de caja (`cobros.ts`) = CAJA o FONDOS_EN_TRANSITO contra CLIENTES; el cobro ligado a un anticipo NO asienta (ya lo asentó
 el depósito, y asentarlo otra vez metería el mismo billete dos veces). CONTRACARGADO reversa contra FONDOS_EN_TRANSITO aunque
@@ -679,6 +678,23 @@ alguien lo cargó, y el tope del FIFO impide que la cuenta se vaya a saldo acree
 `fondosEnTransitoPendientes(db, companyId, hasta)` de `cobros.ts` (saldo y filas que lo componen, en FIFO por fecha), para que la
 regla de QUÉ cuenta como pendiente tenga un solo dueño y la conciliación no la replique: cobro sin liquidación —o con una cuyo
 movimiento bancario aún no llega— y depósito RECIBIDO o APLICADO; el efectivo nunca, que ése va a CAJA. Lo que ya asentó (asientoAt) no se repite; unpostMonth del hub conserva la fuente HOSPITAL.
+
+**Cableado en el hub (sep-2026, `src/lib/contabilidad/hospital-cobro-banco.ts`).** El reparto se calcula del LIBRO, no del
+estado de los cobros: al conciliar un depósito ligado a facturas, postMonth abona primero FONDOS_EN_TRANSITO (o CAJA si el
+depósito es en efectivo) hasta el saldo deudor que esa cuenta tiene a la fecha del depósito —sin los asientos que el propio
+postMonth está por regenerar y menos lo que ya consumieron los depósitos anteriores del mes, en orden de fecha— y sólo el resto
+va a CLIENTES/ANTICIPOS como siempre. Lo cubierto se descuenta primero de lo asignado a facturas (lo que la caja abonó a
+CLIENTES) y luego del sobrante (lo que abonó a ANTICIPOS). Regenerable, con tope exacto: la cuenta nunca queda acreedora.
+Apagada la contabilidad del hospital, las patas son exactamente las de antes. `fondosEnTransitoPendientes` sigue siendo el
+detalle por cobro para la pantalla; el importe lo da el libro.
+
+**Honorarios (sep-2026, `src/lib/contabilidad/hospital-honorarios.ts`).** El CFDI del paciente deja los honorarios en
+HONORARIOS_POR_CUENTA_DE_TERCEROS (205.06). El CFDI con que el médico le factura sus honorarios al hospital CANCELA ese pasivo
+—postMonth carga 205.06 en vez de gasto— por lo que el hospital le facturó al paciente por ese médico (HospCargo HONORARIO en un
+CFDI de ingreso vigente, por RFC del médico o de su proveedor) y aún no se canceló con CFDIs anteriores, en orden cronológico.
+Lo que exceda sigue a gasto y postMonth lo avisa. **La retención tiene una sola fuente: el CFDI del médico** (Art. 106 LISR,
+Art. 1-A LIVA: nace del comprobante y del pago, y el motor fiscal la toma de ahí). El alta ya no asienta la retención
+estimada: con las dos, el pasivo con el SAT quedaba doble. `retencionesPorMedico` queda como estimación para mostrar.
 
 ### P4 expedientes históricos desde CFDIs y convenio 360
 
