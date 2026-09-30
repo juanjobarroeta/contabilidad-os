@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const { member, find, membership } = vi.hoisted(() => ({ member: { role: 'ACCOUNTANT', hospitalPaginas: [] as string[], hospitalPermisos: [] as string[] }, find: vi.fn(), membership: vi.fn() }));
 vi.mock('@/lib/prisma', () => ({ prisma: { companyMember: { findUnique: find } } }));
 vi.mock('@/lib/authz', () => ({ requireMembership: membership, AuthzError: class extends Error { constructor(public status: number, message: string) { super(message) } } }));
-import { combinarPermisos, enforceHospitalAccess, PERMISOS_CLINICOS, permisosDelGrupo } from './permisos';
+import { assertPaginaHospitalEnApi, combinarPermisos, enforceHospitalAccess, PERMISOS_CLINICOS, permisosDelGrupo } from './permisos';
 beforeEach(() => { member.role = 'ACCOUNTANT'; member.hospitalPaginas = []; member.hospitalPermisos = []; find.mockResolvedValue(member); membership.mockResolvedValue({ membership: member }); });
 const request = (path: string, method = 'GET') => new Request(`https://local.test/api/hospital/${path}`, { method });
 describe('hospital server permission matrix', () => {
@@ -86,5 +86,22 @@ describe('combinarPermisos', () => {
   });
   it('los grupos cubren todas las llaves sin traslape', () => {
     expect([...permisosDelGrupo('clinicos'), ...permisosDelGrupo('operacion')].sort()).toEqual([...PERMISOS_CLINICOS].sort());
+  });
+});
+
+describe('assertPaginaHospitalEnApi', () => {
+  const bearer = new Request('https://local.test/api/contabilidad/ce-balance-general', { headers: { authorization: 'Bearer x' } });
+  const sesion = new Request('https://local.test/api/contabilidad/ce-balance-general');
+  it('niega a un usuario del satélite sin la página', async () => {
+    member.hospitalPaginas = ['caja'];
+    await expect(assertPaginaHospitalEnApi('c', 'u', bearer, ['balance'])).rejects.toMatchObject({ status: 403 });
+  });
+  it('deja pasar con la página, sin restricción o desde la sesión del hub', async () => {
+    member.hospitalPaginas = ['balance'];
+    await expect(assertPaginaHospitalEnApi('c', 'u', bearer, ['balance'])).resolves.toBeUndefined();
+    member.hospitalPaginas = [];
+    await expect(assertPaginaHospitalEnApi('c', 'u', bearer, ['balance'])).resolves.toBeUndefined();
+    member.hospitalPaginas = ['caja'];
+    await expect(assertPaginaHospitalEnApi('c', 'u', sesion, ['balance'])).resolves.toBeUndefined();
   });
 });

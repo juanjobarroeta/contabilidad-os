@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { AuthzError, requireMembership } from "@/lib/authz";
+import { extractBearer } from "@/lib/api-token";
 import { DEMO_CEDULA, demoMedicalGrant, isDemoPatient } from "./demo";
 
 export const PERMISOS_CLINICOS = ["CLINICA_LEER", "CLINICA_ESCRIBIR", "ADMINISTRAR", "ALTA", "PRESCRIBIR", "FINANZAS_ESCRIBIR", "COMPRAS_AUTORIZAR", "PAGOS_AUTORIZAR", "TESORERIA_PAGAR"] as const;
@@ -113,4 +114,19 @@ export async function requirePractitioner(companyId: string, userId: string, req
     throw new AuthzError(403, "No puedes firmar como médico con este usuario. Un administrador debe vincular tu cuenta a tu perfil médico y verificar tu cédula en Usuarios. Si ya tienes un perfil verificado, debes firmar con tu propia identidad.");
   }
   return { ...medico, soloDemostracion: false };
+}
+
+/**
+ * Rutas generales del hub que el satélite también lee (estados financieros,
+ * papeles de IVA). No pasan por `/api/hospital/*`, así que la rejilla de
+ * páginas no las cubría: un miembro sin «Estado de resultados» podía leerlo
+ * por la API. Sólo aplica a llamadas con Bearer (los satélites); la sesión
+ * web del hub no usa `hospitalPaginas`. Lista vacía = ve todas.
+ */
+export async function assertPaginaHospitalEnApi(companyId: string, userId: string, req: Request, requeridas: string[]) {
+  if (!extractBearer(req)) return;
+  const member = await prisma.companyMember.findUnique({ where: { userId_companyId: { userId, companyId } }, select: { hospitalPaginas: true } });
+  if (member?.hospitalPaginas.length && !requeridas.some((p) => member.hospitalPaginas.includes(p))) {
+    throw new AuthzError(403, "Tu usuario no tiene acceso a esta sección del hospital. Pide a un administrador que habilite esta sección en Usuarios.");
+  }
 }

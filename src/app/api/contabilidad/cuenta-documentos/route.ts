@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, withAuthz } from "@/lib/authz";
+import { assertPaginaHospitalEnApi } from "@/lib/hospital/permisos";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/contabilidad/cuenta-documentos?companyId=…&cuenta=4101-0001-0000
@@ -30,7 +31,8 @@ export const GET = withAuthz(async (req: Request) => {
   if (!companyId || !cuenta) {
     return NextResponse.json({ error: "companyId y cuenta requeridos" }, { status: 400 });
   }
-  await requireMembership(companyId, undefined, req);
+  const { user } = await requireMembership(companyId, undefined, req);
+  await assertPaginaHospitalEnApi(companyId, user.id, req, ["estado-resultados", "balance"]);
 
   const anio = Number(searchParams.get("anio"));
   const mes = Number(searchParams.get("mes"));

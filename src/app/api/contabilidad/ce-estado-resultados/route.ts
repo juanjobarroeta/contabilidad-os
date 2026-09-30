@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, withAuthz } from "@/lib/authz";
+import { assertPaginaHospitalEnApi } from "@/lib/hospital/permisos";
 import {
   construirEstadoResultados,
   type MovimientoCuenta,
@@ -21,7 +22,8 @@ export const GET = withAuthz(async (req: Request) => {
   const { searchParams } = new URL(req.url);
   const companyId = searchParams.get("companyId");
   if (!companyId) return NextResponse.json({ error: "companyId requerido" }, { status: 400 });
-  await requireMembership(companyId, undefined, req);
+  const { user } = await requireMembership(companyId, undefined, req);
+  await assertPaginaHospitalEnApi(companyId, user.id, req, ["estado-resultados"]);
 
   const anio = Number(searchParams.get("anio"));
   const mes = Number(searchParams.get("mes"));
