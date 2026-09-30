@@ -1,6 +1,6 @@
 # Mexican tax-regime coverage tracker
 
-Status date: 2026-09-15
+Status date: 2026-09-30
 Product scope: current CFDI 4.0 regime codes accepted by ContabilidadOS
 Legal baseline: SAT/RMF 2026; taxpayer-specific CSF obligations remain authoritative
 
@@ -66,6 +66,12 @@ The migration is additive and intentionally has no backfill: every existing CFDI
 CSF refresh recognizes the same canonical 19-code catalog. It validates the complete replacement before writing, retains a still-current primary or requires an explicit choice, marks missing regime rows inactive with an end timestamp, and reactivates returning codes instead of deleting them. The end timestamp means “confirmed absent in this refresh”; it is not represented as an exact SAT legal end date. Current obligation and credit consumers still read active rows, while monthly/annual calculation gates and historical annual-declaration coverage read lifecycle rows for the requested period. Because storage remains one row per company/code, reactivation cannot represent a gap between two active intervals. It can therefore over-include a reactivated code in that gap: mixed sets remain blocked, but explicit interval history is still required to close the single-track gap safely.
 
 When a newer CSF contains several regimes but no longer contains the prior primary, both CSF upload surfaces pause before writing and ask the accountant to choose the ContabilidadOS reference regime. Every listed regime remains active; the choice exists only for legacy screens that still require one scalar code.
+
+### Monthly income evidence aggregation (FISC-002M)
+
+`GET /api/impuestos/asignaciones-regimen/ingresos` aggregates two separate documentary buckets by regime: PUE net bases by emission month, and PPD net bases by REP `FechaPago`. PUE does not prove collection. Exact decimal reads, cumulative cent-conserving allocation, fiscal-UUID deduplication, cancelled/superseded exclusions and complete known-history checks protect the summary. Missing, contradictory, foreign-currency, credit-note or transition evidence produces null aggregate totals, not partial income. Every company-scoped scan is bounded and uses one repeatable-read snapshot.
+
+The [contract and 34-case review matrix](./FISC-002M-INCOME-EVIDENCE-v1.md) include independent documentary amount expectations and real-PostgreSQL regression coverage. Professional review remains pending. There is no new UI, tax formula, schema or calculation admission change: `usadaEnCalculoAutomatico: false`, separate PUE/REP totals and existing mixed-regime guards remain. PUE collection evidence, deductions, retentions/credits, annual composition and accountant-approved tax-amount cases are still required before automatic consumption.
 
 ## Current coverage audit
 

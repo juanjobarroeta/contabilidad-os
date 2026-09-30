@@ -258,16 +258,26 @@ export function allocateCentavosByBasisPoints(params: {
  * must still be present in the payment month; a transition is deliberately a
  * review state because this contract does not decide Mexican transition law.
  */
-export function projectPpdRegimenAllocation(params: {
+export interface RegimenBaseProjectionInput {
   baseCentavos: number;
   parentEffectiveRegimenCodes: ReadonlyArray<string | null | undefined>;
   paymentEffectiveRegimenCodes: ReadonlyArray<string | null | undefined>;
   assignment: {
     allocations: ReadonlyArray<InvoiceRegimenAllocationInput>;
   } | null;
-}): RegimenPaymentProjection {
+}
+
+export function projectPpdRegimenAllocation(params: RegimenBaseProjectionInput): RegimenPaymentProjection {
   if (!isPositiveSafeInteger(params.baseCentavos)) {
     return { ok: false, code: "INVALID_PAYMENT_BASE", error: "La base pagada debe ser un importe positivo en centavos enteros." };
+  }
+  return projectRegimenBase(params);
+}
+
+/** Same attribution rules, also permitting an explicitly known zero base. */
+export function projectRegimenBase(params: RegimenBaseProjectionInput): RegimenPaymentProjection {
+  if (!Number.isSafeInteger(params.baseCentavos) || params.baseCentavos < 0) {
+    return { ok: false, code: "INVALID_PAYMENT_BASE", error: "La base debe expresarse en centavos enteros no negativos." };
   }
 
   const parentCodes = normalizedCodes(params.parentEffectiveRegimenCodes);
