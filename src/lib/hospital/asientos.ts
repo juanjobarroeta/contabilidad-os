@@ -276,44 +276,24 @@ export function retencionesPorMedico(cargos: CargoHonorario[], empresaRetiene: b
   return [...porMedico.values()].filter((m) => m.retencionIsr > 0.005 || m.retencionIva > 0.005);
 }
 
+/**
+ * Lo que el alta del episodio asienta de honorarios: NADA.
+ *
+ * Aquí se asentaba la retención estimada (ISR 10 %, IVA 2/3) de cada médico
+ * persona física contra el pasivo 205.06. Pero la retención nace del CFDI que
+ * el médico le emite al hospital y del pago (Art. 106 LISR, Art. 1-A LIVA), y
+ * el motor del hub ya la asienta al postear ese CFDI, que ahora también cancela
+ * el pasivo 205.06 (contabilidad/hospital-honorarios.ts). Con las dos, el
+ * pasivo con el SAT quedaba doble. La fuente única es el CFDI del médico;
+ * `retencionesPorMedico` queda como estimación para mostrar, no para asentar.
+ */
 export function planesHonorarios(
-  episodio: { id: string; folio: string; fechaAlta: Date | null },
-  cargos: CargoHonorario[],
-  empresaRetiene: boolean,
-  ahora: Date = new Date()
+  _episodio: { id: string; folio: string; fechaAlta: Date | null },
+  _cargos: CargoHonorario[],
+  _empresaRetiene: boolean,
+  _ahora: Date = new Date()
 ): AsientoPlan[] {
-  const fecha = episodio.fechaAlta ?? ahora;
-  const planes: AsientoPlan[] = [];
-  for (const m of retencionesPorMedico(cargos, empresaRetiene)) {
-    const marcar = (tx: Db, at: Date) =>
-      tx.hospCargo.updateMany({ where: { id: { in: m.cargoIds } }, data: { asientoAt: at } }).then(() => undefined);
-    const referencia = `${episodio.id}:${m.medicoId}`;
-    if (m.retencionIsr > 0.005) {
-      planes.push({
-        fecha,
-        descripcion: `Retención ISR 10 % honorarios ${m.nombre} · ${episodio.folio}`,
-        monto: m.retencionIsr,
-        referencia,
-        referenciaTipo: TIPO_ASIENTO.HONORARIOS_RET_ISR,
-        cargo: "HONORARIOS_POR_CUENTA_DE_TERCEROS",
-        abono: "RETENCION_ISR_HONORARIOS",
-        marcar,
-      });
-    }
-    if (m.retencionIva > 0.005) {
-      planes.push({
-        fecha,
-        descripcion: `Retención IVA 2/3 honorarios ${m.nombre} · ${episodio.folio}`,
-        monto: m.retencionIva,
-        referencia,
-        referenciaTipo: TIPO_ASIENTO.HONORARIOS_RET_IVA,
-        cargo: "HONORARIOS_POR_CUENTA_DE_TERCEROS",
-        abono: "RETENCION_IVA_HONORARIOS",
-        marcar,
-      });
-    }
-  }
-  return planes;
+  return [];
 }
 
 const cargosHonorarioPendientes = (tx: Db, companyId: string, episodioId: string) =>
