@@ -841,7 +841,15 @@ usa para escribir. Se construye por pasos:
      CFDI viejo; al timbrarla pasan al nuevo, y el viejo se cancela con 01 y el
      UUID nuevo (el timbrado devuelve `sustituye` para ofrecerlo). La factura
      global no se sustituye: se cancela con 02 y se vuelve a armar.
-4. Complementos de pago (REP) de las facturas PPD.
+4. **Complementos de pago** (hecho). La detección de
+   `GET /api/facturas/complemento-pagos` vive en `lib/facturas/rep-pendientes.ts`
+   (misma salida) y el timbrado sigue en `lib/complementos-rep-emit.ts`
+   (parcialidad por UUID, saldos, IVA). `GET /api/hospital/facturacion/complementos`
+   agrega los cobros de caja ligados a cada PPD (`lib/hospital/complementos.ts`):
+   lo ya amparado cubre los cobros más viejos y el siguiente sin cubrir es el
+   REP sugerido (monto, fecha de operación y forma de pago SAT del cobro).
+   `POST …/complementos` `{ invoiceId, cobroId? | monto/fechaPago/formaPago, preview? }`.
+   El REP se cancela con `…/facturas/[id]/cancelar`.
 5. Nómina: alta y edición de empleados, cancelación de recibos, baja,
    aguinaldo y PTU.
 
