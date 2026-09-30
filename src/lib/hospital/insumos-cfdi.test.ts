@@ -5,6 +5,7 @@ import {
   derivarInsumosBackfill,
   derivarInsumosDesdeCfdi,
   etiquetarControlados,
+  costoDeLinea,
   extraerConceptosCfdi,
   ivaTasaDeCategoria,
   normalizarDescripcion,
@@ -443,5 +444,18 @@ describe("controlados al derivar", () => {
     expect(db._insumos[1]).toMatchObject({ grupoControl: null, controlado: false });
     expect(db._insumos[2]).toMatchObject({ grupoControl: null, sustanciaActiva: "Midazolam" });
     expect(db._insumos[3]).toMatchObject({ grupoControl: null, controlado: false });
+  });
+});
+
+describe("costoDeLinea — el costo de la entrada resta el descuento del concepto", () => {
+  it("cantidad × valor unitario menos descuento", () => {
+    expect(costoDeLinea({ valorUnitario: 10, cantidad: 5, importe: 50, descuento: 7.5 })).toBe(42.5);
+  });
+  it("sin valor unitario usa el importe; sin descuento, igual que antes", () => {
+    expect(costoDeLinea({ valorUnitario: 0, cantidad: 1, importe: 80 })).toBe(80);
+  });
+  it("lee el Descuento del concepto en el XML", () => {
+    const [c] = extraerConceptosCfdi('<cfdi:Concepto ClaveProdServ="51101500" Cantidad="2" ValorUnitario="50" Importe="100" Descuento="15" Descripcion="X"/>');
+    expect(c.descuento).toBe(15);
   });
 });

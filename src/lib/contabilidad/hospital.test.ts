@@ -7,6 +7,7 @@ import {
   piernasResultadosHospital,
   repartirHospital,
   type ContextoHospital,
+  montoInsumosDeCompra,
 } from "./hospital";
 import type { ClaveMotor } from "../hospital/contabilidad";
 import type { CuentaTaller } from "./taller";
@@ -171,5 +172,23 @@ describe("cargarContextoHospital()", () => {
 
   it("sin CFDIs no consulta nada", async () => {
     expect(await cargarContextoHospital("c1", [], { db: comoDb(new DbFalsa()) })).toBe(SIN_HOSPITAL);
+  });
+});
+
+describe("montoInsumosDeCompra — la compra de insumos va al inventario de farmacia", () => {
+  it("suma sólo los conceptos que son insumo, netos de su descuento", () => {
+    expect(
+      montoInsumosDeCompra([
+        { claveProdServ: "51101500", descripcion: "PARACETAMOL 500 MG TABLETAS", importe: 1000, descuento: 100 },
+        { claveProdServ: "42312200", descripcion: "GASAS ESTERILES", importe: 500 },
+        { claveProdServ: "78101800", descripcion: "FLETE", importe: 200 },
+      ]),
+    ).toBe(1400);
+  });
+  it("el equipo médico no es mercancía: no entra al inventario de farmacia", () => {
+    expect(montoInsumosDeCompra([{ claveProdServ: "42181500", descripcion: "MONITOR DE SIGNOS VITALES", importe: 25000 }])).toBe(0);
+  });
+  it("un CFDI sin insumos no aporta nada", () => {
+    expect(montoInsumosDeCompra([{ claveProdServ: "80131500", descripcion: "RENTA DE LOCAL", importe: 9000 }])).toBe(0);
   });
 });

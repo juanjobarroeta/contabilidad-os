@@ -9,6 +9,7 @@ import {
   type CuentaResuelta,
 } from "../hospital/contabilidad";
 import type { CuentaTaller } from "./taller";
+import { clasificarInsumo } from "../hospital/insumos-cfdi";
 
 /**
  * P3c — el hospital en el libro: el CFDI del paciente partido por categoría.
@@ -157,3 +158,66 @@ export function piernasResultadosHospital(invoiceId: string, subtotal: number, c
   const piernas = piernasIngresoHospital(invoiceId, subtotal, ctx);
   return piernas ? piernas.filter((p) => p.cuenta.tipo !== "PASIVO") : null;
 }
+
+// ─── Compras de insumos (CFDI del proveedor) ─────────────────────────────────
+//
+// La salida de farmacia al paciente ABONA la cuenta de INVENTARIO_FARMACIA
+// (hospital/asientos.ts). La compra tiene que CARGAR esa MISMA cuenta, o el
+// inventario se va a negativo y el costo cuenta dos veces: una como gasto al
+// comprar y otra como 501 al aplicar. Antes la compra dependía del UsoCFDI
+// (G01 → 115.01; lo demás al clasificador, y los medicamentos 51xx caían en
+// «Otros gastos»). Ahora, en una empresa con hospital, la parte de insumos de
+// un CFDI recibido —lo que clasifica insumos-cfdi.clasificarInsumo, salvo
+// EQUIPO, que es activo y no mercancía— va a INVENTARIO_FARMACIA resuelta con
+// resolverCuenta: el override del contador mueve las dos patas juntas.
+//
+// El costo de lo consumido lo reconoce la salida (perpetuo, con la
+// contabilidad del hospital activa) o el conteo periódico del Cierre.
+
+export interface LineaCompra {
+  claveProdServ?: string | null;
+  descripcion?: string | null;
+  importe: unknown;
+  descuento?: unknown;
+}
+
+/** La parte de insumos de un CFDI de compra, neta del descuento de cada concepto. PURA. */
+export function montoInsumosDeCompra(items: LineaCompra[]): number {
+  let monto = 0;
+  for (const it of items) {
+    const c = clasificarInsumo({ claveProdServ: it.claveProdServ, descripcion: it.descripcion });
+    if (!c.esInsumo || c.categoria === "EQUIPO") continue;
+    monto += Math.max(0, Number(it.importe ?? 0) - (Number(it.descuento ?? 0) || 0));
+  }
+  return r2(monto);
+}
+
+export interface CompraHospital {
+  cuenta: CuentaTaller;
+  /** Base neta de los conceptos que son insumo. */
+  monto: number;
+}
+
+/**
+ * Por CFDI recibido, la parte de insumos y la cuenta de INVENTARIO_FARMACIA.
+ * Vacío si la empresa no tiene hospital (sin HospConfig): el resto de las
+ * empresas no cambia.
+ */
+export async function cargarComprasHospital(
+  companyId: string,
+  egresos: { id: string; items: LineaCompra[] }[],
+  opts: { db?: Db } = {},
+): Promise<Map<string, CompraHospital>> {
+  const out = new Map<string, CompraHospital>();
+  if (egresos.length === 0) return out;
+  const db = opts.db ?? prisma;
+  const tieneHospital = await db.hospConfig.findUnique({ where: { companyId }, select: { id: true } });
+  if (!tieneHospital) return out;
+  const conMonto = egresos.map((e) => ({ id: e.id, monto: montoInsumosDeCompra(e.items) })).filter((e) => e.monto > 0.005);
+  if (conMonto.length === 0) return out;
+  const config = await cargarConfigContable(db, companyId);
+  const cuenta = comoCuentaTaller(await resolverCuenta(db, companyId, "INVENTARIO_FARMACIA", { config: config.cuentas }));
+  for (const e of conMonto) out.set(e.id, { cuenta, monto: e.monto });
+  return out;
+}
+
