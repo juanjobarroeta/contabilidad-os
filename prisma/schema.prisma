@@ -1057,6 +1057,7 @@ model Invoice {
   items                InvoiceItem[]
   taxes                InvoiceTax[]
   regimenAssignment    InvoiceRegimenAssignment?
+  hospDepositosAnticipo HospDeposito[] @relation("HospDepositoAnticipo")
   bankTransactions     BankTransaction[]
   // Conciliación uno-a-varios: porciones de movimientos asignadas a esta factura.
   conciliacionDetalles ConciliacionDetalle[]
@@ -7355,6 +7356,11 @@ model HospConfig {
   /// tras la apertura; `cuentasContables` sobreescribe cuentas por clave del motor (INGRESO_HOSPITALIZACION → "401.01"…).
   contabilidadActiva Boolean @default(false)
   cuentasContables   Json?
+  /// Tasa de IVA con la que se parte el depósito de un paciente cobrado SIN
+  /// CFDI de anticipo (Art. 1-B LIVA: el IVA se causa al cobro). null = no se
+  /// parte (el depósito queda completo en ANTICIPOS_PACIENTES y sólo se avisa);
+  /// 0.16 / 0 según el servicio que se espera cobrar. Lo decide el contador.
+  ivaAnticiposTasa   Decimal? @db.Decimal(18, 6)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -8819,13 +8825,19 @@ model HospDeposito {
   asientoAt  DateTime?
   recibidoPorUserId String?
   notas      String?
+  /// El CFDI de anticipo que ampara el depósito (lo liga el cron
+  /// hospital-cfdi-vincular por paciente, monto y fecha). Sin él, el depósito
+  /// es IVA causado sin comprobante: aparece en los pendientes por antigüedad.
+  invoiceAnticipoId String?
 
   company  Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
   episodio HospEpisodio @relation(fields: [episodioId], references: [id], onDelete: Cascade)
+  invoiceAnticipo Invoice? @relation("HospDepositoAnticipo", fields: [invoiceAnticipoId], references: [id])
   cobro    HospCobro?
 
   @@index([companyId, fecha])
   @@index([episodioId])
+  @@index([invoiceAnticipoId])
 }
 
 enum HospEpisodioOrigen {

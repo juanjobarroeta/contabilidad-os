@@ -84,6 +84,12 @@ export const TIPO_ASIENTO = {
   COBRO_CANCELADO: "HOSP_COBRO_CANCELADO",
   LIQUIDACION_COMISION: "HOSP_LIQUIDACION_COMISION",
   LIQUIDACION_IVA_COMISION: "HOSP_LIQUIDACION_IVA_COMISION",
+  FARMACIA_MERMA: "HOSP_FARMACIA_MERMA",
+  FARMACIA_SOBRANTE: "HOSP_FARMACIA_SOBRANTE",
+  FARMACIA_DEVOLUCION_PACIENTE: "HOSP_FARMACIA_DEVOLUCION_PACIENTE",
+  FARMACIA_VENTA: "HOSP_FARMACIA_VENTA",
+  DEPOSITO_IVA: "HOSP_DEPOSITO_IVA",
+  DEPOSITO_IVA_REVERSA: "HOSP_DEPOSITO_IVA_REVERSA",
 } as const;
 
 export const TASA_RETENCION_ISR_HONORARIOS = 0.1;
@@ -220,6 +226,75 @@ export async function asentarSalidaFarmacia(tx: Db, movimiento: MovimientoParaAs
   return (await ejecutarPlan(tx, c, plan)) ? 1 : 0;
 }
 
+// ─── Kardex que no es aplicación ─────────────────────────────────────────────
+//
+// Sólo la SALIDA_APLICACION tocaba el libro: la merma, la caducidad, el conteo
+// físico y la venta directa movían el kardex y 115.01 se quedaba donde estaba —
+// un inventario contable siempre mayor que el de los anaqueles, y la merma sin
+// gasto. Cada movimiento se valúa al costo con el que quedó en el kardex:
+//
+//   MERMA · CADUCIDAD · AJUSTE (−)   CARGO MERMA_FARMACIA 501.08 / ABONO INVENTARIO_FARMACIA
+//   AJUSTE (+)                       CARGO INVENTARIO_FARMACIA   / ABONO SOBRANTE_INVENTARIO 704.23
+//   DEVOLUCION (+) del paciente      CARGO INVENTARIO_FARMACIA   / ABONO el costo de la aplicación
+//                                    (sólo si esa aplicación llegó al libro: se reversa lo asentado)
+//   SALIDA_VENTA (venta directa)     CARGO COSTO_FARMACIA_0      / ABONO INVENTARIO_FARMACIA
+//                                    (sólo si su CFDI no ampara cargos de un episodio: si los
+//                                    ampara, la aplicación ya costeó esa pieza y sería doble)
+//   DEVOLUCION (−) al proveedor      nada: la nota de crédito del proveedor la asienta el hub
+//                                    (sale en el cruce de compras para vigilar que llegue)
+//   ENTRADA_COMPRA                   nada: la compra entra con el CFDI del proveedor
+
+export interface MovimientoKardexParaAsiento extends MovimientoParaAsiento {
+  /** DEVOLUCION del paciente: ¿la aplicación que se devuelve está en el libro? */
+  origenAsentado?: boolean;
+  /** SALIDA_VENTA: ¿su CFDI ampara cargos de algún episodio? */
+  facturaConCargos?: boolean;
+}
+
+export function planMovimientoKardex(m: MovimientoKardexParaAsiento): AsientoPlan | null {
+  if (m.tipo === "SALIDA_APLICACION") return planSalidaFarmacia(m);
+  const cantidad = Number(m.cantidad);
+  const monto = r2(Math.abs(cantidad) * Number(m.costoUnitario ?? 0));
+  if (!(monto > 0.005)) return null;
+  const que = m.descripcion?.trim() || `movimiento ${m.id}`;
+  const marcar = (tx: Db, at: Date) => tx.hospMovimientoInsumo.update({ where: { id: m.id }, data: { asientoAt: at } }).then(() => undefined);
+  const base = { fecha: m.fecha, monto, referencia: m.id, marcar };
+  const cargoDe = m.cargo ? { ivaContexto: m.cargo.ivaContexto, ivaTasa: m.cargo.ivaTasa == null ? null : Number(m.cargo.ivaTasa) } : null;
+
+  switch (m.tipo) {
+    case "MERMA":
+    case "CADUCIDAD":
+      return { ...base, descripcion: `${m.tipo === "MERMA" ? "Merma" : "Caducidad"} de farmacia · ${que}`, referenciaTipo: TIPO_ASIENTO.FARMACIA_MERMA, cargo: "MERMA_FARMACIA", abono: "INVENTARIO_FARMACIA" };
+    case "AJUSTE":
+      return cantidad < 0
+        ? { ...base, descripcion: `Faltante de inventario de farmacia · ${que}`, referenciaTipo: TIPO_ASIENTO.FARMACIA_MERMA, cargo: "MERMA_FARMACIA", abono: "INVENTARIO_FARMACIA" }
+        : { ...base, descripcion: `Sobrante de inventario de farmacia · ${que}`, referenciaTipo: TIPO_ASIENTO.FARMACIA_SOBRANTE, cargo: "INVENTARIO_FARMACIA", abono: "SOBRANTE_INVENTARIO" };
+    case "DEVOLUCION":
+      if (cantidad < 0 || !m.origenAsentado) return null;
+      return { ...base, descripcion: `Devolución de farmacia del paciente · ${que}`, referenciaTipo: TIPO_ASIENTO.FARMACIA_DEVOLUCION_PACIENTE, cargo: "INVENTARIO_FARMACIA", abono: claveDeCostoFarmacia(cargoDe) };
+    case "SALIDA_VENTA":
+      if (m.facturaConCargos !== false) return null;
+      return { ...base, descripcion: `Costo de farmacia en venta directa · ${que}`, referenciaTipo: TIPO_ASIENTO.FARMACIA_VENTA, cargo: "COSTO_FARMACIA_0", abono: "INVENTARIO_FARMACIA" };
+    default:
+      return null;
+  }
+}
+
+/** Hook de los movimientos de piso (merma, caducidad, ajuste, devoluciones): dentro de su transacción. */
+export async function asentarMovimientoKardex(tx: Db, movimiento: MovimientoKardexParaAsiento, ctx?: ContextoAsientos): Promise<number> {
+  const c = ctx ?? (await contextoAsientos(tx, movimiento.companyId));
+  if (!c.config.activa || movimiento.asientoAt) return 0;
+  const plan = planMovimientoKardex(movimiento);
+  if (!plan) return 0;
+  return (await ejecutarPlan(tx, c, plan)) ? 1 : 0;
+}
+
+/** El cargo que canceló una DEVOLUCION del paciente (cargos.ts la referencia así). */
+export function cargoDeDevolucion(referencia: string | null | undefined): string | null {
+  const m = /^Cancelación del cargo (\S+?):/.exec(referencia ?? "");
+  return m ? m[1] : null;
+}
+
 // ─── Honorarios ──────────────────────────────────────────────────────────────
 
 export interface CargoHonorario {
@@ -339,6 +414,8 @@ export interface DepositoParaAsiento {
   referencia?: string | null;
   /** Folio del episodio, para la descripción. */
   folio?: string | null;
+  /** CFDI de anticipo que ampara el depósito: con él, el IVA lo lleva ese CFDI. */
+  invoiceAnticipoId?: string | null;
 }
 
 /**
@@ -427,6 +504,58 @@ export function planesDeposito(d: DepositoParaAsiento, opts: { rango?: { desde: 
   return planes;
 }
 
+/**
+ * El IVA del depósito cobrado SIN CFDI de anticipo (Art. 1-B LIVA: el IVA se
+ * causa al cobro, haya o no comprobante). Con `HospConfig.ivaAnticiposTasa`
+ * definida, el recibido se parte: la base se queda en ANTICIPOS_PACIENTES y el
+ * IVA pasa a IVA_TRASLADADO_COBRADO. Cuando el depósito se aplica a la cuenta
+ * (la factura del servicio trae su propio IVA), se devuelve o se cancela, el
+ * IVA regresa a ANTICIPOS_PACIENTES — así 206.01 queda en cero con el
+ * aplicado de siempre y el IVA no se cuenta dos veces. Con CFDI de anticipo
+ * ligado (`invoiceAnticipoId`) no se parte: ese CFDI lleva el IVA al libro.
+ */
+export function planesIvaDeposito(
+  d: DepositoParaAsiento,
+  tasa: number | null | undefined,
+  opts: { rango?: { desde: Date; hasta: Date }; ahora?: Date; ivaRecibidoAsentado?: boolean } = {}
+): AsientoPlan[] {
+  if (tasa == null || !(tasa > 0) || d.invoiceAnticipoId) return [];
+  const monto = r2(Number(d.monto));
+  const iva = r2((monto * tasa) / (1 + tasa));
+  if (!(iva > 0.005)) return [];
+  const ahora = opts.ahora ?? new Date();
+  const quien = d.folio ? ` · ${d.folio}` : "";
+  const marcar = (tx: Db, at: Date) => tx.hospDeposito.update({ where: { id: d.id }, data: { asientoAt: at } }).then(() => undefined);
+  const planes: AsientoPlan[] = [];
+  const recibidoEnLote = d.estado !== "CANCELADO" && enRango(d.fecha, opts.rango);
+  if (recibidoEnLote) {
+    planes.push({
+      fecha: d.fecha,
+      descripcion: `IVA del depósito sin CFDI de anticipo (${Math.round(tasa * 100)} %)${quien}`,
+      monto: iva,
+      referencia: d.id,
+      referenciaTipo: TIPO_ASIENTO.DEPOSITO_IVA,
+      cargo: "ANTICIPOS_PACIENTES",
+      abono: "IVA_TRASLADADO_COBRADO",
+      marcar,
+    });
+  }
+  const fechaFin = d.estado === "APLICADO" ? d.aplicadoAt ?? ahora : d.estado === "DEVUELTO" ? d.devueltoAt ?? ahora : d.estado === "CANCELADO" ? ahora : null;
+  if (fechaFin && enRango(fechaFin, opts.rango) && (opts.ivaRecibidoAsentado || (recibidoEnLote && d.estado !== "CANCELADO"))) {
+    planes.push({
+      fecha: fechaFin,
+      descripcion: `IVA del depósito regresa al anticipo (${d.estado === "APLICADO" ? "aplicado a la cuenta" : d.estado === "DEVUELTO" ? "devuelto" : "cancelado"})${quien}`,
+      monto: iva,
+      referencia: d.id,
+      referenciaTipo: TIPO_ASIENTO.DEPOSITO_IVA_REVERSA,
+      cargo: "IVA_TRASLADADO_COBRADO",
+      abono: "ANTICIPOS_PACIENTES",
+      marcar,
+    });
+  }
+  return planes;
+}
+
 /** Hook de POST/PATCH depósitos: asienta las etapas que falten en el libro. */
 export async function asentarDeposito(
   tx: Db,
@@ -440,6 +569,12 @@ export async function asentarDeposito(
     deposito.estado === "CANCELADO" && (await yaAsentado(tx, deposito.companyId, deposito.id, TIPO_ASIENTO.DEPOSITO_RECIBIDO));
   let n = 0;
   for (const plan of planesDeposito(deposito, { rango: opts.rango, ahora: opts.ahora, reversarCancelado })) {
+    if (await ejecutarPlan(tx, c, plan, opts.ahora)) n++;
+  }
+  // El IVA del depósito sin CFDI de anticipo (después del recibido: si el
+  // recibido acaba de asentarse, su IVA va en la misma transacción).
+  const ivaRecibidoAsentado = await yaAsentado(tx, deposito.companyId, deposito.id, TIPO_ASIENTO.DEPOSITO_IVA);
+  for (const plan of planesIvaDeposito(deposito, c.config.ivaAnticiposTasa, { rango: opts.rango, ahora: opts.ahora, ivaRecibidoAsentado })) {
     if (await ejecutarPlan(tx, c, plan, opts.ahora)) n++;
   }
   return n;
@@ -654,7 +789,12 @@ export async function planesDelMes(db: Db, companyId: string, anio: number, mes:
   const rango = rangoMesUtc(anio, mes);
   const [movimientos, cargos, depositos, cobros, liquidaciones] = await Promise.all([
     db.hospMovimientoInsumo.findMany({
-      where: { companyId, tipo: "SALIDA_APLICACION", asientoAt: null, fecha: { gte: rango.desde, lt: rango.hasta } },
+      where: {
+        companyId,
+        tipo: { in: ["SALIDA_APLICACION", "SALIDA_VENTA", "MERMA", "CADUCIDAD", "AJUSTE", "DEVOLUCION"] },
+        asientoAt: null,
+        fecha: { gte: rango.desde, lt: rango.hasta },
+      },
       select: {
         id: true,
         companyId: true,
@@ -663,8 +803,12 @@ export async function planesDelMes(db: Db, companyId: string, anio: number, mes:
         costoUnitario: true,
         fecha: true,
         asientoAt: true,
+        referencia: true,
         insumo: { select: { nombre: true } },
         lote: { select: { lote: true } },
+        // El contexto de IVA del cargo decide a qué costo va la salida (16 % / 0 %).
+        cargo: { select: { ivaContexto: true, ivaTasa: true } },
+        invoice: { select: { _count: { select: { hospCargos: true } } } },
       },
       orderBy: { fecha: "asc" },
     }),
@@ -723,8 +867,24 @@ export async function planesDelMes(db: Db, companyId: string, anio: number, mes:
   ]);
 
   const planes: AsientoPlan[] = [];
+  // La DEVOLUCION del paciente reversa la aplicación sólo si ésta llegó al libro.
+  const cargosDevueltos = [...new Set(movimientos.filter((m) => m.tipo === "DEVOLUCION").map((m) => cargoDeDevolucion(m.referencia)).filter((x): x is string => !!x))];
+  const aplicacionesDevueltas = cargosDevueltos.length
+    ? await db.hospCargo.findMany({
+        where: { id: { in: cargosDevueltos } },
+        select: { id: true, ivaContexto: true, ivaTasa: true, movimientoInsumo: { select: { asientoAt: true } } },
+      })
+    : [];
+  const porCargo = new Map(aplicacionesDevueltas.map((c) => [c.id, c]));
   for (const m of movimientos) {
-    const plan = planSalidaFarmacia({ ...m, descripcion: `${m.insumo.nombre}${m.lote ? ` · lote ${m.lote.lote}` : ""}` });
+    const devuelto = m.tipo === "DEVOLUCION" ? porCargo.get(cargoDeDevolucion(m.referencia) ?? "") : undefined;
+    const plan = planMovimientoKardex({
+      ...m,
+      descripcion: `${m.insumo.nombre}${m.lote ? ` · lote ${m.lote.lote}` : ""}`,
+      cargo: devuelto ?? m.cargo,
+      origenAsentado: !!devuelto?.movimientoInsumo?.asientoAt,
+      facturaConCargos: m.invoice ? m.invoice._count.hospCargos > 0 : undefined,
+    });
     if (plan) planes.push(plan);
   }
   const porEpisodio = new Map<string, { episodio: { id: string; folio: string; fechaAlta: Date | null }; cargos: CargoHonorario[] }>();
@@ -734,7 +894,20 @@ export async function planesDelMes(db: Db, companyId: string, anio: number, mes:
     porEpisodio.set(c.episodio.id, grupo);
   }
   for (const g of porEpisodio.values()) planes.push(...planesHonorarios(g.episodio, g.cargos, ctx.config.empresaRetiene, ahora));
-  for (const d of depositos) planes.push(...planesDeposito({ ...d, folio: d.episodio.folio }, { rango, ahora }));
+  const ivaDepositosAsentado = new Set(
+    depositos.length
+      ? (
+          await db.accountingEntry.findMany({
+            where: { companyId, fuente: FUENTE_HOSPITAL, referenciaTipo: TIPO_ASIENTO.DEPOSITO_IVA, referencia: { in: depositos.map((d) => d.id) } },
+            select: { referencia: true },
+          })
+        ).map((e) => e.referencia)
+      : [],
+  );
+  for (const d of depositos) {
+    planes.push(...planesDeposito({ ...d, folio: d.episodio.folio }, { rango, ahora }));
+    planes.push(...planesIvaDeposito({ ...d, folio: d.episodio.folio }, ctx.config.ivaAnticiposTasa, { rango, ahora, ivaRecibidoAsentado: ivaDepositosAsentado.has(d.id) }));
+  }
   for (const c of cobros) planes.push(...planesCobro({ ...c, folio: c.episodio?.folio ?? null }, { rango, ahora }));
   for (const l of liquidaciones) planes.push(...planesLiquidacion({ ...l, afiliacion: l.afiliacion.numero }, { rango }));
   return planes.sort((a, b) => a.fecha.getTime() - b.fecha.getTime());

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, requireModule, requireWriter, withAuthz } from "@/lib/authz";
 import { registrarBitacora } from "@/lib/audit";
+import { asentarMovimientoKardex } from "@/lib/hospital/asientos";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/hospital/farmacia/movimientos
@@ -100,6 +101,14 @@ export const POST = withAuthz(async (req: Request) => {
     if (lote) {
       await tx.hospLote.update({ where: { id: lote.id }, data: { existencia: lote.existencia } });
     }
+    // Contabilidad (docs/HOSPITAL.md P3): merma, caducidad y faltante salen de
+    // 115.01 a 501.08; el sobrante entra contra 704.23. La devolución al
+    // proveedor no se asienta aquí (la nota de crédito la lleva el hub).
+    // No-op con la contabilidad del hospital apagada.
+    await asentarMovimientoKardex(tx, {
+      ...movimiento,
+      descripcion: `${insumo.nombre}${lote ? ` · lote ${lote.lote}` : ""} · ${motivo}`,
+    });
     const suma = await tx.hospMovimientoInsumo.aggregate({ where: { insumoId }, _sum: { cantidad: true } });
     return { movimiento, lote, existencia: r2(Number(suma._sum.cantidad ?? 0)) };
   });
