@@ -12,6 +12,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { VINCULO_ORDEN } from "@/lib/hospital/requisiciones";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, requireModule, withAuthz } from "@/lib/authz";
 import {
@@ -123,9 +124,19 @@ export const GET = withAuthz(async (req: Request) => {
     derivadosPorFactura.set(d.invoiceId, lista);
   }
 
+  // Orden de compra de cada factura (cruce orden ↔ CFDI): sin orden = compra
+  // que no pasó por requisición autorizada.
+  const vinculos = await prisma.construccionCfdiVinculo.findMany({
+    where: { companyId, invoiceId: { in: facturasDb.map((f) => f.id) }, estado: "VINCULADA" },
+    select: { invoiceId: true, targetTipo: true, targetId: true, targetLabel: true },
+  });
+  const ordenDe = new Map(
+    vinculos.filter((v) => v.targetTipo === VINCULO_ORDEN).map((v) => [v.invoiceId, { id: v.targetId, folio: v.targetLabel }])
+  );
+
   type Proveedor = { customerId: string | null; razonSocial: string; rfc: string | null; facturas: number; importe: number; pagado: number; pendiente: number };
   const porProveedor = new Map<string, Proveedor>();
-  const totales = { facturas: 0, importe: 0, pagado: 0, pendiente: 0, notasCredito: 0 };
+  const totales = { facturas: 0, importe: 0, pagado: 0, pendiente: 0, notasCredito: 0, sinOrden: 0, importeSinOrden: 0 };
 
   const facturas = facturasDb.map((f) => {
     const ev = pagadoPorEvidencia({
@@ -147,6 +158,11 @@ export const GET = withAuthz(async (req: Request) => {
     totales.importe = r2(totales.importe + f.total);
     totales.pagado = r2(totales.pagado + ev.pagado);
     totales.pendiente = r2(totales.pendiente + ev.saldo);
+    const orden = ordenDe.get(f.id) ?? null;
+    if (!orden) {
+      totales.sinOrden += 1;
+      totales.importeSinOrden = r2(totales.importeSinOrden + f.total);
+    }
 
     const derivadosDeEsta = derivadosPorFactura.get(f.id) ?? [];
     return {
@@ -162,6 +178,7 @@ export const GET = withAuthz(async (req: Request) => {
       pagado: ev.pagado,
       saldo: ev.saldo,
       repPendiente: ev.repPendiente,
+      orden,
       items: f.items.map((it) => {
         const clasif = clasificarInsumo(it);
         let insumoId: string | null = null;
