@@ -1,6 +1,6 @@
 # ContabilidadOS gap-closure plan
 
-Status date: 2026-09-28
+Status date: 2026-09-30
 Production baseline: product/engineering
 Baseline branch: `codex/gap-closure-roadmap`, based on production commit `97d0adfe`
 
@@ -43,7 +43,7 @@ Target: 2–3 weeks. No general-availability sales before this gate passes.
 | SEC-001 | Browser security baseline | DONE | PR #1184 / `e1b4a109` passed all five CI checks and shipped in exact Railway deployment `744b1e7f`. All 22 deployment-attributed HTTPS checks verify host-only HSTS, enforced navigation/framing CSP, nosniff, referrer and permissions headers, and no `x-powered-by`, including errors, assets, redirects and CORS preflights. Production Chromium verifies login hydration/theme persistence and cross-origin frame rejection; local authenticated Chromium verifies the native PDF viewer. Eight legacy 307 redirects retain their destinations/periods while preserving headers through middleware. Focused: 46 tests; local full: 4,832; real Postgres: 31. Strict nonce-based script CSP and installed iOS-PWA acceptance remain separate work. Evidence: [`docs/security/sec-001-browser-baseline-2026-09-28.md`](./security/sec-001-browser-baseline-2026-09-28.md) |
 | SEC-DEP-001 | Production dependency remediation | DONE | The root production audit reports 0 critical, 0 high, and 1 tracked moderate finding; CI rejects high/critical regressions. PR #1162 / `3cc86929` passed all five CI checks and is live in exact Railway deployment `8b3947fd`. Startup/schema checks, public login/assets, unauthenticated fiscal API boundaries, and initial error-log observation pass. Facturapi compatibility is covered by real-SDK offline contracts; no live PAC side effects were exercised. This closes the root critical/high gate, not worker graphs or broader fiscal acceptance. Evidence: [`docs/security/dependency-audit-2026-09-22.md`](./security/dependency-audit-2026-09-22.md) |
 | FISC-DATA-001 | Official fiscal-reference provenance | IN_PROGRESS | INPC now covers August 2026 with official INEGI publication evidence and fail-closed missing-period behavior; its full series remains runtime-unverified until the Banxico cotejo confirms the new tip. Every rate, tariff, holiday, and index seed must record official source, publication date, and verification evidence |
-| QA-001 | Fiscal golden-case harness | NOT_STARTED | Versioned fixtures cover period rollovers, due dates, no-data states, supported regimes, mixed regimes, and unsupported regimes |
+| QA-001 | Fiscal golden-case harness | IN_PROGRESS | First test-only slice adds 42 versioned synthetic scenarios for Mexico/UTC and year rollovers, ordinary monthly deadlines, no-bank evidence, historical declarations, local close gates, supported calculation admission, mixed/unsupported regimes and lifecycle boundaries. Shared fixtures exercise real domain decisions and mocked-IO API handlers; CI repeats them in UTC and Mexico City. No tax calculations or production behavior change. Licensed-accountant review, independent numeric golden cases, broader obligation/date applicability and authenticated staging/production acceptance remain open. Scope and review matrix: [`QA-001-REVIEW-MATRIX-v1.md`](./fiscal/QA-001-REVIEW-MATRIX-v1.md) |
 
 ### Phase 0 release gate
 
