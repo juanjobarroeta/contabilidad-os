@@ -20,6 +20,8 @@ export interface StampItem {
     product_key: string;
     price: number;
     unit_key?: string;
+    /** NoIdentificacion (p. ej. el folio del ticket en la factura global). */
+    sku?: string;
     tax_included?: boolean;
     taxes?: Array<{ type: string; rate: number; factor: string; withholding?: boolean }>;
     /**
@@ -41,6 +43,11 @@ export interface StampInput {
   items: StampItem[];
   notes?: string;
   global?: { periodicity: "day" | "week" | "fortnight" | "month" | "two_months"; months: string; year: number };
+  /**
+   * CFDI relacionados. «04» = sustitución de los CFDI previos: el comprobante
+   * nuevo que reemplaza a uno que se cancelará con motivo 01.
+   */
+  relations?: { relationship: string; documents: string[] };
 }
 
 export type StampResult =
@@ -98,6 +105,7 @@ function toCfdiInput(
     items: input.items,
     notes: input.notes,
     global: resolveGlobalInfo(customer.rfc, input.global),
+    ...(input.relations?.documents.length ? { relations: input.relations } : {}),
   };
 }
 
@@ -126,6 +134,11 @@ async function persistStampedInvoice(
       totalImpuestos,
       notas: notes,
       status: "STAMPED",
+      // Relación declarada en el CFDI (p. ej. 04 sustitución): con ella el
+      // cron de vigencia y la cancelación 01 saben cuál reemplaza a cuál.
+      ...(input.relations?.documents.length
+        ? { tipoRelacion: input.relations.relationship, cfdiRelacionadoUuid: input.relations.documents[0].toUpperCase() }
+        : {}),
       // Canonizar a MAYÚSCULAS: Facturapi puede devolver el UUID en minúsculas
       // y la descarga del SAT lo trae en mayúsculas — guardarlos distinto
       // duplica el CFDI y rompe el empate de cancelaciones.

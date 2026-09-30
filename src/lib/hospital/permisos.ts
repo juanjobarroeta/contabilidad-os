@@ -27,7 +27,7 @@ const paginas: Record<string, string[]> = {
   mantenimiento: ["mantenimiento"], compras: ["compras"], caja: ["caja"],
   usuarios: ["usuarios"], config: ["configuracion"], cumplimiento: ["cumplimiento"],
   contabilidad: ["contabilidad"], fiscal: ["impuestos"], bancos: ["bancos"], nomina: ["nomina"],
-  cartera: ["cuentas", "panel"], contactos: ["clientes", "proveedores"], liquidaciones: ["medicos"], depositos: ["cuentas", "caja"], cobros: ["caja"], afiliaciones: ["convenios", "pacientes"], empleados: ["nomina"], buscar: ["pacientes", "episodios"], "validar-curp": ["pacientes", "medicos"],
+  cartera: ["cuentas", "panel"], facturacion: ["facturacion", "caja", "cuentas"], contactos: ["clientes", "proveedores"], liquidaciones: ["medicos"], depositos: ["cuentas", "caja"], cobros: ["caja"], afiliaciones: ["convenios", "pacientes"], empleados: ["nomina"], buscar: ["pacientes", "episodios"], "validar-curp": ["pacientes", "medicos"],
   panel: ["panel", "alertas"], alertas: ["alertas"], servicios: ["convenios", "cotizaciones", "cuentas"],
   catalogos: ["episodios", "pacientes", "saeh", "medicos"],
 };
@@ -48,7 +48,7 @@ export async function enforceHospitalAccess(companyId: string, userId: string, r
   if (["usuarios", "cumplimiento"].includes(root) || (root === "config" && writing)) {
     if (!admin) throw new AuthzError(403, "Sólo un administrador del hospital puede realizar esta acción. Contacta al administrador de tu hospital.");
   }
-  if (writing && ["cuentas", "caja", "depositos", "cobros", "bancos", "contabilidad", "liquidaciones"].includes(root)) {
+  if (writing && ["cuentas", "caja", "depositos", "cobros", "bancos", "contabilidad", "liquidaciones", "facturacion", "nomina"].includes(root)) {
     if (membership.role === "VIEWER" || !member?.hospitalPermisos.includes("FINANZAS_ESCRIBIR")) throw new AuthzError(403, mensajeSinPermiso("FINANZAS_ESCRIBIR"));
   }
   const clinical = ["pacientes", "episodios", "documentos", "saeh", "buscar", "censo", "citas", "planes", "panel", "registros"].includes(root) || (root === "farmacia" && ["kardex", "libro-control"].includes(path[1]));

@@ -173,7 +173,9 @@ hecho contable, hasta que se factura.
 6. **Impuestos del mes.** IVA a cargo/acreditable e ISR retenido a médicos
    (personas físicas con honorarios) salen del motor fiscal del hub.
 7. **Nómina.** Empleados y corridas se leen de `/api/nomina/*` (CORS ya
-   abierto para satélites).
+   abierto para satélites); alta, edición, baja, cancelación de recibos,
+   aguinaldo y PTU van por `/api/hospital/nomina/*` (paso 5 de «Facturación
+   desde el satélite»).
 
 ## Reglas de negocio que viven en `src/lib/hospital/`
 
@@ -788,11 +790,95 @@ Rutas ↔ endpoints:
 5. `POST /api/hospital/farmacia/derivar` para poblar farmacia desde el
    archivo de CFDIs.
 
+## Facturación desde el satélite
+
+El satélite factura con el motor del hub, detrás de su propia puerta:
+`requireModule(HOSPITAL)` aplica la página (`facturacion`, `caja` o `cuentas`)
+y, para escribir —timbrar incluido—, `FINANZAS_ESCRIBIR`. Las rutas genéricas
+`/api/facturas/*` sólo miran el rol de la empresa, así que el satélite no las
+usa para escribir. Se construye por pasos:
+
+1. **Prefacturas** (hecho). `GET/POST /api/hospital/facturacion/prefacturas`,
+   `GET/PUT/POST/DELETE …/prefacturas/[id]` (`{ accion: "timbrar" | "enviar" }`).
+   Misma lógica que `/api/facturas/borradores` (`lib/facturas/prefacturas.ts`):
+   el draft de Facturapi no consume timbre, editar crea un draft nuevo en la
+   misma fila y timbrar promueve exactamente ese draft. El receptor se
+   sincroniza con Facturapi al vuelo (antes: 422 «créalo en la app primero»).
+2. **Facturar la cuenta del episodio** (hecho; `lib/hospital/facturacion.ts`).
+   La unidad es el cargo, y la regla sigue siendo un cargo ↔ un CFDI
+   (`HospCargo.invoiceId`): el «facturado», la contabilidad por categoría, el
+   vinculador de CFDIs y el candado de cancelar dependen de ella.
+   - `GET /api/hospital/facturacion/episodios/[id]`: cada cargo con su estado
+     (pendiente, en prefactura, a la global, facturado, honorario, cancelado),
+     sus claves SAT y los receptores sugeridos.
+   - `POST …/episodios/[id]` `{ accion: "prefactura", customerId, cargoIds, … }`:
+     prefactura con esos cargos a ese receptor. Los cargos quedan tomados
+     (`HospCargo.prefacturaId`); al timbrar reciben `invoiceId`, al descartar
+     se liberan. Una prefactura así no se edita a mano: se descarta y se
+     vuelve a generar. Sin clave SAT (tarifario o insumo) contesta 422.
+   - `{ accion: "dividir", cargoId, cantidad | importe }`: parte un cargo en dos
+     que suman lo mismo, para mandar cada parte a otro receptor. No divide
+     cargos amarrados a su movimiento de kardex.
+   - `{ accion: "publico-general", cargoIds, valor }` y
+     `GET/POST /api/hospital/facturacion/global` (mes): lo cobrado sin factura
+     individual va a la factura global a público en general (XAXX010101000,
+     S01, 01010101 · ACT · «Venta», un concepto por episodio y tasa con el
+     folio como NoIdentificacion).
+   - Honorarios fuera: hoy los factura cada médico; «a cuenta de terceros»
+     queda como opción. Cómo presentar deducible y coaseguro en la factura de
+     la aseguradora está por definir con los pagadores.
+3. **Cancelación** (hecho). `lib/facturas/cancelar.ts` es la regla (la usa
+   también `DELETE /api/facturas/[id]`): motivos 01-04, 01 exige el UUID que
+   sustituye, no se cancela con complementos de pago vivos, y sólo se marca
+   CANCELLED cuando el SAT lo confirma («En proceso» si el receptor debe
+   aceptar). `GET /api/hospital/facturacion/facturas` (lista con estado de
+   cancelación y relación), `POST …/facturas/[id]/cancelar`.
+   - Un CFDI cancelado suelta sus cargos, lo haya marcado quien lo haya
+     marcado (esta ruta, el cron de vigencia o la sincronización con el SAT):
+     el estado se DERIVA del status del CFDI, no de quién lo canceló.
+   - Sustitución (motivo 01): `POST …/facturas/[id]/sustituir` arma la
+     prefactura con los mismos cargos y la relación 04 al UUID viejo
+     (`StampInput.relations`, nuevo; se guarda en `Invoice.tipoRelacion` /
+     `cfdiRelacionadoUuid`). Mientras está pendiente, los cargos siguen con el
+     CFDI viejo; al timbrarla pasan al nuevo, y el viejo se cancela con 01 y el
+     UUID nuevo (el timbrado devuelve `sustituye` para ofrecerlo). La factura
+     global no se sustituye: se cancela con 02 y se vuelve a armar.
+4. **Complementos de pago** (hecho). La detección de
+   `GET /api/facturas/complemento-pagos` vive en `lib/facturas/rep-pendientes.ts`
+   (misma salida) y el timbrado sigue en `lib/complementos-rep-emit.ts`
+   (parcialidad por UUID, saldos, IVA). `GET /api/hospital/facturacion/complementos`
+   agrega los cobros de caja ligados a cada PPD (`lib/hospital/complementos.ts`):
+   lo ya amparado cubre los cobros más viejos y el siguiente sin cubrir es el
+   REP sugerido (monto, fecha de operación y forma de pago SAT del cobro).
+   `POST …/complementos` `{ invoiceId, cobroId? | monto/fechaPago/formaPago, preview? }`.
+   El REP se cancela con `…/facturas/[id]/cancelar`.
+5. **Nómina** (hecho). Las corridas, incidencias, timbrado y dispersión ya se
+   operaban desde `/api/nomina/*` (bearer + CORS). Lo que sólo tenía sesión
+   del hub pasa a una regla compartida y se expone detrás de la puerta del
+   hospital (página `nomina`; escribir exige `FINANZAS_ESCRIBIR`):
+   - Alta y edición de empleados: `lib/nomina/empleados.ts` (la usa también
+     `/api/empleados`). `POST /api/hospital/nomina/empleados`,
+     `PATCH …/empleados/[id]`. Un cambio de salario registra la modificación
+     al IMSS en la misma transacción que la edición (y ya no queda huérfana si
+     otro campo es inválido), salvo `skipImssMovimiento`.
+   - Baja: `lib/nomina/baja.ts` (la usa `/api/nomina/baja`).
+     `POST …/empleados/[id]/baja { fechaBaja, motivo, diasSalarioPendiente?, preview? }`:
+     desactiva y crea la BAJA al IMSS juntos; `preview` sólo calcula el
+     finiquito (liquidación si es INJUSTIFICADA).
+   - Cancelar un recibo: `lib/nomina/cancelar-recibo.ts` (la usa
+     `/api/nomina/recibos/cancelar`). `POST …/recibos/[payrollItemId]/cancelar
+     { motivo, sustituyeUuid? }`: cancela ante el SAT y deja al empleado listo
+     para retimbrar (la corrida vuelve a CALCULATED).
+   - Aguinaldo y PTU: `GET/POST /api/hospital/nomina/aguinaldo` y `…/ptu`
+     (vista previa y crear la corrida, con el motor de
+     `lib/nomina/corridas-especiales.ts`); la corrida sigue el flujo normal
+     de revisión y timbrado.
+
 ## Lo que NO hace (por diseño, v1)
 
 - No postea al mayor: la cuenta es WIP; el asiento nace con el CFDI.
-- No emite el CFDI desde el módulo: la factura partida (pagador/paciente) se
-  arma con los cargos y se timbra con `POST /api/facturas` del hub (fase 2).
+- Todavía no ARMA la factura partida (pagador/paciente) desde los cargos del
+  episodio (paso 2 de «Facturación desde el satélite», abajo).
 - No firma con e.firma: la firma de las notas es la del sistema (hash + sello
   de tiempo); el PDF firmado del consentimiento se resguarda como archivo del
   documento, sin validación de firma electrónica.

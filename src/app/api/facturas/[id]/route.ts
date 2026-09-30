@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getPacProvider } from "@/lib/pac";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { registrarBitacora } from "@/lib/audit";
+import { cancelarCfdi } from "@/lib/facturas/cancelar";
 import { retirarActivosPorReclasificacion } from "@/lib/fiscal/auto-activo";
-
-const VALID_MOTIVOS = ["01", "02", "03", "04"] as const;
 
 // GET /api/facturas/[id] — una factura con sus partidas y su cliente.
 // Sirve al atajo «volver a facturar» (/facturas/nueva?desde=<id>), que clona
@@ -36,14 +34,8 @@ export async function GET(
 
 // DELETE /api/facturas/[id] — cancel a CFDI.
 // Body (JSON): { motivo: "01"|"02"|"03"|"04", sustituyeUuid?: string }
-//   01 = comprobante emitido con errores CON relación (requiere sustituyeUuid)
-//   02 = comprobante emitido con errores SIN relación
-//   03 = no se llevó a cabo la operación
-//   04 = operación nominativa relacionada en una factura global
-//
-// SAFETY: we ONLY mark the invoice CANCELLED if Facturapi/SAT confirms. A failed
-// SAT cancellation no longer silently flips our DB to CANCELLED (the old bug,
-// which gave a false sense the CFDI was dead at SAT when it was still live).
+// La regla (motivos, cadena de REPs, cancelación consumada vs. solicitada)
+// vive en lib/facturas/cancelar.ts, compartida con la puerta del hospital.
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -52,152 +44,23 @@ export async function DELETE(
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-
   const body = await req.json().catch(() => ({}));
-  const motivo = String(body?.motivo ?? "");
-  const sustituyeUuid: string | undefined = body?.sustituyeUuid
-    ? String(body.sustituyeUuid).toUpperCase()
-    : undefined;
 
-  if (!VALID_MOTIVOS.includes(motivo as (typeof VALID_MOTIVOS)[number])) {
-    return NextResponse.json(
-      { error: "Falta el motivo de cancelación (01, 02, 03 o 04)." },
-      { status: 400 }
-    );
-  }
-  if (motivo === "01" && !sustituyeUuid) {
-    return NextResponse.json(
-      { error: "El motivo 01 requiere el UUID de la factura que la sustituye." },
-      { status: 400 }
-    );
-  }
-
-  const invoice = await prisma.invoice.findUnique({
-    where: { id },
-    include: { company: true },
-  });
+  const invoice = await prisma.invoice.findUnique({ where: { id }, select: { companyId: true } });
   if (!invoice) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
-
   const member = await getEffectiveCompanyMembership(session.user.id, invoice.companyId);
   if (!member || member.role === "VIEWER") {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
-  if (invoice.status === "CANCELLED") {
-    return NextResponse.json({ error: "La factura ya está cancelada" }, { status: 409 });
-  }
 
-  // Cadena de cancelación (decisión del owner, revisión pág. 5): cancelar una
-  // factura con complementos de pago TIMBRADOS deja REPs vivos apuntando a un
-  // CFDI cancelado — el SAT espera cancelar primero la cadena. Se bloquea con
-  // la lista para que el usuario cancele los REP y regrese.
-  if (invoice.uuid) {
-    const repsVivos = await prisma.pagoDoctoRelacionado.findMany({
-      where: {
-        parentUuid: invoice.uuid,
-        pagoInvoice: { companyId: invoice.companyId, tipo: "PAGO", status: "STAMPED" },
-      },
-      select: { pagoInvoice: { select: { serie: true, folio: true, uuid: true } } },
-    });
-    if (repsVivos.length > 0) {
-      const folios = [...new Set(repsVivos.map((r) => {
-        const p = r.pagoInvoice;
-        return [p.serie, p.folio].filter(Boolean).join("-") || (p.uuid ?? "").slice(0, 8);
-      }))];
-      return NextResponse.json(
-        {
-          error:
-            `Esta factura tiene ${folios.length} complemento${folios.length === 1 ? "" : "s"} de pago timbrado${folios.length === 1 ? "" : "s"} (${folios.join(", ")}). ` +
-            "Cancela primero los complementos y después la factura — el SAT exige la cadena.",
-          codigo: "REPS_VIVOS",
-        },
-        { status: 409 },
-      );
-    }
-  }
-
-  // Stamped CFDI → must cancel at SAT via the PAC, with the motivo.
-  // `consumada` distingue una cancelación REAL de una SOLICITADA que espera la
-  // aceptación del receptor: en ese segundo caso el SAT deja el comprobante
-  // VIGENTE (hasta 72 h, o para siempre si el receptor rechaza) y sigue
-  // causando IVA e ISR. Darlo por cancelado le quitaba al mes ingresos reales.
-  let consumada = true;
-  let detallePac: string | null = null;
-  if (invoice.facturapiId && invoice.company.facturapiApiKey) {
-    const out = await getPacProvider().cancelCfdi(
-      invoice.company.facturapiApiKey,
-      invoice.facturapiId,
-      motivo,
-      sustituyeUuid ?? undefined
-    );
-    if (!out.ok) {
-      // DO NOT mark CANCELLED — the CFDI is still live at SAT.
-      return NextResponse.json(
-        { error: `No se pudo cancelar ante el SAT: ${out.message}`, kind: out.kind },
-        { status: out.status }
-      );
-    }
-    consumada = out.data.estado === "cancelado";
-    detallePac = out.data.detalle;
-  } else if (invoice.status !== "STAMPED") {
-    // DRAFT / never stamped → safe to cancel locally only.
-  } else {
-    // Stamped but no Facturapi key → we can't reach SAT. Don't fake it.
-    return NextResponse.json(
-      { error: "No hay conexión con Facturapi para cancelar ante el SAT. Configúrala o cancela desde el portal." },
-      { status: 422 }
-    );
-  }
-
-  const ahora = new Date();
-  const updated = await prisma.invoice.update({
-    where: { id },
-    data: {
-      // Sólo se marca cancelada cuando el SAT la dio por cancelada. Si quedó en
-      // proceso, la factura SIGUE STAMPED —y sigue contando en IVA e ISR, que
-      // es lo correcto— con la solicitud registrada; el cron de vigencia la
-      // confirma (o la libera si el receptor rechaza).
-      ...(consumada
-        ? { status: "CANCELLED" as const, canceladaAt: ahora }
-        : {}),
-      cancelSolicitadaAt: ahora,
-      cancelEstadoSat: consumada ? "Cancelado" : "En proceso",
-      cancelMotivo: motivo,
-      cancelSustituyeUuid: sustituyeUuid ?? null,
-    },
-  });
-
-  // Bitácora de seguridad: cancelación de CFDI (fire-and-forget).
-  registrarBitacora({
-    companyId: invoice.companyId,
-    userId: session.user.id,
-    actorEmail: session.user.email ?? null,
-    accion: "factura.cancelar",
-    entidad: "Invoice",
-    entidadId: invoice.id,
-    detalle: {
-      uuid: invoice.uuid,
-      total: invoice.total,
-      motivo,
-      sustituyeUuid: sustituyeUuid ?? null,
-      // Queda en la bitácora si se canceló de verdad o sólo se SOLICITÓ, y qué
-      // contestó el PAC: sin esto no había forma de auditar la diferencia.
-      resultado: consumada ? "cancelada" : "solicitada",
-      pac: detallePac,
-    },
+  const r = await cancelarCfdi({
+    invoiceId: id,
+    motivo: String(body?.motivo ?? ""),
+    sustituyeUuid: body?.sustituyeUuid ? String(body.sustituyeUuid) : undefined,
+    actor: { id: session.user.id, email: session.user.email ?? null },
     req,
   });
-
-  return NextResponse.json({
-    ...updated,
-    cancelacion: {
-      consumada,
-      mensaje: consumada
-        ? "Cancelada ante el SAT."
-        : "Cancelación SOLICITADA. El receptor tiene 72 horas para aceptarla; " +
-          "mientras tanto el CFDI sigue VIGENTE y cuenta para IVA e ISR. " +
-          "Lo confirmamos solos en cuanto el SAT lo resuelva.",
-    },
-  });
+  return NextResponse.json(r.body, { status: r.status });
 }
 
 // PATCH /api/facturas/[id] — update contador fields on an invoice.

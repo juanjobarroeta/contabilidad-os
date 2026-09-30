@@ -20,6 +20,9 @@ export const itemSchema = z.object({
     product_key: z.string(),
     price: z.number().positive(),
     unit_key: z.string().default("E48"),
+    // NoIdentificacion del concepto. En la factura global a público en
+    // general lleva el folio del ticket (en el hospital, el del episodio).
+    sku: z.string().max(100).optional(),
     tax_included: z.boolean().default(false),
     taxes: z
       .array(
@@ -56,6 +59,14 @@ export const prefacturaSchema = z.object({
   usoCfdi: z.string().min(1),
   items: z.array(itemSchema).min(1),
   notes: z.string().optional(),
+  // CFDI relacionados. Sólo 04 (sustitución de un CFDI que después se cancela
+  // con motivo 01): los demás tipos todavía no tienen flujo.
+  relations: z
+    .object({
+      relationship: z.literal("04"),
+      documents: z.array(z.string().regex(/^[0-9a-fA-F-]{36}$/, "UUID inválido")).min(1).max(10),
+    })
+    .optional(),
   global: z
     .object({
       periodicity: z.enum(["day", "week", "fortnight", "month", "two_months"]),
