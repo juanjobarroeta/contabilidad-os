@@ -22,7 +22,9 @@ import { leerObjetivo, objetivoDesde, objetivoEn } from "@/lib/copiloto/objetivo
 import { tituloDeRuta } from "@/lib/copiloto/sugerencias";
 import type { Accion, RefCopiloto } from "@/lib/copiloto/tarjetas";
 import type { PedidoRail } from "@/lib/rail/armar";
-import { useModoMascota } from "./useRailCopiloto";
+import { useModoMascota, usePielMascota } from "./useRailCopiloto";
+import { PetSkin } from "./PetSkin";
+import { colorDe, nombreDe, PERSONAJES } from "@/lib/copiloto/personajes";
 import { cn } from "@/lib/utils";
 
 const LLAVE_POS = "cos-pet-pos";
@@ -55,6 +57,12 @@ function esquinaSegura(): { x: number; y: number } {
   const seguro = parseFloat(getComputedStyle(sonda).paddingBottom) || 0;
   sonda.remove();
   return { x: p.x, y: p.y - seguro };
+}
+
+/** ¿El color del personaje es claro? (luminosidad OKLCH ≥ 0.8). */
+function colorClaro(c: string): boolean {
+  const m = /oklch\(\s*([\d.]+)/.exec(c);
+  return m ? Number(m[1]) >= 0.8 : false;
 }
 
 // Pistas ya enseñadas en esta sesión (por ruta). Vive en el módulo: sobrevive
@@ -96,6 +104,11 @@ export function CopilotoMascota({
   const pathname = usePathname() ?? "/";
   const [modo] = useModoMascota();
   const clasico = modo === "classic";
+  const [piel] = usePielMascota();
+  const nombre = nombreDe(piel);
+  const color = colorDe(piel);
+  const miradaRef = useRef(PERSONAJES[piel.char].mirada);
+  miradaRef.current = PERSONAJES[piel.char].mirada;
 
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [arrastrando, setArrastrando] = useState(false);
@@ -162,6 +175,13 @@ export function CopilotoMascota({
   useEffect(() => {
     if (saltos) setSalto((s) => s + 1);
   }, [saltos]);
+
+  // Cambiar de personaje: un salto, para que se note quién llegó.
+  const charPrevio = useRef(piel.char);
+  useEffect(() => {
+    if (charPrevio.current !== piel.char) setSalto((s) => s + 1);
+    charPrevio.current = piel.char;
+  }, [piel.char]);
 
   // La caja que se le pasa al panel: la de la mascota visible (o la del botón fijo).
   const caja: Caja | null = clasico
@@ -347,7 +367,8 @@ export function CopilotoMascota({
       if (!clasico && petRef.current) {
         const r = petRef.current.getBoundingClientRect();
         const { dx, dy } = miradaPupila(r.left + r.width / 2, r.top + r.height / 2, e.clientX, e.clientY);
-        for (const p of pupilas.current) if (p) p.style.transform = `translate(${dx}px,${dy}px)`;
+        const k = miradaRef.current;
+        for (const p of pupilas.current) if (p) p.style.transform = `translate(${dx * k}px,${dy * k}px)`;
       }
       const d = drag.current;
       if (!d || clasico) return;
@@ -466,11 +487,11 @@ export function CopilotoMascota({
         tabIndex={0}
         aria-label={
           clasico
-            ? "Copiloto — abrir el chat"
-            : "Copiloto — arrástrame sobre un dato o haz clic para abrir el chat"
+            ? `${nombre} — tu copiloto. Haz clic para abrir el chat`
+            : `${nombre} — tu copiloto. Arrástrame sobre un dato o haz clic para abrir el chat`
         }
         aria-expanded={abierto}
-        title={tituloDeRuta(pathname) ? `Copiloto · ${tituloDeRuta(pathname)}` : "Copiloto"}
+        title={`${nombre} · ${tituloDeRuta(pathname)}`}
         className={cn(
           "cos-pet print:hidden",
           clasico && "classic",
@@ -493,20 +514,22 @@ export function CopilotoMascota({
           }
         }}
       >
-        <div className="cos-pet-body">
-          {!clasico && (
-            <>
-              <span className="cos-pet-eye l">
-                <i ref={(n) => { pupilas.current[0] = n; }} />
-              </span>
-              <span className="cos-pet-eye r">
-                <i ref={(n) => { pupilas.current[1] = n; }} />
-              </span>
-            </>
-          )}
-        </div>
+        <PetSkin
+          char={piel.char}
+          color={color}
+          className="cos-pet-body"
+          pupilaRef={(lado) => (n) => {
+            pupilas.current[lado] = n;
+          }}
+        />
         {clasico && (
-          <span className="absolute inset-0 grid place-items-center text-white">
+          <span
+            className={cn(
+              "absolute inset-0 grid place-items-center",
+              // Crema y Nieve son claros: el ícono blanco se perdería.
+              colorClaro(color) ? "text-[oklch(0.22_0.02_258)]" : "text-white",
+            )}
+          >
             <Sparkles className="h-6 w-6" />
           </span>
         )}
