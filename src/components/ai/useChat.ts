@@ -156,8 +156,8 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
       setMessages(historial);
       setIsLoading(true);
       setActiveTool(null);
-      // Un turno nuevo invalida cualquier propuesta anterior en pantalla.
-      setPendingAction(null);
+      // A proposal remains pending until confirmed/cancelled on the server.
+      // Sending another question must not hide its only confirmation card.
 
       let nuevaConv = false;
       try {
@@ -319,6 +319,7 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
       });
       const data = await res.json().catch(() => ({}));
       const ok = res.ok && data.ok;
+      if (ok || res.status === 409) setPendingAction(null);
       setMessages((prev) => [
         ...prev,
         {
@@ -330,13 +331,23 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
     } catch {
       setMessages((prev) => [...prev, { role: "assistant", content: "No se pudo completar la acción. Inténtalo de nuevo." }]);
     } finally {
-      setPendingAction(null);
       setConfirming(false);
     }
   }, [pendingAction, confirming, onAccionConfirmada]);
 
-  /** Descarta la tarjeta en el cliente; el staged caduca por TTL. No ejecuta nada. */
-  const cancelar = useCallback(() => setPendingAction(null), []);
+  /** Cancel the durable proposal, not only its visible card. */
+  const cancelar = useCallback(async () => {
+    if (!pendingAction || !convRef.current || confirming) return;
+    setConfirming(true);
+    try {
+      const response = await fetch("/api/ai/confirm", { method: "DELETE", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId: convRef.current, token: pendingAction.token }) });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error ?? "No se pudo cancelar la propuesta.");
+      setPendingAction(null);
+    } catch (error) { setMessages((prev) => [...prev, { role: "assistant", content: error instanceof Error ? error.message : "No se pudo cancelar la propuesta." }]); }
+    finally { setConfirming(false); }
+  }, [pendingAction, confirming]);
 
   const enviarFeedback = useCallback(async (id: string, feedback: "up" | "down" | null, correccion?: string) => {
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, feedback } : m)));

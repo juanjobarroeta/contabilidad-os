@@ -52,6 +52,7 @@ import {
 import { calcularDepreciacionMes, CUENTA_ACTIVO_FIJO } from "./depreciacion-contable";
 import { tipoActivoDesdeSubtipo } from "../fiscal/depreciacion";
 import { assertPeriodoAbierto } from "./candado";
+import { loanLines, validLoanAccount } from "./loan-posting";
 import { PeriodoCerradoError } from "./ejercicio";
 import type { Prisma, EntryType, EntrySource, AccountingPeriod } from "@prisma/client";
 import type { EstadoCierreCanonico } from "../cierre/estado-canonico";
@@ -1063,8 +1064,12 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
       conciliacionDetalles: { select: { invoiceId: true, montoAsignado: true } },
       // El otro lado de una devolución vinculada (el par pago ↔ rebote).
       devolucionPor: { select: { id: true } },
+      loanAccount: { select: { id: true, companyId: true, tipo: true, naturaleza: true, codAgrup: true, isActive: true } },
     },
   })).map((t) => ({ ...t, monto: Number(t.monto) }));
+  const loanSnapshot = (rows: Array<{ id: string; fecha: Date; monto: unknown; loanAccountId: string | null; bankAccountId: string; status: string; notes: string | null }>) =>
+    JSON.stringify(rows.filter((row) => row.loanAccountId).map((row) => [row.id, row.fecha.toISOString(), Number(row.monto), row.loanAccountId, row.bankAccountId, row.status, row.notes]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
+  const initialLoans = loanSnapshot(bankTxs);
   // HOSPITAL: lo que la caja del hospital ya asentó (107.05 / CAJA contra
   // CLIENTES) se descuenta del abono del depósito. Ver hospital-cobro-banco.ts.
   const cobroBancoHosp = await cargarContextoCobroBancoHospital(companyId, { year, month, start, end }, REGENERATED_SOURCES);
@@ -1078,6 +1083,10 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     select: { id: true, banco: true, numeroCuenta: true, clabe: true, chartAccountId: true },
   });
   const multiBanco = bankAccounts.length >= 2;
+  const loanBankAccounts = bankTxs.some((t) => t.loanAccountId) ? await prisma.chartAccount.findMany({ where: {
+    companyId, isActive: true, tipo: "ACTIVO", id: { in: bankAccounts.flatMap((b) => b.chartAccountId ? [b.chartAccountId] : []) },
+  }, select: { id: true, codAgrup: true, cuentaSAT: true, subcuenta: true } }) : [];
+  const loanBankById = new Map(loanBankAccounts.map((a) => [a.id, a]));
   const ctaPorBankAccount = new Map<string, { id: string }>();
   if (multiBanco) {
     for (const ba of bankAccounts) {
@@ -1574,6 +1583,17 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
         continue;
       }
 
+      if ((tag === "LOAN_RECEIVED" || tag === "LOAN_GIVEN") && tx.loanAccountId) {
+        const bankId = bankAccounts.find((b) => b.id === tx.bankAccountId)?.chartAccountId;
+        const bank = bankId ? loanBankById.get(bankId) : null;
+        if (!tx.loanAccount || tx.loanAccount.companyId !== companyId || !tx.loanAccount.isActive || !validLoanAccount(tag, tx.loanAccount) ||
+          !bank || !/^102(?:\.|$)/.test(bank.codAgrup ?? bank.subcuenta ?? bank.cuentaSAT)) {
+          throw new Error(`La cuenta de préstamo o banco confirmada para ${tx.id} ya no es válida. Revisa el movimiento antes de contabilizar.`);
+        }
+        drafts.push(...loanLines(bank.id, tx.loanAccount.id, tx.monto).map((line) => ({ ...base, ...line })));
+        continue;
+      }
+
       if (tag === "LOAN_RECEIVED") {
         // Préstamo que NOS DIERON. Direction matters:
         //   inflow → DR Bancos / CR Préstamos por pagar  (deuda nace)
@@ -1771,15 +1791,22 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
   // ─── Persist atomically ────────────────────────────────────────────────
   // Wipe any prior entries for this period so we can re-post after fixes.
   const period = await prisma.$transaction(async (tx) => {
+    // Loan confirmations/undo use this same lock. Do not regenerate from a
+    // snapshot that predates a newly confirmed or reverted counteraccount.
+    await tx.$queryRaw`SELECT id FROM "Company" WHERE id = ${companyId} FOR UPDATE`;
+    const currentLoans = await tx.bankTransaction.findMany({ where: { companyId, fecha: { gte: start, lt: end }, loanAccountId: { not: null } },
+      select: { id: true, fecha: true, monto: true, loanAccountId: true, bankAccountId: true, status: true, notes: true } });
+    if (loanSnapshot(currentLoans) !== initialLoans) throw new Error("Los préstamos del periodo cambiaron durante el cálculo. Vuelve a contabilizar con la evidencia actualizada.");
     // Find or create the period row
     const periodRow = await tx.accountingPeriod.upsert({
       where: { companyId_year_month: { companyId, year, month } },
       update: {},
       create: { companyId, year, month, status: "DRAFT" },
     });
+    await tx.$queryRaw`SELECT id FROM "AccountingPeriod" WHERE id = ${periodRow.id} FOR UPDATE`;
     // Comprobación autoritativa dentro de la transacción: si el ejercicio se
     // cerró entre el chequeo barato de arriba y este punto, se aborta aquí.
-    if (periodRow.status === "CLOSED") throw new PeriodoCerradoError(year, month);
+    await assertPeriodoAbierto(tx, companyId, year, month);
 
     // Borra SÓLO los asientos que este motor regenera (CFDI/NOMINA/BANCO).
     // Se PRESERVA todo lo demás: APERTURA (saldos iniciales), MANUAL (ajustes

@@ -27,7 +27,7 @@ export async function requireContaBotAccess(userId: string, companyId: string, c
       throw new ContaBotError(403, "Sin acceso a esta conversación.");
     }
   }
-  return { canWrite: member.role !== "VIEWER" };
+  return { canWrite: member.role !== "VIEWER", role: member.role };
 }
 
 export async function requireContaBotBudget(userId: string, companyId: string) {

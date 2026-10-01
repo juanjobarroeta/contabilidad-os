@@ -21,6 +21,7 @@ import { MATERIAS_CONTADOR, MATERIAS_CONTADOR_JURISPRUDENCIA } from "@/lib/fisca
 const FUENTES_NORMATIVA = ["LEY", "REGLAMENTO", "RMF", "CRITERIO", "DOF", "GUIA"];
 import { consultarValorFiscal, type ConsultaValorFiscal } from "@/lib/fiscal/valores";
 import { stageChatPendingAction } from "@/lib/ai/pending-action";
+import { getChatPendingAction } from "@/lib/ai/pending-action";
 import { contarSimilaresSinConciliar } from "@/lib/bancos/reglas-categorizacion";
 import { nombreContraparte, rfcContraparte } from "@/lib/facturas/contraparte";
 import { saldoInsolutoPpd } from "@/lib/facturas/saldo-ppd";
@@ -79,6 +80,17 @@ export async function executeToolCall(
   companyId: string,
   context: ToolContext = {}
 ): Promise<string> {
+  if (toolName === "query_saldos_cuentas" || toolName === "query_auxiliar_cuenta") {
+    const { executeAccountingRead } = await import("./accounting-executor");
+    return executeAccountingRead(toolName, input, companyId);
+  }
+  if (toolName.startsWith("proponer_") && context.inApp && context.conversationId && await getChatPendingAction(context.conversationId)) {
+    return JSON.stringify({ error: "Ya hay una propuesta pendiente. Pide confirmar o cancelar esa tarjeta antes de preparar otra; no hay varias tarjetas independientes." });
+  }
+  if (["proponer_crear_subcuenta", "proponer_renombrar_cuenta", "proponer_registro_prestamo"].includes(toolName)) {
+    const { proposeAccounting } = await import("./accounting-proposals");
+    return proposeAccounting(toolName, input, companyId, context);
+  }
   // El expediente se despacha antes del switch: sus herramientas viven en su
   // propio módulo (con sus reglas de versionado y de lo verificado a mano) y
   // copiarlas aquí las partiría en dos sitios que se desincronizan.

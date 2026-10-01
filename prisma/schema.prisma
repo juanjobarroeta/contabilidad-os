@@ -271,6 +271,8 @@ model Company {
 
   // Relations
   members              CompanyMember[]
+  contaBotMandate       ContaBotMandate?
+  contaBotObjectives    ContaBotObjective[]
   invoices             Invoice[]
   customers            Customer[]
   facturaBorradores    FacturaBorrador[]
@@ -1630,6 +1632,13 @@ model BankTransaction {
   // paga UNA declaración y viceversa (el segundo intento se rechaza con 409).
   taxDeclarationId String?
 
+  // Human-confirmed loan counteraccount. Retained when postMonth regenerates
+  // bank entries; never infer the counterparty account from the amount alone.
+  loanAccountId String?
+  loanAccount ChartAccount? @relation("BankLoanAccount", fields: [loanAccountId], references: [id], onDelete: Restrict)
+
+  @@index([loanAccountId])
+
   // Source
   source        String  @default("UPLOAD") // UPLOAD, BELVO, or a satellite module (PADEL, JCPT)
   belvoId       String? @unique // Belvo transaction ID (for dedup)
@@ -2587,6 +2596,7 @@ model ChartAccount {
   company          Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
   entries          AccountingEntry[]
   postingOverrides PostingCuentaOverride[]
+  loanTransactions BankTransaction[] @relation("BankLoanAccount")
   bankAccounts     BankAccount[]
 
   /// DE QUIÉN es este auxiliar. Va de este lado y no en `Customer` porque un
@@ -5941,6 +5951,7 @@ model ChatConversation {
   user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages ChatMessage[]
   agentSessions ContaBotSession[]
+  contaBotObjective ContaBotObjective?
   cierre   CierrePeriodo?
 
   @@index([companyId, visibility, updatedAt])
@@ -5956,12 +5967,15 @@ model ContaBotSession {
   companyId             String
   userId                String
   providerSessionId     String?  @unique
+  capabilityVersion     Int      @default(1)
+  retiredProviderSessionIds String[] @default([])
   model                 String
   state                 String   @default("idle")
   // Nullable unique locks: one active request per conversation AND company.
   activeConversationId  String?  @unique
   activeCompanyId       String?  @unique
   requestId             String?
+  objectiveRunId        String?
   input                 String?  @db.Text
   instructions          String?  @db.Text
   context               Json?
@@ -5979,9 +5993,88 @@ model ContaBotSession {
 
   conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   calls        ContaBotToolCall[]
+  objectiveRun ContaBotObjectiveRun? @relation(fields: [objectiveRunId], references: [id], onDelete: SetNull)
 
   @@unique([conversationId, userId])
   @@index([state, lastSyncedAt])
+  @@index([objectiveRunId])
+}
+
+// Explicit delegation, disabled by default. The actor's current membership is
+// rechecked before every automated turn and tool call; this grants no new role.
+model ContaBotMandate {
+  companyId         String   @id
+  responsibleUserId String
+  enabled           Boolean  @default(false)
+  startPeriod       String
+  nextPeriod        String
+  maxRunsPerDay     Int      @default(3)
+  nextCheckAt       DateTime @default(now())
+  lastError         String?
+  updatedByUserId   String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  @@index([enabled, nextCheckAt])
+}
+
+// Work items are the existing PasoCierre records. scope="cierre" watches all
+// twelve checks; another scope names a single existing close step.
+model ContaBotObjective {
+  id                    String   @id @default(cuid())
+  companyId             String
+  year                  Int
+  month                 Int
+  scope                 String   @default("cierre")
+  title                 String
+  instructions          String   @default("") @db.Text
+  origin                String   @default("manual")
+  responsibleUserId     String
+  assignedByUserId      String
+  conversationId        String?  @unique
+  state                 String   @default("queued")
+  pausedAt              DateTime?
+  version               Int      @default(0)
+  nextAction            String   @default("Revisar evidencia del periodo.")
+  dueDate               String?
+  evidence              Json?
+  evidenceHash          String?
+  lastRunEvidenceHash   String?
+  requestIds            String[] @default([])
+  nextCheckAt           DateTime @default(now())
+  lastCheckedAt         DateTime?
+  lastError             String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  conversation ChatConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  runs ContaBotObjectiveRun[]
+  @@unique([companyId, year, month, scope])
+  @@index([nextCheckAt, pausedAt])
+}
+
+// Durable attempts survive browser closure, restarts, later chat turns and
+// deletion of provider history. The UUID is also the managed turn request ID.
+model ContaBotObjectiveRun {
+  id                String   @id @default(uuid())
+  objectiveId       String
+  companyId         String
+  activeCompanyId   String?  @unique
+  userId            String
+  state             String   @default("queued")
+  budgetDate        String
+  evidenceHash      String
+  input             String   @db.Text
+  sessionId         String?
+  assistantMessageId String?
+  error             String?
+  createdAt         DateTime @default(now())
+  completedAt       DateTime?
+  objective ContaBotObjective @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  sessions ContaBotSession[]
+  @@index([companyId, budgetDate])
+  @@index([objectiveId, createdAt])
+  @@index([state, createdAt])
 }
 
 model ContaBotToolCall {
