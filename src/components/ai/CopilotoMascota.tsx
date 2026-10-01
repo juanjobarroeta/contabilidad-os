@@ -42,6 +42,21 @@ interface Burbuja {
   acciones?: BotonBurbuja[];
 }
 
+/**
+ * La esquina de casa, por encima de la barra de inicio del iPhone (PWA
+ * instalada): `env(safe-area-inset-bottom)` sólo se lee desde CSS, así que se
+ * mide con un elemento de prueba.
+ */
+function esquinaSegura(): { x: number; y: number } {
+  const p = esquinaMascota(window.innerWidth, window.innerHeight);
+  const sonda = document.createElement("div");
+  sonda.style.cssText = "position:fixed;visibility:hidden;padding-bottom:env(safe-area-inset-bottom,0px)";
+  document.body.appendChild(sonda);
+  const seguro = parseFloat(getComputedStyle(sonda).paddingBottom) || 0;
+  sonda.remove();
+  return { x: p.x, y: p.y - seguro };
+}
+
 // Pistas ya enseñadas en esta sesión (por ruta). Vive en el módulo: sobrevive
 // a los re-montajes del layout pero no a una recarga, que es lo que pide.
 const pistasVistas = new Set<string>();
@@ -97,6 +112,7 @@ export function CopilotoMascota({
   const objetivo = useRef<HTMLElement | null>(null);
   const fijado = useRef<HTMLElement | null>(null);
   const ultimoSobre = useRef<HTMLElement | null>(null);
+  const finArrastre = useRef(0);
   const timerBurbuja = useRef<ReturnType<typeof setTimeout> | null>(null);
   const peticion = useRef(0);
   const posRef = useRef(pos);
@@ -124,7 +140,7 @@ export function CopilotoMascota({
     } catch {
       /* posición corrupta: a la esquina */
     }
-    const p = inicial ?? esquinaMascota(window.innerWidth, window.innerHeight);
+    const p = inicial ?? esquinaSegura();
     colocar(p.x, p.y);
     const onResize = () => {
       const actual = posRef.current;
@@ -137,7 +153,7 @@ export function CopilotoMascota({
   // «↘» desde el panel: de vuelta a la esquina, con salto.
   useEffect(() => {
     if (!aCasa) return;
-    const p = esquinaMascota(window.innerWidth, window.innerHeight);
+    const p = esquinaSegura();
     colocar(p.x, p.y);
     guardar(p);
     setSalto((s) => s + 1);
@@ -359,10 +375,11 @@ export function CopilotoMascota({
       const d = drag.current;
       if (!d) return;
       drag.current = null;
-      if (!d.movido) {
-        onToggle();
-        return;
-      }
+      // Sin arrastre es un clic, y el clic lo atiende onClick: si abriéramos
+      // aquí, en táctil el `click` que el navegador dispara después del
+      // pointerup cae sobre el fondo del cajón recién pintado y lo cierra.
+      if (!d.movido) return;
+      finArrastre.current = Date.now();
       setArrastrando(false);
       setSobreObjetivo(false);
       const actual = posRef.current;
@@ -464,7 +481,11 @@ export function CopilotoMascota({
         )}
         style={estilo}
         onPointerDown={clasico ? undefined : onPointerDown}
-        onClick={clasico ? onToggle : undefined}
+        onClick={() => {
+          // Un clic que llega justo al soltar un arrastre no es un clic.
+          if (Date.now() - finArrastre.current < 300) return;
+          onToggle();
+        }}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
