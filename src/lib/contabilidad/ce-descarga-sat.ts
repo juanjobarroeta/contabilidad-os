@@ -62,14 +62,27 @@ export async function descargarCeAnioSat(
     await app.click("#btnBuscar").catch(() => {});
     await page.waitForTimeout(4000);
 
-    const folios: string[] = await app.evaluate(() => {
-      const s = new Set<string>();
-      document.querySelectorAll("[onclick]").forEach((e) => {
-        const m = /VerXML\('([^']+)'\)/.exec(e.getAttribute("onclick") || "");
-        if (m) s.add(m[1]);
-      });
-      return Array.from(s);
-    });
+    // «Buscar» es un postback: si el SAT tarda, el iframe sigue navegando y
+    // evaluate truena con «Execution context was destroyed». Espera a que
+    // asiente y reintenta.
+    let folios: string[] = [];
+    for (let intento = 1; ; intento++) {
+      await app.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {});
+      try {
+        folios = await app.evaluate(() => {
+          const s = new Set<string>();
+          document.querySelectorAll("[onclick]").forEach((e) => {
+            const m = /VerXML\('([^']+)'\)/.exec(e.getAttribute("onclick") || "");
+            if (m) s.add(m[1]);
+          });
+          return Array.from(s);
+        });
+        break;
+      } catch (e) {
+        if (intento >= 3 || !/context was destroyed|navigat/i.test(String(e))) throw e;
+        await page.waitForTimeout(3000);
+      }
+    }
 
     for (const folio of folios) {
       await app
