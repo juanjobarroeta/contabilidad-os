@@ -79,6 +79,10 @@ The [contract and 34-case review matrix](./FISC-002M-INCOME-EVIDENCE-v1.md) incl
 
 The [contract and 30-case matrix](./FISC-002N-DEDUCTION-EVIDENCE-v1.md) retain pending professional review. The existing 34 numeric/integrity cases are replayed on expenses and real-PostgreSQL tests cover both directions. No new UI, schema or automatic calculation is enabled. Versioned reviewer decisions/elections, payment evidence, regime-specific amount/timing/limit rules and professional golden cases remain required before deduction consumption.
 
+### Documented reviews and reported options (FISC-002O)
+
+The monthly Facturas review panel and company/module-authorized API now persist append-only accountant criteria and reported rental/platform options. Reasons, source references, actor identity, effective months, snapshot hashes, optimistic revisions and idempotency keys preserve review provenance. Changed evidence is explicitly stale; all amounts remain unapproved and no option or review activates a tax engine. Source references are not uploaded or externally verified documents. See the [workflow contract and remaining legal/payment prerequisites](./FISC-002O-REVIEW-WORKFLOW-v1.md).
+
 ## Current coverage audit
 
 There are 19 current product catalog codes and 20 calculation tracks because code 626 must be split into PF and PM. `REGIMEN_MAP` currently contains only 16 codes: 607, 615, and 625 are recognized by the canonical CSF parser but remain absent from the default obligation-template map.

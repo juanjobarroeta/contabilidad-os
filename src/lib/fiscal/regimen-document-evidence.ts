@@ -29,7 +29,12 @@ const paymentSelect = {
 
 /** Caller must authorize company membership. Read-only, repeatable snapshot. */
 export async function readRegimenDocumentEvidence(companyId: string, year: number, month: number, direction: "INGRESO" | "EGRESO") {
-  return prisma.$transaction(async (db) => {
+  return prisma.$transaction((db) => readRegimenDocumentSnapshot(db, companyId, year, month, direction),
+    { isolationLevel: "RepeatableRead", timeout: 15_000 });
+}
+
+/** Reuse the caller's transaction so persisted review and evidence share a snapshot. */
+export async function readRegimenDocumentSnapshot(db: Prisma.TransactionClient, companyId: string, year: number, month: number, direction: "INGRESO" | "EGRESO") {
     const company = await db.company.findUnique({
       where: { id: companyId },
       select: { rfc: true, regimenFiscal: true, regimenes: { select: { code: true, since: true, endedAt: true, active: true } } },
@@ -39,7 +44,7 @@ export async function readRegimenDocumentEvidence(companyId: string, year: numbe
     const regimenCodes = companyRegimenCodesForPeriod({ ...company, from, to });
     const period = `${year}-${String(month).padStart(2, "0")}`;
     const empty = { period, regimenCodes, issued: [], parents: [], payments: [], history: [], linkedCreditNoteIds: [] };
-    const snapshot = (input: RegimenDocumentInput) => ({ input, tipoPersona: tipoPersonaFromRfc(company.rfc) });
+    const snapshot = (input: RegimenDocumentInput) => ({ input, tipoPersona: tipoPersonaFromRfc(company.rfc), companyContext: company });
     const limitResult = () => snapshot({ ...empty, truncated: true });
 
     const [issued, payments] = await Promise.all([
@@ -128,5 +133,4 @@ export async function readRegimenDocumentEvidence(companyId: string, year: numbe
       payments: payments.map(paymentEvidence), history: history.map(paymentEvidence),
       linkedCreditNoteIds: creditNotes.map((note) => note.id), truncated: false,
     });
-  }, { isolationLevel: "RepeatableRead", timeout: 15_000 });
 }

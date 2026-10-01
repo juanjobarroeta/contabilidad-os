@@ -353,6 +353,8 @@ model Company {
   // list captures the rest (common for personas físicas) so obligation and
   // annual-declaration logic can reason across all of them.
   regimenes CompanyRegimen[]
+  deductionReviews FiscalDeductionReview[]
+  regimeElections  FiscalRegimeElection[]
 
   creditoEvaluaciones CreditoEvaluacion[]
 
@@ -1152,6 +1154,57 @@ model InvoiceRegimenAssignment {
 
   invoice     Invoice                    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   allocations InvoiceRegimenAllocation[]
+}
+
+// Append-only accountant observations. These records NEVER authorize an amount
+// or activate an election/tax engine. Flat identities survive account removal.
+model FiscalDeductionReview {
+  id             String   @id @default(cuid())
+  companyId      String
+  periodo        String
+  invoiceId      String
+  source         String
+  regimenCode    String
+  revision       Int
+  decision       String
+  reason         String   @db.Text
+  references     String[]
+  evidenceHash   String
+  snapshot       Json
+  requestId      String
+  requestHash    String
+  reviewedById   String
+  reviewedByEmail String?
+  createdAt      DateTime @default(now())
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, periodo, invoiceId, source, regimenCode, revision], map: "DeductionReview_scope_revision_key")
+  @@unique([companyId, requestId])
+}
+
+// An evidence-backed observation of the option reported for an exercise, not
+// a SAT election or permission to change it. Previous versions are retained.
+model FiscalRegimeElection {
+  id              String   @id @default(cuid())
+  companyId       String
+  year            Int
+  regimenCode     String
+  revision        Int
+  choice          String
+  effectiveFrom   String
+  effectiveTo     String
+  reason          String   @db.Text
+  references      String[]
+  contextHash     String
+  requestId       String
+  requestHash     String
+  reviewedById    String
+  reviewedByEmail String?
+  createdAt       DateTime @default(now())
+  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, year, regimenCode, revision])
+  @@unique([companyId, requestId])
 }
 
 model InvoiceRegimenAllocation {
