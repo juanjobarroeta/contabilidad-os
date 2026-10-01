@@ -304,7 +304,9 @@ const REGLAS_FEDERALES: FiscalRule[] = [
 // tasa GENERAL; los matices (progresivo, sobretasas, tiers) van en `nota`.
 // Investigadas contra fuentes oficiales/secundarias 2025-2026 pero marcadas
 // verificado:false hasta ingerir el texto primario de cada ley al KB narrativo.
-const ISN_2026: { e: Entidad; tasa: number; ley: string; art: string; nota?: string }[] = [
+// `verificado: true` = cotejada contra el texto primario ya cargado en la base
+// (se cita esa ley y artículo).
+const ISN_2026: { e: Entidad; tasa: number; ley: string; art: string; nota?: string; verificado?: boolean }[] = [
   { e: "AGU", tasa: 0.025, ley: "Ley de Hacienda del Estado de Aguascalientes", art: "—" },
   { e: "BCN", tasa: 0.0425, ley: "Ley de Hacienda del Estado de Baja California", art: "151-13",
     nota: "1.8% base + sobretasa educación; tasa de liquidación ~4.25%" },
@@ -326,18 +328,18 @@ const ISN_2026: { e: Entidad; tasa: number; ley: string; art: string; nota?: str
   { e: "GRO", tasa: 0.03, ley: "Ley de Hacienda del Estado de Guerrero Núm. 419", art: "38",
     nota: "subió de 2% en 2025" },
   { e: "HID", tasa: 0.03, ley: "Ley de Hacienda del Estado de Hidalgo", art: "24" },
-  { e: "JAL", tasa: 0.03, ley: "Ley de Hacienda del Estado de Jalisco", art: "41",
-    nota: "5% aplica a trabajo NO subordinado (impuesto distinto)" },
+  { e: "JAL", tasa: 0.03, ley: "Ley de Ingresos del Estado de Jalisco para el Ejercicio Fiscal 2026", art: "13",
+    nota: "5% aplica a trabajo NO subordinado (impuesto distinto, art. 9 LI)", verificado: true },
   { e: "MEX", tasa: 0.03, ley: "Código Financiero del Estado de México y Municipios", art: "57" },
   { e: "MIC", tasa: 0.03, ley: "Ley de Hacienda del Estado de Michoacán", art: "45" },
   { e: "MOR", tasa: 0.03, ley: "Ley de Hacienda del Estado de Morelos", art: "58-BIS-4",
     nota: "subió de 2.5% en 2026" },
   { e: "NAY", tasa: 0.03, ley: "Ley de Hacienda del Estado de Nayarit", art: "—" },
   { e: "NLE", tasa: 0.03, ley: "Ley de Hacienda del Estado de Nuevo León", art: "157",
-    nota: "propuesta de 4% rechazada por el congreso (ene-2026)" },
+    nota: "propuesta de 4% rechazada por el congreso (ene-2026)", verificado: true },
   { e: "OAX", tasa: 0.03, ley: "Ley Estatal de Hacienda de Oaxaca", art: "—" },
-  { e: "PUE", tasa: 0.03, ley: "Ley de Hacienda del Estado de Puebla", art: "—",
-    nota: "subió de 2.5% en 2026; tasa en Ley de Ingresos" },
+  { e: "PUE", tasa: 0.03, ley: "Ley de Ingresos del Estado de Puebla, para el Ejercicio Fiscal 2026", art: "16",
+    nota: "impuesto sobre erogaciones por remuneraciones al trabajo personal; base en la Ley de Hacienda", verificado: true },
   { e: "QUE", tasa: 0.03, ley: "Ley de Hacienda del Estado de Querétaro", art: "70" },
   { e: "ROO", tasa: 0.04, ley: "Ley del Impuesto Sobre Nóminas del Estado de Quintana Roo", art: "8",
     nota: "subió de 3% en 2026" },
@@ -367,7 +369,10 @@ const ISN_2026: { e: Entidad; tasa: number; ley: string; art: string; nota?: str
 //
 // Se llenan por PR revisado, igual que las tasas — misma doctrina que
 // docs/fiscal-update-cadence.md.
-const ISN_DIA_VENCIMIENTO: { e: Entidad; dia: number; ley: string; art: string }[] = [];
+const ISN_DIA_VENCIMIENTO: { e: Entidad; dia: number; ley: string; art: string }[] = [
+  { e: "JAL", dia: 12, ley: "Ley de Hacienda del Estado de Jalisco", art: "43" },
+  { e: "NLE", dia: 17, ley: "Ley de Hacienda del Estado de Nuevo León", art: "158" },
+];
 
 const REGLAS_ISN_VENCIMIENTO: FiscalRule[] = ISN_DIA_VENCIMIENTO.map((r) => ({
   clave: "isn.dia_vencimiento",
@@ -391,7 +396,7 @@ const REGLAS_ISN: FiscalRule[] = ISN_2026.map((r) => ({
   vigenciaDesde: "2026-01-01",
   vigenciaHasta: null,
   fundamento: { ley: r.ley, articulo: r.art },
-  verificado: false,
+  verificado: r.verificado ?? false,
   nota: r.nota,
 }));
 
