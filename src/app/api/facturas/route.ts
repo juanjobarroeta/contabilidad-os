@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolverFechaCfdi } from "@/lib/nomina/fecha-cfdi";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { filtrosListaFacturas } from "@/lib/facturas/filtros-lista";
@@ -70,6 +71,10 @@ const createInvoiceSchema = z.object({
     months: z.string(),
     year: z.number(),
   }).optional(),
+  // Fecha del CFDI (AAAA-MM-DD). El SAT acepta fecharlo hasta 72 h antes del
+  // timbrado: sirve para dejar en su mes una operación del día 30/31 que se
+  // timbra el 1–3 del siguiente. Ausente = la fecha del timbrado.
+  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
 // GET /api/facturas?companyId=xxx&q=search&tipo=EGRESO&take=20
@@ -180,6 +185,15 @@ export async function POST(req: Request) {
 
   const { companyId, customerId, formaPago, metodoPago, usoCfdi, items, notes, global: globalInfo } = parsed.data;
 
+  // Fecha del CFDI antedatada (dentro de la ventana de 72 h del SAT).
+  let fechaCfdi: Date | undefined;
+  if (parsed.data.fecha) {
+    const f = resolverFechaCfdi(parsed.data.fecha, new Date(), "factura");
+    if (f.error) return NextResponse.json({ error: f.error }, { status: 400 });
+    fechaCfdi = f.fechaCfdi;
+  }
+  const fechaFactura = fechaCfdi ?? new Date();
+
   // Llave de idempotencia: header Idempotency-Key (preferido) o campo del body.
   // Sin llave (llamadores externos/API) el flujo es exactamente el de siempre.
   const idempotencyKey =
@@ -223,12 +237,15 @@ export async function POST(req: Request) {
   const isPublicoGeneral = customer.rfc === "XAXX010101000";
   let resolvedGlobal = globalInfo;
   if (isPublicoGeneral && !resolvedGlobal) {
-    // Auto-build a sensible default: current month, monthly periodicity
+    // Auto-build a sensible default: the CFDI's month, monthly periodicity.
+    // With a backdated `fecha` the month comes from that date (as typed: the
+    // instant itself is 23:59 CDMX, already the next day in UTC).
     const now = new Date();
+    const [anioF, mesF] = parsed.data.fecha ? parsed.data.fecha.split("-").map(Number) : [now.getFullYear(), now.getMonth() + 1];
     resolvedGlobal = {
       periodicity: "month",
-      months: String(now.getMonth() + 1).padStart(2, "0"),
-      year: now.getFullYear(),
+      months: String(mesF).padStart(2, "0"),
+      year: anioF,
     };
   }
 
@@ -259,7 +276,7 @@ export async function POST(req: Request) {
           companyId,
           customerId,
           tipo: "INGRESO",
-          fecha: new Date(),
+          fecha: fechaFactura,
           formaPago,
           metodoPago,
           usoCfdi,
@@ -312,6 +329,7 @@ export async function POST(req: Request) {
       })),
       ...(notes && { pdf_custom_section: notes }),
       ...(resolvedGlobal && { global: resolvedGlobal }),
+      ...(fechaCfdi ? { date: fechaCfdi.toISOString() } : {}),
     });
   } catch (e) {
     // El timbrado falló: liberar la reserva de idempotencia para que un
@@ -392,7 +410,7 @@ export async function POST(req: Request) {
           companyId,
           customerId,
           tipo: "INGRESO",
-          fecha: new Date(),
+          fecha: fechaFactura,
           formaPago,
           metodoPago,
           usoCfdi,

@@ -23,7 +23,12 @@ export type FechaCfdiResuelta = {
   error?: string;
 };
 
-export function resolverFechaCfdi(fecha: string, ahora: Date = new Date()): FechaCfdiResuelta {
+export function resolverFechaCfdi(
+  fecha: string,
+  ahora: Date = new Date(),
+  /** Para quién es el mensaje de fuera de ventana (la nómina tiene otra salida: FechaPago). */
+  contexto: "nomina" | "factura" = "nomina",
+): FechaCfdiResuelta {
   if (!FORMATO.test(fecha)) return { error: "Fecha del CFDI inválida (formato AAAA-MM-DD)" };
   const inicioDia = new Date(`${fecha}T00:00:00-06:00`);
   const finDia = new Date(`${fecha}T23:59:00-06:00`);
@@ -40,8 +45,10 @@ export function resolverFechaCfdi(fecha: string, ahora: Date = new Date()): Fech
     return {
       error:
         "El SAT sólo permite fechar un CFDI hasta 72 horas antes del timbrado. " +
-        "Para nóminas de periodos anteriores no hace falta antedatar: la FechaPago del " +
-        "complemento (la fecha de pago de la corrida) es la que determina el mes fiscal.",
+        (contexto === "nomina"
+          ? "Para nóminas de periodos anteriores no hace falta antedatar: la FechaPago del " +
+            "complemento (la fecha de pago de la corrida) es la que determina el mes fiscal."
+          : "Esa fecha ya quedó fuera: emítela con la fecha de hoy."),
     };
   }
   return { fechaCfdi: finDia };
