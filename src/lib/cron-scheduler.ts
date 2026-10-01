@@ -167,17 +167,10 @@ const JOBS: Job[] = [
   // (07:00 MX contra sus 06:00) porque lee la foto del día, y sólo toca a las
   // empresas que esa foto marcó. El handler se auto-gatea por empresa y día.
   { name: "contador-pasada", everyMs: 60 * MIN, firstDelayMs: 25 * MIN, minMs: MIN_CARO },
-  { name: "compliance-provision", everyMs: 24 * HOUR, firstDelayMs: 3 * MIN, minMs: MIN_CARO },
-  { name: "compliance-sync", everyMs: 6 * HOUR, firstDelayMs: 8 * MIN, minMs: MIN_CARO },
-  // Acuses MENSUALES desde Syntage (PDF + parse con Claude). Corría SÓLO en el
-  // workflow de Actions del día 22 — con Actions caído, una empresa nueva se
-  // quedaba sin sus mensuales para siempre y el checklist los pedía a mano.
-  // Gap-driven con tope de 10 acuses por corrida: sin faltantes es un no-op
-  // (dos GETs a Syntage por empresa). La vía RÁPIDA para una empresa nueva es el
-  // seguimiento de extracciones (syntage/seguimiento.ts), que corre el backfill
-  // acotado en cuanto Syntage termina; esta cadencia es la red de seguridad si
-  // un redeploy mató ese seguimiento — por eso 1 h y no 6.
-  { name: "declaraciones-backfill", everyMs: HOUR, firstDelayMs: 20 * MIN, minMs: MIN_CARO },
+  // compliance-provision / compliance-sync / declaraciones-backfill (Syntage)
+  // se retiraron en oct-2026: el cumplimiento y los acuses los trae la agenda
+  // del SAT con SatGo (agenda-sat, abajo). Syntage está apagado en el cliente
+  // (SYNTAGE_ENABLED); sus endpoints siguen para la exportación final manual.
   // Red de seguridad de las cancelaciones: lo que una factura cancelada dejó
   // vivo —inventario, costos, y el cobro bancario que la conciliaba (pasa a la
   // sustituta o vuelve a la mesa)—. vigencia-sync y cancel-sync ya lo revierten
@@ -188,8 +181,8 @@ const JOBS: Job[] = [
   // noche del vencimiento, el día siguiente, a diario, cada tanto, y un
   // pendiente en el expediente si no aparece. El tick es cada 15 min porque la
   // agenda pone horas exactas (22:00, 10:00); sin filas vencidas es un no-op.
-  // Corre EN PARALELO con declaraciones-backfill/compliance-sync de Syntage
-  // hasta el corte de octubre (docs/SATGO.md): ambos son gap-fill.
+  // Desde el corte de octubre (docs/SATGO.md) es la ÚNICA fuente de acuses,
+  // opinión 32-D y CSF.
   // HospitalOS: los cargos de un episodio vivo con el CFDI que los cobró, y el
   // depósito con su CFDI de anticipo (lib/hospital/episodios-vivos-cfdi). Local;
   // además se encadena tras sat-rawxml-backfill. Sin empresas hospital, no-op.
@@ -306,6 +299,22 @@ export function correrCron(name: string, query?: string): Promise<SeñalCorrida>
   return tick(name, query);
 }
 
+/**
+ * Cierre de Syntage (oct-2026): la exportación final y el borrado de
+ * entidades sólo se agendan cuando el deploy lo pide con su bandera — se
+ * encienden a mano, corren hasta terminar y se apagan quitando la variable.
+ */
+function jobsDelCierreSyntage(): Job[] {
+  const jobs: Job[] = [];
+  if (process.env.SYNTAGE_ENABLED === "1" && process.env.SYNTAGE_EXPORTAR === "1") {
+    jobs.push({ name: "syntage-exportar", everyMs: 10 * MIN, firstDelayMs: 60_000, minMs: MIN_LOCAL });
+  }
+  if (process.env.SYNTAGE_ENABLED === "1" && process.env.SYNTAGE_BORRAR === "1") {
+    jobs.push({ name: "syntage-borrar", everyMs: 10 * MIN, firstDelayMs: 2 * MIN, minMs: MIN_LOCAL });
+  }
+  return jobs;
+}
+
 /** Arranca el scheduler (idempotente; una sola vez por proceso). */
 export function startInAppCron(): void {
   const enabled =
@@ -325,11 +334,12 @@ export function startInAppCron(): void {
   // no setInterval): así la siguiente espera puede depender del resultado de la
   // corrida anterior. Un trabajo nunca se solapa consigo mismo porque sólo se
   // reprograma DESPUÉS de terminar — y el candado de BD cubre el resto.
-  for (const job of JOBS) {
+  const activos = [...JOBS, ...jobsDelCierreSyntage()];
+  for (const job of activos) {
     void correrEnBucle(job);
   }
   console.log(
-    `[cron-scheduler] pipeline en-proceso activo (ritmo adaptativo, reposo→piso): ${JOBS.map(
+    `[cron-scheduler] pipeline en-proceso activo (ritmo adaptativo, reposo→piso): ${activos.map(
       (j) =>
         `${j.name}${j.query ? `?${j.query}` : ""} ${Math.round(j.everyMs / MIN)}min→${Math.round((j.minMs ?? MIN_LOCAL) / 1000)}s`
     ).join(", ")}`

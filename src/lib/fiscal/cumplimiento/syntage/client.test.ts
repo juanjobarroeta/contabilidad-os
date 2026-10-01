@@ -1,5 +1,23 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { SyntageClient } from "./client";
+
+// Syntage está apagado por default; estas pruebas fijan el contrato del
+// cliente cuando se enciende para la exportación final.
+beforeAll(() => {
+  process.env.SYNTAGE_ENABLED = "1";
+});
+
+describe("SyntageClient apagado", () => {
+  it("no se construye sin SYNTAGE_ENABLED=1", () => {
+    const antes = process.env.SYNTAGE_ENABLED;
+    delete process.env.SYNTAGE_ENABLED;
+    try {
+      expect(() => new SyntageClient({ apiKey: "test" })).toThrow(/apagado/);
+    } finally {
+      process.env.SYNTAGE_ENABLED = antes;
+    }
+  });
+});
 
 // La API de Syntage (API Platform) pagina TODAS las colecciones (~30 por
 // página por default). Un GET sin paginar sólo ve la primera página: las

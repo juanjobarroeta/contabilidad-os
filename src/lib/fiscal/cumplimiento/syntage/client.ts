@@ -58,11 +58,26 @@ type Json = Record<string, unknown>;
  */
 export const MAX_ITEMS_POR_PAGINA = 100;
 
+/**
+ * SYNTAGE ESTÁ APAGADO (oct-2026). El cumplimiento y los acuses vienen de
+ * SatGo (docs/SATGO.md); Syntage cobra por entidad/mes y la cuenta se cierra.
+ * Ninguna llamada sale a menos que el deploy diga `SYNTAGE_ENABLED=1`
+ * explícitamente — que es lo que hace la corrida de exportación final antes
+ * de borrar las entidades. Así un cron olvidado, un botón del operador o el
+ * alta de una empresa no reabren una entidad facturable.
+ */
+export function syntageHabilitado(): boolean {
+  return process.env.SYNTAGE_ENABLED === "1";
+}
+
 export class SyntageClient {
   private readonly apiKey: string;
   private readonly baseUrl: string;
 
   constructor(cfg: SyntageConfig = {}) {
+    if (!syntageHabilitado()) {
+      throw new SyntageError("Syntage está apagado (SYNTAGE_ENABLED≠1): los datos fiscales vienen de SatGo.");
+    }
     this.apiKey = cfg.apiKey ?? process.env.SYNTAGE_API_KEY ?? "";
     this.baseUrl = (cfg.baseUrl ?? process.env.SYNTAGE_BASE_URL ?? "https://api.syntage.com").replace(/\/$/, "");
     if (!this.apiKey) throw new SyntageError("Falta SYNTAGE_API_KEY.");
@@ -122,6 +137,15 @@ export class SyntageClient {
       if (batch.length < itemsPerPage) break;
     }
     return all;
+  }
+
+  /**
+   * Una colección completa de cualquier ruta (p. ej.
+   * `/entities/{id}/tax-returns`), paginando con el tope de la API. La usa la
+   * exportación final para no quedarse con la primera página.
+   */
+  async listarColeccion(path: string): Promise<Json[]> {
+    return this.requestAllPages(path, MAX_ITEMS_POR_PAGINA, 500);
   }
 
   async listEntities(): Promise<Json[]> {

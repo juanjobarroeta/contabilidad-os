@@ -10,9 +10,9 @@ name: Conciliación CE mensual (SAT vs libro, mensual)
 #
 # NOTE: GitHub solo corre schedule: desde la rama default (main).
 
+# APAGADO (oct-2026): la balanza del SAT venía de Syntage y la cuenta se cierra.
+# Sólo disparo manual hasta que la conciliación lea la CE propia (ce-worker).
 on:
-  schedule:
-    - cron: "0 13 5 * *" # ~07:00 CT el día 5 de cada mes
   workflow_dispatch: {}
 
 jobs:
