@@ -303,6 +303,17 @@ export const FUENTES: FuenteFiscal[] = [
     autoridad: "SAT",
   },
   {
+    clave: "RMF-ANEXO-2",
+    nombre: "Anexo 2 RMF — Trámites fiscales (fichas; antes Anexo 1-A)",
+    capa: "narrativa",
+    cadencia: "anual",
+    metodo: "auto",
+    estado: "activo",
+    refresco: 'POST /api/admin/fiscal-ingest {"type":"doc","clave":"RMF-2026-A2"}',
+    autoridad: "SAT",
+    notas: "Requisitos, plazos y fundamento de cada trámite. Clave por ficha: 1/CFF, 45/ISR…",
+  },
+  {
     clave: "RMF-ANEXO-7",
     nombre: "Anexo 7 RMF — Criterios normativos del SAT",
     capa: "narrativa",

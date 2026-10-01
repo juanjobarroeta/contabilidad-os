@@ -9,7 +9,7 @@
 // Design doc: docs/FISCAL-KNOWLEDGE-BASE.md §6.
 
 /** Document shape — selects the chunking + cleaning strategy. */
-export type DocKind = "ley" | "rmf" | "guia" | "criterio";
+export type DocKind = "ley" | "rmf" | "guia" | "criterio" | "tramite";
 
 export interface LawChunk {
   articulo: string | null; // "113-E", "TRANSITORIOS", "2.7.1.32"; null = prose
@@ -435,14 +435,30 @@ const CRITERIO_RE = /^\s*(\d+\/[A-ZÁÉÍÓÚÑ]+(?:\/[A-ZÁÉÍÓÚÑ]+)*\/(?:N
 const CRITERIO_HEADING_RE = /^\s*(?:[A-Z]\.\s+|[IVXLC]+\.\s+)?Criterios?\s+(?:del?|de la)\s+\S/i;
 
 export function chunkCriterio(cleanText: string): LawChunk[] {
-  const matches = [...cleanText.matchAll(CRITERIO_RE)];
+  return chunkPorClave(cleanText, CRITERIO_RE, CRITERIO_HEADING_RE);
+}
+
+// ─── Fichas de trámite (Anexo 2 RMF; antes Anexo 1-A) ────────────────────────
+
+/** «1/CFF Solicitud…», «5/DEC-5 Aviso…»: la clave con su título en la misma línea (el índice la trae sola). */
+const TRAMITE_RE = /^\s*(\d+\/[A-Z]+(?:-\d+)?(?:\/[A-Z]+)?)(?=[ \t]+[A-ZÁÉÍÓÚÑ¿(])/gm;
+const TRAMITE_HEADING_RE =
+  /^\s*(?:Código Fiscal de la Federación|Impuesto (?:sobre la Renta|al Valor Agregado|Especial sobre Producción y Servicios|sobre Automóviles Nuevos)|Ley de Ingresos (?:de la Federación|sobre Hidrocarburos)|Ley Federal de Derechos|De la prestación de servicios digitales.{0,60}|Del Decreto .{0,100})\s*$/;
+
+/** Una ficha por clave (1/CFF, 45/ISR…); contexto = la ley de la sección. */
+export function chunkTramite(cleanText: string): LawChunk[] {
+  return chunkPorClave(cleanText, TRAMITE_RE, TRAMITE_HEADING_RE);
+}
+
+function chunkPorClave(cleanText: string, claveRe: RegExp, headingRe: RegExp): LawChunk[] {
+  const matches = [...cleanText.matchAll(claveRe)];
   if (matches.length < 5) return chunkGeneric(cleanText);
 
   const headIndex: { offset: number; trail: string }[] = [];
   {
     let offset = 0;
     for (const line of cleanText.split("\n")) {
-      if (CRITERIO_HEADING_RE.test(line) && line.trim().length < 120) headIndex.push({ offset, trail: line.trim().slice(0, 90) });
+      if (headingRe.test(line) && line.trim().length < 120) headIndex.push({ offset, trail: line.trim().slice(0, 90) });
       offset += line.length + 1;
     }
   }
@@ -530,5 +546,6 @@ export function chunkDocument(rawText: string, kind: DocKind): LawChunk[] {
   const clean = cleanGenericText(rawText);
   if (kind === "rmf") return chunkRegla(clean);
   if (kind === "criterio") return chunkCriterio(clean);
+  if (kind === "tramite") return chunkTramite(clean);
   return chunkGeneric(clean);
 }

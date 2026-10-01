@@ -230,3 +230,33 @@ describe("chunkCriterio (Anexos 3 y 7 de la RMF)", () => {
     expect(c[5].contexto).toBe("Criterios de la Ley del ISR");
   });
 });
+
+describe("chunkTramite (Anexo 2 de la RMF)", () => {
+  const ficha = (clave: string, titulo: string) =>
+    `${clave} ${titulo}\n\nTrámite\nDescripción del trámite o servicio\n¿Quién puede solicitar el trámite o servicio?\nPersonas morales.\n¿Cuándo se presenta?\nDentro del mes siguiente. Fundamento jurídico: artículos 27 del CFF y 29 de su Reglamento.\n`;
+  const texto = [
+    "Contenido",
+    "1/CFF",
+    "Solicitud de inscripción en el RFC de personas físicas.",
+    "2/CFF",
+    "Solicitud de inscripción en el RFC de personas morales.",
+    "Código Fiscal de la Federación",
+    ficha("1/CFF", "Solicitud de inscripción en el RFC de personas físicas."),
+    "Ver el trámite 2/CFF más adelante.",
+    ficha("2/CFF", "Solicitud de inscripción en el RFC de personas morales."),
+    ficha("3/CFF", "Solicitud de inscripción en el RFC por oficina virtual."),
+    "Impuesto sobre la Renta",
+    ficha("1/ISR", "Aviso de opción para tributar."),
+    "Del Decreto por el que se otorgan diversos beneficios fiscales",
+    ficha("1/DEC-1", "Aviso para aplicar el estímulo."),
+  ].join("\n");
+
+  it("una pieza por ficha, con la ley de su sección; ignora el índice y menciones a media línea", () => {
+    const c = chunkDocument(texto, "tramite");
+    expect(c.map((x) => x.articulo)).toEqual(["1/CFF", "2/CFF", "3/CFF", "1/ISR", "1/DEC-1"]);
+    expect(c[0].texto).toContain("¿Cuándo se presenta?");
+    expect(c[0].contexto).toBe("Código Fiscal de la Federación");
+    expect(c[3].contexto).toBe("Impuesto sobre la Renta");
+    expect(c[4].contexto).toMatch(/^Del Decreto/);
+  });
+});

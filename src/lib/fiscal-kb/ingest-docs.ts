@@ -127,6 +127,16 @@ export const DOCS: Record<string, DocSpec> = {
     url: `${SAT_NORMATIVIDAD}/documentos2026/rmf/compiladas/Compilado_PrimeraModificacion_Anexo3_RMF2026-17072026.pdf`,
     vigenciaDesde: "2026-01-09",
   },
+  // Fichas de trámite (antes Anexo 1-A): quién, cuándo, dónde, requisitos y
+  // fundamento de cada trámite/aviso ante el SAT. 1,020 págs.
+  "RMF-2026-A2": {
+    clave: "RMF-2026-A2",
+    titulo: "Anexo 2 de la RMF 2026 — Trámites fiscales (fichas), compilado con la Primera Modificación",
+    source: "RMF",
+    kind: "tramite",
+    url: `${SAT_NORMATIVIDAD}/documentos2026/rmf/compiladas/Compilado_PrimeraModificacion_Anexo2_RMF2026-17072026.pdf`,
+    vigenciaDesde: "2026-07-17",
+  },
   "RFA-2026": {
     clave: "RFA-2026",
     titulo: "Resolución de Facilidades Administrativas para 2026 (AGAPES, autotransporte)",
