@@ -155,7 +155,7 @@ export const PASOS: DefinicionPaso[] = [
     titulo: "Bancos",
     descripcion: "Estado de cuenta de cada cuenta cargado, movimientos conciliados y mes firmado.",
     aplica: () => true,
-    checks: ["ce:banco", "ce:sin_clasificar", "fx:conciliacion-bancaria", "x:cuentas_sin_estado", "x:firmas_conciliacion"],
+    checks: ["ce:banco", "ce:sin_clasificar", "fx:conciliacion-bancaria", "x:cuentas_sin_estado", "x:firmas_conciliacion", "x:estados_verificados"],
     dependeDe: ["sat"],
     tools: [
       "query_bank_transactions",
@@ -342,6 +342,7 @@ export function definicionPaso(clave: ClavePasoCierre): DefinicionPaso {
 
 /** Extras que sólo el cierre consulta (conteos baratos, sin motores). */
 export interface ExtrasCierre {
+  bankStatements?: { ok: boolean; hash: string; message: string };
   /** CfdiFaltante del periodo (censo del SAT que no pudimos documentar). */
   cfdiFaltantes: number;
   /** Cuentas bancarias activas sin un solo movimiento en el periodo. */
@@ -539,6 +540,10 @@ function senalDatosApertura(x: ExtrasCierre): SenalPaso | null {
 
 function senalExtra(clave: string, x: ExtrasCierre, ctx: ContextoEmpresa): SenalPaso | null {
   switch (clave) {
+    case "x:estados_verificados":
+      return x.bankStatements ? { clave, estado: x.bankStatements.ok ? "ok" : "error",
+        resumen: x.bankStatements.ok ? "Evidencia bancaria vigente" : x.bankStatements.message,
+        cta: { label: "Revisar estados", href: `/bancos?tab=estados&year=${ctx.year}&month=${ctx.month}` } } : null;
     case "x:cfdi_faltantes":
       return x.cfdiFaltantes > 0
         ? {
@@ -755,6 +760,7 @@ export function decidirPasos(h: HechosCierre): PasoEvaluado[] {
     const senales = senalesDelPaso(def, h);
     const cifras = cifrasDelPaso(def.clave, h);
     const hechos: Record<string, unknown> = {
+      ...(def.clave === "banco" && h.extras.bankStatements ? { bankEvidence: h.extras.bankStatements.hash } : {}),
       senales: senales.map((s) => ({ clave: s.clave, estado: s.estado, resumen: s.resumen })),
       ...(Object.keys(cifras).length > 0 ? { cifras } : {}),
     };

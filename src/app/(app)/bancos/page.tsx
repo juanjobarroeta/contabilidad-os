@@ -35,6 +35,7 @@ import { usePeriod } from "@/components/contabilidad/PeriodProvider";
 import { Loading } from "@/components/ui/feedback";
 import { ConciliacionWorkbench } from "@/components/contabilidad/ConciliacionWorkbench";
 import { ExpedienteEnContexto } from "@/components/expediente/ExpedienteEnContexto";
+import { BankStatementReview } from "@/components/bancos/BankStatementReview";
 import { GestionBancos } from "@/components/bancos/GestionBancos";
 import { CuentasDelCatalogo } from "@/components/bancos/CuentasDelCatalogo";
 import { readBankLocation, type BankTab as Tab } from "@/lib/bancos/navigation";
@@ -44,6 +45,7 @@ import { ultimosEjercicios } from "@/lib/periodos";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "conciliacion", label: "Conciliación" },
+  { id: "estados", label: "Estados y duplicados" },
   { id: "movimientos", label: "Movimientos" },
   { id: "cuentas", label: "Cuentas" },
   { id: "historico", label: "Histórico" },
@@ -81,7 +83,7 @@ function BancosContent() {
     setPeriod(y, m);
     // Cambiar de mes deja atrás el movimiento entregado: su `?tx=` en la barra
     // de direcciones prometería una selección que ya no existe.
-    if (location.period || txInicial) window.history.replaceState(null, "", "/bancos");
+    if (location.period || txInicial) window.history.replaceState(null, "", tab === "estados" ? "/bancos?tab=estados" : "/bancos");
   }
   // ENTREGA DESDE EL ARCHIVO. El tab Movimientos vive en ESTA misma página, así
   // que no hace falta recargar la página. La URL es la fuente de tab/selección
@@ -129,7 +131,7 @@ function BancosContent() {
             el gesto de la mesa es mes±1; la rejilla es para saltar a marzo del
             año pasado sin doce clics. Sin cifras: el feed de la mesa es de UN
             mes y no sabe cuántos movimientos tienen los demás. */}
-        {tab === "conciliacion" && (
+        {(tab === "conciliacion" || tab === "estados") && (
           <div className="flex items-center gap-1">
             <button onClick={() => moverPeriodo(-1)} aria-label="Período anterior"
               className="grid h-8 w-8 place-items-center rounded-control text-cos-ink-faint hover:bg-cos-paper hover:text-cos-ink">
@@ -176,6 +178,8 @@ function BancosContent() {
             txInicial={txInicial}
             onApplied={() => setVersion((v) => v + 1)}
           />
+        ) : tab === "estados" ? (
+          <BankStatementReview key={`${activeCompany.id}-${year}-${month}`} companyId={activeCompany.id} year={year} month={month} />
         ) : (
           <>
             <CuentasDelCatalogo companyId={activeCompany.id} className="mb-4" onRegistradas={() => setVersion((v) => v + 1)} />

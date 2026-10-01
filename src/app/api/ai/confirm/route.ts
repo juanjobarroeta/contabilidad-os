@@ -81,7 +81,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "La acción no corresponde a esta empresa." }, { status: 409 });
   }
 
-  if (["crear_subcuenta", "renombrar_cuenta", "registrar_prestamo"].includes(pa!.type)) {
+  if (["crear_subcuenta", "renombrar_cuenta", "registrar_prestamo", "bank_statement_review"].includes(pa!.type)) {
     const { requireContaBotAccess } = await import("@/lib/contabot/access");
     try {
       await requireContaBotAccess(userId, conv.companyId, conversationId, { requireEnabled: false });

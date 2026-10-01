@@ -244,3 +244,43 @@ export async function reconsultarComprobantesEmpresa(
   }
   return out;
 }
+
+/** A bounded, tenant-scoped lookup for ContaBot. Never discovers bank activity. */
+export async function lookupMovementCep(companyId: string, movementId: string, opts: { fetchImpl?: FetchLike; apiKey?: string } = {}) {
+  return prisma.$transaction(async (db) => {
+    await db.$queryRaw`SELECT id FROM "Company" WHERE id = ${companyId} FOR UPDATE`;
+    await db.$queryRaw`SELECT id FROM "BankTransaction" WHERE id = ${movementId} AND "companyId" = ${companyId} FOR UPDATE`;
+    const movement = await db.bankTransaction.findFirst({ where: { id: movementId, companyId }, include: { bankAccount: { select: { clabe: true } } } });
+    if (!movement) throw new Error("Movimiento no encontrado en esta empresa.");
+    const cached = await db.cepMovimiento.findUnique({ where: { bankTransactionId: movementId } });
+    if (cached) {
+      const { xml: _xml, ...data } = cached;
+      return { status: "SAVED", evidence: data, originalUrl: `/api/bancos/transactions/${movementId}/cep?xml=1` };
+    }
+    if (movement.cepAt) return { status: "PREVIOUS_ATTEMPT", attemptedAt: movement.cepAt, message: "No hay comprobante guardado. El intento anterior no se repitió automáticamente." };
+    const missing = [!movement.claveRastreo && "clave de rastreo", !movement.contraparteClabe && "CLABE de contraparte", !movement.bankAccount.clabe && "CLABE de cuenta propia"].filter(Boolean);
+    const params = paramsDesdeMovimiento({ fecha: movement.fecha, monto: Number(movement.monto), claveRastreo: movement.claveRastreo, contraparteClabe: movement.contraparteClabe }, movement.bankAccount.clabe);
+    if (!params) return { status: "MISSING_EVIDENCE", missing, message: "Faltan datos válidos del SPEI. Solicita el comprobante o un estado legible." };
+    if (!opts.apiKey && !process.env.TLALOC_API_KEY) return { status: "UNAVAILABLE", message: "Tlaloc no está configurado." };
+    const cep = await consultarCep(params, opts);
+    if (!cep) {
+      await db.bankTransaction.update({ where: { id: movementId }, data: { cepAt: new Date() } });
+      return { status: "NOT_FOUND", message: "No se encontró CEP. Esto no significa que el movimiento sea falso o duplicado." };
+    }
+    const digits = (v: string | null) => (v ?? "").replace(/\D/g, "");
+    if (cep.monto == null || Math.round(cep.monto * 100) !== Math.round(Math.abs(Number(movement.monto)) * 100) || digits(cep.beneficiario.cuenta) !== params.cuenta) {
+      await db.bankTransaction.update({ where: { id: movementId }, data: { cepAt: new Date() } });
+      return { status: "CONFLICT", message: "El CEP no coincide con el importe o la cuenta esperados. Revisión manual necesaria; no se aplicaron sus datos." };
+    }
+    const parte = contraparteDeCep(cep, Number(movement.monto));
+    await db.cepMovimiento.create({ data: { bankTransactionId: movementId, xml: cep.xml, estado: cep.estado, fechaOperacion: cep.fechaOperacion,
+      concepto: cep.concepto, monto: cep.monto, ordenanteNombre: cep.ordenante.nombre, ordenanteRfc: cep.ordenante.rfc,
+      ordenanteCuenta: cep.ordenante.cuenta, ordenanteBanco: cep.ordenante.banco, beneficiarioNombre: cep.beneficiario.nombre,
+      beneficiarioRfc: cep.beneficiario.rfc, beneficiarioCuenta: cep.beneficiario.cuenta, beneficiarioBanco: cep.beneficiario.banco } });
+    await db.bankTransaction.update({ where: { id: movementId }, data: { cepAt: new Date(),
+      ...(parte?.rfc && !movement.contraparteRfc ? { contraparteRfc: parte.rfc } : {}),
+      ...(parte?.nombre && !movement.contraparteNombre ? { contraparteNombre: parte.nombre } : {}) } });
+    return { status: "SAVED", amount: cep.monto, counterparty: parte, originalUrl: `/api/bancos/transactions/${movementId}/cep?xml=1`,
+      message: "Evidencia de este SPEI guardada. No acredita cobertura del mes." };
+  }, { timeout: 30000 });
+}

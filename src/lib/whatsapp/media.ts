@@ -1,3 +1,4 @@
+import { stageBankOriginal } from "@/lib/bancos/statements/inbox";
 import { prisma } from "@/lib/prisma";
 import { extractStatementFromDocument } from "@/lib/bancos/vision-statement";
 import { parseStatementFile } from "@/lib/bancos/import";
@@ -15,6 +16,7 @@ import {
   etiquetaCuenta,
   ultimos4Digitos,
   type CuentaCandidata,
+  type DecisionIngesta,
 } from "@/lib/whatsapp/estado-cuenta";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -24,8 +26,8 @@ import {
 // - CSV/OFX/Excel → parser de texto existente (sin visión).
 // - PDF/imagen → clasifica estado de cuenta vs factura y extrae con visión.
 //
-// SEGURIDAD: el archivo llega como Buffer en memoria y NUNCA se persiste — de
-// aquí sólo salen filas parseadas (importadas o cacheadas en pendingAction).
+// Originals wait in a tenant-scoped inbox, then attach to immutable source rows.
+// Only IDs and parsed evidence enter pendingAction/model context.
 // La extracción por visión pasa por el CANDADO DE BALANCE (estado-cuenta.ts)
 // antes de importar nada. Returns a short Spanish summary to send back to the
 // user. Never throws to the caller — always returns a user-facing message.
@@ -170,7 +172,7 @@ export async function handleWhatsappMedia(opts: {
 
   // CANDADO DE BALANCE + resolución de cuenta (lógica pura en estado-cuenta.ts).
   const cuentas = await cuentasDeEmpresa(companyId);
-  const decision = decidirIngesta(
+  let decision: DecisionIngesta = decidirIngesta(
     {
       banco: extraction.banco,
       numeroCuenta: extraction.numeroCuenta,
@@ -182,6 +184,18 @@ export async function handleWhatsappMedia(opts: {
     cuentas
   );
 
+  const held = extraction.balanceCheck.cuadra !== true || extraction.controles?.cuadra === false;
+  // Unbalanced/partial statements remain review evidence, never silent imports.
+  if (["SIN_MOVIMIENTOS", "BALANCE_NO_VERIFICABLE", "BALANCE_NO_CUADRA"].includes(decision.accion)) {
+    const resolved = resolverCuentaDestino(cuentas, extraction.numeroCuenta);
+    if (resolved.tipo === "UNICA") decision = { accion: "IMPORTAR", cuenta: resolved.cuenta, notaCuenta: null };
+    else if (resolved.tipo === "VARIAS") decision = { accion: "ELEGIR_CUENTA", cuentas: resolved.cuentas, mensaje: "El documento necesita revisión. Elige la cuenta para conservarlo como provisional." };
+  }
+  const attachmentId = await stageBankOriginal(companyId, buffer, opts.filename || (mediaType === "application/pdf" ? "estado.pdf" : "estado.jpg"), mediaType, {
+    saldoInicial: extraction.balanceCheck.saldoInicial, saldoFinal: extraction.balanceCheck.saldoFinal,
+    cuadro: extraction.balanceCheck.cuadra, holdForReview: held, declaredAccount: extraction.numeroCuenta, declaredCurrency: extraction.moneda,
+    periodStart: extraction.periodoInicio, periodEnd: extraction.periodoFin, controls: extraction.controlesDeclarados, warnings: extraction.warnings,
+  });
   switch (decision.accion) {
     case "IMPORTAR": {
       // GUARDARRAÍL: NO se importa a ciegas. Se escenifica y se pide confirmación
@@ -192,10 +206,11 @@ export async function handleWhatsappMedia(opts: {
       await stagePendingImportEstado(conversationId, {
         companyId,
         companyName,
+        attachmentId,
         origen: "vision",
         banco: extraction.banco,
         periodo: extraction.periodo,
-        saldoVerificado: true,
+        saldoVerificado: !held,
         movimientos: serializarMovimientos(extraction.transactions),
         descartadas: [],
         cuentas: [
@@ -222,10 +237,11 @@ export async function handleWhatsappMedia(opts: {
       await stagePendingImportEstado(conversationId, {
         companyId,
         companyName,
+        attachmentId,
         origen: "vision",
         banco: extraction.banco,
         periodo: extraction.periodo,
-        saldoVerificado: true,
+        saldoVerificado: !held,
         movimientos: serializarMovimientos(extraction.transactions),
         descartadas: [],
         cuentas: decision.cuentas.map((c) => ({
@@ -284,10 +300,12 @@ async function intakeArchivoBanco(opts: {
 
   const companyName = await razonSocialDe(companyId);
 
+  const attachmentId = await stageBankOriginal(companyId, buffer, filename || "estado.csv", "application/octet-stream", { warnings: r.warnings });
   if (resolucion.tipo === "VARIAS") {
     await stagePendingImportEstado(conversationId, {
       companyId,
       companyName,
+      attachmentId,
       origen: "archivo",
       banco: r.detectedBank ?? null,
       periodo: null,
@@ -316,6 +334,7 @@ async function intakeArchivoBanco(opts: {
   await stagePendingImportEstado(conversationId, {
     companyId,
     companyName,
+    attachmentId,
     origen: "archivo",
     banco: r.detectedBank ?? null,
     periodo: null,

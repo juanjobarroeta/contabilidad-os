@@ -31,6 +31,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
 
-  const res = await deshacerLoteImportado(id, companyId, user.id);
-  return NextResponse.json(res);
+  try { return NextResponse.json(await deshacerLoteImportado(id, companyId, user.id)); }
+  catch (e) { return NextResponse.json({ error: e instanceof Error && !e.name.startsWith("Prisma") ? e.message : "No se pudo deshacer la importación." }, { status: 409 }); }
 }

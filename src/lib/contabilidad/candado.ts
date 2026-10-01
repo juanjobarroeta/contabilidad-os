@@ -95,6 +95,11 @@ export async function cerrarEjercicio(
   }
 
   await prisma.$transaction(async (tx) => {
+    // Bank evidence imports/reviews and posting share this company lock.
+    await tx.$queryRaw`SELECT id FROM "Company" WHERE id = ${companyId} FOR UPDATE`;
+    const current = await tx.accountingPeriod.findMany({ where: { companyId, year }, select: { month: true, status: true, entriesCount: true } });
+    const checked = evaluarCierreEjercicio(current);
+    if (!checked.puedeCerrar) throw new EjercicioError(checked.motivo ?? "No se puede cerrar el ejercicio");
     for (const month of MESES_EJERCICIO) {
       await tx.accountingPeriod.upsert({
         where: { companyId_year_month: { companyId, year, month } },
@@ -133,6 +138,7 @@ export async function reabrirEjercicio(
   if (cerrados.length === 0) throw new EjercicioError(`El ejercicio ${year} no está cerrado.`);
 
   await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Company" WHERE id = ${companyId} FOR UPDATE`;
     const conAsientos = cerrados.filter((p) => p.entriesCount > 0).map((p) => p.id);
     const vacios = cerrados.filter((p) => p.entriesCount === 0).map((p) => p.id);
     if (conAsientos.length > 0) {

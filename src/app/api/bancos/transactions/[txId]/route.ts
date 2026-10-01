@@ -43,76 +43,66 @@ export async function DELETE(req: Request, { params }: Params) {
   }
 
   const { txId } = await params;
-  const tx = await prisma.bankTransaction.findUnique({
-    where: { id: txId },
-    include: {
-      conciliacionDetalles: { select: { id: true } },
-      gastoPagado: { select: { id: true } },
-      reembolsoPagado: { select: { id: true } },
-      rayaPagada: { select: { id: true } },
-      solicitudCompraPagada: { select: { id: true } },
-      devolucionPor: { select: { id: true } },
-    },
-  });
-  if (!tx) return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 });
-
-  const member = await getEffectiveCompanyMembership(user.id, tx.companyId);
-  if (!member || member.role === "VIEWER") {
-    return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
-  }
-
-  if (tx.loanAccountId) return NextResponse.json({ error: "Deshaz primero la categoría del préstamo para revertir sus asientos antes de borrar el movimiento." }, { status: 409 });
-
-  if (tx.status === "MATCHED" || tx.invoiceId || tx.taxDeclarationId || tx.conciliacionDetalles.length > 0) {
-    return NextResponse.json(
-      { error: "El movimiento está conciliado. Desconcílialo antes de borrarlo." },
-      { status: 409 },
-    );
-  }
-  if (tx.gastoPagado || tx.reembolsoPagado || tx.rayaPagada || tx.solicitudCompraPagada) {
-    return NextResponse.json(
-      { error: "El movimiento está vinculado a construcción. Desconcílialo primero." },
-      { status: 409 },
-    );
-  }
-  if (tx.devolucionDeId || tx.devolucionPor) {
-    return NextResponse.json(
-      { error: "El movimiento es parte de una devolución vinculada. Desvincúlala primero." },
-      { status: 409 },
-    );
-  }
-
-  // Sólo CAPTURAS MANUALES (caja chica / ingest externo, con externalRef).
-  // Los renglones importados del estado de cuenta no se borran uno a uno:
-  // se corrigen deshaciendo el lote — y borrarlos aquí sólo haría que la
-  // detección de duplicados los reviva en la siguiente importación.
-  // Renglón IMPORTADO (sin externalRef): sí se borra, pero dejando una
-  // LÁPIDA con su clave de deduplicación. Sin ella la siguiente importación
-  // del mismo estado lo revivía (la regla F − D contaba un renglón menos), y
-  // por eso durante mucho tiempo se rechazó borrarlos. Casos reales: la
-  // misma línea pegada dos veces, o un cargo de tarjeta que el banco cambió
-  // de monto o quitó después de que ya estaba importado.
+  const identity = await prisma.bankTransaction.findUnique({ where: { id: txId }, select: { companyId: true } });
+  if (!identity) return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 });
+  const member = await getEffectiveCompanyMembership(user.id, identity.companyId);
+  if (!member || member.role === "VIEWER") return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   const motivo = new URL(req.url).searchParams.get("motivo")?.slice(0, 40) || null;
-  if (tx.externalRef) {
-    await prisma.bankTransaction.delete({ where: { id: txId } });
-  } else {
-    await prisma.$transaction([
-      prisma.bankTransactionTombstone.create({
-        data: {
-          companyId: tx.companyId,
-          bankAccountId: tx.bankAccountId,
-          txId: tx.id,
-          fecha: tx.fecha,
-          monto: tx.monto,
-          descripcion: tx.descripcion,
-          referencia: tx.referencia,
-          motivo,
-          userId: user.id,
-        },
-      }),
-      prisma.bankTransaction.delete({ where: { id: txId } }),
-    ]);
-  }
+  const result = await prisma.$transaction(async (db) => {
+    // The legacy delete must observe any evidence/entries created while it
+    // waited for an import, review, or posting operation to finish.
+    await db.$queryRaw`SELECT id FROM "Company" WHERE id = ${identity.companyId} FOR UPDATE`;
+    await db.$queryRaw`SELECT id FROM "BankTransaction" WHERE id = ${txId} FOR UPDATE`;
+    const tx = await db.bankTransaction.findUnique({
+      where: { id: txId },
+      include: {
+        conciliacionDetalles: { select: { id: true } },
+        gastoPagado: { select: { id: true } },
+        reembolsoPagado: { select: { id: true } },
+        rayaPagada: { select: { id: true } },
+        solicitudCompraPagada: { select: { id: true } },
+        devolucionPor: { select: { id: true } },
+      },
+    });
+    if (!tx) return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 });
+
+    await db.$queryRaw`SELECT id FROM "AccountingPeriod" WHERE "companyId" = ${tx.companyId} AND year = ${tx.fecha.getUTCFullYear()} AND month = ${tx.fecha.getUTCMonth() + 1} FOR UPDATE`;
+    const period = await db.accountingPeriod.findUnique({ where: { companyId_year_month: { companyId: tx.companyId, year: tx.fecha.getUTCFullYear(), month: tx.fecha.getUTCMonth() + 1 } }, select: { status: true } });
+    if (period?.status === "CLOSED") return NextResponse.json({ error: "El periodo está cerrado. Reábrelo formalmente antes de corregir movimientos." }, { status: 409 });
+    if (await db.bankStatementRow.count({ where: { movementId: txId } }) || await db.accountingEntry.count({ where: { companyId: tx.companyId, referencia: txId } })) {
+      return NextResponse.json({ error: "Usa Bancos → Estados para revisar esta operación y conservar su evidencia y efecto contable." }, { status: 409 });
+    }
+    if (tx.loanAccountId) return NextResponse.json({ error: "Deshaz primero la categoría del préstamo para revertir sus asientos antes de borrar el movimiento." }, { status: 409 });
+
+    if (tx.status === "MATCHED" || tx.invoiceId || tx.taxDeclarationId || tx.conciliacionDetalles.length > 0) {
+      return NextResponse.json(
+        { error: "El movimiento está conciliado. Desconcílialo antes de borrarlo." },
+        { status: 409 },
+      );
+    }
+    if (tx.gastoPagado || tx.reembolsoPagado || tx.rayaPagada || tx.solicitudCompraPagada) {
+      return NextResponse.json(
+        { error: "El movimiento está vinculado a construcción. Desconcílialo primero." },
+        { status: 409 },
+      );
+    }
+    if (tx.devolucionDeId || tx.devolucionPor) {
+      return NextResponse.json(
+        { error: "El movimiento es parte de una devolución vinculada. Desvincúlala primero." },
+        { status: 409 },
+      );
+    }
+
+    if (!tx.externalRef) await db.bankTransactionTombstone.create({ data: {
+      companyId: tx.companyId, bankAccountId: tx.bankAccountId, txId: tx.id,
+      fecha: tx.fecha, monto: tx.monto, descripcion: tx.descripcion,
+      referencia: tx.referencia, motivo, userId: user.id,
+    } });
+    await db.bankTransaction.delete({ where: { id: txId } });
+    return tx;
+  });
+  if (result instanceof NextResponse) return result;
+  const tx = result;
   registrarBitacora({
     companyId: tx.companyId,
     userId: user.id,
@@ -131,6 +121,8 @@ export async function DELETE(req: Request, { params }: Params) {
     },
     req,
   });
+  const { invalidarCierre } = await import("@/lib/cierre/evaluar");
+  invalidarCierre(tx.companyId);
   return NextResponse.json({ ok: true });
 }
 

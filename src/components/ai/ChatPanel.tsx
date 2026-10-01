@@ -22,6 +22,8 @@ import {
   History, ArrowDownRight, ArrowUp, Bookmark, Zap, CircleHelp,
   SlidersHorizontal, ListChecks,
 } from "lucide-react";
+import { BankDocumentUpload } from "@/components/bancos/BankDocumentUpload";
+import { usePeriod } from "@/components/contabilidad/PeriodProvider";
 import { Markdown } from "./Markdown";
 import { TOOL_LABELS, useChat, type ChatContexto, type Message } from "./useChat";
 import { AccionesChat, ChatCard, PildoraRef } from "./ChatCards";
@@ -130,6 +132,7 @@ export function ChatPanel() {
 
   const loadConversationsRef = useRef<(() => void) | null>(null);
 
+  const bankPeriod = usePeriod();
   const {
     messages,
     setMessages,
@@ -857,6 +860,9 @@ export function ChatPanel() {
                 </div>
               )}
               <div className="flex items-end gap-1.5">
+                {companyId && <BankDocumentUpload key={companyId} companyId={companyId} month={`${bankPeriod.year}-${String(bankPeriod.month).padStart(2, "0")}`} disabled={isLoading || confirming || Boolean(pendingAction)} onUploaded={(d) => {
+                  void enviar(`Documento bancario recibido: ${d.message} Cuenta: ${d.bankAccountId}; documento: ${d.batchId}; mes elegido: ${d.month}. Consulta query_statement_review, explica la cobertura y pregunta por las decisiones pendientes sin aplicarlas todavía.`);
+                }} />}
                 <textarea
                   ref={inputRef}
                   value={input}

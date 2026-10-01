@@ -12,10 +12,9 @@ import type { ParsedTransaction, RowDescartada } from "@/lib/bank-parser";
 // importación existente (persistTransactions: dedup + auto-categorización).
 //
 // SEGURIDAD (roadmap §4):
-//   - El archivo crudo NUNCA se persiste: se procesa en memoria y se descarta.
-//     Lo único que puede quedar en la BD son filas parseadas (movimientos) —
-//     ya sea importadas, o cacheadas temporalmente en el pendingAction de la
-//     conversación mientras el usuario elige la cuenta destino.
+//   - El original se conserva fuera del contexto del modelo para revisión posterior.
+//     La selección de cuenta conserva filas parseadas y un ID de adjunto en
+//     pendingAction; los bytes originales permanecen en un inbox de la empresa.
 //   - CANDADO DE BALANCE: la extracción por visión NUNCA se ingiere a ciegas.
 //     Sólo se importa si saldoInicial + Σ movimientos ≈ saldoFinal (tolerancia
 //     $1.00). Si los saldos no aparecen o no cuadran, NO se importa nada y se
@@ -285,6 +284,7 @@ export interface MovimientoSerializado {
   monto: number;
   referencia: string | null;
   saldo: number | null;
+  hora?: string; bankReferenceId?: string; sourceRow?: number; sourcePage?: number; claveRastreoRaw?: string; sublineas?: string[];
 }
 
 /**
@@ -300,6 +300,7 @@ export interface PendingImportEstado {
   /** Razón social de la empresa DESTINO — se muestra al confirmar para que un
    *  usuario de despacho no importe a la empresa equivocada por descuido. */
   companyName: string;
+  attachmentId?: string;
   origen: "vision" | "archivo";
   banco: string | null;
   periodo: string | null;
@@ -335,6 +336,7 @@ export function serializarMovimientos(txs: ParsedTransaction[]): MovimientoSeria
     monto: t.monto,
     referencia: t.referencia ?? null,
     saldo: t.saldo ?? null,
+    hora: t.hora, bankReferenceId: t.bankReferenceId, sourceRow: t.sourceRow, sourcePage: t.sourcePage, claveRastreoRaw: t.claveRastreoRaw, sublineas: t.sublineas,
   }));
 }
 
@@ -345,6 +347,7 @@ export function deserializarMovimientos(movs: MovimientoSerializado[]): ParsedTr
     monto: m.monto,
     referencia: m.referencia ?? undefined,
     saldo: m.saldo ?? undefined,
+    hora: m.hora, bankReferenceId: m.bankReferenceId, sourceRow: m.sourceRow, sourcePage: m.sourcePage, claveRastreoRaw: m.claveRastreoRaw, sublineas: m.sublineas,
   }));
 }
 
@@ -424,17 +427,21 @@ export async function importarMovimientosWhatsapp(opts: {
   companyId: string;
   bankAccountId: string;
   transactions: ParsedTransaction[];
+  attachmentId?: string;
   origen: "vision" | "archivo";
   banco: string | null;
   periodo: string | null;
   cuentaTerminacion: string | null;
   descartadas: RowDescartada[];
-}): Promise<{ imported: number; skipped: number }> {
-  const { imported, skipped } = await persistTransactions({
+}): Promise<{ imported: number; skipped: number; pending: number; batchId: string }> {
+  const { readBankOriginal } = await import("@/lib/bancos/statements/inbox");
+  const original = opts.attachmentId ? await readBankOriginal(opts.companyId, opts.attachmentId) : {};
+  const { imported, skipped, pending, batchId } = await persistTransactions({
     bankAccountId: opts.bankAccountId,
     companyId: opts.companyId,
     transactions: opts.transactions,
     source: "WHATSAPP",
+    ...original,
     banco: opts.banco,
     periodo: opts.periodo,
   });
@@ -453,7 +460,7 @@ export async function importarMovimientosWhatsapp(opts: {
       descartadas: opts.descartadas.length,
     },
   });
-  return { imported, skipped };
+  return { imported, skipped, pending, batchId };
 }
 
 /**
@@ -515,10 +522,11 @@ export async function resolverPendingImportEstado(
   const cuenta = pending.cuentas[indiceElegido];
 
   try {
-    const { imported, skipped } = await importarMovimientosWhatsapp({
+    const { imported, skipped, pending: reviewPending } = await importarMovimientosWhatsapp({
       companyId: pending.companyId,
       bankAccountId: cuenta.id,
       transactions: deserializarMovimientos(pending.movimientos),
+      attachmentId: pending.attachmentId,
       origen: pending.origen,
       banco: pending.banco,
       periodo: pending.periodo,
@@ -534,7 +542,7 @@ export async function resolverPendingImportEstado(
         descartadas: pending.descartadas,
         saldoVerificado: pending.saldoVerificado,
         notaCuenta: `Los registré en la cuenta ${cuenta.etiqueta}.`,
-      }) + (imported > 0 ? '\n\n¿Te equivocaste de empresa o cuenta? Dime "deshacer importación".' : "")
+      }) + `\n\n${reviewPending} filas por revisar en Bancos → Estados. La información sigue provisional hasta verificar el mes completo.`
     );
   } catch (e) {
     console.error("[whatsapp] import estado (pendiente) error", e);

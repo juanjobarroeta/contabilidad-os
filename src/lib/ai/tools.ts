@@ -7,10 +7,12 @@ const CLAVES_GET_ARTICULO = [...clavesPorMateria(MATERIAS_CONTADOR), "RMF"];
 import type Anthropic from "@anthropic-ai/sdk";
 import { toolsExpediente } from "@/lib/expediente/tools";
 import { toolsSolicitudes } from "@/lib/solicitudes/tools";
+import { bankStatementTools } from "./bank-statement-tools";
 import { accountingTools } from "./accounting-tools";
 
 export const tools: Anthropic.Tool[] = [
   ...accountingTools,
+  ...bankStatementTools,
   // La memoria de la empresa (expediente): hechos duraderos y bitácora de
   // trabajo. Van primero porque son las que hacen que el copiloto deje de
   // responder como si acabara de conocer al cliente.
@@ -61,7 +63,8 @@ export const tools: Anthropic.Tool[] = [
         monto_min: { type: "number" },
         monto_max: { type: "number" },
         summary_only: { type: "boolean" },
-        limit: { type: "number" },
+        limit: { type: "integer", minimum: 1, maximum: 100 },
+        cursor: { type: "string", description: "nextCursor de la página anterior, conservando los mismos filtros" },
       },
       required: [],
     },

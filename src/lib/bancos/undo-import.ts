@@ -6,6 +6,7 @@
 // hecho). El lote se marca como deshecho (auditoría), no se elimina.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { assertPeriodoAbierto } from "@/lib/contabilidad/candado";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { inferirBancoPorDescripciones } from "./banco-por-descripcion";
@@ -257,6 +258,8 @@ export async function deshacerLoteImportado(
   userId?: string | null
 ): Promise<ResultadoDeshacer> {
   return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Company" WHERE id = ${companyId} FOR UPDATE`;
+    if (await tx.bankStatementRow.count({ where: { batchId, batch: { companyId } } })) throw new Error("Este documento conserva evidencia por fila. Revísalo en Bancos → Estados antes de retirar operaciones.");
     const batch = await tx.importBatch.findFirst({
       where: { id: batchId, companyId, undoneAt: null },
       select: { id: true },
@@ -272,6 +275,10 @@ export async function deshacerLoteImportado(
         select: { id: true },
       })
     ).map((t) => t.id);
+    if (await tx.bankStatementRow.count({ where: { movementId: { in: borradosIds }, batch: { companyId } } })) throw new Error("Otro documento conserva evidencia de estas operaciones. Usa Bancos → Estados para revisarlas.");
+    if (await tx.accountingEntry.count({ where: { companyId, referencia: { in: borradosIds } } })) throw new Error("Hay operaciones contabilizadas. Usa la revisión de estados para conservar la póliza y su reversión.");
+    const dates = await tx.bankTransaction.findMany({ where: { id: { in: borradosIds }, companyId }, select: { fecha: true } });
+    for (const { fecha } of dates) await assertPeriodoAbierto(tx, companyId, fecha.getUTCFullYear(), fecha.getUTCMonth() + 1);
     const { count: borrados } = await tx.bankTransaction.deleteMany({
       where: whereBorrables(batchId, companyId),
     });

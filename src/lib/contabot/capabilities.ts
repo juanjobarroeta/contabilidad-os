@@ -7,6 +7,10 @@ import { objectiveTools } from "./objectives/tools";
 // Closed catalogue: adding a tool to the old chat does not silently grant it to
 // background agents. Financial writes still use the existing confirmation UI.
 export const CAPABILITIES = {
+  query_bank_accounts: "read",
+  query_statement_review: "read",
+  proponer_revision_bancaria: "proposal",
+  consultar_cep_movimiento: "memory",
   consultar_objetivos: "read",
   query_saldos_cuentas: "read",
   query_auxiliar_cuenta: "read",

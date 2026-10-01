@@ -16,6 +16,8 @@
 //      Aprobar es lo ÚNICO que escribe en el ledger.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { statementPostingGate } from "./statements/review";
+import { assertPeriodoAbierto } from "@/lib/contabilidad/candado";
 import { prisma } from "@/lib/prisma";
 import type { EntryType, EntrySource } from "@prisma/client";
 import { COE_CODES } from "@/lib/contabilidad/catalog";
@@ -170,7 +172,7 @@ async function construirAsiento(
 }
 
 export type AprobarResult =
-  | { ok: true; created: boolean; entries: number }
+  | { ok: true; created: boolean; entries: number; deferred?: boolean; message?: string }
   | { ok: false; error: string; status: number; sinEvidencia?: boolean };
 
 export interface OpcionesAprobar {
@@ -263,21 +265,6 @@ export async function aprobarSugerencia(
     return { ok: false, error: "El periodo ya está cerrado", status: 409 };
   }
 
-  // Idempotencia: ¿ya hay asientos BANCO para este movimiento?
-  const existing = await prisma.accountingEntry.count({
-    where: { companyId, referencia: txId, referenciaTipo: "BANK_TX", fuente: "BANCO" },
-  });
-  if (existing > 0) {
-    // Aseguramos al menos que el movimiento quede etiquetado y devolvemos éxito.
-    const changed = await prisma.bankTransaction.updateMany({
-      where: { id: txId, companyId, loanAccountId: null },
-      data: { status: "IGNORED", invoiceId: null, notes: familia },
-    });
-    if (!changed.count) return { ok: false, error: "El movimiento cambió. Revisa su registro antes de categorizarlo.", status: 409 };
-    rastroTraspaso?.();
-    return { ok: true, created: false, entries: existing };
-  }
-
   let renglones: { chartAccountId: string; tipo: EntryType }[];
   try {
     renglones = await construirAsiento(companyId, familia, isCredit);
@@ -289,41 +276,28 @@ export async function aprobarSugerencia(
     };
   }
 
-  const applied = await prisma.$transaction(async (db) => {
-    // Claim before creating entries. A concurrent confirmed loan must not be
-    // overwritten by a proposal prepared while the movement was unassigned.
-    const changed = await db.bankTransaction.updateMany({
-      where: { id: txId, companyId, loanAccountId: null },
-      data: { status: "IGNORED", invoiceId: null, notes: familia },
-    });
-    if (!changed.count) return false;
+  const result = await prisma.$transaction(async (db): Promise<AprobarResult> => {
+    await db.$queryRaw`SELECT id FROM "Company" WHERE id = ${companyId} FOR UPDATE`;
     const periodRow = await db.accountingPeriod.upsert({
-      where: { companyId_year_month: { companyId, year, month } },
-      update: {},
-      create: { companyId, year, month, status: "DRAFT" },
+      where: { companyId_year_month: { companyId, year, month } }, update: {}, create: { companyId, year, month, status: "DRAFT" },
     });
-
-    await db.accountingEntry.createMany({
-      data: renglones.map((r) => ({
-        companyId,
-        chartAccountId: r.chartAccountId,
-        year,
-        month,
-        periodId: periodRow.id,
-        fecha,
-        descripcion: tx.descripcion.substring(0, 200),
-        referencia: txId,
-        referenciaTipo: "BANK_TX",
-        monto: absAmount,
-        tipo: r.tipo,
-        fuente: "BANCO" as EntrySource,
-      })),
-    });
-
-    return true;
-  });
-  if (!applied) return { ok: false, error: "El movimiento cambió. Revisa su registro antes de categorizarlo.", status: 409 };
-
-  rastroTraspaso?.();
-  return { ok: true, created: true, entries: renglones.length };
+    await db.$queryRaw`SELECT id FROM "AccountingPeriod" WHERE id = ${periodRow.id} FOR UPDATE`;
+    await assertPeriodoAbierto(db, companyId, year, month);
+    const current = await db.bankTransaction.findFirst({ where: { id: txId, companyId }, include: { conciliacionDetalles: { select: { id: true } } } });
+    if (!current || current.loanAccountId || current.invoiceId || current.conciliacionDetalles.length || Number(current.monto) !== monto || current.fecha.getTime() !== fecha.getTime()) {
+      return { ok: false, error: "El movimiento cambió. Revisa su registro antes de categorizarlo.", status: 409 };
+    }
+    const existing = await db.accountingEntry.count({ where: { companyId, referencia: txId, referenciaTipo: "BANK_TX", fuente: "BANCO" } });
+    if (existing && current.notes !== familia) return { ok: false, error: "La categoría tiene asientos. Revisa la póliza antes de cambiarla.", status: 409 };
+    const gate = await statementPostingGate(companyId, year, month, db, tx.bankAccountId);
+    await db.bankTransaction.update({ where: { id: txId }, data: { status: "IGNORED", notes: familia } });
+    if (!gate.ok) return { ok: true, created: false, entries: existing, deferred: true, message: "Clasificación guardada como borrador. Falta verificar el estado completo antes de contabilizar." };
+    if (existing) return { ok: true, created: false, entries: existing };
+    await db.accountingEntry.createMany({ data: renglones.map((r) => ({ companyId, chartAccountId: r.chartAccountId, year, month,
+      periodId: periodRow.id, fecha, descripcion: tx.descripcion.substring(0, 200), referencia: txId,
+      referenciaTipo: "BANK_TX", monto: absAmount, tipo: r.tipo, fuente: "BANCO" as EntrySource })) });
+    return { ok: true, created: true, entries: renglones.length };
+  }, { timeout: 120000 });
+  if (result.ok) rastroTraspaso?.();
+  return result;
 }

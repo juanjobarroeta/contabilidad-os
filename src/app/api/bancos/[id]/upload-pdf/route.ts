@@ -1,172 +1,28 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { requireContaBotAccess } from "@/lib/contabot/access";
 import { gateEscritura } from "@/lib/subscription";
-import { extractStatementFromDocument } from "@/lib/bancos/vision-statement";
-import { cuentaTieneIngestExterno, ERROR_CUENTA_PUENTE } from "@/lib/bancos/fuentes";
-import { persistTransactions } from "@/lib/bancos/import";
-import { pdfEstaProtegido, desencriptarPdf } from "@/lib/bancos/pdf-crypt";
-
+import { uploadBankDocument } from "@/lib/bancos/statements/upload";
+import { publicError } from "@/lib/bancos/statements/contract";
 export const runtime = "nodejs";
-// La extracción parte el PDF en lotes de páginas y los corre en PARALELO, así
-// que el tiempo lo marca el lote más lento, no la suma. Aun así un estado de 17
-// páginas con 168 movimientos pasaba de 120 s y se veía como un timeout del
-// navegador: el margen sube para que el corte por lotes tenga dónde caber.
 export const maxDuration = 300;
-
-type Params = { params: Promise<{ id: string }> };
-
-const ALLOWED: Record<string, "application/pdf" | "image/jpeg" | "image/png" | "image/webp"> = {
-  "application/pdf": "application/pdf",
-  "image/jpeg": "image/jpeg",
-  "image/png": "image/png",
-  "image/webp": "image/webp",
-};
-
-// POST /api/bancos/[id]/upload-pdf  (multipart/form-data, field "file")
-//
-// Vision-extracts a PDF/image estado de cuenta, validates the balance, and —
-// only if it reconciles (or ?force=1) — imports the movimientos through the
-// same dedup/categorize pipeline as CSV uploads. If the balance doesn't cuadrar
-// we return the extraction + warnings WITHOUT importing, so the user can review.
-export async function POST(req: Request, { params }: Params) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return NextResponse.json({ error: "Extracción con IA no configurada" }, { status: 503 });
-  }
-
-  const { id: bankAccountId } = await params;
-  const account = await prisma.bankAccount.findUnique({ where: { id: bankAccountId } });
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth(); if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { id } = await params;
+  const account = await prisma.bankAccount.findUnique({ where: { id }, select: { companyId: true } });
   if (!account) return NextResponse.json({ error: "Cuenta no encontrada" }, { status: 404 });
-
-  const member = await getEffectiveCompanyMembership(session.user.id, account.companyId);
-  if (!member || member.role === "VIEWER") return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
-
-  // Gating de suscripción (bandera SUBSCRIPTION_ENFORCEMENT_ENABLED).
-  const gate = await gateEscritura(session.user.id);
-  if (gate) return gate;
-
-  // Guardia anti-duplicado (antes de gastar visión): una cuenta puente
-  // alimentada por ingest externo nunca recibe estados de cuenta.
-  if (await cuentaTieneIngestExterno(bankAccountId)) {
-    return NextResponse.json({ error: ERROR_CUENTA_PUENTE }, { status: 409 });
-  }
-
-  const url = new URL(req.url);
-  const force = url.searchParams.get("force") === "1";
-
-  let file: File | null = null;
-  let password = "";
   try {
-    const formData = await req.formData();
-    const f = formData.get("file");
-    if (f instanceof File) file = f;
-    const p = formData.get("password");
-    if (typeof p === "string") password = p;
-  } catch {
-    return NextResponse.json({ error: "Espera multipart/form-data con campo 'file'" }, { status: 400 });
-  }
-  if (!file) return NextResponse.json({ error: "Sube un archivo en el campo 'file'" }, { status: 400 });
-  if (file.size > 15 * 1024 * 1024) return NextResponse.json({ error: "El archivo excede 15 MB" }, { status: 413 });
-
-  const mediaType = ALLOWED[file.type];
-  if (!mediaType) {
-    return NextResponse.json({ error: "Formato no soportado. Usa PDF o imagen (JPG/PNG)." }, { status: 415 });
-  }
-
-  let buf: Buffer = Buffer.from(await file.arrayBuffer());
-
-  // PDFs cifrados (Banamex, Santander, HSBC los mandan con contraseña): la API
-  // de visión los rechaza, así que se desencriptan aquí. Sin contraseña se
-  // intenta con "" (cubre PDFs con solo restricciones de dueño); si hace falta
-  // una, 422 needsPassword para que la UI la pida y reintente.
-  if (mediaType === "application/pdf" && pdfEstaProtegido(buf)) {
-    const res = await desencriptarPdf(buf, password);
-    if (!res.ok) {
-      return NextResponse.json({
-        ok: false,
-        needsPassword: true,
-        error: password
-          ? "La contraseña no abre este PDF. Verifica e intenta de nuevo (los bancos suelen usar el número de tarjeta, el RFC o una fecha)."
-          : "Este estado de cuenta está protegido con contraseña. Escríbela para poder leerlo.",
-      }, { status: 422 });
-    }
-    buf = res.pdf; // desencriptado: alimenta la visión Y la evidencia guardada
-  }
-
-  let extraction;
-  try {
-    extraction = await extractStatementFromDocument(buf, mediaType);
-  } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "No se pudo procesar el documento" },
-      { status: 502 }
-    );
-  }
-
-  // Safety gate: no se importa si CUALQUIERA de los dos candados falla, salvo
-  // que el usuario lo fuerce. El de controles (los totales que el banco imprime)
-  // se agrega aquí porque atrapa lo que el de saldos no ve: si se escapan un
-  // cargo y un abono del mismo importe, el saldo cuadra igual y antes eso se
-  // importaba sin decir nada.
-  // Si el usuario no confirma, el documento se descarta junto con la extracción:
-  // solo persiste (como evidencia del lote) cuando la importación sucede.
-  const saldosMal = extraction.balanceCheck.cuadra === false;
-  const controlesMal = extraction.controles?.cuadra === false;
-  const needsReview = saldosMal || controlesMal;
-  if ((needsReview || extraction.transactions.length === 0) && !force) {
-    return NextResponse.json({
-      ok: false,
-      imported: 0,
-      skipped: 0,
-      needsReview: true,
-      extraction,
-      message:
-        extraction.transactions.length === 0
-          ? "No se detectaron movimientos. Revisa el archivo."
-          : controlesMal
-            ? "Los movimientos extraídos no coinciden con los totales que declara el banco. Revísalos y vuelve a enviar con confirmación."
-            : "La validación de saldos no cuadró. Revisa los movimientos y vuelve a enviar con confirmación.",
-    }, { status: 200 });
-  }
-
-  const { imported, skipped } = await persistTransactions({
-    bankAccountId,
-    companyId: account.companyId,
-    transactions: extraction.transactions,
-    source: "UPLOAD_PDF",
-    banco: extraction.banco,
-    periodo: extraction.periodo,
-    // Los saldos que declara el estado: ancla de la conciliación bancaria.
-    saldoInicial: extraction.balanceCheck.saldoInicial,
-    saldoFinal: extraction.balanceCheck.saldoFinal,
-    // Evidencia de underwriting: el documento original y si su cuadre pasó.
-    // cuadro=false ⇒ el usuario forzó la importación pese al descuadre.
-    archivo: { bytes: buf, nombre: file.name, mime: mediaType },
-    // Cuadró de verdad = pasaron los dos candados que se pudieron correr. Un
-    // false de cualquiera manda: es evidencia de underwriting, no un adorno.
-    cuadro:
-      saldosMal || controlesMal
-        ? false
-        : (extraction.balanceCheck.cuadra ?? extraction.controles?.cuadra ?? null),
-  });
-
-  return NextResponse.json({
-    ok: true,
-    imported,
-    skipped,
-    // El extractor de PDF no reporta filas descartadas por renglón (el gate
-    // de saldos de arriba cubre la pérdida); exponemos la misma forma que
-    // /api/bancos/[id]/upload para que el front trate ambas igual.
-    posiblesDuplicados: skipped,
-    descartadas: [],
-    detectedBank: extraction.banco,
-    balanceCheck: extraction.balanceCheck,
-    controles: extraction.controles,
-    warnings: extraction.warnings,
-    message: `${imported} movimiento(s) importados${skipped > 0 ? `, ${skipped} omitido(s) por parecer duplicados` : ""}.`,
-  });
+    const access = await requireContaBotAccess(session.user.id, account.companyId, undefined, { requireEnabled: false });
+    if (!access.canWrite) return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
+    const gate = await gateEscritura(session.user.id); if (gate) return gate;
+    const form = await req.formData(), file = form.get("file");
+    if (!(file instanceof File)) return NextResponse.json({ error: "Selecciona un archivo." }, { status: 400 });
+    if (file.size > 15 * 1024 * 1024) return NextResponse.json({ error: "El archivo excede 15 MB." }, { status: 413 });
+    if (!["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(file.type)) return NextResponse.json({ error: "Usa PDF o imagen." }, { status: 415 });
+    const result = await uploadBankDocument({ companyId: account.companyId, bankAccountId: id, userId: session.user.id,
+      bytes: Buffer.from(await file.arrayBuffer()), filename: file.name, mime: file.type, password: String(form.get("password") ?? ""),
+      month: new URL(req.url).searchParams.get("mes") ?? undefined });
+    return NextResponse.json(result, { status: "needsPassword" in result && result.needsPassword ? 422 : 200 });
+  } catch (e) { return NextResponse.json({ error: publicError(e) }, { status: (e as { status?: number }).status ?? 409 }); }
 }

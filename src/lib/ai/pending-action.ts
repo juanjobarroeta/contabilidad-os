@@ -35,6 +35,7 @@ export const PENDING_ACTION_TTL_MS = 15 * 60 * 1000; // 15 min
 
 /** Tipos de acción reversibles que el asistente puede proponer. */
 export type PendingActionType =
+  | "bank_statement_review"
   | AccountingProposal["type"]
   | "conciliar"
   | "categorizacion"
@@ -65,6 +66,7 @@ interface BasePending {
 }
 
 export type ChatPendingAction =
+  | (BasePending & { type: "bank_statement_review"; payload: import("@/lib/bancos/statements/review").ReviewRequest })
   | (BasePending & AccountingProposal)
   | (BasePending & { type: "conciliar"; payload: { txId: string; invoiceId: string } })
   | (BasePending & { type: "categorizacion"; payload: { txId: string; familia: FamiliaConcepto } })
@@ -123,7 +125,7 @@ export type ChatPendingAction =
 /** True si el tipo es una acción reversible permitida (lista blanca estricta). */
 export function isReversibleType(type: string): type is PendingActionType {
   return (
-    type === "crear_subcuenta" || type === "renombrar_cuenta" || type === "registrar_prestamo" ||
+    type === "bank_statement_review" || type === "crear_subcuenta" || type === "renombrar_cuenta" || type === "registrar_prestamo" ||
     type === "conciliar" ||
     type === "categorizacion" ||
     type === "categorizacion_lote" ||
@@ -204,6 +206,7 @@ export async function clearChatPendingAction(conversationId: string): Promise<vo
 // ── Stage (lo único que hacen las herramientas "proponer_*") ─────────────────
 
 type StagePayload =
+  | { type: "bank_statement_review"; payload: import("@/lib/bancos/statements/review").ReviewRequest }
   | AccountingProposal
   | { type: "conciliar"; payload: { txId: string; invoiceId: string } }
   | { type: "categorizacion"; payload: { txId: string; familia: FamiliaConcepto } }
@@ -285,6 +288,12 @@ async function ejecutar(
   confirmingUserId: string,
 ): Promise<ExecuteResult> {
   switch (pa.type) {
+    case "bank_statement_review": {
+      if (pa.payload.companyId !== pa.companyId) return { ok: false, error: "La propuesta no pertenece a esta empresa." };
+      const { executeReview } = await import("@/lib/bancos/statements/review");
+      try { return await executeReview(pa.payload, confirmingUserId); }
+      catch (e) { const { publicError } = await import("@/lib/bancos/statements/contract"); return { ok: false, error: publicError(e) }; }
+    }
     case "crear_subcuenta":
     case "renombrar_cuenta":
     case "registrar_prestamo": {
@@ -330,9 +339,9 @@ async function ejecutar(
       if (!r.ok) return { ok: false, error: r.error };
       return {
         ok: true,
-        message: r.created
+        message: r.message ?? (r.created
           ? "Movimiento categorizado y registrado en el libro mayor."
-          : "El movimiento ya estaba categorizado; no se duplicó el asiento.",
+          : "El movimiento ya estaba categorizado; no se duplicó el asiento."),
       };
     }
 
