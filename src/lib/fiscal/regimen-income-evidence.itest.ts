@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { readRegimenIncomeEvidence } from "./regimen-income-evidence";
+import { readRegimenDeductionEvidence } from "./regimen-deduction-evidence";
 
 const skip = process.env.DB_TESTS_SKIP === "1";
 const parentUuid = "AAAAAAAA-1111-4111-8111-111111111111";
@@ -140,5 +141,97 @@ describe.skipIf(skip)("FISC-002M real PostgreSQL income snapshot", () => {
 
   it("returns absent company evidence as absent, not as a zero summary", async () => {
     expect(await readRegimenIncomeEvidence(`missing-${randomUUID()}`, 2026, 8)).toBeNull();
+  });
+
+  async function asExpenses() {
+    await prisma.company.update({ where: { id: companyId }, data: { rfc: "FISD260101ABC" } });
+    await prisma.invoice.updateMany({ where: { companyId, tipo: "INGRESO" }, data: {
+      tipo: "EGRESO", naturaleza: "GASTO", naturalezaManual: true, naturalezaRevision: false,
+    } });
+  }
+
+  it("N: shares exact expense bases without granting deduction eligibility", async () => {
+    await asExpenses();
+    const result = await readRegimenDeductionEvidence(companyId, 2026, 8);
+    expect(result).toMatchObject({ estado: "PENDIENTE", deduccionAutorizadaCentavos: null, usadaEnCalculoAutomatico: false,
+      documental: { estado: "PROYECTABLE", totales: { pueDocumentadoCentavos: 9000, ppdRepCentavos: 45000 } },
+      resumen: { renglones: 2, asignacionesPorRevisar: 4, pendientesDocumentales: 0 },
+    });
+    expect(result?.renglones.every((row) => row.clasificacion.origen === "MANUAL")).toBe(true);
+    expect(result?.renglones.flatMap((row) => row.elegibilidad).every((review) => review.deduccionAutorizadaCentavos === null)).toBe(true);
+    expect((await readRegimenIncomeEvidence(companyId, 2026, 8))?.totales).toBeNull();
+  });
+
+  it("N: a different company's same UUID and supplier REP do not enter the summary", async () => {
+    await asExpenses();
+    const other = await company();
+    await invoice(other, { tipo: "EGRESO", uuid: parentUuid, metodoPago: "PPD", subtotal: "500000", total: "580000" });
+    await invoice(other, { tipo: "EGRESO", uuid: pueUuid, subtotal: "500000", total: "580000" });
+    await invoice(other, { tipo: "PAGO", tipoSat: "P", regimenAssignment: undefined,
+      doctosRelacionados: { create: { parentUuid, impPagado: "500000", numParcialidad: 2, fechaPago: new Date("2026-08-15T12:00:00Z") } },
+    });
+    expect((await readRegimenDeductionEvidence(companyId, 2026, 8))?.documental.totales)
+      .toEqual({ pueDocumentadoCentavos: 9000, ppdRepCentavos: 45000 });
+  });
+
+  it("N: source classification conflicts survive a manual GASTO override", async () => {
+    await asExpenses();
+    await prisma.invoice.update({ where: { id: pueId }, data: { usoCfdi: "I04" } });
+    const row = (await readRegimenDeductionEvidence(companyId, 2026, 8))?.renglones.find((entry) => entry.invoiceId === pueId);
+    expect(row?.clasificacion).toMatchObject({ naturaleza: "GASTO", origen: "MANUAL", requiereRevision: true });
+    expect(row?.elegibilidad.every((review) => review.motivos.includes("INVESTMENT_TREATMENT_REVIEW") && review.motivos.includes("CLASSIFICATION_REVIEW"))).toBe(true);
+  });
+
+  it("N: missing nature cannot be silently accepted as a current expense", async () => {
+    await asExpenses();
+    await prisma.invoice.update({ where: { id: pueId }, data: { naturaleza: null } });
+    const row = (await readRegimenDeductionEvidence(companyId, 2026, 8))?.renglones.find((entry) => entry.invoiceId === pueId);
+    expect(row?.clasificacion).toMatchObject({ naturaleza: null, requiereRevision: true });
+    expect(row?.elegibilidad.every((review) => review.tratamiento === "CLASIFICACION_POR_REVISAR")).toBe(true);
+  });
+
+  it("N: the real company RFC separates RESICO PF from RESICO PM", async () => {
+    await asExpenses();
+    await prisma.invoiceRegimenAssignment.deleteMany({ where: { invoice: { companyId } } });
+    await prisma.companyRegimen.deleteMany({ where: { companyId } });
+    await prisma.company.update({ where: { id: companyId }, data: { regimenFiscal: "626" } });
+    const pf = await readRegimenDeductionEvidence(companyId, 2026, 8);
+    expect(pf?.renglones.flatMap((row) => row.elegibilidad).every((review) => review.tratamiento === "RESICO_PF_SIN_DEDUCCION_ISR")).toBe(true);
+    await prisma.company.update({ where: { id: companyId }, data: { rfc: "FIS260101ABC" } });
+    const pm = await readRegimenDeductionEvidence(companyId, 2026, 8);
+    const reviews = pm?.renglones.flatMap((row) => row.elegibilidad) ?? [];
+    expect(reviews).toHaveLength(2);
+    expect(reviews.every((review) => review.motivos.includes("RESICO_PM_TREATMENT_REVIEW") && !review.motivos.includes("RESICO_PF_NO_ISR_DEDUCTION"))).toBe(true);
+  });
+
+  it("N: received credits block expense evidence; emitted credits do not cross directions", async () => {
+    await asExpenses();
+    const note = await invoice(companyId, { tipoSat: "E", cfdiRelacionadoUuid: parentUuid, fecha: new Date("2026-09-01T00:00:00Z") });
+    expect((await readRegimenDeductionEvidence(companyId, 2026, 8))?.documental.estado).toBe("PROYECTABLE");
+    await prisma.invoice.update({ where: { id: note.id }, data: { tipo: "EGRESO" } });
+    const result = await readRegimenDeductionEvidence(companyId, 2026, 8);
+    expect(result?.documental.totales).toBeNull();
+    expect(result?.documental.pendientes).toContainEqual({ id: note.id, code: "CREDIT_NOTE_REVIEW" });
+  });
+
+  it("N: decimal precision survives the expense direction too", async () => {
+    await asExpenses();
+    await prisma.invoice.update({ where: { id: pueId }, data: { subtotal: "8589934592.004999", descuento: "0", total: "8589934592.004999" } });
+    const result = await readRegimenDeductionEvidence(companyId, 2026, 8);
+    expect(result?.documental.totales).toEqual({ pueDocumentadoCentavos: 858993459200, ppdRepCentavos: 45000 });
+    expect(result?.deduccionAutorizadaCentavos).toBeNull();
+  });
+
+  it("N: mixed supplier/customer payments in one snapshot retain their own directions", async () => {
+    await asExpenses();
+    const saleUuid = randomUUID().toUpperCase();
+    await invoice(companyId, { uuid: saleUuid, metodoPago: "PPD", subtotal: "5000", descuento: "0", total: "5000" });
+    await invoice(companyId, { tipo: "PAGO", tipoSat: "P", regimenAssignment: undefined,
+      doctosRelacionados: { create: { parentUuid: saleUuid, impPagado: "5000", numParcialidad: 1, fechaPago: new Date("2026-08-15T12:00:00Z") } },
+    });
+    expect((await readRegimenDeductionEvidence(companyId, 2026, 8))?.documental.totales)
+      .toEqual({ pueDocumentadoCentavos: 9000, ppdRepCentavos: 45000 });
+    expect((await readRegimenIncomeEvidence(companyId, 2026, 8))?.totales)
+      .toEqual({ pueDocumentadoCentavos: 0, ppdRepCentavos: 500000 });
   });
 });

@@ -97,6 +97,8 @@ Do not update an expected value merely to make a regression pass. Explain the co
 
 The separate [FISC-002M income evidence matrix](./FISC-002M-INCOME-EVIDENCE-v1.md) adds 34 versioned numeric documentary scenarios and a real-PostgreSQL reader suite without altering these original 42 IDs. Its expected amounts are evidence bases, not certified tax calculations; all professional approvals remain pending.
 
+The [FISC-002N deduction prerequisites matrix](./FISC-002N-DEDUCTION-EVIDENCE-v1.md) adds 30 synthetic review scenarios and replays the 34 documentary numeric cases on expenses. It does not authorize deductible amounts or complete the professional tax-amount gate.
+
 Local engineering verification on 2026-09-30: the focused suite passed **110 tests / 5 files** independently under UTC and America/Mexico_City; the full suite passed **5,029 tests / 460 files** with `npm test -- --maxWorkers=2`; `npx tsc --noEmit` passed. The initial unrestricted full-suite run had worker/test timeouts and is not counted as passing evidence. The bounded rerun completed without assertion failures or worker errors. Remote CI/build and deployment evidence are separate from these local results.
 
 - Licensed Mexican tax professional review of this contract matrix.
