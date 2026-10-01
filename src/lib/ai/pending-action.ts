@@ -5,6 +5,7 @@ import { reconcileTransaction } from "@/lib/conciliacion";
 import { aprobarSugerencia } from "@/lib/bancos/sugerencias-concepto";
 import { aplicarReglaRetroactiva, upsertReglaCategorizacion } from "@/lib/bancos/reglas-categorizacion";
 import type { FamiliaConcepto, SignoMovimiento } from "@/lib/bancos/categorizar-concepto";
+import type { AccountingProposal } from "./accounting-proposals";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Gate de acciones del asistente DENTRO de la app (Fase B — "el contador dentro
@@ -34,6 +35,7 @@ export const PENDING_ACTION_TTL_MS = 15 * 60 * 1000; // 15 min
 
 /** Tipos de acción reversibles que el asistente puede proponer. */
 export type PendingActionType =
+  | AccountingProposal["type"]
   | "conciliar"
   | "categorizacion"
   | "categorizacion_lote"
@@ -63,6 +65,7 @@ interface BasePending {
 }
 
 export type ChatPendingAction =
+  | (BasePending & AccountingProposal)
   | (BasePending & { type: "conciliar"; payload: { txId: string; invoiceId: string } })
   | (BasePending & { type: "categorizacion"; payload: { txId: string; familia: FamiliaConcepto } })
   | (BasePending & {
@@ -120,6 +123,7 @@ export type ChatPendingAction =
 /** True si el tipo es una acción reversible permitida (lista blanca estricta). */
 export function isReversibleType(type: string): type is PendingActionType {
   return (
+    type === "crear_subcuenta" || type === "renombrar_cuenta" || type === "registrar_prestamo" ||
     type === "conciliar" ||
     type === "categorizacion" ||
     type === "categorizacion_lote" ||
@@ -167,10 +171,13 @@ function genToken(): string {
 // ── Persistencia (stage / read / clear) ──────────────────────────────────────
 
 async function persist(conversationId: string, action: ChatPendingAction): Promise<ChatPendingAction> {
-  await prisma.chatConversation.update({
-    where: { id: conversationId },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    data: { pendingAction: action as any },
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "ChatConversation" WHERE id = ${conversationId} FOR UPDATE`;
+    const conversation = await tx.chatConversation.findUniqueOrThrow({ where: { id: conversationId }, select: { companyId: true, pendingAction: true } });
+    if (conversation.companyId !== action.companyId) throw new Error("La propuesta no pertenece a esta empresa.");
+    const current = conversation.pendingAction as ChatPendingAction | null;
+    if (current && current.expiresAt > Date.now()) throw new Error("Ya hay una propuesta pendiente. Confírmala o cancélala antes de preparar otra.");
+    await tx.chatConversation.update({ where: { id: conversationId }, data: { pendingAction: action as unknown as Prisma.InputJsonValue } });
   });
   return action;
 }
@@ -197,6 +204,7 @@ export async function clearChatPendingAction(conversationId: string): Promise<vo
 // ── Stage (lo único que hacen las herramientas "proponer_*") ─────────────────
 
 type StagePayload =
+  | AccountingProposal
   | { type: "conciliar"; payload: { txId: string; invoiceId: string } }
   | { type: "categorizacion"; payload: { txId: string; familia: FamiliaConcepto } }
   | {
@@ -277,6 +285,12 @@ async function ejecutar(
   confirmingUserId: string,
 ): Promise<ExecuteResult> {
   switch (pa.type) {
+    case "crear_subcuenta":
+    case "renombrar_cuenta":
+    case "registrar_prestamo": {
+      const { executeAccountingProposal } = await import("./accounting-proposals");
+      return executeAccountingProposal(pa, confirmingUserId);
+    }
     case "conciliar": {
       // Reusa reconcileTransaction (mismo apply que stagePendingConciliar/preview).
       // Re-valida que el movimiento siga sin conciliar. El lado FACTURA también

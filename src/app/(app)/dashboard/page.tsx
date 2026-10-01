@@ -22,6 +22,7 @@ import { ColaDeTrabajo } from "@/components/inicio/ColaDeTrabajo";
 import { HoyPendientes } from "@/components/inicio/HoyPendientes";
 import { Loading } from "@/components/ui/feedback";
 import { cn } from "@/lib/utils";
+import { ContaBotWorkPanel } from "@/components/ai/ContaBotWorkPanel";
 
 type Lente = "piloto" | "cola";
 
@@ -108,6 +109,7 @@ export default function InicioPage() {
         </div>
       )}
       {enCola ? <ColaDeTrabajo /> : <PilotoDelCierre />}
+      {!enCola && conCierre && <div className="mt-5"><ContaBotWorkPanel companyId={activeCompany.id} /></div>}
     </div>
   );
 }

@@ -7,8 +7,10 @@ const CLAVES_GET_ARTICULO = [...clavesPorMateria(MATERIAS_CONTADOR), "RMF"];
 import type Anthropic from "@anthropic-ai/sdk";
 import { toolsExpediente } from "@/lib/expediente/tools";
 import { toolsSolicitudes } from "@/lib/solicitudes/tools";
+import { accountingTools } from "./accounting-tools";
 
 export const tools: Anthropic.Tool[] = [
+  ...accountingTools,
   // La memoria de la empresa (expediente): hechos duraderos y bitácora de
   // trabajo. Van primero porque son las que hacen que el copiloto deje de
   // responder como si acabara de conocer al cliente.
@@ -471,7 +473,7 @@ export const tools: Anthropic.Tool[] = [
   {
     name: "proponer_categorizacion",
     description:
-      "Propone categorizar un movimiento bancario SIN CFDI (comisión, impuesto, nómina sin CFDI, traspaso, intereses, renta o no deducible) registrándolo en el libro mayor, y lo deja PENDIENTE de confirmación. NO escribe nada: stagea la propuesta y devuelve un resumen + token; el usuario debe tocar Confirmar. Elige la 'familia' correcta según la naturaleza del concepto. Tras llamarla, explica brevemente por qué esa cuenta y pide al usuario tocar Confirmar.",
+      "Propone categorizar un movimiento bancario SIN CFDI, incluyendo capital de préstamos otorgados/recibidos y su devolución, registrándolo en el libro mayor, PENDIENTE de confirmación. NO escribe nada: devuelve un resumen + token; el usuario debe tocar Confirmar. LOAN_GIVEN es dinero que la empresa presta O recupera; LOAN_RECEIVED es dinero que le prestan O devuelve. El signo no decide quién debe a quién: consulta saldos y evidencia. No mezcles capital con intereses ni categorices copias duplicadas. No prometas un auxiliar específico si la herramienta no lo confirma. Sólo una propuesta pendiente a la vez.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -486,9 +488,12 @@ export const tools: Anthropic.Tool[] = [
             "FINANCIAL_INCOME",
             "RENT",
             "NON_DEDUCTIBLE",
+            "LOAN_RECEIVED",
+            "LOAN_GIVEN",
+            "IVA_COMISION",
           ],
           description:
-            "Familia contable: COMISION (comisiones bancarias), TAX_PAYMENT (impuestos/derechos), PAYROLL_NO_CFDI (nómina sin CFDI), INTERNAL_TRANSFER (traspaso entre cuentas propias), FINANCIAL_INCOME (intereses/rendimientos), RENT (renta), NON_DEDUCTIBLE (gasto no deducible).",
+            "Familia contable: COMISION, TAX_PAYMENT, PAYROLL_NO_CFDI, INTERNAL_TRANSFER, FINANCIAL_INCOME, RENT, NON_DEDUCTIBLE, LOAN_RECEIVED (pasivo), LOAN_GIVEN (activo), IVA_COMISION (IVA pendiente de comprobante).",
         },
       },
       required: ["transaction_id", "familia"],

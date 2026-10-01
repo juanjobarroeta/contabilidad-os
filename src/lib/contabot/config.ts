@@ -1,6 +1,7 @@
 export const CONTABOT_MODEL = "gpt-6-astra";
 export const MAX_TOOL_CALLS = 32;
 export const MAX_TURN_MS = 10 * 60_000;
+export const CONTABOT_CAPABILITY_VERSION = 2;
 
 /** Explicit rollout; an API key alone must never switch a company's runtime. */
 export function managedContaBotEnabled(companyId: string): boolean {

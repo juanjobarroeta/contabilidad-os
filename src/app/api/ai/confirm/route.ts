@@ -12,7 +12,7 @@ import {
 import { registrarBitacora } from "@/lib/audit";
 
 // POST /api/ai/confirm
-//   body { conversationId, token? }
+//   body { conversationId, token }
 //
 // El TAP humano que ejecuta la acción reversible PROPUESTA por el asistente. El
 // modelo no puede llegar aquí: este endpoint sólo responde a una sesión
@@ -35,6 +35,7 @@ export async function POST(req: Request) {
   if (!conversationId) {
     return NextResponse.json({ error: "conversationId requerido" }, { status: 400 });
   }
+  if (typeof body.token !== "string" || !body.token) return NextResponse.json({ error: "Token de propuesta requerido." }, { status: 400 });
 
   // La conversación debe existir y ser accesible para el usuario (dueño, o
   // compartida con la empresa). Misma regla que /api/ai/chat.
@@ -80,9 +81,24 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "La acción no corresponde a esta empresa." }, { status: 409 });
   }
 
-  // De un solo uso: limpiamos ANTES de ejecutar para que un doble-tap no la
-  // dispare dos veces (los execute* son además idempotentes).
-  await clearChatPendingAction(conversationId);
+  if (["crear_subcuenta", "renombrar_cuenta", "registrar_prestamo"].includes(pa!.type)) {
+    const { requireContaBotAccess } = await import("@/lib/contabot/access");
+    try {
+      await requireContaBotAccess(userId, conv.companyId, conversationId, { requireEnabled: false });
+    } catch {
+      return NextResponse.json({ error: "Sin permisos para operar esta contabilidad." }, { status: 403 });
+    }
+  }
+
+  // Compare-and-swap: concurrent confirmations/cancellations cannot consume
+  // the same card twice or clear a newer card while another request runs.
+  const claimed = await prisma.chatConversation.updateMany({ where: { id: conversationId,
+    pendingAction: { path: ["token"], equals: body.token },
+  }, data: { pendingAction: (await import("@prisma/client")).Prisma.DbNull } });
+  if (!claimed.count) return NextResponse.json({ error: "La propuesta ya fue atendida o cambió." }, { status: 409 });
+  if (req.method === "DELETE") {
+    return NextResponse.json({ ok: true, message: "Propuesta cancelada." });
+  }
 
   const result = await executeChatPendingAction(pa!, userId);
   if (!result.ok) {
@@ -108,3 +124,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ ok: true, message: result.message });
 }
+
+export const DELETE = POST;

@@ -233,6 +233,7 @@ function whereBorrables(batchId: string, companyId: string): Prisma.BankTransact
     status: { in: ["UNMATCHED", "IGNORED"] },
     invoiceId: null,
     taxDeclarationId: null,
+    loanAccountId: null,
     conciliacionDetalles: { none: {} },
   };
 }

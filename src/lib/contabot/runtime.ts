@@ -7,8 +7,10 @@ import { executeToolCall, type ToolContext } from "@/lib/ai/tool-executor";
 import { ejecutarPresentacion, type Card } from "@/lib/copiloto/tarjetas";
 import { allowedCapability, capabilityCatalogue, capabilityKind, managedTools, validateToolInput } from "./capabilities";
 import { requireContaBotAccess, requireContaBotBudget } from "./access";
-import { CONTABOT_MODEL, ContaBotError, MAX_TOOL_CALLS, MAX_TURN_MS, requireManagedConfig } from "./config";
+import { CONTABOT_MODEL, CONTABOT_CAPABILITY_VERSION, ContaBotError, MAX_TOOL_CALLS, MAX_TURN_MS, requireManagedConfig } from "./config";
 import { ACCOUNTANT_INSTRUCTIONS, agentClient, estimatedCostMicroUsd, textFromItems } from "./provider";
+import { requireObjectiveAuthority, settleObjectiveRun } from "./objectives/authority";
+import { getChatPendingAction } from "@/lib/ai/pending-action";
 
 const LEASE_MS = 5 * 60_000;
 const json = (value: unknown) => value as Prisma.InputJsonValue;
@@ -24,6 +26,7 @@ export interface StartTurn {
   instructions: string;
   context?: ToolContext;
   ref?: unknown;
+  objectiveRunId?: string;
 }
 
 /** Claim the company before any inference; persist the user's input first. */
@@ -31,6 +34,7 @@ export async function beginManagedTurn(input: StartTurn): Promise<ContaBotSessio
   requireManagedConfig();
   await requireContaBotAccess(input.userId, input.companyId, input.conversationId);
   await requireContaBotBudget(input.userId, input.companyId);
+  await requireObjectiveAuthority({ ...input, objectiveRunId: input.objectiveRunId ?? null });
   try {
     return await prisma.$transaction(async (tx) => {
       const session = await tx.contaBotSession.upsert({
@@ -47,7 +51,17 @@ export async function beginManagedTurn(input: StartTurn): Promise<ContaBotSessio
         data: { state: "starting", activeCompanyId: input.companyId, activeConversationId: input.conversationId },
       });
       if (!claim.count) throw new ContaBotError(409, "ContaBot sigue trabajando en esta conversación. Revisa su resultado antes de enviar otra tarea.");
-      const priorMessages = !session.providerSessionId ? await tx.chatMessage.findMany({
+      // Provider tool definitions are fixed at session creation. Preserve local
+      // history and retire the old idle binding when capabilities change.
+      const rotate = !!session.providerSessionId && session.capabilityVersion < CONTABOT_CAPABILITY_VERSION;
+      if (input.objectiveRunId) {
+        const claimedRun = await tx.contaBotObjectiveRun.updateMany({ where: {
+          id: input.objectiveRunId, state: "queued", companyId: input.companyId, userId: input.userId,
+          objective: { pausedAt: null, conversationId: input.conversationId, responsibleUserId: input.userId },
+        }, data: { state: "running", sessionId: session.id } });
+        if (!claimedRun.count) throw new ContaBotError(409, "La revisión del objetivo ya está atendida o pausada.");
+      }
+      const priorMessages = !session.providerSessionId || rotate ? await tx.chatMessage.findMany({
         where: { conversationId: input.conversationId }, orderBy: { createdAt: "desc" }, take: 20,
         select: { role: true, content: true },
       }) : [];
@@ -60,9 +74,16 @@ export async function beginManagedTurn(input: StartTurn): Promise<ContaBotSessio
         conversationId: input.conversationId, role: "assistant", content: "",
         meta: { provider: "openai_agents", status: "queued" },
       } });
+      if (input.objectiveRunId) {
+        const run = await tx.contaBotObjectiveRun.update({ where: { id: input.objectiveRunId }, data: { assistantMessageId: assistant.id } });
+        await tx.contaBotObjective.update({ where: { id: run.objectiveId }, data: { state: "running", version: { increment: 1 } } });
+      }
       await tx.chatConversation.update({ where: { id: input.conversationId }, data: { updatedAt: new Date() } });
       return tx.contaBotSession.update({ where: { id: session.id }, data: {
         requestId: input.requestId, input: input.text,
+        objectiveRunId: input.objectiveRunId ?? null,
+        capabilityVersion: CONTABOT_CAPABILITY_VERSION,
+        ...(rotate ? { providerSessionId: null, retiredProviderSessionIds: { push: session.providerSessionId! } } : {}),
         instructions: input.instructions + (history ? `\nHistorial previo (contexto, no evidencia fiscal):\n${history}` : ""),
         context: json(input.context ?? {}), previousTurnId: session.providerTurnId, providerTurnId: null,
         userMessageId: userMessage.id, assistantMessageId: assistant.id,
@@ -81,6 +102,7 @@ export async function beginManagedTurn(input: StartTurn): Promise<ContaBotSessio
 export async function executeManagedCall(session: ContaBotSession, action: FunctionAction) {
   const { canWrite } = await requireContaBotAccess(session.userId, session.companyId, session.conversationId);
   await requireContaBotBudget(session.userId, session.companyId);
+  await requireObjectiveAuthority(session);
   const key = { sessionId: session.id, turnId: action.turn_id, callId: action.call_id };
   const previous = await prisma.contaBotToolCall.findUnique({ where: { sessionId_turnId_callId: key } });
   if (previous) {
@@ -103,8 +125,16 @@ export async function executeManagedCall(session: ContaBotSession, action: Funct
       throw new Error("TOOL_NOT_AUTHORIZED");
     }
     const args = await validateToolInput(action.name, action.arguments);
+    if (session.objectiveRunId && action.name === "asignar_objetivo_cierre") throw new Error("TOOL_NOT_AUTHORIZED: objectives cannot delegate new work");
+    if (session.objectiveRunId && capabilityKind(action.name) === "proposal" && await getChatPendingAction(session.conversationId)) {
+      throw new Error("TOOL_NOT_AUTHORIZED: a proposal already awaits human confirmation");
+    }
     if (action.name === "consultar_capacidades") {
       result = JSON.stringify(capabilityCatalogue(canWrite));
+    } else if (action.name === "consultar_objetivos" || action.name === "asignar_objetivo_cierre") {
+      effectStarted = action.name === "asignar_objetivo_cierre";
+      const { executeObjectiveTool } = await import("./objectives/tools-executor");
+      result = await executeObjectiveTool(action.name, args, session.userId, session.companyId);
     } else if (capabilityKind(action.name) === "presentation") {
       const rendered = ejecutarPresentacion(action.name, args);
       result = rendered.resultado;
@@ -118,6 +148,14 @@ export async function executeManagedCall(session: ContaBotSession, action: Funct
       });
       if (action.name === "anotar_expediente" && JSON.parse(result).nota_id && typeof args.titulo === "string") {
         card = { type: "memoria", texto: args.titulo.slice(0, 200) };
+      }
+      if (session.objectiveRunId && action.name === "solicitar_al_cliente") {
+        const requestId = JSON.parse(result).solicitud_id;
+        if (typeof requestId === "string" && await prisma.solicitud.findFirst({ where: { id: requestId, companyId: session.companyId }, select: { id: true } })) {
+          const run = await prisma.contaBotObjectiveRun.findUniqueOrThrow({ where: { id: session.objectiveRunId } });
+          await prisma.contaBotObjective.updateMany({ where: { id: run.objectiveId, NOT: { requestIds: { has: requestId } } },
+            data: { requestIds: { push: requestId } } });
+        }
       }
     }
     if (Buffer.byteLength(result, "utf8") > 150_000) {
@@ -143,6 +181,7 @@ export async function executeManagedCall(session: ContaBotSession, action: Funct
 async function submit(session: ContaBotSession, client: Client): Promise<ContaBotSession> {
   const { canWrite } = await requireContaBotAccess(session.userId, session.companyId, session.conversationId);
   await requireContaBotBudget(session.userId, session.companyId);
+  await requireObjectiveAuthority(session);
   const input = `[Solicitud ${session.requestId}]\n${session.instructions ?? ""}\n\n${session.input ?? ""}`;
   if (session.providerSessionId) {
     await client.beta.agents.sessions.events.create(session.providerSessionId, {
@@ -176,6 +215,7 @@ async function submit(session: ContaBotSession, client: Client): Promise<ContaBo
     } });
     await prisma.chatMessage.update({ where: { id: session.assistantMessageId! }, data: { content: message,
       meta: { provider: "openai_agents", status: rejected ? "failed" : "uncertain" } } });
+    if (rejected) await prisma.$transaction((tx) => settleObjectiveRun(tx, session, message, true));
     throw new ContaBotError(503, "No se pudo iniciar el agente. La solicitud quedó registrada.");
   }
 }
@@ -185,7 +225,7 @@ async function recoverCreation(session: ContaBotSession, client: Client) {
   // created merely because it is absent from one page of provider results.
   let inspected = 0;
   for await (const remote of client.beta.agents.sessions.list({ order: "desc", limit: 100 })) {
-    if (remote.metadata.contabot_session === session.id) {
+    if (remote.metadata.contabot_session === session.id && !session.retiredProviderSessionIds.includes(remote.id)) {
       return prisma.contaBotSession.update({ where: { id: session.id }, data: {
         providerSessionId: remote.id, state: "working", error: null,
       } });
@@ -253,7 +293,10 @@ export async function syncManagedSession(id: string): Promise<boolean> {
           const stopped = await prisma.contaBotSession.updateMany({ where: { id, state: "starting" }, data: {
             state: "idle", activeCompanyId: null, activeConversationId: null, error: error.message,
           } });
-          if (stopped.count) await prisma.chatMessage.update({ where: { id: session.assistantMessageId! }, data: { content: error.message } });
+          if (stopped.count) {
+            await prisma.chatMessage.update({ where: { id: session.assistantMessageId! }, data: { content: error.message } });
+            await prisma.$transaction((tx) => settleObjectiveRun(tx, session, error.message, true));
+          }
         }
         throw error;
       }
@@ -283,6 +326,7 @@ export async function syncManagedSession(id: string): Promise<boolean> {
       try {
         await requireContaBotAccess(session.userId, session.companyId, session.conversationId);
         await requireContaBotBudget(session.userId, session.companyId);
+        await requireObjectiveAuthority(session);
         if (session.state === "blocked") throw new ContaBotError(409, session.error ?? "Tarea detenida.");
         if (Date.now() - session.turnStartedAt!.getTime() > MAX_TURN_MS) {
           throw new ContaBotError(408, "La tarea alcanzó su tiempo máximo. Revisa el avance antes de continuar.");
@@ -321,6 +365,7 @@ export async function syncManagedSession(id: string): Promise<boolean> {
         activeCompanyId: costKnown ? null : session.companyId, activeConversationId: null,
       } });
       await tx.chatConversation.update({ where: { id: session.conversationId }, data: { updatedAt: new Date() } });
+      await settleObjectiveRun(tx, session, error, costKnown);
     });
     return true;
   } finally {
@@ -337,6 +382,7 @@ export async function syncProviderSession(providerId: string) {
   const id = remote.metadata.contabot_session;
   if (!id) return;
   const local = await prisma.contaBotSession.findUnique({ where: { id } });
+  if (local?.retiredProviderSessionIds.includes(providerId)) return;
   if (!local || (local.providerSessionId && local.providerSessionId !== providerId)) return;
   if (!local.providerSessionId && ["creating", "uncertain"].includes(local.state)) {
     await prisma.contaBotSession.updateMany({ where: { id, providerSessionId: null }, data: {
@@ -349,6 +395,11 @@ export async function syncProviderSession(providerId: string) {
 /** Remove provider history before local deletion. A failed delete stays
  * retryable; never orphan a durable agent by only deleting its UI messages. */
 export async function deleteManagedSessions(conversationId: string) {
+  // Deleting a chat revokes its delegation before touching provider history.
+  // A scheduled assignment must not silently recreate deleted conversations.
+  await prisma.contaBotObjective.updateMany({ where: { conversationId }, data: {
+    pausedAt: new Date(), state: "paused", nextAction: "Conversación eliminada; objetivo detenido.", version: { increment: 1 },
+  } });
   const sessions = await prisma.contaBotSession.findMany({ where: { conversationId } });
   if (!sessions.length) return;
   for (const session of sessions) {
@@ -359,9 +410,10 @@ export async function deleteManagedSessions(conversationId: string) {
       id: session.id, OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: new Date() } }],
     }, data: { state: "deleting" } });
     if (!claimed.count) throw new ContaBotError(409, "El agente está guardando su avance. Inténtalo de nuevo.");
-    if (session.providerSessionId) {
-      try { await agentClient().beta.agents.sessions.delete(session.providerSessionId); }
+    for (const providerId of [...session.retiredProviderSessionIds, ...(session.providerSessionId ? [session.providerSessionId] : [])]) {
+      try { await agentClient().beta.agents.sessions.delete(providerId); }
       catch (error) { if (!(error instanceof OpenAI.NotFoundError)) throw error; }
     }
+    await prisma.$transaction((tx) => settleObjectiveRun(tx, session, "Conversación eliminada; revisión detenida.", true));
   }
 }

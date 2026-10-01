@@ -11,8 +11,8 @@ vi.mock("./provider", async (original) => ({ ...await original<object>(), agentC
 import { prisma } from "@/lib/prisma";
 import { agentClient } from "./provider";
 import { requireContaBotAccess } from "./access";
-import { MAX_TOOL_CALLS } from "./config";
-import { beginManagedTurn, executeManagedCall, syncManagedSession, deleteManagedSessions } from "./runtime";
+import { CONTABOT_CAPABILITY_VERSION, MAX_TOOL_CALLS } from "./config";
+import { beginManagedTurn, executeManagedCall, syncManagedSession, syncProviderSession, deleteManagedSessions } from "./runtime";
 
 const A = "itest-contabot-a", B = "itest-contabot-b", U = "itest-contabot-owner", V = "itest-contabot-viewer";
 const skip = process.env.DB_TESTS_SKIP === "1";
@@ -168,6 +168,31 @@ describe.skipIf(skip)("managed ContaBot with real Postgres and synthetic provide
     expect(saved.activeCompanyId).toBeNull();
     expect((await prisma.chatMessage.findUniqueOrThrow({ where: { id: saved.assistantMessageId! } })).content).toBe("Need the missing statement.");
     expect(await prisma.costEvent.count({ where: { id: `contabot:${session.id}:turn_new` } })).toBe(1);
+  });
+
+  it("upgrades old tool catalogues on the next idle turn without losing history or accepting old webhooks", async () => {
+    const session = await newRun();
+    await syncManagedSession(session.id);
+    turns[0].status = "completed"; remote.status = "idle";
+    await syncManagedSession(session.id);
+    const retired = { ...remote };
+    await prisma.contaBotSession.update({ where: { id: session.id }, data: { capabilityVersion: 1 } });
+    const next = await beginManagedTurn({ companyId: A, userId: U, conversationId: session.conversationId, requestId: randomUUID(), text: "Read account balances", instructions: "Synthetic" });
+    expect(next.providerSessionId).toBeNull();
+    expect(next.retiredProviderSessionIds).toContain(retired.id);
+    expect(next.capabilityVersion).toBe(CONTABOT_CAPABILITY_VERSION);
+    expect(next.instructions).toContain("Check the month");
+    vi.mocked(api.beta.agents.sessions.retrieve).mockResolvedValueOnce(retired);
+    await syncProviderSession(retired.id);
+    expect((await prisma.contaBotSession.findUniqueOrThrow({ where: { id: session.id } })).providerSessionId).toBeNull();
+    remote = { ...retired, id: `${retired.id}_upgraded`, status: "requires_action" };
+    turns = [{ id: "turn_upgraded", subagent_id: null, status: "waiting", usage }];
+    await syncManagedSession(session.id);
+    expect(api.beta.agents.sessions.create).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(api.beta.agents.sessions.create).mock.calls[1][0].agent?.tools).toContainEqual(expect.objectContaining({ name: "query_saldos_cuentas" }));
+    await deleteManagedSessions(session.conversationId);
+    expect(api.beta.agents.sessions.delete).toHaveBeenCalledWith(retired.id);
+    expect(api.beta.agents.sessions.delete).toHaveBeenCalledWith(remote.id);
   });
 
   it("exposes stored RFC, currency and payment evidence without requiring a Customer record", async () => {

@@ -61,6 +61,8 @@ export async function DELETE(req: Request, { params }: Params) {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
 
+  if (tx.loanAccountId) return NextResponse.json({ error: "Deshaz primero la categoría del préstamo para revertir sus asientos antes de borrar el movimiento." }, { status: 409 });
+
   if (tx.status === "MATCHED" || tx.invoiceId || tx.taxDeclarationId || tx.conciliacionDetalles.length > 0) {
     return NextResponse.json(
       { error: "El movimiento está conciliado. Desconcílialo antes de borrarlo." },
@@ -189,6 +191,18 @@ export async function PATCH(req: Request, { params }: Params) {
   if (!member || member.role === "VIEWER") return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
 
   const { action, invoiceId, gastoId, reembolsoId, rayaId, solicitudCompraId, taxDeclarationId, notes, asignaciones, origenId, fecha, descripcion, monto } = await req.json();
+
+  if (tx.loanAccountId) {
+    if (action !== "unignore" && action !== "unmatch") return NextResponse.json({ error: "Deshaz primero la categoría del préstamo antes de modificar este movimiento." }, { status: 409 });
+    try {
+      const { revertLoanPosting } = await import("@/lib/ai/accounting-proposals");
+      await revertLoanPosting(tx.companyId, tx.id, user.id);
+      return NextResponse.json({ ok: true });
+    } catch (error) {
+      const { PeriodoCerradoError } = await import("@/lib/contabilidad/candado");
+      return NextResponse.json({ error: error instanceof PeriodoCerradoError ? error.message : "No se pudo revertir el préstamo. Actualiza los datos e inténtalo de nuevo." }, { status: 409 });
+    }
+  }
 
   // Aviso (no bloqueante) para conciliación múltiple: la suma asignada quedó
   // por debajo del movimiento más allá de la tolerancia. Se devuelve en la
@@ -541,7 +555,7 @@ export async function PATCH(req: Request, { params }: Params) {
         prisma.conciliacionDetalle.deleteMany({ where: { bankTransactionId: txId } }),
         prisma.bankTransaction.update({
           where: { id: txId },
-          data: { status: "UNMATCHED", invoiceId: null, taxDeclarationId: null, notes: null },
+          data: { status: "UNMATCHED", invoiceId: null, taxDeclarationId: null, notes: null, loanAccountId: null },
         }),
         ...revertDecl,
       ]);
@@ -591,7 +605,7 @@ export async function PATCH(req: Request, { params }: Params) {
     case "unignore":
       await prisma.bankTransaction.update({
         where: { id: txId },
-        data: { status: "UNMATCHED", notes: null },
+        data: { status: "UNMATCHED", notes: null, loanAccountId: null },
       });
       break;
     // ── Edición de captura manual (caja chica / ingresos externos) ───────────

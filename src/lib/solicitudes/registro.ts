@@ -159,6 +159,7 @@ export async function recibirSolicitud(
   });
   if (r.count === 0) return null;
   const fila = await prisma.solicitud.findUnique({ where: { id }, select: SELECT });
+  await wakeObjectives(companyId, id, fila?.periodo ?? null);
   return fila ? aSolicitud(fila) : null;
 }
 
@@ -179,7 +180,17 @@ export async function cancelarSolicitud(
   });
   if (r.count === 0) return null;
   const fila = await prisma.solicitud.findUnique({ where: { id }, select: SELECT });
+  await wakeObjectives(companyId, id, fila?.periodo ?? null);
   return fila ? aSolicitud(fila) : null;
+}
+
+async function wakeObjectives(companyId: string, requestId: string, period: string | null) {
+  const [year, month] = (period ?? "").split("-").map(Number);
+  try {
+    await prisma.contaBotObjective.updateMany({ where: { companyId, pausedAt: null, OR: [
+      { requestIds: { has: requestId } }, ...(year >= 2000 && month >= 1 && month <= 12 ? [{ year, month }] : []),
+    ] }, data: { nextCheckAt: new Date() } });
+  } catch { console.error("[contabot] Document wake-up deferred to the periodic evidence check"); }
 }
 
 /** Deja constancia de que ya se avisó por un canal, sin duplicarlo. */

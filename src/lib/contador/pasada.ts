@@ -15,6 +15,7 @@ import { cadenciaDePlan, tocaHoy, type ResumenCorrida } from "./claves";
 import { ejecutarHerramientaPasada } from "./ejecutar";
 import { NOMBRE_CIERRE, NOMBRES_PASADA, toolsPasada } from "./herramientas";
 import { mensajeDePasada, normalizarResumen, promptDelContador, resumenEnTexto } from "./prompt";
+import { managedContaBotEnabled } from "@/lib/contabot/config";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LA PASADA DEL CONTADOR — la revisión que nadie pidió.
@@ -59,6 +60,9 @@ const dias = (desde: Date, hoy: Date) => Math.max(0, Math.floor((hoy.getTime() -
  * parecerse a un error.
  */
 export async function correrPasadaEmpresa(companyId: string, hoy = new Date()): Promise<ResultadoPasada> {
+  if (managedContaBotEnabled(companyId) && await prisma.contaBotObjective.findFirst({ where: { companyId, pausedAt: null }, select: { id: true } })) {
+    return { companyId, corrio: false, motivo: "ContaBot atiende los objetivos delegados; revisión heredada omitida" };
+  }
   const empresa = await prisma.company.findUnique({
     where: { id: companyId },
     select: { razonSocial: true, rfc: true, regimenFiscal: true, isActive: true },
