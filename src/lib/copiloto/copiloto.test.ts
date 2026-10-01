@@ -215,3 +215,22 @@ describe("pasos en vivo", () => {
     expect(pasosHechos(3, null)).toBe(3);
   });
 });
+
+describe("corte de conexión", () => {
+  it("un fetch caído es corte de red; un error del servidor no", async () => {
+    const { esCorteDeRed } = await import("@/components/ai/useChat");
+    expect(esCorteDeRed(new TypeError("Load failed"))).toBe(true);
+    expect(esCorteDeRed(new Error("Failed to fetch"))).toBe(true);
+    expect(esCorteDeRed(new Error("Límite de uso alcanzado"))).toBe(false);
+  });
+  it("la respuesta guardada exige la pregunta nueva, no una igual de antes", async () => {
+    const { respuestaGuardada } = await import("@/components/ai/useChat");
+    const hilo = [
+      { role: "user", content: "¿Cuánto IVA?" },
+      { role: "assistant", content: "$10" },
+    ];
+    expect(respuestaGuardada(hilo, "¿Cuánto IVA?")).toBe(true);
+    expect(respuestaGuardada(hilo, "¿Cuánto IVA?", 2)).toBe(false);
+    expect(respuestaGuardada([...hilo, { role: "user", content: "otra" }], "otra")).toBe(false);
+  });
+});

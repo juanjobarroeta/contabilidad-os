@@ -190,6 +190,9 @@ export function PantallaHistorial({
             <div className="ob-ctr"><span>Facturas (CFDI)</span><b>{fmt(conteos.cfdis)}</b></div>
             <div className="ob-ctr"><span>Clientes</span><b>{fmt(conteos.clientes)}</b></div>
             <div className="ob-ctr"><span>Proveedores</span><b>{fmt(conteos.proveedores)}</b></div>
+            {(estado.empleados ?? 0) > 0 && (
+              <div className="ob-ctr"><span>Empleados (de tus recibos)</span><b>{fmt(estado.empleados!)}</b></div>
+            )}
           </div>
         </div>
 
@@ -211,6 +214,14 @@ export function PantallaHistorial({
                   </div>
                 );
               })}
+              <div className={cn("ob-stg", estado.catalogo && "done")}>
+                <span>Catálogo de cuentas</span>
+                <b>
+                  {estado.catalogo
+                    ? `${fmt(estado.catalogo.cuentas)} cuentas · ${String(estado.catalogo.mes).padStart(2, "0")}/${estado.catalogo.anio}`
+                    : "Lo pido al SAT"}
+                </b>
+              </div>
               <div className={cn("ob-stg", opinion === "POSITIVA" && "done", opinion && opinion !== "POSITIVA" && "warn")}>
                 <span>Opinión de cumplimiento</span>
                 <b>{opinion === "POSITIVA" ? "Positiva ✓" : opinion === "NEGATIVA" ? "Negativa" : opinion ? "Sin opinión" : "Pendiente"}</b>

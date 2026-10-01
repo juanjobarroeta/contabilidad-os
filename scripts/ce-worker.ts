@@ -17,8 +17,10 @@
  *   - las balanzas que la agenda del SAT (tabla AgendaSat, lib/agenda-sat)
  *     va a revisar en las próximas AGENDA_HORAS (24) o ya debía revisar —
  *     sólo los años de esos periodos; y
- *   - el bootstrap: empresas elegibles SIN ninguna balanza en la base, todos
- *     los años.
+ *   - el bootstrap: empresas elegibles SIN ninguna balanza en la base, o que
+ *     nunca hicieron la descarga completa (sin CeArchivo: el catálogo CT se
+ *     tiraba antes de oct-2026) — todos los años. Una empresa a la que el SAT
+ *     no le devuelve nada se reintenta cuando mucho cada 30 días.
  * La revisión (cron agenda-sat) pregunta después si la balanza ya está en la
  * base y decide la siguiente fecha; el worker sólo descarga.
  */
@@ -30,9 +32,10 @@ import { planIncluyeSyntage } from "../src/lib/planes";
 const prisma = new PrismaClient();
 
 async function main() {
-  const soloRfc = process.env.RFC;
-  const soloId = process.env.COMPANY_ID;
-  const anios = process.env.ANIOS?.split(",").map((s) => Number(s.trim())).filter((n) => Number.isFinite(n));
+  // Vacías = sin filtro (Railway no deja borrar una variable desde la API: se vacía).
+  const soloRfc = process.env.RFC?.trim() || undefined;
+  const soloId = process.env.COMPANY_ID?.trim() || undefined;
+  const anios = process.env.ANIOS?.split(",").map((s) => Number(s.trim())).filter((n) => Number.isInteger(n) && n > 2000);
   const force = process.env.FORCE === "1";
   const limit = process.env.LIMIT ? Number(process.env.LIMIT) : undefined;
   const pausaMs = process.env.PAUSA_MS ? Number(process.env.PAUSA_MS) : 3000;
@@ -46,7 +49,7 @@ async function main() {
       ...(soloId ? { id: soloId } : {}),
       ...(soloRfc ? { rfc: soloRfc } : {}),
     },
-    select: { id: true, rfc: true, tier: true },
+    select: { id: true, rfc: true, tier: true, ceSatSyncEn: true },
     orderBy: { rfc: "asc" },
     ...(limit ? { take: limit } : {}),
   });
@@ -74,12 +77,18 @@ async function main() {
       if (!a.includes(anio)) a.push(anio);
       aniosPorEmpresa.set(f.companyId, a);
     }
+    const ids = elegibles.map((c) => c.id);
     const conHistoria = new Set(
-      (await prisma.ceBalanzaMes.groupBy({ by: ["companyId"], where: { companyId: { in: elegibles.map((c) => c.id) } } })).map(
-        (g) => g.companyId,
-      ),
+      (await prisma.ceBalanzaMes.groupBy({ by: ["companyId"], where: { companyId: { in: ids } } })).map((g) => g.companyId),
     );
-    for (const c of elegibles) if (!conHistoria.has(c.id)) aniosPorEmpresa.set(c.id, anios?.length ? anios : undefined);
+    const conArchivo = new Set(
+      (await prisma.ceArchivo.groupBy({ by: ["companyId"], where: { companyId: { in: ids } } })).map((g) => g.companyId),
+    );
+    const hace30 = Date.now() - 30 * 24 * 3600_000;
+    for (const c of elegibles) {
+      const nuncaCompleta = !conArchivo.has(c.id) && (!c.ceSatSyncEn || c.ceSatSyncEn.getTime() < hace30);
+      if (!conHistoria.has(c.id) || nuncaCompleta) aniosPorEmpresa.set(c.id, anios?.length ? anios : undefined);
+    }
     elegibles = elegibles.filter((c) => aniosPorEmpresa.has(c.id));
     console.log(`CE-worker (agenda, ${horas} h): ${filas.length} balanza(s) por revisar · ${[...aniosPorEmpresa.values()].filter((a) => a === undefined).length} bootstrap`);
   }
@@ -100,7 +109,7 @@ async function main() {
       });
       ok = true;
       nuevos = res.importados;
-      info = `${res.importados} nuevos · ${res.balanzas} balanzas · ${res.periodos.length} períodos vistos`;
+      info = `${res.importados} nuevos · ${res.balanzas} balanzas · ${res.archivosNuevos} archivos${res.catalogo ? ` · catálogo ${res.catalogo.total} cuentas` : ""}`;
       resumen.ok++;
       resumen.importados += res.importados;
       console.log(`[${i + 1}/${elegibles.length}] ${c.rfc} ✅ ${res.importados} períodos nuevos (${Date.now() - t0}ms)`);

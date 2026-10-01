@@ -8,6 +8,9 @@ export interface EstadoAlta {
   conteos: { cfdis: number; clientes: number; proveedores: number };
   etapas: Array<{ clave: string; etiqueta: string; hechos: number; total: number; pct: number | null; completa: boolean }>;
   opinion: { resultado: string; fetchedAt: string } | null;
+  /** El catálogo de cuentas de la CE, cuando ya llegó del SAT. */
+  catalogo?: { anio: number; mes: number; cuentas: number } | null;
+  empleados?: number;
 }
 
 /** 0..1 del historial (meses cerrados descargados). */

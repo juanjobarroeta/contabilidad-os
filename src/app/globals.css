@@ -460,6 +460,43 @@
   .cos-no-scrollbar { scrollbar-width: none; }
   .cos-no-scrollbar::-webkit-scrollbar { display: none; }
 
+  /* El copiloto pensando (src/components/ai/PetPensando.tsx). */
+  .cos-pensando-pet { animation: cos-pet-piensa 2.4s ease-in-out infinite; }
+  .cos-pensando-pet .eye i { animation: cos-pet-mira-arriba 2.4s ease-in-out infinite; }
+  .cos-pensando-burbuja {
+    position: absolute;
+    right: -10px;
+    top: -9px;
+    display: flex;
+    gap: 2px;
+    z-index: 1;
+  }
+  .cos-pensando-burbuja i {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--ink-faint);
+    animation: cos-pet-punto 1.2s ease-in-out infinite;
+  }
+  .cos-pensando-burbuja i:nth-child(2) { animation-delay: 0.2s; }
+  .cos-pensando-burbuja i:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes cos-pet-piensa {
+    0%, 100% { transform: scale(0.586) rotate(0deg) translateY(0); }
+    30% { transform: scale(0.586) rotate(-7deg) translateY(-2px); }
+    70% { transform: scale(0.586) rotate(6deg) translateY(-1px); }
+  }
+  @keyframes cos-pet-mira-arriba {
+    0%, 100% { transform: translate(0, 0); }
+    25%, 60% { transform: translate(1.8px, -2.6px); }
+  }
+  @keyframes cos-pet-punto {
+    0%, 100% { opacity: 0.25; transform: translateY(0); }
+    50% { opacity: 1; transform: translateY(-2px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cos-pensando-pet, .cos-pensando-pet .eye i, .cos-pensando-burbuja i { animation: none; }
+  }
+
   /* Recorrido del alta (src/components/onboarding/RecorridoAlta.tsx): el
      foco sobre el elemento real y la tarjeta con la mascota. */
   .cos-spot {

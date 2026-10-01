@@ -75,6 +75,67 @@ interface Opciones {
   onAccionConfirmada?: () => void;
 }
 
+
+// ── Conexión cortada a media respuesta ──────────────────────────────────────
+// En el celular, salir de la app (o perder señal) corta el stream: Safari lo
+// reporta como «TypeError: Load failed». El servidor NO se entera de que el
+// cliente se fue: termina el turno y lo guarda en la conversación. Así que un
+// corte no es un error: se avisa y se recupera la respuesta guardada.
+
+export const AVISO_CORTE = "Se cortó la conexión (¿saliste de la app?). Sigo trabajando; en cuanto termine te traigo la respuesta…";
+const AVISO_SIN_RECUPERAR =
+  "Se cortó la conexión y no pude traer la respuesta todavía. Ábrela en el historial en un momento, o vuelve a preguntar.";
+const AVISO_CORTE_INICIO = "Se cortó la conexión antes de empezar. Vuelve a preguntar.";
+
+/** ¿El error es un corte de red (no una respuesta de error del servidor)? */
+export function esCorteDeRed(e: unknown): boolean {
+  if (e instanceof TypeError) return true;
+  const msg = e instanceof Error ? e.message : String(e ?? "");
+  return /load failed|failed to fetch|networkerror|network connection was lost|terminated|network error/i.test(msg);
+}
+
+/**
+ * ¿La conversación guardada ya tiene la respuesta al turno `pregunta`? Busca,
+ * desde el final, el último mensaje del usuario con ese texto y exige que le
+ * siga una respuesta del asistente.
+ */
+export function respuestaGuardada(
+  guardados: Array<{ role: string; content: string }>,
+  pregunta: string,
+  /** Cuántas veces se hizo esa misma pregunta en el hilo (contando la nueva). */
+  veces = 1,
+): boolean {
+  const iguales = guardados.filter((m) => m.role === "user" && m.content.trim() === pregunta.trim()).length;
+  if (iguales < veces) return false;
+  for (let i = guardados.length - 1; i >= 0; i--) {
+    if (guardados[i].role === "user" && guardados[i].content.trim() === pregunta.trim()) {
+      return guardados.slice(i + 1).some((m) => m.role === "assistant");
+    }
+  }
+  return false;
+}
+
+/** Espera `ms` o a que la app vuelva al frente (lo que pase primero). */
+function esperarOVolver(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((res) => {
+    const fin = () => {
+      clearTimeout(t);
+      document.removeEventListener("visibilitychange", alVolver);
+      signal.removeEventListener("abort", fin);
+      res();
+    };
+    const alVolver = () => {
+      if (document.visibilityState === "visible") fin();
+    };
+    const t = setTimeout(fin, ms);
+    document.addEventListener("visibilitychange", alVolver);
+    signal.addEventListener("abort", fin);
+  });
+}
+
+const MS_ENTRE_INTENTOS = 4000;
+const MAX_ESPERA_MS = 4 * 60_000;
+
 export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirmada }: Opciones) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -140,6 +201,45 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
       }
     }
   }, [observarAgente, onTurnoTerminado]);
+
+  /**
+   * Tras un corte: lee la conversación guardada hasta que aparezca la respuesta
+   * al turno (o se agote la espera) y la pinta tal como quedó en el servidor.
+   */
+  const recuperarTurno = useCallback(
+    async (conv: string, pregunta: string, veces: number, signal: AbortSignal): Promise<boolean> => {
+      const limite = Date.now() + MAX_ESPERA_MS;
+      while (!signal.aborted && Date.now() < limite) {
+        await esperarOVolver(MS_ENTRE_INTENTOS, signal);
+        if (signal.aborted) return false;
+        // Con la app en segundo plano el fetch también se cae: se espera a que vuelva.
+        if (document.visibilityState !== "visible") continue;
+        try {
+          const res = await fetch(`/api/ai/conversations/${conv}`, { signal });
+          if (!res.ok) continue;
+          const data = (await res.json()) as { messages?: Message[] };
+          const guardados = data.messages ?? [];
+          if (!respuestaGuardada(guardados, pregunta, veces)) continue;
+          if (signal.aborted || convRef.current !== conv) return false;
+          setMessages(
+            guardados.map((m) => ({
+              id: m.id,
+              role: m.role,
+              content: m.content,
+              feedback: m.feedback ?? null,
+              ...(m.cards ? { cards: m.cards } : {}),
+              ...(m.ref ? { ref: m.ref } : {}),
+            })),
+          );
+          return true;
+        } catch {
+          /* sigue sin red: otro intento */
+        }
+      }
+      return false;
+    },
+    [],
+  );
 
   /** Manda un turno. `texto` ya viene limpio; la UI decide de dónde sale. */
   const enviar = useCallback(
@@ -289,6 +389,24 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
         onTurnoTerminado?.(nuevaConv);
       } catch (e) {
         if (observer.signal.aborted) return;
+        if (esCorteDeRed(e)) {
+          const conv = convRef.current;
+          if (!conv) {
+            setMessages((prev) => [...prev, { role: "assistant", content: AVISO_CORTE_INICIO }]);
+            return;
+          }
+          setActiveTool(null);
+          setMessages((prev) => [...prev, { role: "assistant", content: AVISO_CORTE }]);
+          const veces = historial.filter((m) => m.role === "user" && m.content.trim() === contenido).length;
+          const ok = await recuperarTurno(conv, contenido, veces, observer.signal);
+          if (observer.signal.aborted) return;
+          if (ok) onTurnoTerminado?.(nuevaConv);
+          else
+            setMessages((prev) =>
+              prev.map((m, i) => (i === prev.length - 1 && m.content === AVISO_CORTE ? { ...m, content: AVISO_SIN_RECUPERAR } : m)),
+            );
+          return;
+        }
         setMessages((prev) => [
           ...prev,
           { role: "assistant", content: `Error: ${e instanceof Error ? e.message : "Error desconocido"}` },
@@ -305,7 +423,7 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
         });
       }
     },
-    [companyId, contexto, fijarConversacion, onTurnoTerminado, observarAgente]
+    [companyId, contexto, fijarConversacion, onTurnoTerminado, observarAgente, recuperarTurno]
   );
 
   const confirmar = useCallback(async () => {

@@ -90,3 +90,50 @@ export async function seedCompanyObligaciones(
   }
   return toSeed.length;
 }
+
+/**
+ * Agrega (sin tocar las que ya existen) obligaciones a vigilar. Para las que
+ * llegan después del alta: una CSF nueva que trae una obligación que no
+ * vigilábamos, o la nómina que aparece en los recibos timbrados. Nunca
+ * desactiva ni reactiva: si el usuario apagó una, se queda apagada.
+ * Devuelve cuántas se crearon.
+ */
+export async function agregarObligacionesFaltantes(
+  companyId: string,
+  tipos: string[],
+  fuente: string,
+): Promise<number> {
+  if (tipos.length === 0) return 0;
+  const empresa = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { rfc: true, regimenFiscal: true, regimenes: { select: { code: true } } },
+  });
+  if (!empresa) return 0;
+  const regimenCodes = empresa.regimenes.length ? empresa.regimenes.map((r) => r.code) : [empresa.regimenFiscal].filter(Boolean);
+  const anualRequerida = requiereDeclaracionAnual({ regimenes: regimenCodes, esPersonaFisica: esPersonaFisicaRfc(empresa.rfc) });
+  const porTipo = new Map(getObligacionesPorRegimen(regimenCodes.join(",")).map((o) => [o.tipo, o]));
+  const configs = [...new Set(tipos)]
+    .filter((t) => anualRequerida || !t.includes("ANUAL"))
+    .map((t) => porTipo.get(t) ?? defaultConfigForTipo(t));
+  const r = await prisma.companyObligation.createMany({
+    data: configs.map((c) => ({
+      companyId,
+      tipo: c.tipo,
+      descripcion: c.descripcion,
+      periodicidad: c.periodicidad,
+      diaVencimiento: c.diaVencimiento,
+      mesVencimiento: c.mesVencimiento ?? null,
+      fuente,
+    })),
+    skipDuplicates: true,
+  });
+  return r.count;
+}
+
+/** Lo que causa tener trabajadores: IMSS (SIPARE), ISN estatal y retenciones de ISR. */
+export const OBLIGACIONES_NOMINA = ["IMSS_MENSUAL", "IMSS_BIMESTRAL", "ISN_MENSUAL", "RETENCIONES_ISR"] as const;
+
+/** Tipos a vigilar según las obligaciones de una CSF (las que sabemos mapear). */
+export function tiposDeCsf(obligaciones: string[]): string[] {
+  return [...new Set(obligaciones.map(mapCsfObligacion).filter((t): t is string => !!t))];
+}

@@ -13,6 +13,7 @@ import { mesesHistorial, resumirHistorial, type SolicitudMes } from "@/lib/onboa
 //   · etapas  ← src/lib/onboarding/estado.ts (las 5 por factura)
 //   · conteos ← CFDI, clientes (RFC distintos en INGRESO), proveedores (EGRESO)
 //   · opinión ← último ComplianceSnapshot SAT_OPINION
+//   · catálogo ← último CT de la CE aplicado (CeArchivo) · empleados activos
 // La UI lo lee cada 5 s mientras está en la pantalla.
 //
 // POST { companyId, anios: 1|3|5 } — «¿Cuántos años?»: ajusta satBackfillYears
@@ -51,7 +52,7 @@ export async function GET(req: Request) {
     const anios = Math.max(1, company.satBackfillYears);
     const anioMin = hoy.getUTCFullYear() - anios - 1;
 
-    const [solicitudes, facturas, contrapartes, declaraciones, balanzas, total, conXml, conImpuestos, conContraparte, conVigencia, opinion] =
+    const [solicitudes, facturas, contrapartes, declaraciones, balanzas, total, conXml, conImpuestos, conContraparte, conVigencia, opinion, catalogo, cuentas, empleados] =
       await Promise.all([
         prisma.satSyncRequest.findMany({
           where: { companyId, tipo: { in: ["EMITIDOS", "RECIBIDOS"] }, year: { gte: anioMin } },
@@ -87,6 +88,15 @@ export async function GET(req: Request) {
           orderBy: { fetchedAt: "desc" },
           select: { resultado: true, fetchedAt: true },
         }),
+        // El catálogo de cuentas presentado al SAT (CE), ya aplicado.
+        prisma.ceArchivo.findFirst({
+          where: { companyId, tipo: "CT", importadoEn: { not: null } },
+          orderBy: [{ anio: "desc" }, { mes: "desc" }],
+          select: { anio: true, mes: true },
+        }),
+        prisma.chartAccount.count({ where: { companyId, isActive: true } }),
+        // Empleados (los crea la importación de los recibos de nómina timbrados).
+        prisma.employee.count({ where: { companyId, isActive: true } }),
       ]);
 
     const meses = mesesHistorial({
@@ -120,6 +130,8 @@ export async function GET(req: Request) {
       },
       etapas: etapas.map((e) => ({ clave: e.clave, etiqueta: e.etiqueta, hechos: e.hechos, total: e.total, pct: e.pct, completa: e.completa })),
       opinion: opinion ? { resultado: opinion.resultado, fetchedAt: opinion.fetchedAt.toISOString() } : null,
+      catalogo: catalogo ? { anio: catalogo.anio, mes: catalogo.mes, cuentas } : null,
+      empleados,
     });
   } catch (e) {
     return error(e);

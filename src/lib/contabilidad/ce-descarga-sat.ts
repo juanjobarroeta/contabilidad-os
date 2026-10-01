@@ -17,6 +17,8 @@ export interface CeXml {
   mes: number;
   /** "B" = balanza (BN/BC), "CT" = catálogo, u otro (PL/XF/XC). */
   tipo: "B" | "CT" | string;
+  /** El código tal cual del nombre del SAT: BN | BC | CT | PL | XF | XC | "?". */
+  codigo: string;
   nombre: string;
   xml: string;
 }
@@ -95,6 +97,7 @@ export async function descargarCeAnioSat(
           anio: m ? Number(m[1]) : 0,
           mes: m ? Number(m[2]) : 0,
           tipo: tipoRaw.startsWith("B") ? "B" : tipoRaw || "?",
+          codigo: tipoRaw || "?",
           nombre,
           xml,
         });

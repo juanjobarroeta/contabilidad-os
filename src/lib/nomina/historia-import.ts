@@ -25,6 +25,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { prisma } from "../prisma";
+import { agregarObligacionesFaltantes, OBLIGACIONES_NOMINA } from "@/lib/obligaciones-seed";
 import { calcularFactorIntegracion } from "./prestaciones";
 import { clasificarEmpleado, partirNombre, type ReciboEvento } from "./roster-import";
 
@@ -392,12 +393,21 @@ export async function importarNominaHistorica(
         riesgoPuesto: fuente.complemento.riesgoPuesto ?? "1",
       },
     });
+    // La clave de empleado del recibo, si la trae; si no, el id corto.
     await prisma.employee.update({
       where: { id: created.id },
-      data: { numEmpleado: created.id.slice(-6).toUpperCase() },
+      data: { numEmpleado: fuente.complemento.numEmpleado?.trim().slice(0, 15) || created.id.slice(-6).toUpperCase() },
     });
     idPorRfc.set(rfc, created.id);
     result.empleadosCreados++;
+  }
+
+  // Tener nómina timbrada causa IMSS, ISN y retenciones de ISR: se agregan a lo
+  // que se vigila (sin pisar las que el usuario haya apagado).
+  if (porRfc.size > 0) {
+    await agregarObligacionesFaltantes(companyId, [...OBLIGACIONES_NOMINA], "NOMINA").catch((e) =>
+      console.warn("[nomina] no se pudieron agregar obligaciones de nómina:", e instanceof Error ? e.message : e),
+    );
   }
 
   // ── Crear corridas + items (STAMPED + origen SAT = sólo lectura en la UI) ──

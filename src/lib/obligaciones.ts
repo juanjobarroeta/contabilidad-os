@@ -452,6 +452,18 @@ export function mapCsfObligacion(descripcion: string): string | null {
   if (d.includes("diot") || d.includes("operaciones con terceros") || d.includes("proveedores")) {
     return "DIOT";
   }
+  // Otras informativas (anual de pagos y retenciones, informativa de IVA con la
+  // anual, múltiple…) no son pagos que vigilemos: mencionan «iva»/«isr» y antes
+  // se colaban como IVA mensual o ISR provisional.
+  if (d.includes("informativa")) return null;
+  // RETENCIONES ANTES QUE ISR/IVA: «Entero de retenciones mensuales de ISR por
+  // sueldos y salarios» trae «isr» y caía en ISR provisional, así que las
+  // retenciones de ISR nunca se vigilaban. Las retenciones de IVA se enteran en
+  // la misma declaración mensual de IVA.
+  if (d.includes("retenci")) {
+    if (d.includes("valor agregado") || /\biva\b/.test(d)) return "IVA_MENSUAL";
+    return "RETENCIONES_ISR";
+  }
   // IEPS antes que ISR: sus descripciones ("Declaración mensual del impuesto
   // especial sobre producción y servicios…") no mencionan IVA/ISR, pero sí
   // pueden traer "pago definitivo" que otras ramas no deben capturar.
@@ -467,7 +479,6 @@ export function mapCsfObligacion(descripcion: string): string | null {
     if (d.includes("ejercicio") || d.includes("anual")) return "ISR_ANUAL";
     return "ISR_PROVISIONAL";
   }
-  if (d.includes("retenci")) return "RETENCIONES_ISR";
   if (d.includes("declaraci") && d.includes("anual")) return "ISR_ANUAL";
   return null;
 }

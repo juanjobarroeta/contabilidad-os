@@ -90,7 +90,7 @@ export async function POST(req: Request) {
     throw e;
   }
 
-  const { companyId, banco, nombre, numeroCuenta, clabe, moneda, tipo } = await req.json();
+  const { companyId, banco, nombre, numeroCuenta, clabe, moneda, tipo, chartAccountId } = await req.json();
   if (!companyId || !banco || !nombre || !numeroCuenta) {
     return NextResponse.json({ error: "Faltan campos requeridos" }, { status: 400 });
   }
@@ -104,9 +104,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
 
+  // Ligada a su cuenta contable (sugerencias del catálogo): debe ser de la empresa.
+  if (chartAccountId !== undefined && chartAccountId !== null) {
+    const cuenta = typeof chartAccountId === "string"
+      ? await prisma.chartAccount.findFirst({ where: { id: chartAccountId, companyId }, select: { id: true } })
+      : null;
+    if (!cuenta) return NextResponse.json({ error: "Cuenta contable inválida" }, { status: 400 });
+  }
+
   try {
     const account = await prisma.bankAccount.create({
-      data: { companyId, banco, nombre, numeroCuenta, clabe, moneda: moneda ?? "MXN", ...(tipo ? { tipo } : {}) },
+      data: {
+        companyId,
+        banco,
+        nombre,
+        numeroCuenta,
+        clabe,
+        moneda: moneda ?? "MXN",
+        ...(tipo ? { tipo } : {}),
+        ...(chartAccountId ? { chartAccountId } : {}),
+      },
     });
     return NextResponse.json(account, { status: 201 });
   } catch {
