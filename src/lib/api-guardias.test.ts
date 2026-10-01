@@ -27,6 +27,7 @@ const API_DIR = path.join(APP_DIR, "api");
 
 /** Autenticación de cualquier tipo: sesión, bearer, secreto, firma, token. */
 const AUTENTICADORES: RegExp[] = [
+  /\brequireContaBotAccess\b/, // company membership + accounting module, exercised against Postgres
   // Membresía / tenant (src/lib/authz.ts)
   /\brequireMembership\b/,
   // Cierre guiado (src/lib/cierre/gate.ts): membresía + plan PRO
@@ -62,6 +63,7 @@ const AUTENTICADORES: RegExp[] = [
   /\bverifyTwilioSignature/,
   /\bconstructEventAsync\b/,
   /\bverifyZoomSignature\b/,
+  /\.webhooks\.verifySignature\b/, // OpenAI SDK: signature + timestamp, tested with forged payloads
   // Telegram no firma el cuerpo: autentica con secret_token propio por header
   // (X-Telegram-Bot-Api-Secret-Token), fijado al registrar el webhook.
   /\bTELEGRAM_WEBHOOK_SECRET\b/,
@@ -78,6 +80,7 @@ const AUTENTICADORES: RegExp[] = [
  * exactamente el bug que buscamos.
  */
 const ESCOPADORES: RegExp[] = [
+  /\brequireContaBotAccess\b/,
   /\brequireMembership\b/,
   /\brequireCierreGuiado\b/,
   /\brequireWriter\b/,

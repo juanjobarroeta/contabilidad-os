@@ -12,8 +12,9 @@
 // nada se ejecuta hasta /api/ai/confirm, y un botón sólo manda un turno.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Card, RefCopiloto } from "@/lib/copiloto/tarjetas";
+import { watchManagedRun } from "./managed-run";
 
 export interface Message {
   role: "user" | "assistant";
@@ -84,6 +85,8 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
   // El id vive también en un ref: `enviar` no debe recrearse (ni perder el hilo)
   // cada vez que cambia la conversación.
   const convRef = useRef<string | null>(null);
+  const observerRef = useRef<AbortController | null>(null);
+  useEffect(() => () => observerRef.current?.abort(), [companyId]);
   const fijarConversacion = useCallback((id: string | null) => {
     convRef.current = id;
     setConversationId(id);
@@ -95,6 +98,8 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
   messagesRef.current = messages;
 
   const reset = useCallback(() => {
+    observerRef.current?.abort();
+    setIsLoading(false);
     // El ref también: quien hace reset() y enviar() en el mismo tick (abrir
     // el chat con una pregunta lista) no debe mandar el hilo anterior.
     messagesRef.current = [];
@@ -104,11 +109,46 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
     fijarConversacion(null);
   }, [fijarConversacion]);
 
+  const observarAgente = useCallback(async (id: string, requestId: string, signal: AbortSignal) => {
+    await watchManagedRun(id, requestId, signal, (snapshot) => {
+      setActiveTool(snapshot.activeTool);
+      setPendingAction(snapshot.pendingAction);
+      if (snapshot.message?.content || snapshot.message?.cards?.length) {
+        const message = snapshot.message!;
+        setMessages((prev) => {
+          const index = prev.findIndex((m) => m.id === message.id);
+          if (index >= 0) return prev.map((m, i) => i === index ? message : m);
+          return [...prev, message];
+        });
+      }
+    });
+  }, []);
+
+  const retomarAgente = useCallback(async (id: string, requestId: string) => {
+    observerRef.current?.abort();
+    const observer = new AbortController();
+    observerRef.current = observer;
+    setIsLoading(true);
+    try { await observarAgente(id, requestId, observer.signal); }
+    catch (error) {
+      if (!observer.signal.aborted) setMessages((prev) => [...prev, { role: "assistant", content: error instanceof Error ? error.message : "No se pudo consultar el avance." }]);
+    } finally {
+      if (!observer.signal.aborted) {
+        setIsLoading(false);
+        setActiveTool(null);
+        onTurnoTerminado?.(false);
+      }
+    }
+  }, [observarAgente, onTurnoTerminado]);
+
   /** Manda un turno. `texto` ya viene limpio; la UI decide de dónde sale. */
   const enviar = useCallback(
     async (texto: string, opciones?: { ref?: RefCopiloto }) => {
       const contenido = texto.trim();
       if (!contenido || !companyId) return;
+      observerRef.current?.abort();
+      const observer = new AbortController();
+      observerRef.current = observer;
       const ref = opciones?.ref;
 
       const nuevo: Message = { role: "user", content: contenido, ...(ref ? { ref } : {}) };
@@ -123,6 +163,7 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
       try {
         const res = await fetch("/api/ai/chat", {
           method: "POST",
+          signal: observer.signal,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             // La referencia del turno nuevo va en `contexto.ref`; la de los
@@ -132,6 +173,7 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
               .filter((m) => m.content.trim())
               .map((m, i, arr) => ({ role: m.role, content: i === arr.length - 1 ? m.content : contenidoParaModelo(m) })),
             companyId,
+            requestId: crypto.randomUUID(),
             conversationId: convRef.current,
             contexto: { ...contexto(), ...(ref ? { ref } : {}) },
           }),
@@ -139,6 +181,15 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           throw new Error(err.error || "Error del servidor");
+        }
+        if (res.status === 202) {
+          const managed = await res.json();
+          if (observer.signal.aborted) return;
+          fijarConversacion(managed.conversationId);
+          nuevaConv = !!managed.nueva;
+          await observarAgente(managed.managedRunId, managed.requestId, observer.signal);
+          if (!observer.signal.aborted) onTurnoTerminado?.(nuevaConv);
+          return;
         }
         const reader = res.body?.getReader();
         if (!reader) throw new Error("No se pudo leer la respuesta");
@@ -158,6 +209,7 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
           messageId?: string | null;
           card?: Card;
         }) => {
+          if (observer.signal.aborted) return;
           if (data.type === "conversation") {
             if (data.id) fijarConversacion(data.id);
             if (data.nueva) nuevaConv = true;
@@ -236,11 +288,13 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
         }
         onTurnoTerminado?.(nuevaConv);
       } catch (e) {
+        if (observer.signal.aborted) return;
         setMessages((prev) => [
           ...prev,
           { role: "assistant", content: `Error: ${e instanceof Error ? e.message : "Error desconocido"}` },
         ]);
       } finally {
+        if (observer.signal.aborted) return;
         setIsLoading(false);
         setActiveTool(null);
         // Si el turno se cortó, los pasos no se quedan girando para siempre.
@@ -251,7 +305,7 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
         });
       }
     },
-    [companyId, contexto, fijarConversacion, onTurnoTerminado]
+    [companyId, contexto, fijarConversacion, onTurnoTerminado, observarAgente]
   );
 
   const confirmar = useCallback(async () => {
@@ -306,6 +360,7 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
     confirming,
     conversationId,
     fijarConversacion,
+    retomarAgente,
     /** La pantalla del cierre pinta la tarjeta que el paso deja puesta al abrirse. */
     setPendingAction,
     enviar,

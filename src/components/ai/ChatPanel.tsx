@@ -130,6 +130,7 @@ export function ChatPanel() {
     confirming,
     conversationId,
     fijarConversacion,
+    retomarAgente,
     enviar,
     confirmar: confirmAction,
     cancelar: cancelAction,
@@ -168,6 +169,7 @@ export function ChatPanel() {
 
   const openConversation = useCallback(
     async (id: string) => {
+      resetChat();
       setView("chat");
       const res = await fetch(`/api/ai/conversations/${id}`);
       if (!res.ok) return;
@@ -187,13 +189,19 @@ export function ChatPanel() {
       setIsMine(!!data.mine);
       setMarcadores([]);
       cancelAction();
+      if (data.activeManagedRun?.requestId) void retomarAgente(data.activeManagedRun.id, data.activeManagedRun.requestId);
     },
-    [setMessages, fijarConversacion, cancelAction],
+    [setMessages, fijarConversacion, cancelAction, resetChat, retomarAgente],
   );
 
   async function deleteConversation(id: string) {
     if (!window.confirm("¿Borrar esta conversación?")) return;
-    await fetch(`/api/ai/conversations/${id}`, { method: "DELETE" });
+    const response = await fetch(`/api/ai/conversations/${id}`, { method: "DELETE" });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      window.alert(error.error ?? "No se pudo borrar la conversación.");
+      return;
+    }
     if (id === conversationId) newChat();
     await loadConversations();
   }

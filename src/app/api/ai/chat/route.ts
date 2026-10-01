@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
@@ -19,6 +20,9 @@ import { asegurarUsoIA, respuestaTopeIA } from "@/lib/ai/guardia";
 import { checkChatUserDaily } from "@/lib/ai/rate-limit";
 import { effectiveWhatsappPlan } from "@/lib/planes";
 import { getChatPendingAction } from "@/lib/ai/pending-action";
+import { managedContaBotEnabled, ContaBotError } from "@/lib/contabot/config";
+import { beginManagedTurn, syncManagedSession } from "@/lib/contabot/runtime";
+import { requireContaBotAccess } from "@/lib/contabot/access";
 import { MAX_BODY_BYTES, sanearHistorial } from "@/lib/ai/historial";
 import { fuentesDesdeToolResult, verificarRespuesta, type FuenteVerificacion } from "@/lib/ai/verificacion";
 import {
@@ -66,6 +70,7 @@ export async function POST(req: Request) {
     messages?: unknown;
     companyId?: string;
     conversationId?: string;
+    requestId?: string;
     contexto?: { ruta?: unknown; ref?: unknown; cierre?: { year?: unknown; month?: unknown; paso?: unknown } };
   };
   try {
@@ -109,6 +114,13 @@ export async function POST(req: Request) {
   const member = await getEffectiveCompanyMembership(session.user.id, companyId);
   if (!member) {
     return NextResponse.json({ error: "Sin acceso a esta empresa" }, { status: 403 });
+  }
+  if (managedContaBotEnabled(companyId)) {
+    try { await requireContaBotAccess(session.user.id, companyId); }
+    catch (error) {
+      if (error instanceof ContaBotError) return NextResponse.json({ error: error.message }, { status: error.status });
+      throw error;
+    }
   }
 
   // Todo lo que sigue a la membresía va EN PARALELO: eran cuatro viajes a la
@@ -201,7 +213,7 @@ export async function POST(req: Request) {
       select: { userId: true, companyId: true, visibility: true },
     });
     if (!conv) return NextResponse.json({ error: "Conversación no encontrada" }, { status: 404 });
-    const acceso = conv.userId === userId || (conv.visibility === "COMPANY" && conv.companyId === companyId);
+    const acceso = conv.companyId === companyId && (conv.userId === userId || conv.visibility === "COMPANY");
     if (!acceso) return NextResponse.json({ error: "Sin acceso a esta conversación" }, { status: 403 });
   } else {
     const title = nuevoMensajeUsuario.trim().slice(0, 60) || "Nueva conversación";
@@ -230,6 +242,29 @@ export async function POST(req: Request) {
     bloqueCierre: bloqueDelCierre,
     bloqueExpediente: bloqueDelExpediente,
   });
+
+  if (managedContaBotEnabled(companyId)) {
+    try {
+      const run = await beginManagedTurn({
+        conversationId: convId!, companyId, userId,
+        requestId: typeof body.requestId === "string" && /^[a-zA-Z0-9-]{16,64}$/.test(body.requestId) ? body.requestId : randomUUID(),
+        text: nuevoMensajeUsuario,
+        instructions: systemBlocks.map((block) => block.text).join("\n\n"),
+        context: { cierre: cierreCtx }, ref: refActual,
+      });
+      // The database queue and recovery cron survive this callback/browser.
+      after(async () => {
+        try { await syncManagedSession(run.id); }
+        catch { console.error("[contabot] Initial synchronization deferred to recovery"); }
+      });
+      return NextResponse.json({ managedRunId: run.id, requestId: run.requestId,
+        conversationId: convId, nueva: convCreada }, { status: 202 });
+    } catch (error) {
+      if (error instanceof ContaBotError) return NextResponse.json({ error: error.message }, { status: error.status });
+      console.error("[contabot] Could not persist managed request");
+      return NextResponse.json({ error: "No se pudo registrar la tarea de ContaBot." }, { status: 503 });
+    }
+  }
 
   // Stream response with tool-use loop
   const encoder = new TextEncoder();

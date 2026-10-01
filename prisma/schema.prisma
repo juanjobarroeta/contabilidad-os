@@ -5853,11 +5853,69 @@ model ChatConversation {
   company  Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages ChatMessage[]
+  agentSessions ContaBotSession[]
   cierre   CierrePeriodo?
 
   @@index([companyId, visibility, updatedAt])
   @@index([userId, updatedAt])
   @@index([companyId, modo, periodo])
+}
+
+// Managed-agent execution state. ChatConversation/ChatMessage remain the UI's
+// source of truth. Provider IDs never authorize access to a company.
+model ContaBotSession {
+  id                    String   @id @default(cuid())
+  conversationId        String
+  companyId             String
+  userId                String
+  providerSessionId     String?  @unique
+  model                 String
+  state                 String   @default("idle")
+  // Nullable unique locks: one active request per conversation AND company.
+  activeConversationId  String?  @unique
+  activeCompanyId       String?  @unique
+  requestId             String?
+  input                 String?  @db.Text
+  instructions          String?  @db.Text
+  context               Json?
+  providerTurnId        String?
+  previousTurnId        String?
+  assistantMessageId    String?
+  userMessageId         String?
+  turnStartedAt         DateTime?
+  leaseToken            String?
+  leaseExpiresAt        DateTime?
+  lastSyncedAt          DateTime?
+  error                 String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  calls        ContaBotToolCall[]
+
+  @@unique([conversationId, userId])
+  @@index([state, lastSyncedAt])
+}
+
+model ContaBotToolCall {
+  id          String   @id @default(cuid())
+  sessionId   String
+  turnId      String
+  callId      String
+  name        String
+  arguments   Json
+  // A running call without a saved result is uncertain after recovery. Never
+  // repeat its side effects just because a webhook or stream was retried.
+  state       String   @default("running")
+  success     Boolean?
+  result      String?  @db.Text
+  card        Json?
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+
+  session ContaBotSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, turnId, callId])
 }
 
 model ChatMessage {

@@ -3,6 +3,9 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { loadAccessibleConversation } from "@/lib/ai/conversation-access";
 import { sanearRef, sanearTarjetas } from "@/lib/copiloto/tarjetas";
+import { deleteManagedSessions } from "@/lib/contabot/runtime";
+import { ContaBotError } from "@/lib/contabot/config";
+import { requireContaBotAccess } from "@/lib/contabot/access";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -15,11 +18,22 @@ export async function GET(_req: Request, { params }: Params) {
   const { conv, isOwner, canView } = await loadAccessibleConversation(id, session.user.id);
   if (!conv) return NextResponse.json({ error: "No encontrada" }, { status: 404 });
   if (!canView) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
+  if (await prisma.contaBotSession.count({ where: { conversationId: id } })) {
+    try { await requireContaBotAccess(session.user.id, conv.companyId, id, { requireEnabled: false }); }
+    catch (error) {
+      if (error instanceof ContaBotError) return NextResponse.json({ error: error.message }, { status: error.status });
+      throw error;
+    }
+  }
 
   const messages = await prisma.chatMessage.findMany({
     where: { conversationId: id },
     orderBy: { createdAt: "asc" },
     select: { id: true, role: true, content: true, createdAt: true, feedback: true, cards: true, meta: true },
+  });
+  const activeRun = await prisma.contaBotSession.findFirst({
+    where: { conversationId: id, userId: session.user.id, state: { notIn: ["idle", "usage_pending", "deleting"] } },
+    select: { id: true, requestId: true },
   });
 
   return NextResponse.json({
@@ -27,6 +41,7 @@ export async function GET(_req: Request, { params }: Params) {
     title: conv.title,
     visibility: conv.visibility,
     mine: isOwner,
+    activeManagedRun: activeRun,
     // La traza (meta) no sale: sólo la referencia que el usuario adjuntó.
     messages: messages.map(({ meta, cards, ...m }) => {
       const ref = m.role === "user" ? sanearRef((meta as { ref?: unknown } | null)?.ref) : null;
@@ -77,6 +92,11 @@ export async function DELETE(_req: Request, { params }: Params) {
   if (!conv) return NextResponse.json({ error: "No encontrada" }, { status: 404 });
   if (!isOwner) return NextResponse.json({ error: "Sólo el dueño puede borrarla" }, { status: 403 });
 
+  try { await deleteManagedSessions(id); }
+  catch (error) {
+    return NextResponse.json({ error: error instanceof ContaBotError ? error.message : "No se pudo borrar la sesión del agente. Inténtalo de nuevo." },
+      { status: error instanceof ContaBotError ? error.status : 503 });
+  }
   await prisma.chatConversation.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }
