@@ -235,12 +235,12 @@ export function AccionesChat({
     <div className="flex flex-wrap gap-1.5">
       {acciones.map((a, i) => {
         const Icono = a.icon ? ICONO[a.icon] : null;
-        const apagado = elegida !== null && elegida !== i;
+        const apagado = a.kind === "turno" && elegida !== null && elegida !== i;
         return (
           <button
             key={i}
             type="button"
-            disabled={elegida !== null || (deshabilitado && a.kind === "turno")}
+            disabled={a.kind === "turno" && (elegida !== null || deshabilitado)}
             onClick={() => {
               if (a.kind === "navegar" && a.href) {
                 router.push(a.href);
