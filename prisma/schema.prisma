@@ -10112,3 +10112,28 @@ model HospControlEvento {
   createdAt DateTime @default(now())
   @@index([companyId, tipo, createdAt])
 }
+
+/// Archivo de lo que había en Syntage al cerrar la cuenta (oct-2026). La
+/// exportación final (src/lib/fiscal/cumplimiento/syntage/exportar.ts) guarda
+/// aquí, por RFC, cada registro JSON y cada archivo (acuses, opiniones, CSF,
+/// XML de contabilidad electrónica) antes de borrar las entidades. Es la única
+/// copia: Syntage no se puede volver a consultar. Una fila `export:completo`
+/// por RFC es la condición para que el borrado toque esa entidad.
+model SyntageArchivo {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  rfc         String
+  companyId   String?
+  entityId    String
+  /// "json:<recurso>" | "archivo" | "export:completo" | "export:incompleto" | "borrado"
+  tipo        String
+  /// Ruta de Syntage (IRI del recurso o del archivo). Llave de idempotencia.
+  ref         String
+  nombre      String?
+  contentType String?
+  bytes       Bytes?
+  datos       Json?
+
+  @@unique([rfc, tipo, ref])
+  @@index([rfc, tipo])
+}

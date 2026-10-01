@@ -299,6 +299,22 @@ export function correrCron(name: string, query?: string): Promise<SeñalCorrida>
   return tick(name, query);
 }
 
+/**
+ * Cierre de Syntage (oct-2026): la exportación final y el borrado de
+ * entidades sólo se agendan cuando el deploy lo pide con su bandera — se
+ * encienden a mano, corren hasta terminar y se apagan quitando la variable.
+ */
+function jobsDelCierreSyntage(): Job[] {
+  const jobs: Job[] = [];
+  if (process.env.SYNTAGE_ENABLED === "1" && process.env.SYNTAGE_EXPORTAR === "1") {
+    jobs.push({ name: "syntage-exportar", everyMs: 10 * MIN, firstDelayMs: 60_000, minMs: MIN_LOCAL });
+  }
+  if (process.env.SYNTAGE_ENABLED === "1" && process.env.SYNTAGE_BORRAR === "1") {
+    jobs.push({ name: "syntage-borrar", everyMs: 10 * MIN, firstDelayMs: 2 * MIN, minMs: MIN_LOCAL });
+  }
+  return jobs;
+}
+
 /** Arranca el scheduler (idempotente; una sola vez por proceso). */
 export function startInAppCron(): void {
   const enabled =
@@ -318,11 +334,12 @@ export function startInAppCron(): void {
   // no setInterval): así la siguiente espera puede depender del resultado de la
   // corrida anterior. Un trabajo nunca se solapa consigo mismo porque sólo se
   // reprograma DESPUÉS de terminar — y el candado de BD cubre el resto.
-  for (const job of JOBS) {
+  const activos = [...JOBS, ...jobsDelCierreSyntage()];
+  for (const job of activos) {
     void correrEnBucle(job);
   }
   console.log(
-    `[cron-scheduler] pipeline en-proceso activo (ritmo adaptativo, reposo→piso): ${JOBS.map(
+    `[cron-scheduler] pipeline en-proceso activo (ritmo adaptativo, reposo→piso): ${activos.map(
       (j) =>
         `${j.name}${j.query ? `?${j.query}` : ""} ${Math.round(j.everyMs / MIN)}min→${Math.round((j.minMs ?? MIN_LOCAL) / 1000)}s`
     ).join(", ")}`

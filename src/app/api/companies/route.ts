@@ -648,8 +648,10 @@ export async function POST(req: Request) {
   let syntage = null;
   if (guardaEfirma) {
     // Syntage apagado (oct-2026): no se abre una entidad facturable por cada
-    // empresa nueva. SatGo usa la e.firma guardada directamente.
-    if (syntageHabilitado()) {
+    // empresa nueva. SatGo usa la e.firma guardada directamente. Ni siquiera
+    // durante la exportación final (SYNTAGE_ENABLED=1): sólo con una bandera
+    // propia que nadie debería volver a poner.
+    if (syntageHabilitado() && process.env.SYNTAGE_PROVISION === "1") {
       try {
         syntage = await provisionCompany(company.id, undefined, { force: false });
       } catch (e) {

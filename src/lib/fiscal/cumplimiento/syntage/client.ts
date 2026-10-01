@@ -139,6 +139,15 @@ export class SyntageClient {
     return all;
   }
 
+  /**
+   * Una colección completa de cualquier ruta (p. ej.
+   * `/entities/{id}/tax-returns`), paginando con el tope de la API. La usa la
+   * exportación final para no quedarse con la primera página.
+   */
+  async listarColeccion(path: string): Promise<Json[]> {
+    return this.requestAllPages(path, MAX_ITEMS_POR_PAGINA, 500);
+  }
+
   async listEntities(): Promise<Json[]> {
     return this.requestAllPages("/entities");
   }
