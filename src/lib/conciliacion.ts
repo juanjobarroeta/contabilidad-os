@@ -358,7 +358,7 @@ export async function reconcileTransaction(
   const [tx, inv] = await Promise.all([
     prisma.bankTransaction.findFirst({
       where: { id: txId, companyId },
-      select: { id: true, monto: true },
+      select: { id: true, monto: true, loanAccountId: true },
     }),
     prisma.invoice.findFirst({
       where: { id: invoiceId, companyId },
@@ -383,6 +383,7 @@ export async function reconcileTransaction(
     }),
   ]);
   if (!tx) return { ok: false, error: "Movimiento no encontrado." };
+  if (tx.loanAccountId) return { ok: false, error: "Deshaz primero el préstamo registrado antes de conciliarlo con una factura." };
   if (!inv) return { ok: false, error: "Factura no encontrada." };
 
   const pagosPrevios = mergePagosConciliados(
@@ -396,9 +397,10 @@ export async function reconcileTransaction(
   const guard = checkInvoiceMatchGuard({ ...inv, total: Number(inv.total) }, pagosPrevios, { ...tx, monto: Number(tx.monto) });
   if (!guard.ok) return { ok: false, error: guard.error };
 
-  await prisma.bankTransaction.update({
-    where: { id: txId },
+  const changed = await prisma.bankTransaction.updateMany({
+    where: { id: txId, companyId, loanAccountId: null },
     data: { status: "MATCHED", invoiceId },
   });
+  if (!changed.count) return { ok: false, error: "El movimiento cambió. Revisa su registro antes de conciliarlo." };
   return { ok: true, uuid: inv.uuid, cliente: inv.customer?.razonSocial ?? "—" };
 }
