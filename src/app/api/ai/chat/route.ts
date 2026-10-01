@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { tools } from "@/lib/ai/tools";
 import { executeToolCall } from "@/lib/ai/tool-executor";
 import { buildSystemBlocks } from "@/lib/ai/system-prompt";
+import { entidadesDeEmpresa } from "@/lib/fiscal-kb/entidades-empresa";
 import { bloqueCierre } from "@/lib/cierre/contexto";
 import { bloqueExpediente } from "@/lib/expediente/cargar";
 import { evaluarCierre } from "@/lib/cierre/evaluar";
@@ -236,7 +237,11 @@ export async function POST(req: Request) {
     return "";
   });
 
-  const systemBlocks = buildSystemBlocks(empresa, {
+  const entidades = await entidadesDeEmpresa(companyId)
+    .then((e) => e.todas)
+    .catch(() => [] as string[]);
+
+  const systemBlocks = buildSystemBlocks({ ...empresa, entidades }, {
     ruta: rutaActual,
     ref: refActual,
     bloqueCierre: bloqueDelCierre,

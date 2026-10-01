@@ -370,7 +370,7 @@ export const tools: Anthropic.Tool[] = [
   {
     name: "search_fiscal_knowledge",
     description:
-      "Busca en la legislación mexicana vigente que un contador cita — fiscal (LISR, LIVA, LIEPS, CFF, LFD, LIF, LCF, LFDC, LFPCA y sus reglamentos RLISR/RLIVA/RCFF), aduanera y de comercio exterior (LADUA, LCE), nómina y seguridad social (LFT, LSS, LINFONAVIT, LSAR y los reglamentos RACERF e RIPAEDI), mercantil (CCOM, LGSM, LGTOC, LCM), antilavado (LFPIORPI y su reglamento), estatal (LHPUE/CFPUE de Puebla, CFCDMX de la CDMX), la RMF y sus reglas y las guías de llenado del CFDI / Anexo 20 — y devuelve fragmentos con su cita (artículo/regla/guía, fuente, fecha de vigencia). Úsala SIEMPRE antes de afirmar una regla, tasa, plazo, requisito o fundamento — no respondas de memoria. Si no devuelve resultados, dilo explícitamente y NO inventes un fundamento legal. Para preguntas sobre periodos pasados pasa fecha_vigencia del periodo, no la de hoy.",
+      "Busca en la legislación mexicana vigente que un contador cita — fiscal (LISR, LIVA, LIEPS, CFF, LFD, LIF, LCF, LFDC, LFPCA y sus reglamentos RLISR/RLIVA/RCFF), aduanera y de comercio exterior (LADUA, LCE), nómina y seguridad social (LFT, LSS, LINFONAVIT, LSAR y los reglamentos RACERF e RIPAEDI), mercantil (CCOM, LGSM, LGTOC, LCM), antilavado (LFPIORPI y su reglamento), estatal (Ley de Hacienda / Código Fiscal o Financiero de los estados donde opera la empresa), la RMF y sus reglas y las guías de llenado del CFDI / Anexo 20 — y devuelve fragmentos con su cita (artículo/regla/guía, fuente, fecha de vigencia). Úsala SIEMPRE antes de afirmar una regla, tasa, plazo, requisito o fundamento — no respondas de memoria. Si no devuelve resultados, dilo explícitamente y NO inventes un fundamento legal. Para preguntas sobre periodos pasados pasa fecha_vigencia del periodo, no la de hoy.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -385,6 +385,11 @@ export const tools: Anthropic.Tool[] = [
           description: "Filtrar por tipo de fuente (opcional). GUIA = guías de llenado del CFDI / Anexo 20.",
         },
         limit: { type: "number", description: "Máximo de fragmentos (default 6)" },
+        entidad: {
+          type: "string",
+          description:
+            "Sólo si preguntan por un estado DISTINTO a los de la empresa (código SAT de 3 letras: CMX, JAL, NLE…). Sin él, la búsqueda ya trae la ley federal más la de los estados donde opera la empresa (domicilio y sucursales con nómina).",
+        },
       },
       required: ["query"],
     },

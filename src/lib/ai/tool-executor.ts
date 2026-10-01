@@ -1,5 +1,7 @@
 import { BANK_STATEMENT_TOOL_NAMES } from "./bank-statement-tools";
 import { prisma } from "@/lib/prisma";
+import { esEntidad } from "@/lib/fiscal/rules";
+import { entidadesDeEmpresa } from "@/lib/fiscal-kb/entidades-empresa";
 import {
   detectComplementosPendientes,
   detectComplementosRecibidosPendientes,
@@ -333,6 +335,11 @@ export async function executeToolCall(
             // El corpus es todo el derecho mexicano; el copiloto contable sólo
             // ve lo que un contador cita. Lo fija el servidor, no el modelo.
             materias: MATERIAS_CONTADOR,
+            // Ley federal + la de los estados donde opera la empresa (o el que
+            // pidió el modelo), no los 32 revueltos.
+            entidades: esEntidad(String(input.entidad ?? "").toUpperCase())
+              ? [String(input.entidad).toUpperCase()]
+              : (await entidadesDeEmpresa(companyId)).todas,
             limit: typeof input.limit === "number" ? input.limit : undefined,
             // El embedding de la consulta se cobra a la empresa/usuario que
             // preguntó (la ley es común, el gasto no).
