@@ -21,6 +21,7 @@ vi.mock("@/lib/construccion/pagos-proveedor", () => ({
 }));
 
 import {
+  totalAPagar,
   aprobarRequisicion, autorizarPago, etapaDe, recibirManual, registrarPago, validarCantidadRecibida, vencimientoDe,
 } from "./requisiciones";
 
@@ -71,9 +72,10 @@ describe("separación de funciones", () => {
     expect(r).toMatchObject({ monto: 400, saldo: 600 });
     expect(m.aplicar.mock.calls[0][2]).toEqual([{ adjudicacionId: "o1", monto: 400 }]);
   });
-  it("no se paga de más: el monto se topa al saldo", async () => {
+  it("no se paga de más: un monto mayor al saldo se rechaza, no se recorta en silencio", async () => {
     m.aplicado.mockResolvedValue(900);
-    const r = await registrarPago("o1", "c", "teso", { monto: 5000 });
+    await expect(registrarPago("o1", "c", "teso", { monto: 5000 })).rejects.toMatchObject({ status: 400 });
+    const r = await registrarPago("o1", "c", "teso", {});
     expect(r.monto).toBe(100);
   });
 });
@@ -108,5 +110,13 @@ describe("vencimiento y etapa", () => {
     expect(etapaDe({ ...base, facturado: 100, autorizada: true })).toBe("EN_TESORERIA");
     expect(etapaDe({ ...base, saldo: 0 })).toBe("PAGADA");
     expect(etapaDe({ ...base, saldo: 0, conciliado: true })).toBe("CONCILIADA");
+  });
+});
+
+describe("lo que se paga", () => {
+  it("con factura ligada se paga la factura; sin ella, lo autorizado", () => {
+    expect(totalAPagar(2800, 0)).toBe(2800);
+    expect(totalAPagar(2800, 3248)).toBe(3248);
+    expect(totalAPagar(2800, 2500)).toBe(2500);
   });
 });

@@ -25,7 +25,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { generateAdjudicaciones } from "@/lib/construccion/adjudicaciones";
-import { aplicadoDeAdjudicacion, aplicarPago, saldoDe } from "@/lib/construccion/pagos-proveedor";
+import { aplicadoDeAdjudicacion, aplicarPago, recomputeAdjudicacionEstado, saldoDe } from "@/lib/construccion/pagos-proveedor";
 import { conFolioUnico, siguienteFolio } from "./folio";
 import { HospitalError } from "./errores";
 import { amparadoDe, amparadoPorReps, conciliadoDe, pagadoPorEvidencia } from "./cobranza";
@@ -445,11 +445,12 @@ export async function ordenesDeCompra(db: Db, companyId: string, filtro: FiltroO
       proveedor: a.solicitud.supplier ?? { id: a.supplierId, razonSocial: a.supplierNombre, rfc: null, clabe: null, banco: null },
       credito: { tieneCredito: a.tieneCredito, diasCredito: a.diasCredito },
       total,
+      autorizado: r2(partidas.reduce((s, p) => s + p.importe, 0)),
       partidas,
       recepcion: recepcionCompleta ? "COMPLETA" : algoRecibido ? "PARCIAL" : "PENDIENTE",
       cfdis,
       facturado,
-      diferenciaFactura: cfdis.length ? r2(facturado - total) : null,
+      diferenciaFactura: cfdis.length ? r2(facturado - partidas.reduce((s, p) => s + p.importe, 0)) : null,
       vencimiento,
       diasParaVencer: vencimiento ? Math.floor((vencimiento.getTime() - hoy.getTime()) / DIA) : null,
       pago: {
@@ -540,19 +541,59 @@ export async function vincularCfdi(ordenId: string, companyId: string, invoiceId
   if (!rfc || rfcDeCfdi(f) !== rfc) throw new HospitalError(422, "El CFDI es de otro proveedor");
   const previo = await prisma.construccionCfdiVinculo.findUnique({ where: { invoiceId }, select: { targetId: true } });
   if (previo && previo.targetId !== ordenId) throw new HospitalError(409, "Ese CFDI ya está ligado a otra orden o gasto");
-  await prisma.construccionCfdiVinculo.upsert({
-    where: { invoiceId },
-    create: { invoiceId, companyId, estado: "VINCULADA", targetTipo: VINCULO_ORDEN, targetId: ordenId, targetLabel: o.solicitud.folio },
-    update: { estado: "VINCULADA", targetTipo: VINCULO_ORDEN, targetId: ordenId, targetLabel: o.solicitud.folio },
+  const r = await prisma.$transaction(async (tx) => {
+    await tx.construccionCfdiVinculo.upsert({
+      where: { invoiceId },
+      create: { invoiceId, companyId, estado: "VINCULADA", targetTipo: VINCULO_ORDEN, targetId: ordenId, targetLabel: o.solicitud.folio },
+      update: { estado: "VINCULADA", targetTipo: VINCULO_ORDEN, targetId: ordenId, targetLabel: o.solicitud.folio },
+    });
+    return recalcularTotalOrden(tx, ordenId);
   });
-  return { ordenId, invoiceId, diferencia: r2(Number(f.total) - Number(o.total)) };
+  return { ordenId, invoiceId, diferencia: r2(r.facturado - r.autorizado), aPagar: r.total };
 }
 
 export async function desvincularCfdi(ordenId: string, companyId: string, invoiceId: string) {
   await cargarOrden(prisma, ordenId, companyId);
-  const n = await prisma.construccionCfdiVinculo.deleteMany({ where: { invoiceId, companyId, targetTipo: VINCULO_ORDEN, targetId: ordenId } });
-  if (n.count === 0) throw new HospitalError(404, "Ese CFDI no está ligado a esta orden");
-  return { ordenId, invoiceId };
+  return prisma.$transaction(async (tx) => {
+    const n = await tx.construccionCfdiVinculo.deleteMany({ where: { invoiceId, companyId, targetTipo: VINCULO_ORDEN, targetId: ordenId } });
+    if (n.count === 0) throw new HospitalError(404, "Ese CFDI no está ligado a esta orden");
+    const r = await recalcularTotalOrden(tx, ordenId);
+    return { ordenId, invoiceId, aPagar: r.total };
+  });
+}
+
+/**
+ * Lo que se le debe al proveedor: la(s) factura(s) ligada(s) vigentes; sin
+ * factura, lo autorizado (Σ líneas de la requisición). La requisición lleva
+ * precios estimados y la factura trae el IVA y el precio real, así que en
+ * cuanto llega el CFDI la orden se paga por el CFDI. El motor de pagos
+ * (aplicarPago) topa contra `adjudicacion.total`, por eso se reescribe aquí.
+ * No baja de lo ya pagado: si la factura es menor que lo pagado, se rechaza.
+ */
+export async function recalcularTotalOrden(tx: Prisma.TransactionClient, ordenId: string) {
+  const a = await tx.solicitudAdjudicacion.findUniqueOrThrow({
+    where: { id: ordenId },
+    select: { id: true, companyId: true, solicitud: { select: { partidas: { select: { importe: true } } } } },
+  });
+  const autorizado = r2(a.solicitud.partidas.reduce((s, p) => s + Number(p.importe), 0));
+  const vinculos = await tx.construccionCfdiVinculo.findMany({
+    where: { companyId: a.companyId, targetTipo: VINCULO_ORDEN, targetId: ordenId },
+    select: { invoice: { select: { total: true, status: true } } },
+  });
+  const facturado = r2(vinculos.filter((v) => v.invoice.status !== "CANCELLED").reduce((s, v) => s + Number(v.invoice.total), 0));
+  const total = totalAPagar(autorizado, facturado);
+  const aplicado = await aplicadoDeAdjudicacion(tx, ordenId);
+  if (total < aplicado - EPS) {
+    throw new HospitalError(409, `Ya se pagaron ${aplicado.toFixed(2)} y la factura ligada suma ${total.toFixed(2)}: revisa la factura o pide una nota de crédito.`);
+  }
+  await tx.solicitudAdjudicacion.update({ where: { id: ordenId }, data: { total } });
+  await recomputeAdjudicacionEstado(tx, ordenId, new Date());
+  return { autorizado, facturado, total };
+}
+
+/** Con factura ligada se paga la factura; sin ella, lo autorizado. */
+export function totalAPagar(autorizado: number, facturado: number): number {
+  return facturado > EPS ? r2(facturado) : r2(autorizado);
 }
 
 // ── Autorización de pago y tesorería ────────────────────────────────────────
@@ -604,7 +645,10 @@ export async function registrarPago(ordenId: string, companyId: string, userId: 
     const aplicado = await aplicadoDeAdjudicacion(tx, o.id);
     const saldo = saldoDe({ total: Number(o.total), estado: o.estado }, aplicado);
     if (saldo <= EPS) throw new HospitalError(409, "La orden ya está saldada");
-    const monto = r2(Math.min(input.monto ?? saldo, saldo));
+    if (input.monto != null && input.monto > saldo + EPS) {
+      throw new HospitalError(400, `El monto excede el saldo de la orden (${r2(saldo).toFixed(2)}). Registra lo que realmente salió del banco.`);
+    }
+    const monto = r2(input.monto ?? saldo);
     if (!(monto > 0)) throw new HospitalError(400, "Monto inválido");
     const pago = await tx.pagoProveedor.create({
       data: {
