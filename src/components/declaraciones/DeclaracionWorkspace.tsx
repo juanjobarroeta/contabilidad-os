@@ -1,5 +1,6 @@
 "use client";
 
+import { atributoCopiloto } from "@/lib/copiloto/objetivos";
 import { descargarUrl } from "@/lib/descargar";
 import { haceCuanto } from "@/lib/tiempo-relativo";
 import type { EvidenciaPresentacion } from "@/lib/fiscal/presentacion";
@@ -523,7 +524,15 @@ function Resumen({ data, year, companyId, month }: { data: CierreData; year: num
           </div>
         </div>
       )}
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-card bg-gradient-to-br from-cos-brand to-cos-brand-deep px-6 py-6 text-white shadow-[0_16px_36px_-20px_var(--brand)]">
+      <div
+        className="flex flex-wrap items-center justify-between gap-4 rounded-card bg-gradient-to-br from-cos-brand to-cos-brand-deep px-6 py-6 text-white shadow-[0_16px_36px_-20px_var(--brand)]"
+        data-copiloto={atributoCopiloto({
+          tipo: "kpi",
+          id: "total_a_pagar",
+          titulo: "Total a pagar",
+          datos: { importe: String(f.totalAPagar), estado: String(f.estado), vence: fmtFecha(f.vencimiento) },
+        })}
+      >
         <div>
           <span className="block text-[12.5px] font-medium uppercase tracking-[0.02em] text-white/75">Total a pagar</span>
           <div className="my-1.5"><Money value={f.totalAPagar} size={42} weight={700} className="text-white" /></div>
@@ -538,7 +547,16 @@ function Resumen({ data, year, companyId, month }: { data: CierreData; year: num
         <table className="mt-3 w-full text-[14px]">
           <tbody>
             {f.lineas.map((l) => (
-              <tr key={l.tipo} className="border-b border-cos-line-soft last:border-0">
+              <tr
+                key={l.tipo}
+                className="border-b border-cos-line-soft last:border-0"
+                data-copiloto={atributoCopiloto({
+                  tipo: "kpi",
+                  id: l.tipo,
+                  titulo: l.descripcion,
+                  datos: { importe: String(l.monto), concepto: montoLabel(l) },
+                })}
+              >
                 <td className="py-2 text-cos-ink-soft">{l.descripcion}</td>
                 <td className="py-2 text-right">
                   <span className="text-[12px] text-cos-ink-faint mr-2">{montoLabel(l)}</span>

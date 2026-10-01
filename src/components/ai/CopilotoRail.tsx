@@ -23,6 +23,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   ArrowRight, Check, ChevronLeft, ChevronRight, Inbox, MessageCircle, Search, Sparkles,
 } from "lucide-react";
@@ -57,6 +58,9 @@ function cuandoPaso(iso: string | null): string {
 
 export function CopilotoRail() {
   const { activeCompany } = useCompany();
+  // La mascota es la entrada al chat en todas las páginas menos /cierre (ahí
+  // el chat ES la pantalla): mientras está, el botón de abajo sobra.
+  const mascotaActiva = !(usePathname() ?? "").startsWith("/cierre");
   const [colapsado, setColapsado] = useState(false);
   const [rail, setRail] = useState<RailRespuesta | null>(null);
   const [loading, setLoading] = useState(true);
@@ -282,6 +286,7 @@ export function CopilotoRail() {
         )}
       </div>
 
+      {!mascotaActiva && (
       <div className="border-t border-cos-line p-3">
         <button
           type="button"
@@ -291,6 +296,7 @@ export function CopilotoRail() {
           <MessageCircle className="h-3.5 w-3.5" /> Preguntar al copiloto
         </button>
       </div>
+      )}
     </aside>
   );
 }

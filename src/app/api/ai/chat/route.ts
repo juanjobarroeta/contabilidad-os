@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { tools } from "@/lib/ai/tools";
@@ -20,6 +21,13 @@ import { effectiveWhatsappPlan } from "@/lib/planes";
 import { getChatPendingAction } from "@/lib/ai/pending-action";
 import { MAX_BODY_BYTES, sanearHistorial } from "@/lib/ai/historial";
 import { fuentesDesdeToolResult, verificarRespuesta, type FuenteVerificacion } from "@/lib/ai/verificacion";
+import {
+  ejecutarPresentacion,
+  NOMBRES_PRESENTACION,
+  sanearRef,
+  toolsPresentacion,
+  type Card,
+} from "@/lib/copiloto/tarjetas";
 
 const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY from env
 
@@ -29,6 +37,10 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 const MAX_TOOL_ROUNDS = 5;
+// Las rondas que SÓLO pintan (mostrar_tarjeta / ofrecer_acciones) no cuentan
+// contra MAX_TOOL_ROUNDS —no consultan nada—, pero sí contra este techo, para
+// que un modelo terco no gire pintando tarjetas para siempre.
+const MAX_RONDAS_TOTALES = 8;
 // Assistant brain: best available model, overridable per deployment. If the API
 // key's tier doesn't have the primary yet, fall back once instead of breaking
 // the chat.
@@ -54,7 +66,7 @@ export async function POST(req: Request) {
     messages?: unknown;
     companyId?: string;
     conversationId?: string;
-    contexto?: { ruta?: unknown; cierre?: { year?: unknown; month?: unknown; paso?: unknown } };
+    contexto?: { ruta?: unknown; ref?: unknown; cierre?: { year?: unknown; month?: unknown; paso?: unknown } };
   };
   try {
     body = JSON.parse(rawBody);
@@ -68,6 +80,9 @@ export async function POST(req: Request) {
     typeof contexto?.ruta === "string" && contexto.ruta.startsWith("/") && contexto.ruta.length <= 200
       ? contexto.ruta
       : undefined;
+  // El elemento sobre el que el usuario soltó la mascota («Explícame esto»):
+  // con tipo e id, el modelo carga ESE registro con sus herramientas.
+  const refActual = sanearRef(contexto?.ref) ?? undefined;
 
   // Cierre guiado: si el usuario está en /cierre, el periodo y el paso viajan
   // en el contexto. Con ellos el copiloto recibe el estado de los doce pasos y
@@ -149,7 +164,12 @@ export async function POST(req: Request) {
   // Sólo roles con permiso de escritura pueden STAGEAR acciones reversibles. A un
   // VIEWER ni siquiera le exponemos las herramientas "proponer_*".
   const canWrite = member.role !== "VIEWER";
-  const availableTools = canWrite ? tools : tools.filter((t) => !t.name.startsWith("proponer_"));
+  // Las de presentación (tarjetas y botones) sólo existen en el chat de la app:
+  // WhatsApp, la pasada diaria y el eval usan `tools` tal cual.
+  const availableTools = [
+    ...(canWrite ? tools : tools.filter((t) => !t.name.startsWith("proponer_"))),
+    ...toolsPresentacion,
+  ];
 
   // El bloque del cierre para el prompt. El paso dice QUÉ REVISAR, no qué puede
   // ver: el copiloto conserva TODAS sus herramientas dentro del cierre.
@@ -206,6 +226,7 @@ export async function POST(req: Request) {
 
   const systemBlocks = buildSystemBlocks(empresa, {
     ruta: rutaActual,
+    ref: refActual,
     bloqueCierre: bloqueDelCierre,
     bloqueExpediente: bloqueDelExpediente,
   });
@@ -234,6 +255,12 @@ export async function POST(req: Request) {
 
       // Acumula la respuesta del asistente para persistirla al final.
       let assistantText = "";
+      // Tarjetas y botones del turno, en el orden en que se pintaron.
+      const cardsTurno: Card[] = [];
+      const emitirCard = (card: Card) => {
+        cardsTurno.push(card);
+        safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: "card", card })}\n\n`));
+      };
       // Traza del turno: sin ella un fallo del copiloto no se puede depurar (¿no
       // ENCONTRÓ el artículo o lo IGNORÓ?). Se guarda en ChatMessage.meta.
       const traza: {
@@ -251,9 +278,11 @@ export async function POST(req: Request) {
       try {
         let currentMessages = [...messages];
         let toolRounds = 0;
+        let rondasTotales = 0;
         let model = CHAT_MODEL;
 
-        while (toolRounds < MAX_TOOL_ROUNDS) {
+        while (toolRounds < MAX_TOOL_ROUNDS && rondasTotales < MAX_RONDAS_TOTALES) {
+          rondasTotales++;
           // A partir de la segunda ronda, re-evaluar el techo: el gasto de las
           // rondas anteriores ya está registrado. Si se alcanzó, cerramos el
           // turno con un aviso en vez de seguir gastando.
@@ -312,8 +341,9 @@ export async function POST(req: Request) {
                   name: event.content_block.name,
                   input: "",
                 };
-                // Send a thinking indicator to the client
-                safeEnqueue(
+                // Send a thinking indicator to the client. Las de presentación
+                // no: no son trabajo, y la tarjeta de pasos cuenta tool_start.
+                if (!NOMBRES_PRESENTACION.has(event.content_block.name)) safeEnqueue(
                   encoder.encode(
                     `data: ${JSON.stringify({ type: "tool_start", tool: event.content_block.name })}\n\n`
                   )
@@ -375,6 +405,11 @@ export async function POST(req: Request) {
           const llamadas = toolUseBlocks.filter((b): b is Anthropic.ToolUseBlockParam => b.type === "tool_use");
           const correr = async (block: Anthropic.ToolUseBlockParam) => {
             const t0 = Date.now();
+            if (NOMBRES_PRESENTACION.has(block.name)) {
+              const { card, resultado } = ejecutarPresentacion(block.name, block.input as Record<string, unknown>);
+              if (card) emitirCard(card);
+              return { block, result: resultado, ms: Date.now() - t0 };
+            }
             const result = await executeToolCall(
               block.name,
               block.input as Record<string, unknown>,
@@ -384,16 +419,33 @@ export async function POST(req: Request) {
               // el confirm endpoint re-valida igualmente. userId habilita las
               // herramientas de cartera (query_despacho_panorama), acotadas a
               // las empresas accesibles del propio usuario.
-              { conversationId: convId!, inApp: canWrite, userId, cierre: cierreCtx }
+              { conversationId: convId!, inApp: canWrite, userId, cierre: cierreCtx, origen: "copiloto" }
             );
+            // «Guardado en memoria: …» bajo la respuesta: la nota ya quedó en
+            // el expediente y aparece en «Lo que recuerdo».
+            if (block.name === "anotar_expediente") {
+              try {
+                const r = JSON.parse(result) as { nota_id?: string };
+                const titulo = (block.input as { titulo?: unknown })?.titulo;
+                if (r.nota_id && typeof titulo === "string") emitirCard({ type: "memoria", texto: titulo.slice(0, 200) });
+              } catch {
+                /* sin marca: la nota igual quedó */
+              }
+            }
             return { block, result, ms: Date.now() - t0 };
           };
           const salidas = new Map<string, { result: string; ms: number }>();
-          const lecturas = llamadas.filter((b) => !b.name.startsWith("proponer_"));
+          const lecturas = llamadas.filter((b) => !b.name.startsWith("proponer_") && !NOMBRES_PRESENTACION.has(b.name));
           for (const r of await Promise.all(lecturas.map(correr))) {
             salidas.set(r.block.id, { result: r.result, ms: r.ms });
           }
           for (const block of llamadas.filter((b) => b.name.startsWith("proponer_"))) {
+            const r = await correr(block);
+            salidas.set(block.id, { result: r.result, ms: r.ms });
+          }
+          // Las tarjetas se pintan al final de la ronda, en el orden pedido:
+          // una «hecho» no debe aparecer antes de que termine lo que resume.
+          for (const block of llamadas.filter((b) => NOMBRES_PRESENTACION.has(b.name))) {
             const r = await correr(block);
             salidas.set(block.id, { result: r.result, ms: r.ms });
           }
@@ -423,7 +475,7 @@ export async function POST(req: Request) {
             { role: "user", content: toolResults },
           ];
 
-          toolRounds++;
+          if (!llamadas.every((b) => NOMBRES_PRESENTACION.has(b.name))) toolRounds++;
         }
         traza.modelo = model;
         traza.rondas = toolRounds;
@@ -479,11 +531,26 @@ export async function POST(req: Request) {
         let assistantMessageId: string | null = null;
         try {
           await prisma.chatMessage.create({
-            data: { conversationId: convId!, role: "user", content: nuevoMensajeUsuario, authorId: userId },
+            data: {
+              conversationId: convId!,
+              role: "user",
+              content: nuevoMensajeUsuario,
+              authorId: userId,
+              // La referencia de «Explícame esto» se guarda para volver a
+              // pintar la píldora al reabrir la conversación.
+              ...(refActual ? { meta: { ref: { ...refActual } } } : {}),
+            },
           });
-          if (assistantText.trim()) {
+          if (assistantText.trim() || cardsTurno.length) {
             const creado = await prisma.chatMessage.create({
-              data: { conversationId: convId!, role: "assistant", content: assistantText, authorId: null, meta: traza },
+              data: {
+                conversationId: convId!,
+                role: "assistant",
+                content: assistantText,
+                authorId: null,
+                meta: traza,
+                ...(cardsTurno.length ? { cards: cardsTurno as unknown as Prisma.InputJsonValue } : {}),
+              },
               select: { id: true },
             });
             assistantMessageId = creado.id;

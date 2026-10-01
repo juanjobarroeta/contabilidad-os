@@ -1,5 +1,6 @@
 "use client";
 
+import { atributoCopiloto } from "@/lib/copiloto/objetivos";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -287,7 +288,7 @@ function ObligacionCard({ ob, onPeriodoClick }: { ob: ObligacionCalendar; onPeri
           ob.periodos.map((p) => <AnualRow key={p.periodo} p={p} onClick={() => onPeriodoClick(p.periodo)} />)
         ) : (
           <div className={`grid gap-2 ${ob.periodicidad === "BIMESTRAL" ? "grid-cols-6" : "grid-cols-6 sm:grid-cols-12"}`}>
-            {ob.periodos.map((p) => <PeriodoCell key={p.periodo} p={p} onClick={() => onPeriodoClick(p.periodo)} />)}
+            {ob.periodos.map((p) => <PeriodoCell key={p.periodo} p={p} ob={ob} onClick={() => onPeriodoClick(p.periodo)} />)}
           </div>
         )}
       </div>
@@ -295,12 +296,18 @@ function ObligacionCard({ ob, onPeriodoClick }: { ob: ObligacionCalendar; onPeri
   );
 }
 
-function PeriodoCell({ p, onClick }: { p: PeriodoItem; onClick: () => void }) {
+function PeriodoCell({ p, ob, onClick }: { p: PeriodoItem; ob: { tipo: string; descripcion: string }; onClick: () => void }) {
   const cfg = ESTADO[p.estado];
   const Icon = cfg.icon;
   return (
     <button
       onClick={onClick}
+      data-copiloto={atributoCopiloto({
+        tipo: "obligacion_mes",
+        id: `${ob.tipo}:${p.periodo}`,
+        titulo: `${ob.descripcion} · ${p.label}`,
+        datos: { estatus: cfg.chip ?? "no aplica", vence: fmtShort(p.vencimiento) },
+      })}
       title={`${p.label} — ${cfg.chip ?? "N/A"}\nVence: ${fmtShort(p.vencimiento)}`}
       className={`flex flex-col items-center gap-1 rounded-[10px] border p-2 text-center transition-opacity hover:opacity-80 ${cfg.cell}`}
     >
@@ -315,7 +322,15 @@ function AnualRow({ p, onClick }: { p: PeriodoItem; onClick: () => void }) {
   const cfg = ESTADO[p.estado];
   const Icon = cfg.icon ?? Clock;
   return (
-    <button onClick={onClick} className={`flex w-full items-center justify-between rounded-[10px] border px-4 py-3 transition-opacity hover:opacity-80 ${cfg.cell}`}>
+    <button
+      onClick={onClick}
+      data-copiloto={atributoCopiloto({
+        tipo: "obligacion_mes",
+        id: p.periodo,
+        titulo: p.label,
+        datos: { estatus: cfg.chip ?? "no aplica", vence: fmtShort(p.vencimiento) },
+      })}
+      className={`flex w-full items-center justify-between rounded-[10px] border px-4 py-3 transition-opacity hover:opacity-80 ${cfg.cell}`}>
       <div className="flex items-center gap-2"><Icon className={`h-4 w-4 ${cfg.text}`} /><span className={`text-sm font-medium ${cfg.text}`}>{p.label}</span></div>
       <div className="text-right">
         {cfg.chip ? <Chip status={cfg.chip} /> : <span className="text-[13px] text-cos-ink-faint">N/A</span>}

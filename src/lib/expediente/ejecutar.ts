@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { esConfianza, esTema, esTipoNota, type Confianza, type TemaExpediente, type TipoNota } from "./claves";
 import { registrarHecho } from "./hechos";
 import { anotar, resolverNota } from "./notas";
@@ -18,6 +19,12 @@ export interface CtxExpediente {
   userId?: string | null;
   /** "agente" en la pasada diaria, "usuario" cuando lo dicta una persona en el chat. */
   autor?: "agente" | "usuario";
+  /**
+   * Metadatos que se guardan con las NOTAS (no con los hechos). El chat de la
+   * app manda `{ origen: "copiloto", conversationId }`: así la nota aparece en
+   * «Lo que recuerdo» y se puede olvidar desde ahí.
+   */
+  datosNota?: Prisma.InputJsonValue;
 }
 
 /** Ejecuta una herramienta del expediente. Devuelve el JSON que ve el modelo. */
@@ -89,6 +96,7 @@ export async function ejecutarHerramientaExpediente(
       titulo,
       cuerpo,
       refs: lista("refs"),
+      datos: ctx.datosNota ?? null,
     });
     return JSON.stringify({
       nota_id: n.id,

@@ -9,6 +9,7 @@
 // contexto a mano.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { atributoCopiloto } from "@/lib/copiloto/objetivos";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -285,7 +286,21 @@ export default function DespachoCockpitPage() {
               const est = ESTADO[r.estadoDeclaracion];
               const Icon = est.icon;
               return (
-                <tr key={r.id} className="border-t border-cos-line hover:bg-cos-paper/60">
+                <tr
+                  key={r.id}
+                  className="border-t border-cos-line hover:bg-cos-paper/60"
+                  data-copiloto={atributoCopiloto({
+                    tipo: "empresa",
+                    id: r.id,
+                    titulo: r.razonSocial,
+                    datos: {
+                      declaracion: est.label,
+                      vencidas: String(r.obligacionesVencidas),
+                      porVencer: String(r.obligacionesPorVencer),
+                      hallazgos: String(r.hallazgosAbiertos),
+                    },
+                  })}
+                >
                   <td className="px-4 py-3">
                     <p className="font-medium text-cos-ink">{r.razonSocial}</p>
                     <p className="font-mono text-[11px] text-cos-ink-faint">{r.rfc} · {r.regimenFiscal}</p>

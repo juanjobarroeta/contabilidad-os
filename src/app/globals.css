@@ -239,3 +239,152 @@
     -webkit-print-color-adjust: exact;
   }
 }
+
+/* ═════════════════════════════════════════════════════════════════════════
+   COPILOTO MASCOTA (src/components/ai/CopilotoMascota.tsx). Vive aquí y no
+   en clases de Tailwind porque son keyframes y pseudo-elementos, y porque
+   el resaltado del objetivo se aplica a CUALQUIER elemento de la página
+   (los que llevan data-copiloto), no a uno que el componente pinte.
+   ═════════════════════════════════════════════════════════════════════════ */
+@layer components {
+  .cos-pet {
+    position: fixed;
+    z-index: 60;
+    width: 58px;
+    height: 58px;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+    outline: none;
+  }
+  .cos-pet-body {
+    position: absolute;
+    inset: 0;
+    border-radius: 20px;
+    background: var(--brand);
+    box-shadow: 0 10px 24px -8px oklch(0.4 0.15 258 / 0.55), inset 0 -4px 0 oklch(0 0 0 / 0.12);
+    animation: cos-pet-bob 3.2s ease-in-out infinite;
+    transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.3, 1.4), box-shadow 0.18s;
+  }
+  .cos-pet-body::after {
+    content: "";
+    position: absolute;
+    left: 9px;
+    right: 9px;
+    top: 8px;
+    height: 10px;
+    border-radius: 8px;
+    background: oklch(1 0 0 / 0.14);
+  }
+  .cos-pet-eye {
+    position: absolute;
+    top: 21px;
+    width: 11px;
+    height: 14px;
+    border-radius: 6px;
+    background: #fff;
+    overflow: hidden;
+    animation: cos-pet-blink 5.5s infinite;
+    transition: height 0.15s;
+  }
+  .cos-pet-eye.l { left: 15px; }
+  .cos-pet-eye.r { right: 15px; }
+  .cos-pet-eye i {
+    position: absolute;
+    left: 3px;
+    top: 4px;
+    width: 5px;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--ink);
+    transition: transform 0.08s;
+  }
+  [data-theme="dark"] .cos-pet-eye i { background: oklch(0.2 0.02 260); }
+  .cos-pet-dot {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--amber);
+    border: 2.5px solid var(--canvas);
+    transform: scale(0);
+    transition: transform 0.2s;
+  }
+  .cos-pet.news .cos-pet-dot { transform: scale(1); }
+  .cos-pet.drag { cursor: grabbing; }
+  .cos-pet.drag .cos-pet-body {
+    transform: scale(1.12) rotate(-8deg);
+    animation: none;
+    box-shadow: 0 22px 30px -10px oklch(0.4 0.15 258 / 0.6);
+  }
+  .cos-pet.hop .cos-pet-body { animation: cos-pet-hop 0.5s cubic-bezier(0.3, 0.7, 0.4, 1.4); }
+  .cos-pet.over .cos-pet-body { transform: scale(1.18); }
+  .cos-pet.over .cos-pet-eye { height: 16px; }
+  .cos-pet:focus-visible .cos-pet-body { outline: 3px solid var(--brand-tint); outline-offset: 3px; }
+
+  /* Modo «Botón fijo»: círculo en la esquina, sin ojos ni arrastre. */
+  .cos-pet.classic { width: 54px; height: 54px; cursor: pointer; }
+  .cos-pet.classic .cos-pet-body { border-radius: 50%; animation: none; }
+  .cos-pet.classic .cos-pet-body::after { display: none; }
+
+  .copiloto-objetivo {
+    outline: 2px dashed var(--brand) !important;
+    outline-offset: 3px;
+    background-color: var(--brand-tint) !important;
+    transition: background-color 0.12s;
+  }
+  .copiloto-fijado {
+    outline: 2px solid var(--brand) !important;
+    outline-offset: 3px;
+  }
+
+  .cos-pet-bubble {
+    opacity: 0;
+    transform: translateY(6px) scale(0.97);
+    pointer-events: none;
+    transition: opacity 0.18s, transform 0.18s;
+  }
+  .cos-pet-bubble.show { opacity: 1; transform: none; pointer-events: auto; }
+
+  .cos-pet-panel { animation: cos-pet-rise 0.2s ease both; }
+
+  .cos-typing i {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--ink-faint);
+    animation: cos-typing 1s infinite;
+  }
+  .cos-typing i:nth-child(2) { animation-delay: 0.15s; }
+  .cos-typing i:nth-child(3) { animation-delay: 0.3s; }
+
+  .cos-no-scrollbar { scrollbar-width: none; }
+  .cos-no-scrollbar::-webkit-scrollbar { display: none; }
+
+  @keyframes cos-pet-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+  @keyframes cos-pet-hop {
+    0% { transform: translateY(0); }
+    35% { transform: translateY(-14px) scale(1.04, 0.96); }
+    70% { transform: translateY(0) scale(1.06, 0.92); }
+    100% { transform: none; }
+  }
+  @keyframes cos-pet-blink { 0%, 94%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.1); } }
+  @keyframes cos-pet-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @keyframes cos-typing { 0%, 60%, 100% { opacity: 0.3; transform: none; } 30% { opacity: 1; transform: translateY(-3px); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cos-pet-body,
+    .cos-pet.hop .cos-pet-body,
+    .cos-pet-eye,
+    .cos-pet-panel,
+    .cos-typing i { animation: none !important; }
+  }
+}
+
+@media print {
+  .cos-pet,
+  .cos-pet-bubble,
+  .cos-pet-panel { display: none !important; }
+}

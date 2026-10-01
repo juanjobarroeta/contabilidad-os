@@ -1,5 +1,6 @@
 "use client";
 
+import { atributoCopiloto } from "@/lib/copiloto/objetivos";
 import { descargarBlob } from "@/lib/descargar";
 
 import { useEffect, useState, useCallback } from "react";
@@ -777,6 +778,12 @@ export default function FacturasPage() {
               <button
                 key={inv.id}
                 onClick={() => setSel(inv)}
+                data-copiloto={atributoCopiloto({
+                  tipo: "factura",
+                  id: inv.id,
+                  titulo: `${meta.label} · ${inv.customer?.razonSocial ?? inv.contraparteNombre ?? "sin contraparte"}`,
+                  datos: { estatus: inv.status, total: String(inv.total), fecha: String(inv.fecha).slice(0, 10) },
+                })}
                 className="grid w-full grid-cols-[108px_minmax(0,1fr)_130px] items-center gap-3 border-t border-cos-line-soft px-[18px] py-3.5 text-left first:border-t-0 hover:bg-cos-paper max-[860px]:grid-cols-[76px_minmax(0,1fr)_auto]"
               >
                 <span>
