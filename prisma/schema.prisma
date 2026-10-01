@@ -41,6 +41,9 @@ model User {
   // Preferencias de notificaciones push, por categoría. Modelo opt-out: una
   // categoría ausente o true = activada. Shape: { cfdis?: bool, declaraciones?: bool }.
   notifPrefs Json?
+  // Onboarding con mascota (src/lib/onboarding/progreso.ts): pantalla, empresa en
+  // alta, perfil (despacho/empresa), tono y piel del copiloto. Por usuario.
+  onboarding Json?
 
   accounts               Account[]
   sessions               Session[]

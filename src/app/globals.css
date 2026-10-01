@@ -460,6 +460,30 @@
   .cos-no-scrollbar { scrollbar-width: none; }
   .cos-no-scrollbar::-webkit-scrollbar { display: none; }
 
+  /* Recorrido del alta (src/components/onboarding/RecorridoAlta.tsx): el
+     foco sobre el elemento real y la tarjeta con la mascota. */
+  .cos-spot {
+    position: fixed;
+    z-index: 55;
+    border-radius: 16px;
+    box-shadow: 0 0 0 9999px oklch(0.2 0.03 258 / 0.45);
+    pointer-events: none;
+    transition: all 0.55s cubic-bezier(0.5, 0, 0.2, 1);
+  }
+  .cos-tip {
+    position: fixed;
+    z-index: 62;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 16px 18px;
+    box-shadow: 0 24px 50px -20px oklch(0.2 0.05 258 / 0.5);
+    transition: left 0.55s cubic-bezier(0.5, 0, 0.2, 1), top 0.55s cubic-bezier(0.5, 0, 0.2, 1);
+  }
+  .cos-tip-pet { box-shadow: 0 10px 24px -8px color-mix(in oklch, var(--pet-c), black 45%); }
+  @media (prefers-reduced-motion: reduce) {
+    .cos-spot, .cos-tip { transition-duration: 0.15s; }
+  }
   @keyframes cos-pet-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
   @keyframes cos-pet-hop {
     0% { transform: translateY(0); }

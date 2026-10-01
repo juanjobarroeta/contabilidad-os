@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { X, Share, Plus } from "lucide-react";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type BeforeInstallPromptEvent = any;
+import { esIos, esStandalone, instalar, LLAVE_RECORRIDO, puedeInstalar, suscribirInstalacion } from "@/lib/pwa/instalacion";
 
 const DISMISS_KEY = "pwa-install-dismissed";
 
@@ -14,35 +12,28 @@ const DISMISS_KEY = "pwa-install-dismissed";
  * "Compartir → Agregar a inicio" instructions. Dismissible + remembered.
  */
 export function InstallPrompt() {
-  const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
   const [show, setShow] = useState(false);
   const [iosHint, setIosHint] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (localStorage.getItem(DISMISS_KEY)) return;
+    // Durante el alta lo ofrece el paso «Descarga la app».
+    if (localStorage.getItem(LLAVE_RECORRIDO)) return;
 
     // Already installed (standalone) → never show.
-    const standalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (navigator as any).standalone === true;
-    if (standalone) return;
+    if (esStandalone()) return;
 
-    const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
-    if (isIos) {
+    if (esIos()) {
       setIosHint(true);
       setShow(true);
       return;
     }
 
-    const onPrompt = (e: BeforeInstallPromptEvent) => {
-      e.preventDefault();
-      setDeferred(e);
-      setShow(true);
-    };
-    window.addEventListener("beforeinstallprompt", onPrompt);
-    return () => window.removeEventListener("beforeinstallprompt", onPrompt);
+    // El evento lo captura src/lib/pwa/instalacion.ts (lo comparte con el alta).
+    const revisar = () => setShow(puedeInstalar());
+    revisar();
+    return suscribirInstalacion(revisar);
   }, []);
 
   function dismiss() {
@@ -55,9 +46,7 @@ export function InstallPrompt() {
   }
 
   async function install() {
-    if (!deferred) return;
-    deferred.prompt();
-    await deferred.userChoice;
+    await instalar();
     dismiss();
   }
 
