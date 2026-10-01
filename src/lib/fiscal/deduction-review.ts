@@ -3,7 +3,9 @@ import { Prisma, type FiscalDeductionReview, type FiscalRegimeElection } from "@
 import { prisma } from "@/lib/prisma";
 import { readRegimenDocumentSnapshot, DOCUMENT_EVIDENCE_LIMIT } from "./regimen-document-evidence";
 import { summarizeRegimenDeductions, DEDUCTION_REVIEW_REASONS, DEDUCTION_REVIEW_YEAR } from "./regimen-deduction-summary";
-import { DEDUCTION_WORKFLOW_VERSION, ELECTION_CHOICES, reviewKey, type ReviewScope, type ReviewWrite } from "./deduction-review-contract";
+import { DEDUCTION_WORKFLOW_VERSION, ELECTION_CONTEXT_VERSION, ELECTION_CHOICES, reviewKey, type ReviewScope, type ReviewWrite } from "./deduction-review-contract";
+import { readDeductionPaymentEvidence } from "./deduction-payment-evidence";
+import { REP_CHECK_REASONS } from "./rep-payment-evidence";
 
 export class DeductionReviewError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message); }
@@ -35,11 +37,19 @@ async function loadContext(tx: Prisma.TransactionClient, scope: ReviewScope) {
     ORDER BY "regimenCode", revision DESC
   `);
   const contextHash = evidenceHash({ companyId: scope.companyId, year: scope.year,
-    company: snapshot.companyContext, version: DEDUCTION_WORKFLOW_VERSION });
-  const summary = summarizeRegimenDeductions(snapshot.input, snapshot.tipoPersona);
+    company: snapshot.companyContext, version: ELECTION_CONTEXT_VERSION });
+  const documentary = summarizeRegimenDeductions(snapshot.input, snapshot.tipoPersona);
+  const payments = await readDeductionPaymentEvidence(tx, scope.companyId, snapshot.companyContext.rfc, snapshot.input, documentary.renglones);
+  const summary = { ...documentary, renglones: documentary.renglones.map((row) => ({ ...row,
+    evidenciaPago: payments.byInvoice.get(row.invoiceId)!,
+    elegibilidad: row.elegibilidad.map((allocation) => ({ ...allocation,
+      motivos: allocation.motivos.map((reason) => reason === "PPD_PAYMENT_METHOD_UNAVAILABLE"
+        && payments.byInvoice.get(row.invoiceId)?.estado === "REP_COTEJADO" ? "PAYMENT_METHOD_REVIEW" as const : reason),
+    })),
+  })) };
   // Conservatively invalidates ALL reviews in the month when any documentary
   // fact or election revision changes. Never trusts a previously stored amount.
-  const hash = evidenceHash({ companyId: scope.companyId, snapshot, elections,
+  const hash = evidenceHash({ companyId: scope.companyId, snapshot, elections, payments: payments.fingerprint,
     version: DEDUCTION_WORKFLOW_VERSION, criteria: DEDUCTION_REVIEW_REASONS });
   return { snapshot, summary, elections, contextHash, hash };
 }
@@ -58,7 +68,7 @@ export async function readDeductionReviewWorkspace(scope: ReviewScope) {
       const key = { invoiceId: row.invoiceId, source: row.source, regimenCode: allocation.regimenCode };
       const review = current.get(reviewKey(key));
       return { ...key, uuid: row.uuid, baseDocumentalCentavos: allocation.baseDocumentalCentavos,
-        clasificacion: row.clasificacion, tratamiento: allocation.tratamiento, motivos: allocation.motivos,
+        clasificacion: row.clasificacion, tratamiento: allocation.tratamiento, motivos: allocation.motivos, evidenciaPago: row.evidenciaPago,
         review: review ? { ...identity(review), decision: review.decision,
           estado: review.evidenceHash === context.hash ? "VIGENTE" as const : "DESACTUALIZADA" as const } : null };
     }));
@@ -78,7 +88,7 @@ export async function readDeductionReviewWorkspace(scope: ReviewScope) {
       puedeDocumentar: !overflow && scope.year === DEDUCTION_REVIEW_YEAR && context.summary.documental.estado === "PROYECTABLE",
       limiteExcedido: overflow || context.snapshot.input.truncated,
       documental: { ...context.summary.documental, pendientes: context.summary.documental.pendientes.slice(0, 25) },
-      criterios: DEDUCTION_REVIEW_REASONS, elecciones: elections,
+      criterios: DEDUCTION_REVIEW_REASONS, criteriosPago: REP_CHECK_REASONS, elecciones: elections,
       resumen: { asignaciones: rows.length, revisionesVigentes: rows.filter((row) => row.review?.estado === "VIGENTE" && row.review.decision !== "PENDIENTE").length,
         revisionesDesactualizadas: rows.filter((row) => row.review?.estado === "DESACTUALIZADA").length,
         revisionesSinRenglon: saved.filter((row) => !keys.has(reviewKey(row))).length,

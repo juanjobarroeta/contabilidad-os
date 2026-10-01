@@ -136,6 +136,18 @@ function ScopedReview({ companyId, periodo, refreshKey, onReviewInvoice }: Param
           {data.renglones.map((row) => <div key={`${row.invoiceId}:${row.source}:${row.regimenCode}`} className="rounded-control border border-cos-line p-3">
             <p className="break-all font-semibold">{row.uuid} · régimen {row.regimenCode}</p>
             <p>{row.source === "PUE_DOCUMENTADO" ? "PUE por emisión (no acredita pago)" : "REP por FechaPago"} · Base documental {money(row.baseDocumentalCentavos)}</p>
+            {row.evidenciaPago.estado !== "PUE_SIN_ACREDITAR" && <details className="my-2 rounded-control bg-cos-bg p-2" aria-label={`Cotejo de pagos ${row.uuid}`}>
+              <summary className="cursor-pointer font-medium">{row.evidenciaPago.estado === "REP_COTEJADO" ? "Datos de pago cotejados con XML" : "Cotejo de pagos pendiente"}</summary>
+              <p className="mt-2 text-cos-ink-soft">Cotejo documental del XML almacenado, sin validar sellos o vigencia ante SAT. No acredita liquidación bancaria, requisitos fiscales ni un importe deducible.</p>
+              <p>{row.evidenciaPago.relacionesEnPeriodo} relaciones del periodo · {row.evidenciaPago.totalRelaciones} en la historia revisada · {row.evidenciaPago.pendientes} pendientes.</p>
+              <ul className="mt-2 space-y-2">{row.evidenciaPago.pagos.map((payment) => <li key={payment.relationId} className="break-words">
+                <p className="break-all">REP {payment.repUuid ?? "sin UUID"} · {payment.enPeriodo ? "periodo seleccionado" : "otro periodo"}</p>
+                {payment.cotejo.estado === "COTEJADO" ? <p>FechaPago {payment.cotejo.fechaPago.replace("T", " ")} · forma {payment.cotejo.formaDePagoP} · {payment.cotejo.monedaP} · importe pagado {payment.cotejo.impPagado} · parcialidad {payment.cotejo.parcialidad}</p>
+                  : <p className="text-cos-amber-ink">{data.criteriosPago[payment.cotejo.motivo]}</p>}
+                {payment.repInvoiceId && <button type="button" disabled={saving} className={`${buttonClass} mt-1`} onClick={() => void onReviewInvoice(payment.repInvoiceId!)}>Abrir REP</button>}
+              </li>)}</ul>
+              {row.evidenciaPago.vistaLimitada && <p>Vista limitada a 25 relaciones; el estado y los conteos incluyen toda la historia leída.</p>}
+            </details>}
             <p>{row.review ? `${REVIEW_DECISIONS[row.review.decision as keyof typeof REVIEW_DECISIONS]} · ${stateLabel[row.review.estado]} · v${row.review.revision}` : "Sin revisión documentada"}</p>
             {row.review && <p className="text-cos-ink-faint">{row.review.reviewedByEmail ?? row.review.reviewedById} · {new Date(row.review.reviewedAt).toLocaleString("es-MX")}</p>}
             <ul className="my-2 list-disc space-y-1 pl-4 text-cos-ink-soft">{row.motivos.map((code) => <li key={code}>{data.criterios[code]}</li>)}</ul>

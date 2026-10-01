@@ -95,6 +95,7 @@ try {
   assert.match(await panel.getByLabel("Historial fiscal").innerText(), /folio 42/);
   await page.screenshot({ path: process.env.REVIEW_SMOKE_SCREENSHOT ?? "/tmp/fisc002o-review.png", fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForFunction(() => (document.querySelector("aside")?.getBoundingClientRect().right ?? Infinity) <= 1);
   await panel.scrollIntoViewIfNeeded();
   assert.equal(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth + 1), true, "Review panel must fit mobile width");
   await panel.screenshot({ path: (process.env.REVIEW_SMOKE_SCREENSHOT ?? "/tmp/fisc002o-review.png").replace(/\.png$/, "-mobile.png") });
@@ -114,6 +115,53 @@ try {
   assert.equal(await prisma.taxDeclaration.count({ where: { companyId: id } }), 0);
   assert.deepEqual(failures, []);
   console.log("PASS viewer read-only UI/API, restricted-module denial, retained history, and unchanged tax boundary");
+
+  // FISC-002P: a separate synthetic PPD/REP exercises the actual source-check UI.
+  const parentUuid = randomUUID().toUpperCase(), repUuid = randomUUID().toUpperCase();
+  const paymentDate = `${periodo}-10T12:00:00`;
+  const ppd = await prisma.invoice.create({ data: { companyId: id, uuid: parentUuid, tipo: "EGRESO", tipoSat: "I", status: "STAMPED",
+    fecha: new Date(Date.UTC(year, month - 1, 1, 12)), metodoPago: "PPD", formaPago: "99", usoCfdi: "G03", moneda: "MXN",
+    contraparteRfc: "AAA010101AAA", subtotal: "100", total: "116", naturaleza: "GASTO", naturalezaManual: true } });
+  const sourceXml = `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:p="http://www.sat.gob.mx/Pagos20" xmlns:t="http://www.sat.gob.mx/TimbreFiscalDigital" Version="4.0" TipoDeComprobante="P">
+    <cfdi:Emisor Rfc="AAA010101AAA"/><cfdi:Receptor Rfc="FISO261001ABC"/><cfdi:Complemento><p:Pagos Version="2.0"><p:Totales MontoTotalPagos="58"/>
+    <p:Pago FechaPago="${paymentDate}" FormaDePagoP="03" MonedaP="MXN" Monto="58"><p:DoctoRelacionado IdDocumento="${parentUuid}" MonedaDR="MXN" EquivalenciaDR="1" NumParcialidad="1" ImpPagado="58" ImpSaldoAnt="116" ImpSaldoInsoluto="58" ObjetoImpDR="01"/></p:Pago>
+    </p:Pagos><t:TimbreFiscalDigital UUID="${repUuid}"/></cfdi:Complemento></cfdi:Comprobante>`;
+  const rep = await prisma.invoice.create({ data: { companyId: id, uuid: repUuid, tipo: "PAGO", tipoSat: "P", status: "STAMPED",
+    fecha: new Date(`${paymentDate}Z`), metodoPago: "PUE", formaPago: "99", usoCfdi: "CP01", moneda: "XXX", subtotal: "0", total: "0", rawXml: sourceXml,
+    doctosRelacionados: { create: { parentUuid, impPagado: "58", fechaPago: new Date(`${paymentDate}Z`), numParcialidad: 1 } } } });
+  await page.setViewportSize({ width: 1365, height: 1000 });
+  await panel.getByRole("button", { name: "Recargar evidencia" }).click();
+  const sourceCheck = panel.getByLabel(`Cotejo de pagos ${parentUuid}`);
+  await sourceCheck.getByText("Datos de pago cotejados con XML", { exact: true }).click();
+  await sourceCheck.getByText(/forma 03/).waitFor();
+  assert.match(await sourceCheck.innerText(), /No acredita liquidación bancaria/);
+  await sourceCheck.locator("..").getByRole("button", { name: "Documentar criterio", exact: true }).click();
+  await form.getByLabel(/Motivo y alcance/).fill("Cotejo documental sintético del REP; no acredita una deducción.");
+  await form.getByLabel(/Referencias al expediente/).fill("REP sintético y papel de trabajo 44");
+  await form.getByRole("checkbox").check();
+  await form.getByRole("button", { name: "Guardar criterio sin afectar cálculos" }).click();
+  await form.waitFor({ state: "hidden" });
+  assert.equal(await prisma.fiscalDeductionReview.count({ where: { companyId: id, invoiceId: ppd.id } }), 1);
+  await sourceCheck.locator("..").getByRole("button", { name: "Documentar criterio", exact: true }).click();
+  await form.getByLabel(/Motivo y alcance/).fill("Borrador conservado cuando cambia únicamente la forma de pago del XML.");
+  await form.getByRole("checkbox").check();
+  await prisma.invoice.update({ where: { id: rep.id }, data: { rawXml: sourceXml.replace('FormaDePagoP="03"', 'FormaDePagoP="28"') } });
+  await form.getByRole("button", { name: "Guardar criterio sin afectar cálculos" }).click();
+  await form.getByText(/Tu borrador se conserva/).waitFor();
+  assert.equal(await prisma.fiscalDeductionReview.count({ where: { companyId: id, invoiceId: ppd.id } }), 1);
+  assert.match(await form.getByLabel(/Motivo y alcance/).inputValue(), /únicamente/);
+  await form.getByRole("button", { name: "Cancelar borrador" }).click();
+  await panel.getByRole("button", { name: "Recargar evidencia" }).click();
+  await sourceCheck.getByText(/forma 28/).waitFor();
+  await sourceCheck.locator("..").getByText(/Revisar de nuevo/).waitFor();
+  await page.screenshot({ path: (process.env.REVIEW_SMOKE_SCREENSHOT ?? "/tmp/fisc002o-review.png").replace(/\.png$/, "-rep.png"), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForFunction(() => (document.querySelector("aside")?.getBoundingClientRect().right ?? Infinity) <= 1);
+  await sourceCheck.scrollIntoViewIfNeeded();
+  assert.equal(await sourceCheck.evaluate((element) => element.scrollWidth <= element.clientWidth + 1), true);
+  await page.screenshot({ path: (process.env.REVIEW_SMOKE_SCREENSHOT ?? "/tmp/fisc002o-review.png").replace(/\.png$/, "-rep-mobile.png") });
+  assert.deepEqual(failures, []);
+  console.log("PASS REP XML comparison, saved review, XML-only stale conflict/draft protection, and mobile layout");
 } finally {
   await browser?.close();
   await prisma.auditLog.deleteMany({ where: { companyId: id } });

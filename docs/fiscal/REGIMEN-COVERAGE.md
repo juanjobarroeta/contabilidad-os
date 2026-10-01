@@ -110,6 +110,10 @@ There are 19 current product catalog codes and 20 calculation tracks because cod
 | 626 RESICO | PF | PARTIAL monthly; NO-CALC annual | FULL | 1 | True collected-income basis for PUE/PPD/REP, mixed-income handling, eligibility/exit, 1.25% retention, and DIOT/CE relief by effective rule |
 | 626 RESICO | PM | NOT_SUPPORTED (guarded) | FULL | 1 | Build a separate cumulative cash-basis income-minus-paid-deductions engine |
 
+### Stored REP payment-source comparison (FISC-002P)
+
+The deduction-review workflow now cross-checks the stored REP's own payment date, method, currency, amount and installment against company-local relations, with RFC/UUID matching, exact arithmetic, bounded reads and full inspected-history freshness. The UI exposes successful comparisons and explicit pending reasons; changed XML invalidates earlier reviews. This does not verify XML authenticity, SAT status, bank settlement or deductibility, and leaves the M/N numeric contracts and calculation guards unchanged. See [FISC-002P](./FISC-002P-REP-SOURCE-CHECK-v1.md).
+
 ## Launch boundary
 
 The initial commercial promise should cover only these six tracks:

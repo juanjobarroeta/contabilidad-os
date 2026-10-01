@@ -1,6 +1,8 @@
 import { z } from "zod";
 
-export const DEDUCTION_WORKFLOW_VERSION = "2026-10-01.1";
+export const DEDUCTION_WORKFLOW_VERSION = "2026-10-01.2";
+// Payment-source changes require new reviews, not re-recording unchanged options.
+export const ELECTION_CONTEXT_VERSION = "2026-10-01.1";
 export const REVIEW_DECISIONS = {
   DOCUMENTADA: "Revisión documentada (sin aprobar importe)",
   NO_PROPONER: "No proponer como deducción de ISR",
