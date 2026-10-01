@@ -125,7 +125,9 @@ export async function abrirBuzonSat<T>(
     await page.locator("#filePrivateKey").setInputFiles(keyPath);
     await page.locator("#privateKeyPassword").fill(fiel.pass);
     await page.locator("#submit").click({ timeout: 8000 }).catch(() =>
-      page.evaluate(() => (document.getElementById("submit") as HTMLElement | null)?.click()),
+      // Si el click sí disparó la navegación, este evaluate truena con
+      // «context destroyed»: no importa, abajo se espera la URL del buzón.
+      page.evaluate(() => (document.getElementById("submit") as HTMLElement | null)?.click()).catch(() => {}),
     );
     await page.waitForURL((u) => EN_BUZON.test(String(u)), { timeout: 45000 }).catch(() => {});
     await page.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});

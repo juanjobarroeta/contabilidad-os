@@ -121,9 +121,17 @@ export function buildCita(
     case "REGLAMENTO":
       return articulo ? `Art. ${articulo} ${clave}` : clave;
     case "RMF":
+      // Anexo 2: «Ficha de trámite 45/ISR (Anexo 2 RMF-2026)»
+      if (/^RMF-\d{4}-A\d+$/.test(clave)) {
+        const anexo = clave.replace(/^(RMF-\d{4})-A(\d+)$/, "Anexo $2 $1");
+        return articulo ? `Ficha de trámite ${articulo} (${anexo})` : anexo;
+      }
       return articulo ? `Regla ${articulo} ${clave}` : clave;
     case "GUIA":
       return titulo; // guías no tienen numeración de artículo
+    case "CRITERIO":
+      // «Criterio 1/CFF/N (Anexo 7 RMF-2026)»
+      return articulo ? `Criterio ${articulo} (${clave.replace(/^(RMF-\d{4})-A(\d+)$/, "Anexo $2 $1")})` : clave;
     default:
       return articulo ? `${clave} ${articulo}` : clave;
   }

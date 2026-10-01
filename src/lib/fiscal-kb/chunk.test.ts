@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chunkLaw, cleanLawText, corregirNotasPegadas, chunkRegla } from "./chunk";
+import { chunkLaw, cleanLawText, corregirNotasPegadas, chunkRegla, chunkDocument } from "./chunk";
 
 const ley = (cuerpo: string) => `LEY DE PRUEBA\n\nTÍTULO I\nDISPOSICIONES GENERALES\n${cuerpo}\n`;
 
@@ -204,5 +204,59 @@ describe("chunkRegla: la RMF no numera todo igual", () => {
     const c = chunkRegla(rmf).find((x) => x.articulo === "4.2.2");
     expect(c?.texto).toContain("billetes");
     expect(c?.texto).not.toContain("tabacos labrados");
+  });
+});
+
+describe("chunkCriterio (Anexos 3 y 7 de la RMF)", () => {
+  const indice = ["Contenido", "Criterios del CFF", "1/CFF/N", "Crédito fiscal. Es firme.", "2/CFF/N", "Normas sustantivas.", "3/CFF/N", "Momento de causación.", "4/CFF/N", "Actualización.", "5/CFF/N", "Recargos.", "1/ISR/PI", "Deducción indebida."].join("\n");
+  const cuerpo = (clave: string, titulo: string) =>
+    `${clave}\n\n${titulo} Texto largo del criterio con su fundamento: el artículo 17-A del CFF establece que el monto de las contribuciones se actualiza por el transcurso del tiempo y con motivo de los cambios de precios en el país.\n`;
+  const texto = [
+    indice,
+    "Criterios del CFF",
+    cuerpo("1/CFF/N", "Crédito fiscal. Es firme."),
+    cuerpo("2/CFF/N", "Normas sustantivas."),
+    cuerpo("3/CFF/N", "Momento de causación."),
+    cuerpo("4/CFF/N", "Actualización."),
+    cuerpo("5/CFF/N", "Recargos."),
+    "Criterios de la Ley del ISR",
+    cuerpo("1/ISR/PI", "Deducción indebida."),
+  ].join("\n");
+
+  it("una pieza por criterio, con el cuerpo (no la entrada del índice)", () => {
+    const c = chunkDocument(texto, "criterio");
+    expect(c.map((x) => x.articulo)).toEqual(["1/CFF/N", "2/CFF/N", "3/CFF/N", "4/CFF/N", "5/CFF/N", "1/ISR/PI"]);
+    expect(c[0].texto).toContain("artículo 17-A del CFF");
+    expect(c[5].contexto).toBe("Criterios de la Ley del ISR");
+  });
+});
+
+describe("chunkTramite (Anexo 2 de la RMF)", () => {
+  const ficha = (clave: string, titulo: string) =>
+    `${clave} ${titulo}\n\nTrámite\nDescripción del trámite o servicio\n¿Quién puede solicitar el trámite o servicio?\nPersonas morales.\n¿Cuándo se presenta?\nDentro del mes siguiente. Fundamento jurídico: artículos 27 del CFF y 29 de su Reglamento.\n`;
+  const texto = [
+    "Contenido",
+    "1/CFF",
+    "Solicitud de inscripción en el RFC de personas físicas.",
+    "2/CFF",
+    "Solicitud de inscripción en el RFC de personas morales.",
+    "Código Fiscal de la Federación",
+    ficha("1/CFF", "Solicitud de inscripción en el RFC de personas físicas."),
+    "Ver el trámite 2/CFF más adelante.",
+    ficha("2/CFF", "Solicitud de inscripción en el RFC de personas morales."),
+    ficha("3/CFF", "Solicitud de inscripción en el RFC por oficina virtual."),
+    "Impuesto sobre la Renta",
+    ficha("1/ISR", "Aviso de opción para tributar."),
+    "Del Decreto por el que se otorgan diversos beneficios fiscales",
+    ficha("1/DEC-1", "Aviso para aplicar el estímulo."),
+  ].join("\n");
+
+  it("una pieza por ficha, con la ley de su sección; ignora el índice y menciones a media línea", () => {
+    const c = chunkDocument(texto, "tramite");
+    expect(c.map((x) => x.articulo)).toEqual(["1/CFF", "2/CFF", "3/CFF", "1/ISR", "1/DEC-1"]);
+    expect(c[0].texto).toContain("¿Cuándo se presenta?");
+    expect(c[0].contexto).toBe("Código Fiscal de la Federación");
+    expect(c[3].contexto).toBe("Impuesto sobre la Renta");
+    expect(c[4].contexto).toMatch(/^Del Decreto/);
   });
 });
