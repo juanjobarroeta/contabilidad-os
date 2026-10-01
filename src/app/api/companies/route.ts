@@ -7,6 +7,7 @@ import { assertPuedeEscribir } from "@/lib/subscription";
 import { AuthzError, getEffectiveCompanyMembership, requireUser } from "@/lib/authz";
 import { provisionFacturapiOrg } from "@/lib/facturapi";
 import { provisionCompany } from "@/lib/fiscal/cumplimiento/syntage/provision";
+import { syntageHabilitado } from "@/lib/fiscal/cumplimiento/syntage/client";
 import { kickCron } from "@/lib/cron-scheduler";
 import { seedChartOfAccounts } from "@/lib/contabilidad/seed-catalog";
 import { seedCompanyObligaciones } from "@/lib/obligaciones-seed";
@@ -646,10 +647,14 @@ export async function POST(req: Request) {
   // Best-effort: only triggers extractions (sync persists results later).
   let syntage = null;
   if (guardaEfirma) {
-    try {
-      syntage = await provisionCompany(company.id, undefined, { force: false });
-    } catch (e) {
-      syntage = { error: e instanceof Error ? e.message : String(e) };
+    // Syntage apagado (oct-2026): no se abre una entidad facturable por cada
+    // empresa nueva. SatGo usa la e.firma guardada directamente.
+    if (syntageHabilitado()) {
+      try {
+        syntage = await provisionCompany(company.id, undefined, { force: false });
+      } catch (e) {
+        syntage = { error: e instanceof Error ? e.message : String(e) };
+      }
     }
     // El backfill de CFDIs arranca YA para la empresa nueva (primer envío de
     // solicitudes al SAT); los ticks del scheduler importan conforme el SAT

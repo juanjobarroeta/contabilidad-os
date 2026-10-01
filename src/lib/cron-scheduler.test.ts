@@ -56,10 +56,16 @@ describe("cron-scheduler: pisos del ritmo adaptativo", () => {
   });
 
   it("los crons que cuestan dinero llevan el piso caro", () => {
-    for (const name of ["compliance-provision", "compliance-sync", "declaraciones-backfill"]) {
+    for (const name of ["agenda-sat", "contador-pasada", "cep-rfc"]) {
       const b = bloques.find((x) => x.name === name);
       expect(b, `falta el job ${name}`).toBeDefined();
       expect(b!.texto, `${name} sin piso caro`).toMatch(/minMs:\s*MIN_CARO/);
+    }
+  });
+
+  it("ningún job de Syntage está agendado (corte oct-2026: SatGo)", () => {
+    for (const name of ["compliance-provision", "compliance-sync", "declaraciones-backfill", "syntage-cfdis", "syntage-liberar-slots"]) {
+      expect(bloques.find((x) => x.name === name), `${name} sigue agendado`).toBeUndefined();
     }
   });
 
