@@ -7,7 +7,7 @@ Implementation contract for overlapping interim exports, final statements and co
 - Strong identifiers link compatible observations. Conflicts and weak matches require a recorded decision. Distinct identifiers/times and repeated rows remain distinct.
 - Imports are serialized and file replay is idempotent per account. All imports are provisional until a complete statement is verified.
 - Verification requires identity/coverage attestation, both balances, debit/credit totals and available counts, one-to-one coverage and no unresolved discrepancies. Missing checks are explicit.
-- Posting revalidates the current evidence under the same company lock as import and review. New evidence reopens verification.
+- Posting revalidates the current evidence under the same company lock as import, review and year closing. New evidence reopens verification.
 - Corrections retain an audit snapshot. Posted copies require an explicit balanced reversal; closed periods and dependent operational links remain blocked for review.
 - Banks and ContaBot share the same read, proposal and confirmation services. Chat supports document intake, paginated evidence, client questions and bounded CEP lookup.
 - Soluciones receives a read-only diagnostic report; no real financial correction is executed as part of validation.
@@ -57,7 +57,7 @@ It cannot establish that all bank activity has been received.
 PostgreSQL integration exercises simultaneous replay, cross-format corroboration,
 legitimate equal payments, changed amount/date across months, full-month controls,
 stale financial previews, balanced posted-copy reversals, closed-period and
-linked-invoice blocks, owner/viewer/tenant separation, staged chat confirmation,
+linked-invoice blocks, legacy deletion/undo after later evidence, owner/viewer/tenant separation, staged chat confirmation,
 draft-to-posted classification, empty-month evidence, original staging, and
 mocked CEP retrieval/cache. Existing loan tests now verify a statement before
 regeneration. The separate ledger calculation suite isolates the statement gate;

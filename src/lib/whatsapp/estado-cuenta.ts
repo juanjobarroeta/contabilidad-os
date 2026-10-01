@@ -13,9 +13,8 @@ import type { ParsedTransaction, RowDescartada } from "@/lib/bank-parser";
 //
 // SEGURIDAD (roadmap §4):
 //   - El original se conserva fuera del contexto del modelo para revisión posterior.
-//     Lo único que puede quedar en la BD son filas parseadas (movimientos) —
-//     ya sea importadas, o cacheadas temporalmente en el pendingAction de la
-//     conversación mientras el usuario elige la cuenta destino.
+//     La selección de cuenta conserva filas parseadas y un ID de adjunto en
+//     pendingAction; los bytes originales permanecen en un inbox de la empresa.
 //   - CANDADO DE BALANCE: la extracción por visión NUNCA se ingiere a ciegas.
 //     Sólo se importa si saldoInicial + Σ movimientos ≈ saldoFinal (tolerancia
 //     $1.00). Si los saldos no aparecen o no cuadran, NO se importa nada y se

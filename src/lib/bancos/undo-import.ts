@@ -275,6 +275,7 @@ export async function deshacerLoteImportado(
         select: { id: true },
       })
     ).map((t) => t.id);
+    if (await tx.bankStatementRow.count({ where: { movementId: { in: borradosIds }, batch: { companyId } } })) throw new Error("Otro documento conserva evidencia de estas operaciones. Usa Bancos → Estados para revisarlas.");
     if (await tx.accountingEntry.count({ where: { companyId, referencia: { in: borradosIds } } })) throw new Error("Hay operaciones contabilizadas. Usa la revisión de estados para conservar la póliza y su reversión.");
     const dates = await tx.bankTransaction.findMany({ where: { id: { in: borradosIds }, companyId }, select: { fecha: true } });
     for (const { fecha } of dates) await assertPeriodoAbierto(tx, companyId, fecha.getUTCFullYear(), fecha.getUTCMonth() + 1);

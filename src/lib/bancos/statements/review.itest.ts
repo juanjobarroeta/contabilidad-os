@@ -10,11 +10,14 @@ import { stageBankOriginal, readBankOriginal } from "./inbox";
 import { prisma } from "@/lib/prisma";
 import { persistStatementTransactions } from "./ingest";
 import { accountReview, previewReview, executeReview, statementPostingGate, documentPage, type ReviewOperation } from "./review";
+import { DELETE } from "@/app/api/bancos/transactions/[txId]/route";
+import { deshacerLoteImportado } from "../undo-import";
 import { POST } from "@/app/api/bancos/statement-review/route";
 import { executeBankStatementTool } from "@/lib/ai/bank-statement-executor";
 import { executeChatPendingAction, getChatPendingAction } from "@/lib/ai/pending-action";
 import { seedChartOfAccounts } from "@/lib/contabilidad/seed-catalog";
 import { aprobarSugerencia } from "../sugerencias-concepto";
+import { cerrarEjercicio } from "@/lib/contabilidad/candado";
 import { postMonth } from "@/lib/contabilidad/posting";
 import type { ParsedTransaction } from "@/lib/bank-parser";
 const scope = { companyId: A, bankAccountId: A + "-bank", year: 2025, month: 9 };
@@ -114,7 +117,8 @@ describe.skipIf(process.env.DB_TESTS_SKIP === "1")("statement evidence against P
     await prisma.bankTransaction.update({where:{id:b.id},data:{invoiceId:invoice.id}});
     await expect(prepared(op)).rejects.toThrow(/aplicaciones/);
     await prisma.bankTransaction.update({where:{id:b.id},data:{invoiceId:null}});
-    await prisma.accountingPeriod.create({data:{companyId:A,year:2025,month:9,status:"CLOSED"}});
+    await prisma.accountingPeriod.create({data:{companyId:A,year:2025,month:13,status:"POSTED",entriesCount:2}});
+    await cerrarEjercicio(A,2025);
     await expect(prepared(op)).rejects.toThrow(/cerrado/);
   });
   it("defers category posting until verified, then posts exactly once", async () => {
@@ -143,6 +147,25 @@ describe.skipIf(process.env.DB_TESTS_SKIP === "1")("statement evidence against P
     expect((await statementPostingGate(A,2025,9)).ok).toBe(false);
     const doc=await ingest("empty-statement.pdf",[]);await verify(doc.batchId,[]);
     expect((await statementPostingGate(A,2025,9)).ok).toBe(true);
+  });
+  it("blocks legacy deletion after a later document corroborates a historic movement", async () => {
+    const legacy = await prisma.importBatch.create({ data: { companyId: A, bankAccountId: scope.bankAccountId, source: "UPLOAD", count: 1 } });
+    const movement = await prisma.bankTransaction.create({ data: { companyId: A, bankAccountId: scope.bankAccountId, fecha: row(100).fecha, monto: 100,
+      descripcion: "Historic movement", tipo: "CREDITO", source: "UPLOAD", importBatchId: legacy.id, bankReferenceId: "historic-id" } });
+    await ingest("new-evidence.ofx", [row(100, "historic-id")]);
+    await expect(deshacerLoteImportado(legacy.id, A, U)).rejects.toThrow(/Otro documento/);
+    const response = await DELETE(new Request("http://localhost/api/bancos/transactions/" + movement.id, { method: "DELETE" }), { params: Promise.resolve({ txId: movement.id }) });
+    expect(response.status).toBe(409);
+    expect(await prisma.bankTransaction.count({ where: { id: movement.id } })).toBe(1);
+    expect(await prisma.bankStatementRow.count({ where: { movementId: movement.id } })).toBe(1);
+    expect((await prisma.importBatch.findUniqueOrThrow({ where: { id: legacy.id } })).undoneAt).toBeNull();
+  });
+  it("blocks legacy deletion in closed periods even without source rows", async () => {
+    const movement = await prisma.bankTransaction.create({ data: { companyId: A, bankAccountId: scope.bankAccountId, fecha: row(100).fecha, monto: 100, descripcion: "Closed historic movement", tipo: "CREDITO", source: "UPLOAD" } });
+    await prisma.accountingPeriod.create({ data: { companyId: A, year: 2025, month: 9, status: "CLOSED" } });
+    const response = await DELETE(new Request("http://localhost/api/bancos/transactions/" + movement.id, { method: "DELETE" }), { params: Promise.resolve({ txId: movement.id }) });
+    expect(response.status).toBe(409);
+    expect(await prisma.bankTransaction.count({ where: { id: movement.id } })).toBe(1);
   });
   it("retains originals during account selection and prevents cross-company retrieval", async () => {
     const id=await stageBankOriginal(A,Buffer.from("synthetic source"),"original.pdf","application/pdf",{saldoInicial:100,holdForReview:true});

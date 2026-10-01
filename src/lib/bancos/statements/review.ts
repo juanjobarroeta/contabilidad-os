@@ -90,6 +90,7 @@ export function documentPage(review: AccountReview, documentId: string, cursor =
     items: items.slice(start, start + 50), totalItems: items.length, nextCursor: start + 50 < items.length ? start + 50 : null };
 }
 async function removalEvidence(db: Db, scope: ReviewScope, movementId: string) {
+  await db.$queryRaw`SELECT id FROM "BankTransaction" WHERE id = ${movementId} AND "companyId" = ${scope.companyId} FOR UPDATE`;
   const movement = await db.bankTransaction.findFirst({ where: { id: movementId, companyId: scope.companyId, bankAccountId: scope.bankAccountId },
     include: { cepMovimiento: true, conciliacionDetalles: { select: { id: true } }, devolucionPor: { select: { id: true } },
       gastoPagado: { select: { id: true } }, reembolsoPagado: { select: { id: true } }, rayaPagada: { select: { id: true } }, solicitudCompraPagada: { select: { id: true } },

@@ -306,7 +306,7 @@ async function intakeArchivoBanco(opts: {
       companyId,
       companyName,
       attachmentId,
-    origen: "archivo",
+      origen: "archivo",
       banco: r.detectedBank ?? null,
       periodo: null,
       saldoVerificado: false,
