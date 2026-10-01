@@ -122,6 +122,7 @@ export const LINEAS = {
       "Ahora traigo tres cosas del SAT: tus <b>facturas</b>, lo que <b>declaraste</b> cada mes y tu <b>contabilidad</b> que ya se envió. Empiezo por lo más reciente para que puedas usar la app pronto.",
   } satisfies Linea,
   historialReciente: "Ya tengo lo reciente: puedo calcular tus impuestos del mes. <b>Si quieres, sigue tú</b>; yo continúo con el resto.",
+  teAviso: "Listo: te aviso cuando tenga lo reciente y cuando termine tu historial. Ya puedes seguir.",
   historialSinFiel: "Sin e.firma no puedo descargar tu historial. Cuando la conectes en Configuración, empiezo solo.",
 
   // 06 · Bancos

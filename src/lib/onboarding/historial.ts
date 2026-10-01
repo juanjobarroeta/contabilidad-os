@@ -281,3 +281,84 @@ export function narrar(antes: MesHistorial[] | null, ahora: MesHistorial[]): Eve
   }
   return out;
 }
+
+// ── Cuánto falta (estimado honesto, de datos reales) ────────────────────────
+//
+// El tiempo lo ponen dos cosas medibles:
+//   1. Pedir: cron/sat-backfill corre cada ~10 min y pide hasta 8 meses nuevos
+//      por empresa por corrida (MAX_NEW_SUBMITS_PER_COMPANY).
+//   2. Esperar al SAT: lo que tardan las solicitudes en quedar FINISHED. Se
+//      mide (mediana de esta empresa o, sin historia, del portafolio).
+// Se expresa como RANGO, nunca como cuenta regresiva. Si el SAT pidió esperar
+// (5002), se dice: eso puede añadir hasta un día y no lo controlamos.
+
+export const MESES_POR_CORRIDA = 8;
+export const MS_ENTRE_CORRIDAS = 10 * 60_000;
+export const MS_RESPUESTA_SAT_DEFAULT = 30 * 60_000;
+
+export interface Estimado {
+  listo: boolean;
+  minMs: number;
+  maxMs: number;
+}
+
+export interface Estimacion {
+  reciente: Estimado;
+  completo: Estimado;
+  /** El SAT pidió esperar (5002) en algún mes pendiente: puede tardar más. */
+  frenadoPorSat: boolean;
+}
+
+/** Mediana de lo que tardó el SAT (de pedir a FINISHED), en ms; null sin muestras. */
+export function medianaRespuestaSat(solicitudes: Array<{ status: string; createdAt: Date | string; updatedAt: Date | string }>): number | null {
+  const ds = solicitudes
+    .filter((s) => s.status === "FINISHED")
+    .map((s) => new Date(s.updatedAt).getTime() - new Date(s.createdAt).getTime())
+    .filter((d) => d > 0 && d < 7 * 24 * 3600_000)
+    .sort((a, b) => a - b);
+  if (ds.length < 3) return null;
+  return ds[Math.floor(ds.length / 2)];
+}
+
+function rango(ms: number): Estimado {
+  return { listo: false, minMs: Math.max(5 * 60_000, Math.round(ms * 0.6)), maxMs: Math.max(15 * 60_000, Math.round(ms * 1.8)) };
+}
+
+const LISTO: Estimado = { listo: true, minMs: 0, maxMs: 0 };
+
+export function estimarTiempos(meses: MesHistorial[], respuestaSatMs: number = MS_RESPUESTA_SAT_DEFAULT): Estimacion {
+  const cerrados = meses.filter((x) => x.estado !== "cur" && x.estado !== "fuera");
+  const faltan = (xs: MesHistorial[]) => xs.filter((x) => x.estado !== "ok");
+  // Los meses sin pedir se piden de lo reciente a lo antiguo, 8 por corrida.
+  const tiempo = (xs: MesHistorial[]): number => {
+    const sinPedir = xs.filter((x) => x.estado === "pendiente" || x.estado === "quota" || x.estado === "error").length;
+    const corridas = Math.ceil(sinPedir / MESES_POR_CORRIDA);
+    return corridas * MS_ENTRE_CORRIDAS + respuestaSatMs;
+  };
+  const recientes = cerrados.slice(0, MESES_RECIENTES);
+  const faltanRecientes = faltan(recientes);
+  const faltanTodos = faltan(cerrados);
+  return {
+    reciente: faltanRecientes.length === 0 ? LISTO : rango(tiempo(faltanRecientes)),
+    completo: faltanTodos.length === 0 ? LISTO : rango(tiempo(faltanTodos)),
+    frenadoPorSat: faltanTodos.some((x) => x.estado === "quota"),
+  };
+}
+
+/** «~20 min», «30–60 min», «1–2 h», «~1 día». */
+export function rangoHumano(e: Estimado): string {
+  if (e.listo) return "listo";
+  const fmt = (ms: number) => {
+    const min = ms / 60_000;
+    if (min < 60) return { n: Math.max(5, Math.round(min / 5) * 5), u: "min" };
+    const h = min / 60;
+    if (h < 24) return { n: Math.max(1, Math.round(h)), u: "h" };
+    return { n: Math.max(1, Math.round(h / 24)), u: "día" };
+  };
+  const a = fmt(e.minMs);
+  const b = fmt(e.maxMs);
+  const plural = (x: { n: number; u: string }) => (x.u === "día" && x.n > 1 ? "días" : x.u);
+  if (a.u === b.u && a.n === b.n) return `~${a.n} ${plural(a)}`;
+  if (a.u === b.u) return `${a.n}–${b.n} ${plural(b)}`;
+  return `${a.n} ${plural(a)} – ${b.n} ${plural(b)}`;
+}

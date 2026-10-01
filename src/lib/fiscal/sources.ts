@@ -262,6 +262,17 @@ export const FUENTES: FuenteFiscal[] = [
     notas: "Aguinaldo, vacaciones, prima, finiquito/liquidación, PTU.",
   },
   {
+    clave: "GUIA-CFDI",
+    nombre: "Anexo 20 — Guía de llenado del CFDI 4.0",
+    capa: "narrativa",
+    cadencia: "por-publicacion",
+    metodo: "auto",
+    estado: "activo",
+    refresco: 'POST /api/admin/fiscal-ingest {"type":"doc","clave":"GUIA-CFDI"}',
+    autoridad: "SAT",
+    notas: "Atributo por atributo: Fecha, FormaPago, MetodoPago (PUE/PPD), UsoCFDI. La ventana de 72 h de la Fecha NO está aquí (es validación del PAC al timbrar).",
+  },
+  {
     clave: "GUIA-PAGOS",
     nombre: "Guía de llenado del complemento de pagos (REP)",
     capa: "narrativa",

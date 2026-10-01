@@ -33,6 +33,17 @@ export interface DocSpec {
  * known publication of the current version; refine as needed.
  */
 export const DOCS: Record<string, DocSpec> = {
+  // La guía PRINCIPAL del CFDI 4.0 (atributo por atributo: Fecha, FormaPago,
+  // MetodoPago PUE/PPD, UsoCFDI…). Faltaba: el copiloto sólo tenía la de pagos
+  // y la global.
+  "GUIA-CFDI": {
+    clave: "GUIA-CFDI",
+    titulo: "Anexo 20 — Guía de llenado de los comprobantes fiscales digitales por Internet (CFDI 4.0)",
+    source: "GUIA",
+    kind: "guia",
+    url: "http://omawww.sat.gob.mx/tramitesyservicios/Paginas/documentos/Anexo_20_Guia_de_llenado_CFDI.pdf",
+    vigenciaDesde: "2022-01-01",
+  },
   "GUIA-PAGOS": {
     clave: "GUIA-PAGOS",
     titulo: "Guía de llenado del CFDI con complemento para recepción de pagos (Anexo 20)",

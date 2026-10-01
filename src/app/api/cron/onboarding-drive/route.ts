@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
 import { empresasPorAtender, type ConteosEmpresa } from "@/lib/onboarding/estado";
+import { avisarHitosAlta, empresasConHitosPosibles } from "@/lib/onboarding/avisos-alta";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (o GET) /api/cron/onboarding-drive   [?companyId=<id>][&maxEmpresas=N]
@@ -130,8 +131,23 @@ async function handle(req: Request) {
     }
   }
 
+  // Avisos de hitos del alta (lo reciente / historial completo / catálogo).
+  // Idempotentes: cada hito sale una sola vez por usuario. No en corridas
+  // dirigidas a una sola empresa (las dispara el alta, no el reloj).
+  let avisos = 0;
+  if (!onlyCompanyId) {
+    for (const id of await empresasConHitosPosibles()) {
+      if (Date.now() - startedAt > TIME_BUDGET_MS) break;
+      avisos += await avisarHitosAlta(id).catch((e) => {
+        console.error("[cron/onboarding-drive] avisos de alta:", id, e instanceof Error ? e.message : e);
+        return 0;
+      });
+    }
+  }
+
   const summary = {
     ok: true,
+    avisos,
     empresasEvaluadas: conteos.length,
     // Empresas que todavía no terminan su carga inicial. Converge a 0 y ahí el
     // cron se vuelve un no-op de una sola consulta.

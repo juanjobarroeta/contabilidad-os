@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  estimarTiempos,
+  medianaRespuestaSat,
+  rangoHumano,
   cifraCorta,
   estadoDeMes,
   mesesHistorial,
@@ -13,6 +16,7 @@ import {
 import { mezclarProgreso, PROGRESO_INICIAL, sanearProgreso, tonoSugerido } from "./progreso";
 import { LINEAS, esc, t } from "./lineas";
 import { PASOS_RECORRIDO } from "./recorrido";
+import { hitosAlta } from "./avisos-alta";
 
 const HOY = new Date(Date.UTC(2026, 9, 1)); // 1-oct-2026
 
@@ -195,5 +199,57 @@ describe("líneas y recorrido", () => {
       expect(ids).toContain(id);
     }
     expect(PASOS_RECORRIDO.filter((p) => p.practico === "arrastre")).toHaveLength(1);
+  });
+});
+
+describe("cuánto falta", () => {
+  const m = (mm: number, estado: MesHistorial["estado"]): MesHistorial => ({ y: 2026, m: mm, estado, cfdis: 0, satDijo: 0, decl: null, ce: false });
+  it("todo listo → listo", () => {
+    const e = estimarTiempos([m(10, "cur"), m(9, "ok"), m(8, "ok"), m(7, "ok")]);
+    expect(e.reciente.listo && e.completo.listo).toBe(true);
+  });
+  it("meses sin pedir suman corridas de 10 min; los pedidos sólo esperan al SAT", () => {
+    const sinPedir = Array.from({ length: 20 }, (_, i) => m(9 - (i % 9), "pendiente"));
+    const e = estimarTiempos([m(10, "cur"), ...sinPedir], 30 * 60_000);
+    // 20 meses → 3 corridas (30 min) + 30 min del SAT = 60 min → rango 36–108 min
+    expect(e.completo.minMs).toBe(36 * 60_000);
+    expect(e.completo.maxMs).toBe(108 * 60_000);
+    const pedidos = estimarTiempos([m(10, "cur"), m(9, "req"), m(8, "req"), m(7, "req")], 30 * 60_000);
+    expect(pedidos.reciente.minMs).toBe(18 * 60_000);
+  });
+  it("la cuota del SAT se avisa", () => {
+    expect(estimarTiempos([m(10, "cur"), m(9, "quota")]).frenadoPorSat).toBe(true);
+  });
+  it("mediana del SAT con al menos 3 muestras", () => {
+    const s = (min: number) => ({ status: "FINISHED", createdAt: "2026-10-01T00:00:00Z", updatedAt: new Date(Date.parse("2026-10-01T00:00:00Z") + min * 60_000) });
+    expect(medianaRespuestaSat([s(10), s(20)])).toBeNull();
+    expect(medianaRespuestaSat([s(10), s(40), s(20)])).toBe(20 * 60_000);
+  });
+  it("rangos legibles", () => {
+    expect(rangoHumano({ listo: false, minMs: 18 * 60_000, maxMs: 54 * 60_000 })).toBe("20–55 min");
+    expect(rangoHumano({ listo: false, minMs: 36 * 60_000, maxMs: 108 * 60_000 })).toBe("35 min – 2 h");
+    expect(rangoHumano({ listo: false, minMs: 26 * 3600_000, maxMs: 60 * 3600_000 })).toBe("1–3 días");
+    expect(rangoHumano({ listo: true, minMs: 0, maxMs: 0 })).toBe("listo");
+  });
+});
+
+describe("hitos del alta", () => {
+  const base = { conteos: { cfdis: 1200, clientes: 0, proveedores: 0 }, catalogo: null as { anio: number; mes: number; cuentas: number } | null };
+  const res = (o: Partial<ReturnType<typeof resumirHistorial>>) => ({ total: 59, ok: 3, declaraciones: 0, balanzas: 0, recienteListo: false, completo: false, ...o });
+  it("lo reciente, luego completo; nunca a empresas viejas", () => {
+    const opts = { altaReciente: true, catalogoNuevo: false, cuentasSugeridas: 0, razonSocial: "ZIONX" };
+    expect(hitosAlta({ ...base, resumen: res({ recienteListo: true }) }, opts).map((h) => h.clave)).toEqual(["reciente"]);
+    expect(hitosAlta({ ...base, resumen: res({ recienteListo: true, completo: true, ok: 59 }) }, opts).map((h) => h.clave)).toEqual(["completo"]);
+    expect(hitosAlta({ ...base, resumen: res({ completo: true }) }, { ...opts, altaReciente: false })).toEqual([]);
+  });
+  it("el catálogo nuevo avisa y menciona las cuentas bancarias por registrar", () => {
+    const h = hitosAlta(
+      { ...base, resumen: res({}), catalogo: { anio: 2026, mes: 1, cuentas: 340 } },
+      { altaReciente: false, catalogoNuevo: true, cuentasSugeridas: 2, razonSocial: "ZIONX" },
+    );
+    expect(h).toHaveLength(1);
+    expect(h[0].cuerpo).toContain("340");
+    expect(h[0].cuerpo).toContain("2 cuentas bancarias");
+    expect(h[0].url).toBe("/bancos");
   });
 });

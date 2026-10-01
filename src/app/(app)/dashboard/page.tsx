@@ -20,6 +20,7 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import { PilotoDelCierre } from "@/components/inicio/PilotoDelCierre";
 import { ColaDeTrabajo } from "@/components/inicio/ColaDeTrabajo";
 import { HoyPendientes } from "@/components/inicio/HoyPendientes";
+import { HistorialSatCard } from "@/components/inicio/HistorialSatCard";
 import { Loading } from "@/components/ui/feedback";
 import { cn } from "@/lib/utils";
 import { ContaBotWorkPanel } from "@/components/ai/ContaBotWorkPanel";
@@ -103,6 +104,7 @@ export default function InicioPage() {
         )}
       </div>
 
+      {!enCola && <HistorialSatCard companyId={activeCompany.id} />}
       {conCierre && (
         <div className="mb-6">
           <HoyPendientes companyId={enCola ? null : activeCompany.id} />
