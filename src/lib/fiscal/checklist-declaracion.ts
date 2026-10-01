@@ -55,6 +55,7 @@ export interface PosicionResumen {
     saldoFavorAnterior: number;
     pagar: number;
     saldoAFavor: number;
+    cobrosPue?: { determinado: boolean; pendientes: number };
   };
   isr: {
     metodo: string;
@@ -129,7 +130,7 @@ export interface ChecklistInputs {
   /** REP que los PROVEEDORES nos deben por gastos PPD pagados en el mes. */
   repProveedores: { total: number; vencidos: number };
   /** Posición del periodo (de computeTaxPosition — la misma llamada, sin recalcular). */
-  iva: { pagar: number; saldoAFavor: number };
+  iva: { pagar: number; saldoAFavor: number; cobrosPueDeterminados?: boolean };
   isrPagar: number | null;
   diot: { aplica: boolean; generada: boolean; presentada: boolean };
   nomina: { tieneEmpleados: boolean; corridasDelMes: number; timbradasDelMes: number };
@@ -322,9 +323,11 @@ export function decidirChecklist(i: ChecklistInputs): ChecklistItem[] {
   items.push({
     clave: "posicion-calculada",
     titulo: "IVA e ISR del periodo",
-    estado: i.isrPagar == null ? "atencion" : "listo",
+    estado: i.isrPagar == null || i.iva.cobrosPueDeterminados === false ? "atencion" : "listo",
     detalle:
-      i.isrPagar == null
+      i.iva.cobrosPueDeterminados === false
+        ? "IVA PUE preliminar: falta confirmar el cobro o el tratamiento fiscal. Revisa el papel de IVA antes de presentar."
+        : i.isrPagar == null
         ? `${ivaTexto}. El ISR provisional no se pudo determinar (falta el coeficiente de utilidad o la tarifa del ejercicio); revísalo en los papeles de trabajo.`
         : `${ivaTexto} · ISR provisional a pagar ${formatCurrency(i.isrPagar)}.`,
     accionUrl: linkPapeles,
@@ -657,7 +660,7 @@ export async function checklistDeclaracion(
       total: repProveedoresMes.length,
       vencidos: repProveedoresMes.filter((p) => p.urgencia === "VENCIDO").length,
     },
-    iva: { pagar: pos.iva.pagar, saldoAFavor: pos.iva.saldoAFavor },
+    iva: { pagar: pos.iva.pagar, saldoAFavor: pos.iva.saldoAFavor, cobrosPueDeterminados: pos.iva.cobrosPue.determinado },
     isrPagar: pos.isr.isrPagar,
     diot: {
       aplica: diotAplica,
@@ -692,6 +695,7 @@ export async function checklistDeclaracion(
         saldoFavorAnterior: pos.iva.saldoFavorAnterior,
         pagar: pos.iva.pagar,
         saldoAFavor: pos.iva.saldoAFavor,
+        cobrosPue: { determinado: pos.iva.cobrosPue.determinado, pendientes: pos.iva.cobrosPue.pendientes.length },
       },
       isr: {
         metodo: pos.isr.metodo,

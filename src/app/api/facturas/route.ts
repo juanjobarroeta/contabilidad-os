@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resolverFechaCfdi } from "@/lib/nomina/fecha-cfdi";
+import { resolverFechaGeneracion } from "@/lib/facturas/fecha-generacion";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { filtrosListaFacturas } from "@/lib/facturas/filtros-lista";
@@ -74,7 +74,8 @@ const createInvoiceSchema = z.object({
   // Fecha del CFDI (AAAA-MM-DD). El SAT acepta fecharlo hasta 72 h antes del
   // timbrado: sirve para dejar en su mes una operación del día 30/31 que se
   // timbra el 1–3 del siguiente. Ausente = la fecha del timbrado.
-  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  fecha: z.string().max(35).optional(),
+  fechaGeneracionConfirmada: z.boolean().optional(),
 });
 
 // GET /api/facturas?companyId=xxx&q=search&tipo=EGRESO&take=20
@@ -185,10 +186,11 @@ export async function POST(req: Request) {
 
   const { companyId, customerId, formaPago, metodoPago, usoCfdi, items, notes, global: globalInfo } = parsed.data;
 
-  // Fecha del CFDI antedatada (dentro de la ventana de 72 h del SAT).
+  // Actual generation timestamp; collection timing is a separate fiscal fact.
   let fechaCfdi: Date | undefined;
   if (parsed.data.fecha) {
-    const f = resolverFechaCfdi(parsed.data.fecha, new Date(), "factura");
+    if(parsed.data.fechaGeneracionConfirmada!==true) return NextResponse.json({error:"Confirma que la fecha y hora corresponden a la generación real del comprobante; no al cobro."},{status:400});
+    const f = resolverFechaGeneracion(parsed.data.fecha);
     if (f.error) return NextResponse.json({ error: f.error }, { status: 400 });
     fechaCfdi = f.fechaCfdi;
   }
@@ -432,6 +434,8 @@ export async function POST(req: Request) {
       uuid: invoice.uuid,
       total: invoice.total,
       clienteRfc: customer.rfc,
+      fechaGeneracionSolicitada: parsed.data.fecha ?? null,
+      fechaGeneracionConfirmada: parsed.data.fechaGeneracionConfirmada === true,
     },
     req,
   });

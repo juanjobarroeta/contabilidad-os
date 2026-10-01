@@ -53,6 +53,11 @@ function item(items: ChecklistItem[], clave: string): ChecklistItem {
 }
 
 describe("decidirChecklist — empresa limpia", () => {
+  it("does not mark the position ready while PUE collection evidence is unresolved", () => {
+    const result = decidirChecklist(baseInputs({ iva: { pagar: 2000, saldoAFavor: 0, cobrosPueDeterminados: false } }));
+    expect(item(result, "posicion-calculada")).toMatchObject({ estado: "atencion" });
+    expect(item(result, "posicion-calculada").detalle).toContain("preliminar");
+  });
   it("todo listo cuando datos completos, conciliado, complementado y presentada", () => {
     const items = decidirChecklist(baseInputs());
     expect(items.length).toBe(12);

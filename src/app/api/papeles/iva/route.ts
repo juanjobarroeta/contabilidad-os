@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
 import { assertPaginaHospitalEnApi } from "@/lib/hospital/permisos";
 import { toCsv, type CsvRow } from "@/lib/csv";
-import { calcularActosDelPeriodo } from "@/lib/fiscal/iva";
+import { actosConCobrosPue, loadPueIncomeCollections, pueCollectionWarnings } from "@/lib/fiscal/iva-pue-cobros-db";
 import { reconciliacionActiva } from "@/lib/fiscal/conciliacion-pue";
 import { aplicarFlujoPue, pagosPueDelPeriodo, puesAnterioresPagadosEnPeriodo, type ModoPue } from "@/lib/fiscal/iva-pue-flujo";
 import { notasRecibidasPorPadre, padresDeNotasRecibidas, reduccionPorNotaRecibida, totalNetoDeNotas } from "@/lib/fiscal/iva-notas-credito";
@@ -77,12 +77,9 @@ export async function GET(req: Request) {
     throw e;
   }
 
-  // Mismos límites del mes que el motor (computeTaxPosition): hora LOCAL del
-  // servidor, no UTC. Con UTC aquí y local allá, un REP con FechaPago en las
-  // horas de frontera caía en meses distintos y el papel no cuadraba con el
-  // copiloto por $180 en el trasladado (agosto 2026). Un solo criterio.
-  const from = new Date(year, month - 1, 1);
-  const to = new Date(year, month, 1);
+  // Stored fiscal dates and the calculator use UTC month boundaries.
+  const from = new Date(Date.UTC(year, month - 1, 1));
+  const to = new Date(Date.UTC(year, month, 1));
   const periodo = `${year}-${String(month).padStart(2, "0")}`;
 
   // Previous month's declaration for saldo a favor carryover
@@ -220,6 +217,12 @@ export async function GET(req: Request) {
     tasa: number | null;
     importe: number;
     metodoPago: string;
+    fechaCfdi?: string;
+    fechasCobro?: string[];
+    fuenteCobro?: string;
+    fingerprint?: string;
+    motivosCobro?: string[];
+    evidenciaCobro?: { id: string; fecha: string; monto: number; referencia: string }[];
     /** PUE acreditable sin pago conciliado en banco (cash-basis, Art. 5-I LIVA). */
     sinPagoConciliado?: boolean;
     /** PUE acreditable con pago conciliado en banco (lo opuesto a sinPagoConciliado). */
@@ -260,10 +263,25 @@ export async function GET(req: Request) {
 
   const trasladado: Row[] = [];
   const retenidoPorClientes: Row[] = [];
+  const cobrosPue = await loadPueIncomeCollections(companyId, from, to);
+
+  for (const {invoice:inv,result:r,fingerprint,review} of cobrosPue.rows) {
+    const row = {
+      id:inv.id, fecha:r.fechasCobro.find((d)=>d.startsWith(periodo)) ?? r.fechaCfdi, fechaCfdi:r.fechaCfdi,
+      fechasCobro:r.fechasCobro, fuenteCobro:r.fuente, fingerprint:member.role !== "VIEWER" ? fingerprint : undefined,
+      revisionCobro:review, motivosCobro:r.incidencias, evidenciaCobro:r.evidencia,
+      uuid:inv.uuid,serie:inv.serie,folio:inv.folio,contraparte:nombreContraparte(inv),rfc:rfcContraparte(inv),
+      subtotal:Math.round((inv.subtotal-inv.descuento)*r.fraccion*100)/100,tasa:null,metodoPago:"PUE",
+      revisar:!r.determinado,motivoRevisar:r.incidencias.join(" "),excluidoAcreditamiento:inv.ivaNoCausado,
+    };
+    trasladado.push({...row,importe:r.trasladado});
+    if(r.retenido>0) retenidoPorClientes.push({...row,importe:r.retenido});
+  }
 
   for (const inv of ingresos) {
+    if (inv.metodoPago === "PUE" && inv.tipoSat !== "E") continue;
     const { trasladado: t, retenido: r } = extractIva(inv);
-    // PUE causa al emitirse; PPD causa al cobrarse (se arma abajo desde los REP).
+    // PUE income above follows collection; PPD below follows REP FechaPago.
     if (t > 0.005 && inv.metodoPago !== "PPD") {
       trasladado.push({
         id: inv.id,
@@ -598,7 +616,7 @@ export async function GET(req: Request) {
   // IVA retenido a proveedores el MES ANTERIOR (y enterado con aquella
   // declaración): acreditable en ésta (Art. 5-IV LIVA). Mismo criterio de flujo
   // que el motor mensual.
-  const prevFrom = new Date(year, month - 2, 1);
+  const prevFrom = new Date(Date.UTC(year, month - 2, 1));
   const retenidoMesAnteriorAcreditable = await ivaRetenidoAProveedoresEnPeriodo(companyId, prevFrom, from);
 
   const sum = (rs: Row[]) => rs.reduce((s, r) => s + r.importe, 0);
@@ -636,7 +654,7 @@ export async function GET(req: Request) {
   // Proporción de acreditamiento (Art. 5-V LIVA): con actos exentos en el mes,
   // el IVA acreditable sólo procede en gravados/(gravados+exentos). Mismo
   // helper que el motor (computeTaxPosition) para no divergir.
-  const actos = calcularActosDelPeriodo(ingresos);
+  const actos = actosConCobrosPue(ingresos, cobrosPue.summary);
   const acreditableProcedente = +(totalAcreditable * actos.proporcion).toFixed(2);
 
   // IVA cargo = trasladado - retenidoPorClientes - acreditable procedente
@@ -726,6 +744,8 @@ export async function GET(req: Request) {
     ppdSinComplemento,
     ppdIngresoPendiente,
     depositosSinFactura,
+    cobrosPue: cobrosPue.summary,
+    advertencias: pueCollectionWarnings(cobrosPue.summary),
   };
 
   if (format === "csv") {
@@ -741,6 +761,11 @@ export async function GET(req: Request) {
       "Tasa",
       "IVA importe",
       "Método pago",
+      "Fecha CFDI",
+      "Fechas de cobro",
+      "Fuente del cobro",
+      "Evidencia",
+      "Revisión pendiente",
     ];
 
     const section = (label: string, rows: Row[]): CsvRow[] =>
@@ -756,9 +781,12 @@ export async function GET(req: Request) {
         r.tasa != null ? (r.tasa * 100).toFixed(2) + "%" : "",
         r.importe.toFixed(2),
         r.metodoPago,
+        r.fechaCfdi??"", r.fechasCobro?.join("; ")??"", r.fuenteCobro??"",
+        r.evidenciaCobro?.map((e)=>e.referencia).join("; ")??"",r.motivosCobro?.join("; ")??"",
       ]);
 
     const rows: CsvRow[] = [
+      ...pueCollectionWarnings(cobrosPue.summary).map((message)=>["ADVERTENCIA",message]),
       ...section("IVA trasladado (cobrado)", trasladado),
       ...section("IVA acreditable (pagado)", acreditable),
       ...section("IVA retenido por clientes", retenidoPorClientes),

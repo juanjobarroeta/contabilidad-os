@@ -247,7 +247,7 @@ export function DeclaracionWorkspace() {
         ...(filing && acuseParsed ? { acuse: acuseParsed } : {}),
       });
       await load();
-    } catch { setError("No se pudo guardar la declaración"); }
+    } catch (e) { setError(e instanceof Error && e.message ? e.message : "No se pudo guardar la declaración"); }
     finally { setSaving(false); }
   }
 
@@ -631,7 +631,7 @@ function PapelesTab({ companyId, month, year, onChanged }: { companyId: string; 
         </a>
       </div>
 
-      {sub === "iva" && <IvaPanel companyId={companyId} year={year} month={month} />}
+      {sub === "iva" && <IvaPanel companyId={companyId} year={year} month={month} onCobroSaved={onChanged} />}
       {/* IsrPanel ya incluye el editor de coeficiente (con la fuente correcta del
           motor); onCoefSaved refresca el total del padre (Resumen/Presentar). */}
       {sub === "isr" && <IsrPanel companyId={companyId} year={year} month={month} onCoefSaved={onChanged} />}

@@ -184,6 +184,7 @@ export async function GET(req: Request) {
       saldoAFavor: pos.iva.saldoAFavor,
       // Devengado (informational — all stamped CFDIs regardless of payment)
       devengado: pos.iva.devengado,
+      cobrosPue: pos.iva.cobrosPue,
     },
     // Asimilados a salarios recibidos (Art. 94) — null si la empresa no recibe.
     asimilados,
@@ -279,6 +280,25 @@ export async function POST(req: Request) {
   const member = await getEffectiveCompanyMembership(session.user.id, companyId);
   if (!member || member.role === "VIEWER") {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
+  }
+
+  if (tipo === "IVA_MENSUAL" && ivaData) {
+    if (typeof periodo!=="string" || !/^\d{4}-(0[1-9]|1[0-2])$/.test(periodo)) return NextResponse.json({error:"Periodo inválido."},{status:400});
+    const [fy,fm]=periodo.split("-").map(Number);
+    const calculation=await calculationForApi(computeTaxPosition(companyId,fy,fm));
+    if(calculation instanceof NextResponse) return calculation;
+    if(!calculation.iva.cobrosPue.determinado) return NextResponse.json({
+      code:"IVA_COBRO_REVIEW_REQUIRED",error:"El IVA PUE requiere confirmar el cobro o su tratamiento. Revisa el papel de IVA antes de guardar el cálculo.",
+      pendientes:calculation.iva.cobrosPue.pendientes.slice(0,25),
+    },{status:422});
+    const [filed,closed]=await Promise.all([
+      prisma.taxDeclaration.findFirst({where:{companyId,tipo:"IVA_MENSUAL",periodo,status:{in:["FILED","PAID"]}},select:{id:true}}),
+      prisma.accountingPeriod.findFirst({where:{companyId,year:fy,month:fm,status:"CLOSED"},select:{id:true}}),
+    ]);
+    if(filed||closed) return NextResponse.json({code:"PERIOD_REVIEW_REQUIRED",error:"El periodo ya está cerrado o declarado. Revisa la corrección del periodo; no se sobrescribió el cálculo guardado."},{status:409});
+    if(typeof ivaData.trasladado!=="number" || !Number.isFinite(ivaData.trasladado) || Math.abs(ivaData.trasladado-calculation.iva.trasladado)>.01) return NextResponse.json({
+      code:"STALE_IVA_CALCULATION",error:"Cambió la evidencia del IVA trasladado. Recarga el cálculo antes de guardarlo.",
+    },{status:409});
   }
 
   // Acuse/presentación patch shared by every row of the period. Each field is

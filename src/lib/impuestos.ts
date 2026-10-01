@@ -4,7 +4,7 @@ import { calcularIsrResicoPf } from "./resico";
 import { calcularIsrProvisionalPf } from "./fiscal/isr-pf";
 import { calcularIsrArrendamientoMensual, esErogacionPredial } from "./fiscal/isr-arrendamiento";
 import { calcularIsrPlataformas, normalizarActividadPlataforma, TASAS_PLATAFORMA } from "./fiscal/isr-plataformas";
-import { calcularActosDelPeriodo } from "./fiscal/iva";
+import { actosConCobrosPue, loadPueIncomeCollections, pueCollectionWarnings } from "./fiscal/iva-pue-cobros-db";
 import { calcularDepreciacionRegistroPeriodo } from "./fiscal/activos-registro";
 import { efosRfcsBloqueados } from "./fiscal/efos/service";
 import { perdidasDisponibles } from "./fiscal/perdidas";
@@ -41,7 +41,7 @@ function filtroEfos(bloqueados: Set<string>): Record<string, unknown> {
 // page, the AI/WhatsApp tools, and the dashboard — one source of truth.
 //
 // IVA is on FLUJO DE EFECTIVO (cash basis, Art. 1-B LIVA):
-//   - PUE: causa el mes de emisión (se asume pagada)
+//   - PUE ingreso: cobro conciliado/documentado; sin evidencia, sólo estimación.
 //   - PPD: causa el mes del PAGO, tomado del Complemento de Pago (REP). El IVA
 //     trasladado proviene del propio REP (complemento 2.0, valor firme) o se
 //     prorratea de la factura madre para REP legacy 1.0 sin desglose. La
@@ -250,6 +250,8 @@ export interface TaxPosition {
       sinPago: { iva: number; cfdis: number };
       anterioresPagadosEsteMes: number;
     };
+    /** Evidence for outgoing PUE timing; false means the displayed tax is preliminary. */
+    cobrosPue: Awaited<ReturnType<typeof loadPueIncomeCollections>>["summary"];
     /** Notas de crédito recibidas en el mes: IVA que se RESTÓ del acreditable
      *  (Art. 7 LIVA), en positivo, y cuántas restaron algo. */
     notasCreditoRecibidas: { iva: number; cfdis: number };
@@ -842,13 +844,16 @@ export async function computeTaxPosition(
   }
 
   // ── IVA (flujo de efectivo) ──────────────────────────────────────────────
-  const ivaTrasladadoPUE = facturasEmitidas
-    .filter((inv) => inv.metodoPago === "PUE" && !inv.ivaNoCausado)
-    .reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * ivaTrasladado(inv), 0);
+  const cobrosPue = await loadPueIncomeCollections(companyId, from, to);
+  // Credit notes retain their separate adjustment path; a late invoice never
+  // creates a second collection or changes the CFDI timestamp.
+  const ivaTrasladadoPUE = cobrosPue.summary.trasladado + facturasEmitidas
+    .filter((inv) => inv.metodoPago === "PUE" && inv.tipoSat === "E" && !inv.ivaNoCausado)
+    .reduce((s, inv) => s - ivaTrasladado(inv), 0);
   const ivaTrasladadoTotal = ivaTrasladadoPUE + ivaTrasladadoPPD;
 
   const ivaTrasladadoDevengado = facturasEmitidas.reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * ivaTrasladado(inv), 0);
-  const ivaRetenidoPorClientes = facturasEmitidas.reduce(
+  const ivaRetenidoPorClientes = cobrosPue.summary.retenido + facturasEmitidas.filter((i)=>i.metodoPago!=="PUE" || i.tipoSat==="E").reduce(
     (sum, inv) => sum + inv.taxes.filter((t) => t.tipo === "IVA" && t.retencion).reduce((s, t) => s + t.importe, 0),
     0
   );
@@ -936,7 +941,7 @@ export async function computeTaxPosition(
   // el IVA de los gastos sólo procede en gravados/(gravados+exentos). v1 trata
   // todos los gastos como indistintos (sin destino etiquetado por gasto). Sin
   // exentos la proporción es 1 y el comportamiento no cambia.
-  const actos = calcularActosDelPeriodo(facturasEmitidas);
+  const actos = actosConCobrosPue(facturasEmitidas, cobrosPue.summary);
   const ivaAcreditable = round2(ivaAcreditableBruto * actos.proporcion);
 
   // SALDO A FAVOR DE MESES ANTERIORES (Art. 6 LIVA). Sólo se acredita «contra el
@@ -1402,6 +1407,7 @@ export async function computeTaxPosition(
   const mesesConDeclaracion = new Set(declaracionesPrevias.map((d) => d.periodo));
   if (prevDeclaracion || prevIsrDeclaracion) mesesConDeclaracion.add(prevPeriodo);
   const advertencias = [
+    ...pueCollectionWarnings(cobrosPue.summary),
     ...advertenciasCadenaDeclaraciones({ year, month, mesesConActividad, mesesConDeclaracion }),
     ...advertenciasPerdida,
   ];
@@ -1441,6 +1447,7 @@ export async function computeTaxPosition(
         sinPago: { iva: round2(ivaPueSinPago), cfdis: cfdisPueSinPago },
         anterioresPagadosEsteMes: round2(ivaAcreditablePueAnteriores),
       },
+      cobrosPue: cobrosPue.summary,
       // Notas de crédito recibidas: IVA que el mes RESTA del acreditable (Art. 7).
       notasCreditoRecibidas: { iva: round2(ivaNotasRecibidas), cfdis: cfdisNotasRecibidas },
     },
