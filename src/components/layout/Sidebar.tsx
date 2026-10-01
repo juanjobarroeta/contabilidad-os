@@ -242,6 +242,7 @@ export function Sidebar({ user, esOperador }: SidebarProps) {
           largo. Sólo dispara el evento; el paletón lo escucha desde el layout. */}
       <div className="px-3 pt-3">
         <button
+          data-tour="buscar"
           onClick={() => window.dispatchEvent(new CustomEvent("cos:abrir-buscador"))}
           className="flex w-full items-center gap-2 rounded-md border border-cos-line px-2.5 py-2 text-sm text-cos-ink-faint transition-colors hover:border-cos-brand/40 hover:bg-cos-paper hover:text-cos-ink-soft"
         >

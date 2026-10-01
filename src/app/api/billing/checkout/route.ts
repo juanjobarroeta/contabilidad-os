@@ -87,6 +87,10 @@ export async function POST(req: Request) {
       ? returnPathRaw
       : "/onboarding";
 
+  // Alta nueva (precios → pago → onboarding con mascota): sin satélite de por
+  // medio, Stripe regresa directo a /onboarding en vez de a Facturación.
+  const flujoAlta = (body as { flujo?: unknown } | null)?.flujo === "alta";
+
   try {
     const customerId = await resolveStripeCustomerId(session.user.id);
     const base = appBaseUrl();
@@ -115,10 +119,14 @@ export async function POST(req: Request) {
       locale: "es-419",
       success_url: returnBase
         ? `${returnBase}${returnPath}?checkout=exito`
-        : `${base}/configuracion/facturacion?checkout=exito`,
+        : flujoAlta
+          ? `${base}/onboarding?checkout=exito`
+          : `${base}/configuracion/facturacion?checkout=exito`,
       cancel_url: returnBase
         ? `${returnBase}${returnPath}?checkout=cancelado`
-        : `${base}/configuracion/facturacion?checkout=cancelado`,
+        : flujoAlta
+          ? `${base}/onboarding?checkout=cancelado`
+          : `${base}/configuracion/facturacion?checkout=cancelado`,
     });
 
     return NextResponse.json({ url: checkout.url });

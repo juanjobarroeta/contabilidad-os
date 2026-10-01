@@ -100,6 +100,16 @@ export const RUTAS_PUBLICAS: EntradaAllowlist[] = [
  */
 export const RUTAS_CON_AUTH_PROPIA: EntradaAllowlist[] = [
   {
+    ruta: "api/onboarding/fiel/route.ts",
+    razon:
+      "No toca datos de ninguna empresa: valida la e.firma y pide la CSF ANTES de que exista la empresa (no guarda nada). El único companyId es el `null` que se pasa a la guardia de IA (tope por usuario).",
+  },
+  {
+    ruta: "api/onboarding/progreso/route.ts",
+    razon:
+      "Lee/escribe User.onboarding del propio usuario (requireUser). El companyId que guarda se verifica contra CompanyMember del mismo usuario antes de aceptarlo; no lee datos de la empresa.",
+  },
+  {
     ruta: "api/onboarding/parse-csf/route.ts",
     razon:
       "No toca datos de ninguna empresa: lee un PDF subido ANTES de que exista la empresa. El único companyId es el `null` que se pasa a la guardia de IA (tope por usuario).",
