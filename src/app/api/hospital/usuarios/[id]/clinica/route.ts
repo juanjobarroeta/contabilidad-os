@@ -2,7 +2,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, requireMembership, requireModule } from "@/lib/authz";
 import { withHospital } from "@/lib/hospital/with-hospital";
-import { combinarPermisos, PERMISOS_CLINICOS } from "@/lib/hospital/permisos";
+import { combinarPermisos, PERMISOS_CLINICOS, type PermisoClinico } from "@/lib/hospital/permisos";
 import { errorZod } from "@/lib/hospital/http";
 
 // PATCH /api/hospital/usuarios/[id]/clinica
@@ -13,8 +13,10 @@ import { errorZod } from "@/lib/hospital/http";
 // el mismo profesional que ya está vinculado y verificado se conserva sin
 // volver a verificarlo (no pide evidencia ni otro administrador). Sólo un
 // profesional DISTINTO pasa por la verificación completa; null la revoca.
+// `permisos` ausente = sólo la identidad médica (Usuarios guarda el acceso
+// con puestos por PATCH /usuarios/[id] { action: "acceso" }).
 const schema = z.object({
-  permisos: z.array(z.enum(PERMISOS_CLINICOS)),
+  permisos: z.array(z.enum(PERMISOS_CLINICOS)).optional(),
   grupo: z.enum(["clinicos", "operacion"]).optional(),
   medicoId: z.string().nullable().optional(),
   evidencia: z.string().trim().min(10).max(2000).optional(),
@@ -28,7 +30,7 @@ export const PATCH = withHospital(async (req: Request, ctx: { params: Promise<{ 
   if (!target) throw new AuthzError(404, "Membresía no encontrada");
   const { user, membership } = await requireMembership(target.companyId, ["OWNER", "ADMIN"], req);
   await requireModule(target.companyId, "HOSPITAL", req);
-  const permisos = combinarPermisos(target.hospitalPermisos, d.data.permisos, d.data.grupo);
+  const permisos = d.data.permisos === undefined ? (target.hospitalPermisos as PermisoClinico[]) : combinarPermisos(target.hospitalPermisos, d.data.permisos, d.data.grupo);
   if (["OWNER", "ADMIN"].includes(target.role) && membership.role !== "OWNER" && [...permisos].sort().join() !== [...target.hospitalPermisos].sort().join()) throw new AuthzError(403, "Sólo el dueño administra los permisos de dirección");
   if (target.role === "VIEWER" && permisos.some(p => p !== "CLINICA_LEER")) throw new AuthzError(400, "Sólo lectura: no puede recibir permisos de escritura");
   await prisma.$transaction(async tx => {

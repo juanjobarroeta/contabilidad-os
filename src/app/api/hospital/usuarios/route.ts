@@ -1,4 +1,5 @@
 import { PERMISOS_CLINICOS } from "@/lib/hospital/permisos";
+import { accesoEfectivo, ajustesSchema, leerAjustes, SIN_AJUSTES, validarRolYPermisos } from "@/lib/hospital/puestos";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
@@ -36,6 +37,8 @@ export const GET = withAuthz(async (req: Request) => {
       paginas: m.hospitalPaginas,
       permisosClinicos: m.hospitalPermisos,
       sinRestriccion: m.hospitalPaginas.length === 0,
+      puestoId: m.hospitalPuestoId,
+      ajustes: leerAjustes(m.hospitalAjustes),
       createdAt: m.createdAt,
     }))
   );
@@ -51,6 +54,9 @@ const createSchema = z.object({
   // Llaves de página del satélite; [] = todas. Strings opacos para el hub.
   permisosClinicos: z.array(z.enum(PERMISOS_CLINICOS)).default([]),
     paginas: z.array(z.string().trim().min(1).max(40)).max(64).default([]),
+  // Con puesto, páginas y permisos salen de él (más los ajustes) y se ignoran los de arriba.
+  puestoId: z.string().min(1).nullable().optional(),
+  ajustes: ajustesSchema.optional(),
 });
 
 // POST /api/hospital/usuarios — crea un usuario-empleado y su membresía en un
@@ -66,7 +72,9 @@ export const POST = withAuthz(async (req: Request) => {
     const first = parsed.error.issues[0]?.message ?? "Datos inválidos";
     return NextResponse.json({ error: first }, { status: 400 });
   }
-  const { companyId, nombre, email, password, role, paginas, permisosClinicos } = parsed.data;
+  const { companyId, nombre, email, password, role, puestoId } = parsed.data;
+  let { paginas, permisosClinicos } = parsed.data;
+  const ajustes = parsed.data.ajustes ?? SIN_AJUSTES;
 
   const { user: actor } = await requireMembership(companyId, ["OWNER", "ADMIN"], req);
   await requireModule(companyId, "HOSPITAL", req);
@@ -81,6 +89,15 @@ export const POST = withAuthz(async (req: Request) => {
       { status: 409 }
     );
   }
+
+  if (puestoId) {
+    const puesto = await prisma.hospPuesto.findUnique({ where: { id: puestoId } });
+    if (!puesto || puesto.companyId !== companyId) return NextResponse.json({ error: "Puesto no encontrado" }, { status: 404 });
+    const ef = accesoEfectivo(puesto, ajustes);
+    paginas = ef.paginas;
+    permisosClinicos = ef.permisos;
+  }
+  validarRolYPermisos(role, permisosClinicos);
 
   const hashed = await bcrypt.hash(password, 10);
   const member = await prisma.$transaction(async (tx) => {
@@ -101,6 +118,8 @@ export const POST = withAuthz(async (req: Request) => {
         allowedModules: ["HOSPITAL"],
         hospitalPaginas: paginas,
         hospitalPermisos: permisosClinicos,
+        hospitalPuestoId: puestoId ?? null,
+        hospitalAjustes: puestoId ? ajustes : undefined,
       },
       include: { user: { select: { id: true, name: true, email: true } } },
     });
@@ -127,6 +146,8 @@ export const POST = withAuthz(async (req: Request) => {
       paginas: member.hospitalPaginas,
       permisosClinicos: member.hospitalPermisos,
       sinRestriccion: member.hospitalPaginas.length === 0,
+      puestoId: member.hospitalPuestoId,
+      ajustes,
     },
     { status: 201 }
   );
