@@ -44,3 +44,17 @@ describe("resolverFechaCfdi", () => {
     expect(resolverFechaCfdi("", AHORA).error).toMatch(/inválida/);
   });
 });
+
+describe("fecha del CFDI de factura", () => {
+  it("una operación del 30 se puede fechar el 1 del mes siguiente", () => {
+    const ahora = new Date("2026-10-01T18:00:00-06:00");
+    const r = resolverFechaCfdi("2026-09-30", ahora, "factura");
+    expect(r.error).toBeUndefined();
+    expect(r.fechaCfdi?.toISOString()).toBe(new Date("2026-09-30T23:59:00-06:00").toISOString());
+  });
+  it("fuera de las 72 h, el mensaje de factura no habla de nómina", () => {
+    const r = resolverFechaCfdi("2026-09-25", new Date("2026-10-01T18:00:00-06:00"), "factura");
+    expect(r.error).toMatch(/72 horas/);
+    expect(r.error).not.toMatch(/nómina/);
+  });
+});

@@ -197,6 +197,9 @@ export default function NuevaFacturaPage() {
   const [formaPago, setFormaPago] = useState("03");
   const [metodoPago, setMetodoPago] = useState("PUE");
   const [usoCfdi, setUsoCfdi] = useState("G03");
+  // Fecha del CFDI: vacía = la del timbrado. El SAT deja fecharlo hasta 72 h
+  // antes (una operación del 30 timbrada el 1–3 del mes siguiente).
+  const [fechaCfdi, setFechaCfdi] = useState("");
   const [notas, setNotas] = useState("");
   // Retención local del 5 al millar (obra pública, Art. 191 LFD). Opcional y
   // apagada por omisión: sólo aplica a contratos con dependencias, no a un
@@ -696,7 +699,7 @@ export default function NuevaFacturaPage() {
           "Content-Type": "application/json",
           "Idempotency-Key": idempotencyKey,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, ...(fechaCfdi ? { fecha: fechaCfdi } : {}) }),
       });
 
       if (!res.ok) {
@@ -1051,6 +1054,24 @@ export default function NuevaFacturaPage() {
               </div>
             </div>
 
+            {/* Fecha del CFDI (antedatar dentro de las 72 h del SAT) */}
+            {!prefacturaId && (
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Fecha del CFDI</label>
+                <input
+                  type="date"
+                  value={fechaCfdi || hoyCdmx()}
+                  min={haceDiasCdmx(3)}
+                  max={hoyCdmx()}
+                  onChange={(e) => setFechaCfdi(e.target.value === hoyCdmx() ? "" : e.target.value)}
+                  className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-cos-card"
+                />
+                <p className="mt-1 text-xs text-cos-ink-faint">
+                  El SAT permite fecharla hasta 72 horas antes del timbrado: una operación del día 30 o 31 se puede timbrar el 1–3 del mes siguiente y quedar en su mes.
+                </p>
+              </div>
+            )}
+
             {/* Uso CFDI */}
             <div>
               <label className="block text-sm font-medium mb-1.5">Uso del CFDI <span className="text-cos-red-ink">*</span></label>
@@ -1373,6 +1394,12 @@ export default function NuevaFacturaPage() {
                   <p className="text-xs text-cos-ink-soft mb-0.5">Uso CFDI</p>
                   <p className="font-medium">{usoCfdi}</p>
                 </div>
+                {fechaCfdi && !prefacturaId && (
+                  <div>
+                    <p className="text-xs text-cos-ink-soft mb-0.5">Fecha del CFDI</p>
+                    <p className="font-medium">{fechaCfdi}</p>
+                  </div>
+                )}
               </div>
 
               {/* Items */}
@@ -1524,4 +1551,14 @@ export default function NuevaFacturaPage() {
       )}
     </div>
   );
+}
+
+/** Hoy (AAAA-MM-DD) en hora del centro de México. */
+function hoyCdmx(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Mexico_City" });
+}
+
+/** Hace `n` días (AAAA-MM-DD) en hora del centro de México. */
+function haceDiasCdmx(n: number): string {
+  return new Date(Date.now() - n * 86_400_000).toLocaleDateString("en-CA", { timeZone: "America/Mexico_City" });
 }
