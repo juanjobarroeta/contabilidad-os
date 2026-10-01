@@ -265,6 +265,8 @@ export function CopilotoMascota({
     async (el: HTMLElement) => {
       const ref = leerObjetivo(el, pathname);
       if (!ref) return;
+      // El recorrido del alta escucha esto para su paso práctico (arrastre o ⌘/).
+      window.dispatchEvent(new CustomEvent("cos:copiloto-explica", { detail: { el } }));
       soltarFijado();
       fijado.current = el;
       el.classList.add("copiloto-fijado");

@@ -12,9 +12,13 @@ export async function GET() {
   const dm = await prisma.despachoMember.findUnique({
     where: { userId: session.user.id },
     select: {
+      role: true,
       despacho: { select: { name: true, defaultTier: true, maxEmpresas: true } },
     },
   });
+  // Empresas a las que ya entra: con alguna, /onboarding es «agregar otra»
+  // (sin bienvenida ni recorrido).
+  const empresas = await prisma.companyMember.count({ where: { userId: session.user.id } });
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { subscriptionStatus: true },
@@ -28,5 +32,7 @@ export async function GET() {
     sinCargo: invitado && user?.subscriptionStatus === "ACTIVE",
     syntage: invitado ? dm!.despacho!.defaultTier !== "ASISTENTE" : null,
     maxEmpresas: dm?.despacho?.maxEmpresas ?? null,
+    despachoRol: dm?.role ?? null,
+    empresas,
   });
 }

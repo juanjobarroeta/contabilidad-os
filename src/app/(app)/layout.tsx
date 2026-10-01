@@ -12,6 +12,7 @@ import { accesoSuspendido } from "@/lib/billing/suspension";
 import { CuentaSuspendida } from "@/components/layout/CuentaSuspendida";
 import { isOperador } from "@/lib/authz";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
+import { RecorridoAlta } from "@/components/onboarding/RecorridoAlta";
 import { PushOptIn } from "@/components/pwa/PushOptIn";
 import { AceptacionLegalGate } from "@/components/legal/AceptacionLegalGate";
 import { pendientesDeUsuario } from "@/lib/legal/aceptaciones";
@@ -130,6 +131,7 @@ export default async function AppLayout({
         <ChatPanel />
         <AbrirChatDesdeNotif />
         <InstallPrompt />
+        <RecorridoAlta />
         <PushOptIn />
       </div>
       </PeriodProvider>
