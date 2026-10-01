@@ -197,9 +197,10 @@ export default function NuevaFacturaPage() {
   const [formaPago, setFormaPago] = useState("03");
   const [metodoPago, setMetodoPago] = useState("PUE");
   const [usoCfdi, setUsoCfdi] = useState("G03");
-  // Fecha del CFDI: vacía = la del timbrado. El SAT deja fecharlo hasta 72 h
-  // antes (una operación del 30 timbrada el 1–3 del mes siguiente).
+  // Empty = generate now. An explicit timestamp must be real and zoned.
   const [fechaCfdi, setFechaCfdi] = useState("");
+  const [fechaZona, setFechaZona] = useState("");
+  const [fechaConfirmada, setFechaConfirmada] = useState(false);
   const [notas, setNotas] = useState("");
   // Retención local del 5 al millar (obra pública, Art. 191 LFD). Opcional y
   // apagada por omisión: sólo aplica a contratos con dependencias, no a un
@@ -655,6 +656,9 @@ export default function NuevaFacturaPage() {
 
   async function handleStamp() {
     if (!activeCompany || !selectedCliente) return;
+    if(!prefacturaId && fechaCfdi && (!fechaZona || !fechaConfirmada)) {
+      setSubmitError("Confirma la hora real de generación y el huso del lugar de expedición.");return;
+    }
     setSubmitting(true);
     setSubmitError("");
     // Llave de idempotencia: una nueva por intento de envío. El botón
@@ -699,7 +703,7 @@ export default function NuevaFacturaPage() {
           "Content-Type": "application/json",
           "Idempotency-Key": idempotencyKey,
         },
-        body: JSON.stringify({ ...payload, ...(fechaCfdi ? { fecha: fechaCfdi } : {}) }),
+        body: JSON.stringify({ ...payload, ...(fechaCfdi ? { fecha: fechaCfdi+fechaZona, fechaGeneracionConfirmada:fechaConfirmada } : {}) }),
       });
 
       if (!res.ok) {
@@ -1054,21 +1058,27 @@ export default function NuevaFacturaPage() {
               </div>
             </div>
 
-            {/* Fecha del CFDI (antedatar dentro de las 72 h del SAT) */}
+            {/* Generation and collection dates have different legal effects. */}
             {!prefacturaId && (
               <div>
-                <label className="block text-sm font-medium mb-1.5">Fecha del CFDI</label>
+                <label htmlFor="fecha-generacion-cfdi" className="block text-sm font-medium mb-1.5">Fecha y hora de generación del CFDI (opcional)</label>
                 <input
-                  type="date"
-                  value={fechaCfdi || hoyCdmx()}
-                  min={haceDiasCdmx(3)}
-                  max={hoyCdmx()}
-                  onChange={(e) => setFechaCfdi(e.target.value === hoyCdmx() ? "" : e.target.value)}
+                  id="fecha-generacion-cfdi"
+                  type="datetime-local"
+                  value={fechaCfdi}
+                  onChange={(e) => {setFechaCfdi(e.target.value);setFechaConfirmada(false);}}
                   className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30 bg-cos-card"
                 />
                 <p className="mt-1 text-xs text-cos-ink-faint">
-                  El SAT permite fecharla hasta 72 horas antes del timbrado: una operación del día 30 o 31 se puede timbrar el 1–3 del mes siguiente y quedar en su mes.
+                  Vacío: generar ahora. Las 72 horas corren desde la generación hasta la certificación (RMF 2.7.2.9), no desde el pago. La fecha del cobro determina el IVA conforme al tratamiento aplicable; no cambies esta fecha para mover el impuesto de mes.
                 </p>
+                {fechaCfdi&&<div className="mt-2 space-y-2">
+                  <label className="block text-sm">Huso horario del lugar de expedición<select className="ml-2 rounded border border-cos-line bg-cos-card p-2" value={fechaZona} onChange={(e)=>{setFechaZona(e.target.value);setFechaConfirmada(false);}}>
+                    <option value="">Seleccionar</option><option value="-05:00">UTC−05:00</option><option value="-06:00">UTC−06:00</option><option value="-07:00">UTC−07:00</option><option value="-08:00">UTC−08:00</option>
+                  </select></label>
+                  <label className="flex gap-2 text-xs"><input type="checkbox" checked={fechaConfirmada} onChange={(e)=>setFechaConfirmada(e.target.checked)}/>Confirmo la fecha y hora reales de generación y el huso del lugar de expedición.</label>
+                  <p className="text-xs text-cos-ink-faint">La aceptación del timbre no acredita emisión oportuna. Revisa el plazo aplicable a la operación (RCFF 39 y facilidades específicas).</p>
+                </div>}
               </div>
             )}
 
@@ -1397,7 +1407,7 @@ export default function NuevaFacturaPage() {
                 {fechaCfdi && !prefacturaId && (
                   <div>
                     <p className="text-xs text-cos-ink-soft mb-0.5">Fecha del CFDI</p>
-                    <p className="font-medium">{fechaCfdi}</p>
+                    <p className="font-medium">{fechaCfdi} {fechaZona}</p>
                   </div>
                 )}
               </div>
@@ -1551,14 +1561,4 @@ export default function NuevaFacturaPage() {
       )}
     </div>
   );
-}
-
-/** Hoy (AAAA-MM-DD) en hora del centro de México. */
-function hoyCdmx(): string {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Mexico_City" });
-}
-
-/** Hace `n` días (AAAA-MM-DD) en hora del centro de México. */
-function haceDiasCdmx(n: number): string {
-  return new Date(Date.now() - n * 86_400_000).toLocaleDateString("en-CA", { timeZone: "America/Mexico_City" });
 }

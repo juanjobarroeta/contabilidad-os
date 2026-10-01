@@ -358,6 +358,13 @@ export async function GET(req: Request) {
             (complementos.stats.vencidos > 0 ? ` — ${complementos.stats.vencidos} vencido(s)` : "") +
             ` (vence día 5; ${formatCurrency(complementos.stats.montoPendiente)} sin complementar)`,
     },
+    cobrosPue: {
+      ok: pos.iva.cobrosPue.determinado,
+      aplica: pos.iva.cobrosPue.asignaciones.length > 0,
+      detail: pos.iva.cobrosPue.determinado
+        ? "Cobros PUE revisados para el periodo"
+        : "IVA PUE preliminar: confirma cobros y tratamiento en el papel de IVA.",
+    },
   };
 
   const obligacionesPresentadas =
@@ -376,6 +383,7 @@ export async function GET(req: Request) {
     // Ingresos por asimilados a salarios recibidos (Art. 94); null si no hay.
     asimilados,
     federal: {
+      cobrosPue: pos.iva.cobrosPue,
       lineas: federalLineas,
       totalAPagar,
       saldoFavorIva,
@@ -504,6 +512,26 @@ export async function POST(req: Request) {
     // drive carry-forward); otherwise we persist the app-computed position as
     // before. The diffs between the two are stored so a filing error stays visible.
     const useAcuse = filing && !!acuse;
+    // A captured filing is historical evidence. Only its explicit IVA figures
+    // may be persisted when the live collection-based estimate is unresolved.
+    const ivaFromAcuse = useAcuse && [acuse?.ivaCausado, acuse?.ivaAcreditable, acuse?.ivaAPagar, acuse?.ivaAFavor]
+      .every((n) => typeof n === "number" && Number.isFinite(n) && n >= 0);
+    if (!ivaFromAcuse && !pos.iva.cobrosPue.determinado) {
+      return NextResponse.json({
+        code: "IVA_COBRO_REVIEW_REQUIRED",
+        error: "El IVA PUE sigue preliminar. Confirma el cobro y su tratamiento en el papel de IVA, o registra las cifras completas del acuse real del SAT.",
+      }, { status: 422 });
+    }
+    if (!ivaFromAcuse) {
+      const [filed, closed] = await Promise.all([
+        prisma.taxDeclaration.findFirst({ where: { companyId, periodo, tipo: "IVA_MENSUAL", status: { in: ["FILED", "PAID"] } }, select: { id: true } }),
+        prisma.accountingPeriod.findFirst({ where: { companyId, year, month, status: "CLOSED" }, select: { id: true } }),
+      ]);
+      if (closed || (filed && filing)) return NextResponse.json({
+        code: "PERIOD_REVIEW_REQUIRED",
+        error: "El periodo ya está cerrado o declarado. No se sustituyeron sus cifras por el cálculo actual; revisa el periodo y su acuse.",
+      }, { status: 409 });
+    }
     const pick = (filed: number | null | undefined, computed: number): number =>
       useAcuse && filed != null ? filed : computed;
 

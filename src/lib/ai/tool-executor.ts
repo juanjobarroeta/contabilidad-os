@@ -308,6 +308,8 @@ export async function executeToolCall(
       // usuario de WhatsApp/chat DEBE enterarse — las cifras pueden estar
       // sobrestimadas por tomar en cero el saldo a favor / pagos provisionales.
       const instrucciones = [
+        ...(pos.iva.cobrosPue?.determinado===false
+          ? ["El IVA PUE NO está determinado. Presenta cualquier cifra como estimación, explica pendientes y pide conciliar o documentar el cobro en el papel de IVA. No afirmes que se puede declarar ni inventes un REP o una fecha de CFDI."] : []),
         ...(pos.advertencias.length > 0
           ? ["Comunica al usuario TODAS las 'advertencias' tal cual, antes de las cifras: los montos pueden estar sobrestimados por falta de declaraciones guardadas."]
           : []),
@@ -317,6 +319,18 @@ export async function executeToolCall(
       ];
       return JSON.stringify({
         ...pos,
+        iva: {
+          ...pos.iva,
+          cobrosPue: pos.iva.cobrosPue ? {
+            ...pos.iva.cobrosPue,
+            pendientes: pos.iva.cobrosPue.pendientes.slice(0, 25),
+            asignaciones: pos.iva.cobrosPue.asignaciones.slice(0, 25).map((a) => ({ ...a, evidencia: a.evidencia.slice(0, 10) })),
+            totalPendientes: pos.iva.cobrosPue.pendientes.length,
+            totalAsignaciones: pos.iva.cobrosPue.asignaciones.length,
+            detalleLimitado: pos.iva.cobrosPue.asignaciones.length > 25 || pos.iva.cobrosPue.asignaciones.some((a) => a.evidencia.length > 10),
+            detalleUrl: `/impuestos/papeles?tab=iva&month=${month}&year=${year}`,
+          } : undefined,
+        },
         ...(ieps ? { ieps } : {}),
         ...(instrucciones.length > 0 ? { instruccion_para_el_asistente: instrucciones.join(" ") } : {}),
       });

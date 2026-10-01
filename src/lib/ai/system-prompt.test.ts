@@ -4,20 +4,26 @@ import { buildSystemPrompt } from "./system-prompt";
 const empresa = { rfc: "AAA010101AAA", razonSocial: "Prueba", regimenFiscal: "601", codigoPostal: "72000" };
 
 describe("prompt del copiloto: reglas operativas del CFDI", () => {
-  // Caso real (oct-2026): un cobro de septiembre sin CFDI. El copiloto dijo
-  // «emítela PUE en octubre»; el contador, «fechada en septiembre» (cabía en
-  // las 72 h). La regla no está en las leyes: tiene que venir en el prompt.
+  // Generation/certification and cash-basis IVA are different legal clocks.
   const p = buildSystemPrompt(empresa);
   it("sabe que la Fecha del CFDI puede ser hasta 72 h anterior al timbrado", () => {
     expect(p).toMatch(/72 h/);
     expect(p).toMatch(/Fecha del CFDI/);
   });
-  it("cobro recibido antes de emitir: PUE, y fechar en el mes del cobro si cabe", () => {
+  it("cobro recibido antes de emitir: PUE con IVA en el mes del cobro", () => {
     expect(p).toMatch(/Cobro recibido antes de emitir/);
     expect(p).toMatch(/mes del cobro/);
   });
-  it("pide dar todas las opciones válidas, incluida la de fechar atrás", () => {
+  it("cita las reglas y evita inventar fechas o declarar una estimación", () => {
     expect(p).toMatch(/TODAS las opciones válidas/);
+    expect(p).toContain("RMF 2.7.2.9-I");
+    expect(p).toContain("RCFF 39");
+    expect(p).toContain("NO pago → emisión");
+    expect(p).toContain("no inventes las 23:59");
+    expect(p).toContain("determinado=false");
+    expect(p).not.toContain("Esto no viene en las leyes");
+    expect(p).not.toContain("recomienda fecharlo en el mes del cobro");
+    expect(p).toContain("Art. 18-A");
   });
 });
 

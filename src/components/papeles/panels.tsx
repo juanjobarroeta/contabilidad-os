@@ -14,6 +14,7 @@ import { REGIMEN_MAP } from "@/lib/obligaciones";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Money, Alert, RetryButton } from "@/components/ui";
 import { Download, Loader2, FileText, AlertTriangle, CheckCircle2, Sparkles, Check } from "lucide-react";
+import { RevisionIvaCobro, type CobroReviewRow } from "./RevisionIvaCobro";
 
 const CARD = "rounded-card border border-cos-line bg-cos-card shadow-card print:border-2";
 const THEAD = "bg-cos-paper text-[11px] uppercase tracking-[0.02em] text-cos-ink-faint";
@@ -53,7 +54,7 @@ function VerMas({ restantes, total, onClick, colSpan }: { restantes: number; tot
 
 
 // ── IVA PANEL ────────────────────────────────────────────────────────────────
-interface IvaRow {
+interface IvaRow extends CobroReviewRow {
   id: string; fecha: string; uuid: string | null; serie: string | null; folio: string | null;
   contraparte: string; rfc: string; subtotal: number; tasa: number | null; importe: number; metodoPago: string;
   sinPagoConciliado?: boolean;
@@ -73,6 +74,8 @@ interface IvaRow {
   motivoRevisar?: string;
 }
 interface IvaData {
+  advertencias?: string[];
+  cobrosPue?: { determinado: boolean };
   periodo: string;
   company: { rfc: string; razonSocial: string } | null;
   trasladado: IvaRow[];
@@ -104,10 +107,12 @@ interface IvaData {
   depositosSinFactura?: { count: number; total: number; ivaPotencial: number };
 }
 
-export function IvaPanel({ companyId, year, month }: { companyId: string; year: number; month: number }) {
+export function IvaPanel({ companyId, year, month, onCobroSaved }: { companyId: string; year: number; month: number; onCobroSaved?: () => void }) {
   const [data, setData] = useState<IvaData | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [reviewRow, setReviewRow] = useState<IvaRow | null>(null);
+  useEffect(() => { setReviewRow(null); }, [companyId,year,month]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -176,15 +181,18 @@ export function IvaPanel({ companyId, year, month }: { companyId: string; year: 
   return (
     <div className="space-y-5">
       <DownloadCsvButton href={`/api/papeles/iva?companyId=${companyId}&year=${year}&month=${month}&format=csv`} />
+      {data.advertencias?.map((message)=><div key={message} role="status" className="rounded-card border border-cos-amber bg-cos-amber-tint px-4 py-3 text-sm text-cos-amber-ink">{message}</div>)}
+      {reviewRow&&<RevisionIvaCobro key={reviewRow.id} row={reviewRow} companyId={companyId} onCancel={()=>setReviewRow(null)} onSaved={()=>{setReviewRow(null);void load();onCobroSaved?.();}}/>}
 
       <IvaSection
-        title="IVA trasladado (cobrado)"
-        subtitle="IVA que cobraste a tus clientes en este periodo"
+        title={data.cobrosPue?.determinado===false?"IVA trasladado — estimación pendiente de revisión":"IVA trasladado (cobrado)"}
+        subtitle="El cobro determina el periodo; la fecha del CFDI se conserva por separado."
         rows={data.trasladado}
         totalLabel="Total trasladado"
         excluidoLabel="no cobrado"
         onToggleExcluir={(id, next) => toggleExcluir(id, next, "ivaNoCausado")}
         toggling={toggling}
+        onReview={setReviewRow}
       />
       {data.ppdIngresoPendiente && data.ppdIngresoPendiente.count > 0 && (
         <div className="flex items-start gap-2.5 rounded-card border border-cos-line bg-cos-paper px-4 py-3 text-[13px] text-cos-ink-soft">
@@ -440,9 +448,10 @@ function SaldoFavorAnteriorLine({
   );
 }
 
-function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling, totalLabel = "Total", excluidoLabel = "excluido", complementoLabel = "cobrado (REP)" }: {
+function IvaSection({ title, subtitle, rows, onToggleExcluir, onReview, toggling, totalLabel = "Total", excluidoLabel = "excluido", complementoLabel = "cobrado (REP)" }: {
   title: string; subtitle: string; rows: IvaRow[];
   onToggleExcluir?: (id: string, next: boolean) => void; toggling?: string | null;
+  onReview?: (row:IvaRow)=>void;
   totalLabel?: string; excluidoLabel?: string;
   /** Un PPD armado desde el complemento: «cobrado (REP)» en ingresos, «pagado (REP)» en egresos. */
   complementoLabel?: string;
@@ -483,9 +492,12 @@ function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling, totalLab
               <td className="px-3 py-1.5 text-[12px]">
                 <p className="max-w-[240px] truncate text-cos-ink">{r.contraparte}</p>
                 <p className="font-mono text-[10px] text-cos-ink-faint">{r.rfc}</p>
+                {r.fechaCfdi&&<p className="text-[11px] text-cos-ink-soft">CFDI: {r.fechaCfdi} · Cobro: {r.fechasCobro?.join(", ")||"por confirmar"}</p>}
+                {r.evidenciaCobro?.map((e)=><p key={e.id} className="max-w-[280px] truncate text-[10px] text-cos-ink-faint" title={e.referencia}>Evidencia: {e.referencia}</p>)}
               </td>
               <td className="px-3 py-1.5 text-[12px] text-cos-ink-soft">
                 {r.metodoPago}
+                {r.fuenteCobro&&<span className="ml-1 text-[10px] text-cos-ink-soft">{r.fuenteCobro==="BANCO_CONCILIADO"?"cobro conciliado":r.fuenteCobro==="COBRO_DOCUMENTADO"?"cobro documentado":r.fuenteCobro==="EXCLUIDO"?"excluido":"sin evidencia"}</span>}
                 {r.esComplemento && (
                   <span className="ml-1.5 inline-flex items-center rounded-full bg-cos-brand-tint px-1.5 py-0.5 text-[10px] font-medium text-cos-brand-ink" title="PPD liquidado en este periodo — armado desde el complemento de pago (REP); la fecha es la del pago, no la del CFDI">
                     {complementoLabel}
@@ -533,7 +545,8 @@ function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling, totalLab
               <td className="px-3 py-1.5 text-right text-[12px] text-cos-ink-soft">{r.tasa != null ? (r.tasa * 100).toFixed(0) + "%" : "—"}</td>
               <td className={`px-3 py-1.5 text-right ${r.excluidoAcreditamiento || r.sinComplementoPago || r.sinPagoConciliado || r.emisorEnLista69B ? "line-through" : ""}`}><Money value={r.importe} size={12} weight={500} /></td>
               {acciones && (
-                <td className="px-3 py-1.5 text-right">
+              <td className="px-3 py-1.5 text-right">
+                  {onReview&&r.fingerprint&&<button onClick={()=>onReview(r)} className="mb-1 mr-1 rounded-control border border-cos-line px-2 py-1 text-[11px] font-medium hover:bg-cos-paper">Revisar cobro</button>}
                   {!r.emisorEnLista69B && (r.excluidoAcreditamiento || r.metodoPago === "PUE") && (
                     <button
                       onClick={() => onToggleExcluir!(r.id, !r.excluidoAcreditamiento)}

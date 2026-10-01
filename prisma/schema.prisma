@@ -1003,6 +1003,10 @@ model Invoice {
    * el IVA se causa cuando se cobra, Art. 1-B/11/17 LIVA). Default false = sin efecto.
    */
   ivaNoCausado       Boolean @default(false)
+  // Reviewed IVA timing/classification for an outgoing PUE. Versioned payload
+  // binds the decision to the invoice fingerprint and records the reviewer,
+  // reason and optional documented full-collection date. Never changes XML.
+  ivaCausacionRevision Json?
 
   // Nómina (CFDI tipo "N"): datos del complemento de nómina 1.2 que el import del
   // SAT antes descartaba. regimenNomina = c_TipoRegimen del Receptor del
