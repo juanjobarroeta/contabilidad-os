@@ -20,13 +20,14 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import {
   X, Loader2, Wrench, Plus, Lock, Users, Trash2, ArrowLeft, CheckCircle2, ShieldCheck, ThumbsUp, ThumbsDown,
   History, ArrowDownRight, ArrowUp, Bookmark, Zap, CircleHelp,
-  SlidersHorizontal,
+  SlidersHorizontal, ListChecks,
 } from "lucide-react";
 import { Markdown } from "./Markdown";
 import { TOOL_LABELS, useChat, type ChatContexto, type Message } from "./useChat";
 import { AccionesChat, ChatCard, PildoraRef } from "./ChatCards";
 import { CopilotoMascota } from "./CopilotoMascota";
-import { useModoMascota, useNecesitoRail, usePielMascota } from "./useRailCopiloto";
+import { useModoMascota, usePielMascota, useRail } from "./useRailCopiloto";
+import { ResumenCopiloto } from "./ResumenCopiloto";
 import { PetFace } from "./PetSkin";
 import { PersonalizarCopiloto } from "./PersonalizarCopiloto";
 import { colorDe, nombreDe } from "@/lib/copiloto/personajes";
@@ -78,7 +79,7 @@ export function ChatPanel() {
   const { activeCompany } = useCompany();
   const companyId = activeCompany?.id ?? null;
   const [isOpen, setIsOpen] = useState(false);
-  const [view, setView] = useState<"chat" | "history" | "cust">("chat");
+  const [view, setView] = useState<"chat" | "history" | "cust" | "resumen">("chat");
   const [input, setInput] = useState("");
   const [refPendiente, setRefPendiente] = useState<RefCopiloto | null>(null);
   const pathname = usePathname() ?? "/";
@@ -107,7 +108,8 @@ export function ChatPanel() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const prevCompanyRef = useRef<string | null>(null);
-  const necesito = useNecesitoRail(companyId);
+  const railCopiloto = useRail(companyId);
+  const necesito = useMemo(() => railCopiloto.rail?.necesito ?? [], [railCopiloto.rail]);
 
   const leerContexto = useCallback((): ChatContexto => {
     const ruta = window.location.pathname + window.location.search;
@@ -250,6 +252,14 @@ export function ChatPanel() {
   useEffect(() => {
     if (isOpen) void loadConversations();
   }, [isOpen, loadConversations]);
+
+  // El resumen se pide fresco al abrirlo (la caché de un minuto sirve a la
+  // mascota y a las sugerencias, no a quien lo vino a leer).
+  const recargarRail = railCopiloto.recargar;
+  useEffect(() => {
+    if (isOpen && view === "resumen") recargarRail();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, view]);
 
   // Escritorio (panel flotante) vs. móvil (cajón).
   useEffect(() => {
@@ -429,6 +439,10 @@ export function ChatPanel() {
   const contexto =
     view === "cust"
       ? "Elige cómo te acompaña"
+      : view === "resumen"
+        ? necesito.length
+          ? `${necesito.length} ${necesito.length === 1 ? "pendiente tuyo" : "pendientes tuyos"}`
+          : "Nada pendiente de tu lado"
       : view === "history"
       ? `${memoria.length} ${memoria.length === 1 ? "cosa recordada" : "cosas recordadas"} · ${conversations.length} ${conversations.length === 1 ? "conversación" : "conversaciones"}`
       : `${tituloDeRuta(pathname)} · ${activeCompany.razonSocial}`;
@@ -558,7 +572,13 @@ export function ChatPanel() {
         )}
         <div className="ml-0.5 min-w-0 flex-1">
           <h3 className="truncate text-[14.5px] font-semibold text-cos-ink">
-            {view === "history" ? "Historial y memoria" : view === "cust" ? "Personalizar" : nombrePet}
+            {view === "history"
+              ? "Historial y memoria"
+              : view === "cust"
+                ? "Personalizar"
+                : view === "resumen"
+                  ? "Resumen"
+                  : nombrePet}
           </h3>
           <p className="truncate text-[11.5px] text-cos-ink-faint">{contexto}</p>
         </div>
@@ -571,6 +591,20 @@ export function ChatPanel() {
             {visibility === "COMPANY" ? <Users className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
           </button>
         )}
+        <button
+          onClick={() => setView(view === "resumen" ? "chat" : "resumen")}
+          className={cn(BOTON_ICONO, "relative", view === "resumen" && "bg-cos-brand-tint text-cos-brand-ink")}
+          title="Resumen: lo que hice, lo que necesito de ti y cómo vamos"
+        >
+          <ListChecks className="h-4 w-4" />
+          {/* Cuenta lo que necesita de TI, no los problemas que hay: un
+              número que el usuario no puede bajar sólo enseña a ignorarlo. */}
+          {necesito.length > 0 && view !== "resumen" && (
+            <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-cos-amber px-1 text-[9px] font-bold text-white">
+              {necesito.length}
+            </span>
+          )}
+        </button>
         <button
           onClick={() => setView(view === "cust" ? "chat" : "cust")}
           className={cn(BOTON_ICONO, view === "cust" && "bg-cos-brand-tint text-cos-brand-ink")}
@@ -598,7 +632,19 @@ export function ChatPanel() {
         </button>
       </div>
 
-      {view === "cust" ? (
+      {view === "resumen" ? (
+        <ResumenCopiloto
+          {...railCopiloto}
+          onPreguntar={(seed) => {
+            setView("chat");
+            newChat();
+            setTimeout(() => mandar(seed), 0);
+          }}
+          onNavegar={() => {
+            if (!flotante) setIsOpen(false);
+          }}
+        />
+      ) : view === "cust" ? (
         <PersonalizarCopiloto piel={piel} onCambio={setPiel} />
       ) : view === "history" ? (
         /* ── Historial y memoria ── */

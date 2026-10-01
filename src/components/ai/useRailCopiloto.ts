@@ -1,49 +1,79 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { PedidoRail } from "@/lib/rail/armar";
+import type { PedidoRail, Rail } from "@/lib/rail/armar";
 import { PIEL_DEFAULT, sanearPiel, type Piel } from "@/lib/copiloto/personajes";
 
-// El `necesito[]` del rail, compartido por la mascota (pistas al cambiar de
-// pantalla) y el chat (píldoras de sugerencia). Caché de módulo de un minuto
-// y una sola petición en vuelo por empresa: los dos lo piden al montar.
+// El rail del copiloto (lo que hice / lo que necesito / revisiones / cómo
+// vamos), compartido por la mascota (pistas), las sugerencias del chat y la
+// vista «Resumen». Caché de módulo de un minuto y una sola petición en vuelo
+// por empresa: todos lo piden al montar.
+
+export interface RailRespuesta extends Rail {
+  resumen: { titulo: string; cuerpo: string; fecha: string } | null;
+  informativos: number;
+}
 
 const TTL_MS = 60_000;
-const cache = new Map<string, { at: number; necesito: PedidoRail[] }>();
-const enVuelo = new Map<string, Promise<PedidoRail[]>>();
+const cache = new Map<string, { at: number; rail: RailRespuesta }>();
+const enVuelo = new Map<string, Promise<RailRespuesta>>();
 
-function pedir(companyId: string): Promise<PedidoRail[]> {
+function pedir(companyId: string, forzar = false): Promise<RailRespuesta> {
   const hit = cache.get(companyId);
-  if (hit && Date.now() - hit.at < TTL_MS) return Promise.resolve(hit.necesito);
+  if (!forzar && hit && Date.now() - hit.at < TTL_MS) return Promise.resolve(hit.rail);
   const ya = enVuelo.get(companyId);
   if (ya) return ya;
   const p = fetch(`/api/rail?companyId=${companyId}`)
-    .then((r) => (r.ok ? r.json() : null))
-    .then((j: { necesito?: PedidoRail[] } | null) => {
-      const necesito = Array.isArray(j?.necesito) ? j!.necesito : [];
-      cache.set(companyId, { at: Date.now(), necesito });
-      return necesito;
+    .then(async (r) => {
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j) throw new Error(j?.error ?? `HTTP ${r.status}`);
+      const rail = j as RailRespuesta;
+      cache.set(companyId, { at: Date.now(), rail });
+      return rail;
     })
-    .catch(() => [] as PedidoRail[])
     .finally(() => enVuelo.delete(companyId));
   enVuelo.set(companyId, p);
   return p;
 }
 
-export function useNecesitoRail(companyId: string | null | undefined): PedidoRail[] {
-  const [necesito, setNecesito] = useState<PedidoRail[]>([]);
+export function useRail(companyId: string | null | undefined): {
+  rail: RailRespuesta | null;
+  cargando: boolean;
+  error: string | null;
+  recargar: () => void;
+} {
+  const [rail, setRail] = useState<RailRespuesta | null>(null);
+  const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [intento, setIntento] = useState(0);
   useEffect(() => {
     if (!companyId) {
-      setNecesito([]);
+      setRail(null);
       return;
     }
     let vivo = true;
-    void pedir(companyId).then((n) => vivo && setNecesito(n));
+    setCargando(true);
+    setError(null);
+    pedir(companyId, intento > 0)
+      .then((r) => vivo && setRail(r))
+      .catch(() => {
+        if (!vivo) return;
+        setRail(null);
+        setError("No se pudo cargar el resumen.");
+      })
+      .finally(() => vivo && setCargando(false));
     return () => {
       vivo = false;
     };
-  }, [companyId]);
-  return necesito;
+  }, [companyId, intento]);
+  return { rail, cargando, error, recargar: () => setIntento((n) => n + 1) };
+}
+
+const SIN_PEDIDOS: PedidoRail[] = [];
+
+export function useNecesitoRail(companyId: string | null | undefined): PedidoRail[] {
+  const { rail } = useRail(companyId);
+  return rail?.necesito ?? SIN_PEDIDOS;
 }
 
 // ── Modo de la mascota (localStorage, compartido entre componentes) ─────────
