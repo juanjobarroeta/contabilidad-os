@@ -18,7 +18,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { usePathname } from "next/navigation";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import {
-  X, Loader2, Wrench, Plus, Lock, Users, Trash2, ArrowLeft, CheckCircle2, ShieldCheck, ThumbsUp, ThumbsDown,
+  X, Loader2, Plus, Lock, Users, Trash2, ArrowLeft, CheckCircle2, ShieldCheck, ThumbsUp, ThumbsDown,
   History, ArrowDownRight, ArrowUp, Bookmark, Zap, CircleHelp,
   SlidersHorizontal, ListChecks,
 } from "lucide-react";
@@ -29,6 +29,7 @@ import { CopilotoMascota } from "./CopilotoMascota";
 import { useModoMascota, usePielMascota, useRail } from "./useRailCopiloto";
 import { ResumenCopiloto } from "./ResumenCopiloto";
 import { PetFace } from "./PetSkin";
+import { PetPensando } from "./PetPensando";
 import { PersonalizarCopiloto } from "./PersonalizarCopiloto";
 import { colorDe, nombreDe } from "@/lib/copiloto/personajes";
 import { colocarJunto, type Caja } from "@/lib/copiloto/colocar";
@@ -779,11 +780,13 @@ export function ChatPanel() {
             ])}
             {marcadores.filter((m) => m.antesDe >= messages.length && messages.length > 0).map((m, k) => separador(m.texto, `sepf${k}`))}
 
-            {activeTool && (
-              <div className="flex items-center gap-2 self-start rounded-[13px] bg-cos-amber-tint px-3 py-2 text-[13px] text-cos-amber-ink">
-                <Wrench className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-                <span>{TOOL_LABELS[activeTool] || activeTool}...</span>
-              </div>
+            {isLoading && (activeTool || messages[messages.length - 1]?.role === "user") && (
+              <PetPensando
+                char={piel.char}
+                color={colorDe(piel)}
+                nombre={nombrePet}
+                texto={activeTool ? `${TOOL_LABELS[activeTool] || activeTool}…` : "Pensando…"}
+              />
             )}
 
             {/* Tarjeta de confirmación: el asistente PROPUSO una acción reversible.
@@ -815,13 +818,6 @@ export function ChatPanel() {
               </div>
             )}
 
-            {isLoading && !activeTool && messages[messages.length - 1]?.role === "user" && (
-              <div className="cos-typing flex gap-1 self-start rounded-[13px] rounded-bl border border-cos-line-soft bg-cos-paper px-[13px] py-3" aria-label="Escribiendo">
-                <i />
-                <i />
-                <i />
-              </div>
-            )}
 
             <div ref={messagesEndRef} />
           </div>
