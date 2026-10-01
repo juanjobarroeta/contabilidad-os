@@ -1,5 +1,7 @@
 "use client";
 
+import { ContaBotWorkPanel } from "@/components/ai/ContaBotWorkPanel";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // EL CIERRE GUIADO — una acción a la vez.
 //
@@ -367,6 +369,7 @@ function CierrePageInner() {
         <Loading label="Revisando el cierre del periodo…" />
       ) : (
         <>
+          <ContaBotWorkPanel companyId={activeCompany.id} period={`${year}-${String(month).padStart(2, "0")}`} />
           {/* Avance: una sola barra, sin números repetidos. */}
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-cos-paper">
             <div

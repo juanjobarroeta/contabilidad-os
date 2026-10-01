@@ -2,10 +2,15 @@ import type { AgentToolParam } from "openai/resources/beta/agents/agents";
 import { fromJsonSchema } from "@modelcontextprotocol/server";
 import { tools } from "@/lib/ai/tools";
 import { toolsPresentacion } from "@/lib/copiloto/tarjetas";
+import { objectiveTools } from "./objectives/tools";
 
 // Closed catalogue: adding a tool to the old chat does not silently grant it to
 // background agents. Financial writes still use the existing confirmation UI.
 export const CAPABILITIES = {
+  consultar_objetivos: "read",
+  query_saldos_cuentas: "read",
+  query_auxiliar_cuenta: "read",
+  asignar_objetivo_cierre: "memory",
   query_invoices: "read",
   query_bank_transactions: "read",
   query_tax_declarations: "read",
@@ -39,6 +44,9 @@ export const CAPABILITIES = {
   cerrar_pendiente: "memory",
   solicitar_al_cliente: "memory",
   proponer_conciliacion: "proposal",
+  proponer_crear_subcuenta: "proposal",
+  proponer_renombrar_cuenta: "proposal",
+  proponer_registro_prestamo: "proposal",
   proponer_categorizacion: "proposal",
   proponer_categorizacion_lote: "proposal",
   mostrar_tarjeta: "presentation",
@@ -54,7 +62,7 @@ export function allowedCapability(name: string, canWrite: boolean): boolean {
   return kind !== null && (canWrite || kind === "read" || kind === "presentation");
 }
 
-const definitions = new Map([...tools, ...toolsPresentacion].map((t) => [t.name, t]));
+const definitions = new Map([...tools, ...toolsPresentacion, ...objectiveTools].map((t) => [t.name, t]));
 
 function schemaFor(name: string) {
   const definition = definitions.get(name);

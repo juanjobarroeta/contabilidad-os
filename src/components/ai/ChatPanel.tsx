@@ -350,7 +350,11 @@ export function ChatPanel() {
     const open = (e: Event) => {
       setIsOpen(true);
       setSaltos((s) => s + 1);
-      const detail = (e as CustomEvent<{ seed?: string; send?: boolean; ref?: RefCopiloto }>).detail;
+      const detail = (e as CustomEvent<{ seed?: string; send?: boolean; ref?: RefCopiloto; conversationId?: string; companyId?: string }>).detail;
+      if (detail?.conversationId) {
+        if (detail.companyId === companyId) void openConversation(detail.conversationId);
+        return;
+      }
       if (detail?.seed || detail?.ref) {
         newChat();
         if (detail.send) {
@@ -364,7 +368,7 @@ export function ChatPanel() {
     };
     window.addEventListener("cos:ask-ai", open);
     return () => window.removeEventListener("cos:ask-ai", open);
-  }, [newChat, mandar]);
+  }, [newChat, mandar, companyId, openConversation]);
 
   const sendMessage = useCallback(() => {
     const texto = input.trim();
