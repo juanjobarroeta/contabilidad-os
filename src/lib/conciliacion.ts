@@ -113,6 +113,9 @@ export interface UnmatchedTx {
   descripcion: string;
   monto: number;
   banco: string;
+  moneda: string;
+  contraparteRfc: string | null;
+  contraparteNombre: string | null;
   topCandidate: MatchCandidate | null;
 }
 
@@ -126,7 +129,7 @@ export async function listUnmatched(companyId: string, limit = 10): Promise<{
   });
   const txs = await prisma.bankTransaction.findMany({
     where: { companyId, status: "UNMATCHED" },
-    include: { bankAccount: { select: { banco: true } } },
+    include: { bankAccount: { select: { banco: true, moneda: true } } },
     orderBy: { fecha: "desc" },
     take: limit,
   });
@@ -140,6 +143,9 @@ export async function listUnmatched(companyId: string, limit = 10): Promise<{
       descripcion: tx.descripcion,
       monto: Number(tx.monto),
       banco: tx.bankAccount?.banco ?? "—",
+      moneda: tx.bankAccount.moneda,
+      contraparteRfc: tx.contraparteRfc,
+      contraparteNombre: tx.contraparteNombre,
       topCandidate: candidates[0] ?? null,
     });
   }

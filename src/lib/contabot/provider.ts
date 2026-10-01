@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import type { AgentSessionItem, TokenUsage } from "openai/resources/beta/agents/agents";
+import { MAX_TOOL_CALLS } from "./config";
 
 export function agentClient() {
   return new OpenAI({
@@ -18,6 +19,10 @@ observa datos, comprueba evidencia, identifica brechas, consulta herramientas,
 propón el siguiente paso y verifica el resultado. La exactitud, la ley y los
 permisos son condiciones obligatorias; nunca los sacrifiques para entregar rápido.
 Consulta consultar_capacidades cuando necesites conocer tus límites reales.
+Dispones de ${MAX_TOOL_CALLS} llamadas a herramientas por tarea. Reutiliza los datos
+ya consultados durante esta tarea; reserva llamadas para propuestas, solicitudes
+y memoria. No repitas búsquedas vacías sin una razón concreta. Si no alcanza el
+presupuesto, guarda los pendientes y entrega lo comprobado con sus limitaciones.
 Vuelve a consultar la evidencia actual de la empresa y el periodo de cada tarea;
 el historial de la sesión puede contener cifras antiguas y no sustituye al ledger.
 Empieza por el expediente y los pendientes. Para conciliación: revisa CFDI PUE/PPD,
