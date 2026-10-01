@@ -91,7 +91,7 @@ and no Zero Data Retention support; review that deployment constraint before
 sending customer accounting data.
 
 The existing company/user AI limits are checked before starting and before tool
-callbacks. Each request is limited to 20 tool calls and ten minutes of observed
+callbacks. Each request is limited to 32 tool calls and ten minutes of observed
 runtime. The minute recovery interval means cancellation is not instantaneous.
 Provider usage is best-effort, not a final bill. For this pilot, `CostEvent`
 records a conservative Astra estimate using long-context input/cache-write and

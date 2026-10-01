@@ -11,6 +11,7 @@ vi.mock("./provider", async (original) => ({ ...await original<object>(), agentC
 import { prisma } from "@/lib/prisma";
 import { agentClient } from "./provider";
 import { requireContaBotAccess } from "./access";
+import { MAX_TOOL_CALLS } from "./config";
 import { beginManagedTurn, executeManagedCall, syncManagedSession, deleteManagedSessions } from "./runtime";
 
 const A = "itest-contabot-a", B = "itest-contabot-b", U = "itest-contabot-owner", V = "itest-contabot-viewer";
@@ -167,6 +168,53 @@ describe.skipIf(skip)("managed ContaBot with real Postgres and synthetic provide
     expect(saved.activeCompanyId).toBeNull();
     expect((await prisma.chatMessage.findUniqueOrThrow({ where: { id: saved.assistantMessageId! } })).content).toBe("Need the missing statement.");
     expect(await prisma.costEvent.count({ where: { id: `contabot:${session.id}:turn_new` } })).toBe(1);
+  });
+
+  it("exposes stored RFC, currency and payment evidence without requiring a Customer record", async () => {
+    const session = await newRun();
+    const bank = await prisma.bankAccount.create({ data: { companyId: A, banco: "Synthetic",
+      nombre: "USD test", numeroCuenta: randomUUID(), moneda: "USD" } });
+    const movement = await prisma.bankTransaction.create({ data: { companyId: A, bankAccountId: bank.id,
+      fecha: new Date(), descripcion: "Synthetic transfer", monto: 116, tipo: "CREDITO",
+      contraparteRfc: "AAA010101AAA", contraparteNombre: "Synthetic customer", conceptoPago: "TEST-101" } });
+    const invoiceData = { tipo: "INGRESO" as const, fecha: new Date(), formaPago: "03", metodoPago: "PPD",
+      usoCfdi: "G03", subtotal: 100, total: 116, status: "STAMPED" as const, moneda: "USD",
+      folio: "TEST-101", contraparteRfc: "AAA010101AAA", contraparteNombre: "Synthetic customer" };
+    const invoice = await prisma.invoice.create({ data: { ...invoiceData, companyId: A } });
+    const foreign = await prisma.invoice.create({ data: { ...invoiceData, companyId: B } });
+    const read = async (name: string, args: Record<string, unknown>) => {
+      const receipt = await executeManagedCall(session, action(name, args, name));
+      expect(receipt.success).toBe(true);
+      return JSON.parse(receipt.result!);
+    };
+    const evidence = { id: movement.id, moneda: "USD", contraparteRfc: "AAA010101AAA",
+      contraparteNombre: "Synthetic customer" };
+    const bankResult = await read("query_bank_transactions", { bank_account_id: bank.id });
+    expect(bankResult.movimientos).toEqual([expect.objectContaining({ ...evidence, conceptoPago: "TEST-101" })]);
+    const invoices = await read("query_invoices", { q: "TEST-101" });
+    expect(invoices.facturas).toEqual([expect.objectContaining({ id: invoice.id, folio: "TEST-101",
+      moneda: "USD", metodoPago: "PPD", contraparteRfc: "AAA010101AAA" })]);
+    const suggestion = await read("suggest_reconciliation_match", { transaction_id: movement.id });
+    expect(suggestion.transaction).toMatchObject(evidence);
+    expect(suggestion.candidate_invoices).toContainEqual(expect.objectContaining({ id: invoice.id,
+      moneda: "USD", metodoPago: "PPD", clienteRfc: "AAA010101AAA", cliente: "Synthetic customer" }));
+    expect(suggestion.candidate_invoices.some((inv: { id: string }) => inv.id === foreign.id)).toBe(false);
+    const unmatched = await read("list_unmatched_transactions", {});
+    expect(unmatched.transactions).toContainEqual(expect.objectContaining(evidence));
+    expect((await prisma.bankTransaction.findUniqueOrThrow({ where: { id: movement.id } })).invoiceId).toBeNull();
+  });
+
+  it("enforces the tool budget while allowing a completed callback to be replayed", async () => {
+    const session = await newRun();
+    await prisma.contaBotToolCall.createMany({ data: Array.from({ length: MAX_TOOL_CALLS }, (_, i) => ({
+      sessionId: session.id, turnId: "turn_new", callId: `budget_${i}`, name: "consultar_expediente",
+      arguments: {}, state: "done", success: true, result: "{}",
+    })) });
+    await expect(executeManagedCall(session, action("consultar_expediente", {}, "budget_0")))
+      .resolves.toMatchObject({ success: true, result: "{}" });
+    await expect(executeManagedCall(session, action("consultar_expediente", {}, "beyond_budget")))
+      .rejects.toMatchObject({ status: 429 });
+    expect(await prisma.contaBotToolCall.count({ where: { sessionId: session.id } })).toBe(MAX_TOOL_CALLS);
   });
 
   it("does not mistake idle or an older turn for completion of new work", async () => {

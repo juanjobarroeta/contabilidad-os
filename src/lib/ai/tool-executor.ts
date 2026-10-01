@@ -1359,6 +1359,10 @@ async function queryInvoices(input: ToolInput, companyId: string) {
         total: inv.total,
         status: inv.status,
         uuid: inv.uuid,
+        serie: inv.serie,
+        folio: inv.folio,
+        moneda: inv.moneda,
+        tipoCambio: inv.tipoCambio,
         formaPago: inv.formaPago,
         metodoPago: inv.metodoPago,
       };
@@ -1737,7 +1741,7 @@ async function queryBankTransactions(input: ToolInput, companyId: string) {
   const txs = await prisma.bankTransaction.findMany({
     where,
     include: {
-      bankAccount: { select: { banco: true, nombre: true } },
+      bankAccount: { select: { banco: true, nombre: true, moneda: true } },
       invoice: { select: { uuid: true, total: true, tipo: true } },
       supplier: { select: { razonSocial: true, rfc: true } },
     },
@@ -1759,6 +1763,10 @@ async function queryBankTransactions(input: ToolInput, companyId: string) {
       status: tx.status,
       banco: tx.bankAccount.banco,
       cuenta: tx.bankAccount.nombre,
+      moneda: tx.bankAccount.moneda,
+      contraparteRfc: tx.contraparteRfc,
+      contraparteNombre: tx.contraparteNombre,
+      conceptoPago: tx.conceptoPago,
       invoiceUuid: tx.invoice?.uuid,
       supplier: tx.supplier?.razonSocial,
     })),
@@ -1994,7 +2002,7 @@ async function categorizeTransaction(input: ToolInput, companyId: string) {
 async function suggestReconciliationMatch(input: ToolInput, companyId: string) {
   const tx = await prisma.bankTransaction.findFirst({
     where: { id: input.transaction_id as string, companyId },
-    include: { bankAccount: { select: { banco: true, nombre: true } } },
+    include: { bankAccount: { select: { banco: true, nombre: true, moneda: true } } },
   });
 
   if (!tx) return JSON.stringify({ error: "Transacción no encontrada" });
@@ -2030,6 +2038,7 @@ async function suggestReconciliationMatch(input: ToolInput, companyId: string) {
   );
 
   return JSON.stringify({
+    _nota: "Los candidatos se buscan por importe y fecha; no validan RFC, moneda ni método de pago. Compara esos campos antes de proponer una conciliación. La moneda del movimiento es la de su cuenta bancaria.",
     transaction: {
       id: tx.id,
       fecha: tx.fecha.toISOString().substring(0, 10),
@@ -2037,6 +2046,10 @@ async function suggestReconciliationMatch(input: ToolInput, companyId: string) {
       monto: tx.monto,
       tipo: tx.tipo,
       banco: tx.bankAccount.banco,
+      moneda: tx.bankAccount.moneda,
+      contraparteRfc: tx.contraparteRfc,
+      contraparteNombre: tx.contraparteNombre,
+      referencia: tx.referencia,
     },
     candidate_invoices: candidateInvoices.map((inv) => ({
       id: inv.id,
@@ -2044,8 +2057,12 @@ async function suggestReconciliationMatch(input: ToolInput, companyId: string) {
       tipo: inv.tipo,
       fecha: inv.fecha.toISOString().substring(0, 10),
       total: inv.total,
-      cliente: inv.customer?.razonSocial,
-      clienteRfc: inv.customer?.rfc,
+      serie: inv.serie,
+      folio: inv.folio,
+      moneda: inv.moneda,
+      metodoPago: inv.metodoPago,
+      cliente: nombreContraparte(inv),
+      clienteRfc: rfcContraparte(inv),
     })),
     matching_suppliers: matchingSuppliers.map((s) => ({
       id: s.id,
