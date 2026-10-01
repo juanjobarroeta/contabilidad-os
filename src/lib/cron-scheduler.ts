@@ -77,6 +77,9 @@ const MIN_CARO = 15 * MIN;
 // empresa nueva vea su historial entrar en la primera hora — el candado y la
 // cuota por corrida (MAX_NEW_SUBMITS) mantienen el gasto SAT acotado.
 const JOBS: Job[] = [
+  // Durable managed-agent callbacks recover even after the browser closes.
+  // No model work is started unless a company was explicitly opted in.
+  { name: "contabot-recovery", everyMs: MIN, firstDelayMs: MIN, minMs: MIN },
   { name: "sat-backfill", everyMs: 10 * MIN, firstDelayMs: 2 * MIN, minMs: MIN_SAT,
     // Lo que el SAT acaba de entregar se deriva enseguida, sin esperar cita.
     encadena: ["sat-rawxml-backfill", "onboarding-drive"] },
