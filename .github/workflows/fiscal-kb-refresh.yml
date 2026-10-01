@@ -88,7 +88,7 @@ jobs:
           URL="$(printf '%s' "${BASE_URL_INPUT:-}" | tr -d '[:space:]')"
           if [ -z "$URL" ]; then URL="$(printf '%s' "${STAGING_URL:-}" | tr -d '[:space:]')"; fi
           FORCE_FRAG=""; if [ "${FORCE:-false}" = "true" ]; then FORCE_FRAG=',"force":true'; fi
-          for clave in GUIA-CFDI GUIA-NOMINA GUIA-PAGOS GUIA-CFDI-GLOBAL RMF-2026-1M RMF-2026-A7 RMF-2026-A3 RFA-2026; do
+          for clave in GUIA-CFDI GUIA-NOMINA GUIA-PAGOS GUIA-CFDI-GLOBAL GUIA-COMERCIO-EXTERIOR GUIA-CFDI-DPA RMF-2026-1M RMF-2026-A7 RMF-2026-A3 RFA-2026; do
             echo "→ ingest doc ${clave}"
             # Un documento lento o caído (el RMF compilado pesa ~10 MB) no tumba a los demás.
             curl -sS --max-time 600 -X POST "${URL}/api/admin/fiscal-ingest" \

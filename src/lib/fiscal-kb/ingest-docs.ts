@@ -70,6 +70,24 @@ export const DOCS: Record<string, DocSpec> = {
     url: "http://omawww.sat.gob.mx/tramitesyservicios/Paginas/documentos/Guia_llenado_nomina.pdf",
     vigenciaDesde: "2026-01-16",
   },
+  "GUIA-COMERCIO-EXTERIOR": {
+    clave: "GUIA-COMERCIO-EXTERIOR",
+    titulo: "Guía de llenado del complemento de Comercio Exterior 2.0 (CFDI 4.0)",
+    source: "GUIA",
+    kind: "guia",
+    url: "http://omawww.sat.gob.mx/tramitesyservicios/Paginas/documentos/Guia_complemento_Comercio_Exterior.pdf",
+    vigenciaDesde: "2026-01-16",
+  },
+  // CFDI que emiten Federación, estados y municipios (derechos, productos,
+  // aprovechamientos, apoyos): lo que reciben los clientes al pagar al gobierno.
+  "GUIA-CFDI-DPA": {
+    clave: "GUIA-CFDI-DPA",
+    titulo: "Guía de llenado de los CFDI emitidos por entes públicos por contribuciones, derechos, productos y aprovechamientos (DPA)",
+    source: "GUIA",
+    kind: "guia",
+    url: "http://omawww.sat.gob.mx/tramitesyservicios/Paginas/documentos/Guia_llenadoCFDI_DPA.pdf",
+    vigenciaDesde: "2026-01-16",
+  },
   // RMF anual. El DOF bloquea bots, pero el micrositio de normatividad del SAT
   // sirve los PDF (oficial y compilados).
   "RMF-2026": {
