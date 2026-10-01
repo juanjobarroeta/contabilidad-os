@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chunkLaw, cleanLawText, corregirNotasPegadas, chunkRegla } from "./chunk";
+import { chunkLaw, cleanLawText, corregirNotasPegadas, chunkRegla, chunkDocument } from "./chunk";
 
 const ley = (cuerpo: string) => `LEY DE PRUEBA\n\nTÍTULO I\nDISPOSICIONES GENERALES\n${cuerpo}\n`;
 
@@ -204,5 +204,29 @@ describe("chunkRegla: la RMF no numera todo igual", () => {
     const c = chunkRegla(rmf).find((x) => x.articulo === "4.2.2");
     expect(c?.texto).toContain("billetes");
     expect(c?.texto).not.toContain("tabacos labrados");
+  });
+});
+
+describe("chunkCriterio (Anexos 3 y 7 de la RMF)", () => {
+  const indice = ["Contenido", "Criterios del CFF", "1/CFF/N", "Crédito fiscal. Es firme.", "2/CFF/N", "Normas sustantivas.", "3/CFF/N", "Momento de causación.", "4/CFF/N", "Actualización.", "5/CFF/N", "Recargos.", "1/ISR/PI", "Deducción indebida."].join("\n");
+  const cuerpo = (clave: string, titulo: string) =>
+    `${clave}\n\n${titulo} Texto largo del criterio con su fundamento: el artículo 17-A del CFF establece que el monto de las contribuciones se actualiza por el transcurso del tiempo y con motivo de los cambios de precios en el país.\n`;
+  const texto = [
+    indice,
+    "Criterios del CFF",
+    cuerpo("1/CFF/N", "Crédito fiscal. Es firme."),
+    cuerpo("2/CFF/N", "Normas sustantivas."),
+    cuerpo("3/CFF/N", "Momento de causación."),
+    cuerpo("4/CFF/N", "Actualización."),
+    cuerpo("5/CFF/N", "Recargos."),
+    "Criterios de la Ley del ISR",
+    cuerpo("1/ISR/PI", "Deducción indebida."),
+  ].join("\n");
+
+  it("una pieza por criterio, con el cuerpo (no la entrada del índice)", () => {
+    const c = chunkDocument(texto, "criterio");
+    expect(c.map((x) => x.articulo)).toEqual(["1/CFF/N", "2/CFF/N", "3/CFF/N", "4/CFF/N", "5/CFF/N", "1/ISR/PI"]);
+    expect(c[0].texto).toContain("artículo 17-A del CFF");
+    expect(c[5].contexto).toBe("Criterios de la Ley del ISR");
   });
 });

@@ -124,6 +124,9 @@ export function buildCita(
       return articulo ? `Regla ${articulo} ${clave}` : clave;
     case "GUIA":
       return titulo; // guías no tienen numeración de artículo
+    case "CRITERIO":
+      // «Criterio 1/CFF/N (Anexo 7 RMF-2026)»
+      return articulo ? `Criterio ${articulo} (${clave.replace(/^(RMF-\d{4})-A(\d+)$/, "Anexo $2 $1")})` : clave;
     default:
       return articulo ? `${clave} ${articulo}` : clave;
   }

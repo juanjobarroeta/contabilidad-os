@@ -9,7 +9,7 @@
 // Design doc: docs/FISCAL-KNOWLEDGE-BASE.md §6.
 
 /** Document shape — selects the chunking + cleaning strategy. */
-export type DocKind = "ley" | "rmf" | "guia";
+export type DocKind = "ley" | "rmf" | "guia" | "criterio";
 
 export interface LawChunk {
   articulo: string | null; // "113-E", "TRANSITORIOS", "2.7.1.32"; null = prose
@@ -424,6 +424,51 @@ export function chunkRegla(cleanText: string): LawChunk[] {
   return chunks;
 }
 
+// ─── Criterios del SAT (Anexos 3 y 7 de la RMF) ──────────────────────────────
+//
+// Cada criterio abre con su clave sola en el renglón: «1/CFF/N» (normativo,
+// Anexo 7), «1/CFF/NV» o «1/CFF/PI» (no vinculativo / práctica indebida,
+// Anexo 3), «12/ISR/N», «3/LIVA/N». El documento trae primero un índice con la
+// misma clave y sólo el título; se queda la aparición más larga de cada clave
+// (el cuerpo), así el índice no duplica criterios.
+const CRITERIO_RE = /^\s*(\d+\/[A-ZÁÉÍÓÚÑ]+(?:\/[A-ZÁÉÍÓÚÑ]+)*\/(?:NV|PI|N))\b/gm;
+const CRITERIO_HEADING_RE = /^\s*(?:[A-Z]\.\s+|[IVXLC]+\.\s+)?Criterios?\s+(?:del?|de la)\s+\S/i;
+
+export function chunkCriterio(cleanText: string): LawChunk[] {
+  const matches = [...cleanText.matchAll(CRITERIO_RE)];
+  if (matches.length < 5) return chunkGeneric(cleanText);
+
+  const headIndex: { offset: number; trail: string }[] = [];
+  {
+    let offset = 0;
+    for (const line of cleanText.split("\n")) {
+      if (CRITERIO_HEADING_RE.test(line) && line.trim().length < 120) headIndex.push({ offset, trail: line.trim().slice(0, 90) });
+      offset += line.length + 1;
+    }
+  }
+
+  // La aparición más larga de cada clave (el índice sólo trae el título).
+  const mejor = new Map<string, { start: number; end: number }>();
+  for (let i = 0; i < matches.length; i++) {
+    const clave = matches[i][1];
+    const start = matches[i].index!;
+    const end = matches[i + 1]?.index ?? cleanText.length;
+    const prev = mejor.get(clave);
+    if (!prev || end - start > prev.end - prev.start) mejor.set(clave, { start, end });
+  }
+
+  const chunks: LawChunk[] = [];
+  for (const [clave, { start, end }] of [...mejor.entries()].sort((a, b) => a[1].start - b[1].start)) {
+    const contexto = trailAt(headIndex, start);
+    const prefix = contexto ? `[${contexto}]\n` : "";
+    const parts = subSplit(cleanText.slice(start, end).trim());
+    for (let p = 0; p < parts.length; p++) {
+      chunks.push({ articulo: clave, parte: parts.length > 1 ? p + 1 : null, contexto, texto: `${prefix}${parts[p]}` });
+    }
+  }
+  return chunks;
+}
+
 // ─── Guías de llenado (prose + tables) ───────────────────────────────────────
 
 const GUIA_HEADING_RE = /^\s*(?:[IVXLC]+\.\s+|Apéndice\s+\d+|Capítulo\s|Glosario)/;
@@ -483,5 +528,7 @@ export function cleanGenericText(raw: string): string {
 export function chunkDocument(rawText: string, kind: DocKind): LawChunk[] {
   if (kind === "ley") return chunkLaw(cleanLawText(rawText));
   const clean = cleanGenericText(rawText);
-  return kind === "rmf" ? chunkRegla(clean) : chunkGeneric(clean);
+  if (kind === "rmf") return chunkRegla(clean);
+  if (kind === "criterio") return chunkCriterio(clean);
+  return chunkGeneric(clean);
 }
