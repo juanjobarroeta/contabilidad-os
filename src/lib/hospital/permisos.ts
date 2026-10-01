@@ -55,7 +55,7 @@ const paginas: Record<string, string[]> = {
   cuentas: ["cuentas"], cotizaciones: ["cotizaciones"], pagadores: ["convenios", "cotizaciones", "episodios"],
   protocolos: ["protocolos"], planes: ["protocolos", "episodios"], saeh: ["saeh"],
   mantenimiento: ["mantenimiento"], compras: ["compras"], caja: ["caja"],
-  usuarios: ["usuarios"], config: ["configuracion"], cumplimiento: ["cumplimiento"],
+  usuarios: ["usuarios"], puestos: ["usuarios"], config: ["configuracion"], cumplimiento: ["cumplimiento"],
   contabilidad: ["contabilidad"], fiscal: ["impuestos"], bancos: ["bancos"], nomina: ["nomina"],
   cartera: ["cuentas", "panel"], facturacion: ["facturacion", "caja", "cuentas"], contactos: ["clientes", "proveedores"], liquidaciones: ["caja", "bancos"], depositos: ["cuentas", "caja"], cobros: ["caja"], afiliaciones: ["convenios", "pacientes", "caja", "bancos"], empleados: ["nomina"], buscar: ["pacientes", "episodios"], "validar-curp": ["pacientes", "medicos"],
   proveedores: ["proveedores", "compras", "requisiciones", "tesoreria", "medicos"],
@@ -78,7 +78,7 @@ export async function enforceHospitalAccess(companyId: string, userId: string, r
   if (!(root === "config" && !writing) && member?.hospitalPaginas.length && !(paginas[root] ?? [root]).some(p => member.hospitalPaginas.includes(p))) {
     throw new AuthzError(403, "Tu usuario no tiene acceso a esta sección del hospital. Pide a un administrador que habilite esta sección en Usuarios.");
   }
-  if (["usuarios", "cumplimiento"].includes(root) || (root === "config" && writing)) {
+  if (["usuarios", "puestos", "cumplimiento"].includes(root) || (root === "config" && writing)) {
     if (!admin) throw new AuthzError(403, "Sólo un administrador del hospital puede realizar esta acción. Contacta al administrador de tu hospital.");
   }
   if (writing && ["cuentas", "caja", "depositos", "cobros", "bancos", "contabilidad", "liquidaciones", "facturacion", "nomina", "tesoreria"].includes(root)) {

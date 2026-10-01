@@ -1,4 +1,5 @@
 import { PERMISOS_CLINICOS } from "@/lib/hospital/permisos";
+import { accesoEfectivo, ajustesSchema, validarRolYPermisos } from "@/lib/hospital/puestos";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
@@ -15,6 +16,15 @@ const patchSchema = z.discriminatedUnion("action", [
     // Llaves de página del satélite; [] = ve todas.
     permisosClinicos: z.array(z.enum(PERMISOS_CLINICOS)).optional(),
     paginas: z.array(z.string().trim().min(1).max(40)).max(64).default([]),
+  }),
+  z.object({
+    // Puesto + ajustes: el acceso completo en un solo guardado (páginas y
+    // permisos efectivos salen de lib/hospital/puestos.ts).
+    action: z.literal("acceso"),
+    // OWNER sólo vale para el propio dueño (su rol no cambia desde aquí).
+    role: z.enum(["OWNER", "ADMIN", "ACCOUNTANT", "VIEWER"]),
+    puestoId: z.string().min(1).nullable(),
+    ajustes: ajustesSchema,
   }),
   z.object({
     action: z.literal("password"),
@@ -118,6 +128,61 @@ export const PATCH = withAuthz(async (req: Request, ctx: Params) => {
           permisosClinicos: updated.hospitalPermisos,
         sinRestriccion: updated.hospitalPaginas.length === 0,
       });
+    }
+
+    case "acceso": {
+      // El dueño sí ajusta su propio acceso (es quien puede); nadie más se
+      // edita a sí mismo, y a un administrador sólo lo cambia el dueño.
+      const esDuenoSobreSi = actorRole === "OWNER" && target.userId === actor.id;
+      if (!esDuenoSobreSi) validarJerarquia(target, actor, actorRole);
+      if (data.role === "OWNER" && target.role !== "OWNER") {
+        return NextResponse.json({ error: "El dueño se cambia en ContabilidadOS." }, { status: 403 });
+      }
+      const role = target.role === "OWNER" ? "OWNER" : data.role;
+      if (role === "ADMIN" && target.role !== "ADMIN" && actorRole !== "OWNER") {
+        return NextResponse.json({ error: "Sólo el dueño puede nombrar administradores." }, { status: 403 });
+      }
+      let puesto = null;
+      if (data.puestoId) {
+        puesto = await prisma.hospPuesto.findUnique({ where: { id: data.puestoId } });
+        if (!puesto || puesto.companyId !== target.companyId) return NextResponse.json({ error: "Puesto no encontrado" }, { status: 404 });
+      }
+      // A la medida (sin puesto): los «extra» son todo su acceso.
+      const ef = accesoEfectivo(puesto, puesto ? data.ajustes : { ...data.ajustes, paginasQuitadas: [], permisosQuitados: [] });
+      validarRolYPermisos(role, ef.permisos);
+      const updated = await prisma.companyMember.update({
+        where: { id },
+        data: {
+          role,
+          hospitalPuestoId: puesto?.id ?? null,
+          hospitalAjustes: data.ajustes,
+          hospitalPaginas: ef.paginas,
+          hospitalPermisos: ef.permisos,
+        },
+      });
+      registrarBitacora({
+        companyId: target.companyId,
+        userId: actor.id,
+        actorEmail: actor.email,
+        accion: "usuario.acceso",
+        entidad: "CompanyMember",
+        entidadId: id,
+        detalle: {
+          email: target.user.email,
+          rolAnterior: target.role,
+          rol: role,
+          puestoAnterior: target.hospitalPuestoId,
+          puesto: puesto?.nombre ?? null,
+          ajustes: data.ajustes,
+          paginasAntes: target.hospitalPaginas,
+          paginas: ef.paginas,
+          permisosAntes: target.hospitalPermisos,
+          permisos: ef.permisos,
+          origen: "hospital",
+        },
+        req,
+      });
+      return NextResponse.json({ ok: true, role: updated.role, puestoId: updated.hospitalPuestoId, paginas: ef.paginas, permisosClinicos: ef.permisos });
     }
 
     case "password": {

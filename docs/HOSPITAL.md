@@ -926,6 +926,19 @@ Usuarios guarda los permisos en dos grupos (`PATCH /usuarios/[id]/clinica { perm
 verificado, no toca la identidad médica: sólo un profesional distinto pasa por la verificación (evidencia y otro
 administrador).
 
+### Puestos (roles vivos)
+`HospPuesto` junta páginas y permisos (`todasLasPaginas` = Dirección). Cada `CompanyMember` tiene
+`hospitalPuestoId` y `hospitalAjustes` (`paginasExtra/Quitadas`, `permisosExtra/Quitados`); el acceso
+efectivo `(puesto ∪ extra) − quitados` se guarda en `hospitalPaginas`/`hospitalPermisos`, que es lo que lee
+la autorización (lib/hospital/puestos.ts). Rutas:
+```
+GET/POST /api/hospital/puestos · PUT/DELETE /api/hospital/puestos/[id]   (dueño y administradores)
+PATCH /api/hospital/usuarios/[id] { action: "acceso", role, puestoId|null, ajustes }
+```
+Editar un puesto recalcula a todos sus miembros en la misma transacción; si lo tiene un administrador (o
+el propio actor), sólo el dueño lo edita. Un acceso sin páginas se rechaza ([] significaría «todas»).
+Sólo lectura no recibe escritura (al recalcular se le filtra). Borrar un puesto con miembros: 409.
+
 ## Lo que NO hace (por diseño, v1)
 
 - No postea al mayor: la cuenta es WIP; el asiento nace con el CFDI.
