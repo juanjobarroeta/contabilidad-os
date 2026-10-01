@@ -27,19 +27,19 @@
 // ?year=&month=&tx= abre la mesa en ese mes con ese movimiento elegido.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { usePeriod } from "@/components/contabilidad/PeriodProvider";
 import { Loading } from "@/components/ui/feedback";
 import { ConciliacionWorkbench } from "@/components/contabilidad/ConciliacionWorkbench";
 import { ExpedienteEnContexto } from "@/components/expediente/ExpedienteEnContexto";
-import { GestionBancos, type VistaBancos } from "@/components/bancos/GestionBancos";
+import { GestionBancos } from "@/components/bancos/GestionBancos";
+import { readBankLocation, type BankTab as Tab } from "@/lib/bancos/navigation";
 import { TopTabsBar } from "@/components/layout/TopTabsBar";
 import { SelectorPeriodo } from "@/components/ui/SelectorPeriodo";
 import { ultimosEjercicios } from "@/lib/periodos";
-
-type Tab = "conciliacion" | VistaBancos;
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "conciliacion", label: "Conciliación" },
@@ -48,54 +48,31 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "historico", label: "Histórico" },
 ];
 
-/** `?tab=` inicial. Lazy useState (mismo patrón que facturas/nueva): se lee una
- *  vez al montar — el tab luego vive en estado y se refleja con replaceState. */
-function tabInicial(): Tab {
-  if (typeof window === "undefined") return "conciliacion";
-  const t = new URLSearchParams(window.location.search).get("tab");
-  return t === "movimientos" || t === "cuentas" || t === "historico" ? t : "conciliacion";
-}
-
-/** `?year=&month=&tx=` — el archivo (tab Movimientos) entrega un movimiento a
- *  la mesa: su mes en el encabezado y él seleccionado. Se lee UNA vez al
- *  montar, igual que el tab; después el período vive en estado. */
-function periodoInicial(): { year: number; month: number; tx: string | null; explicito: boolean } {
-  const hoy = new Date();
-  const base = { year: hoy.getFullYear(), month: hoy.getMonth() + 1, tx: null as string | null, explicito: false };
-  if (typeof window === "undefined") return base;
-  const q = new URLSearchParams(window.location.search);
-  const y = Number(q.get("year"));
-  const m = Number(q.get("month"));
-  // Sin un período válido y completo se ignora: medio parámetro llevaría a un
-  // mes que nadie pidió.
-  if (!Number.isInteger(y) || y < 2000 || y > 2100 || !Number.isInteger(m) || m < 1 || m > 12) return base;
-  return { year: y, month: m, tx: q.get("tx"), explicito: true };
-}
-
 export default function BancosPage() {
+  return <Suspense fallback={<Loading className="p-8" />}><BancosContent /></Suspense>;
+}
+
+function BancosContent() {
   const { activeCompany, loading: companyLoading } = useCompany();
-  const [tab, setTab] = useState<Tab>(tabInicial);
+  const searchParams = useSearchParams();
+  const query = searchParams.toString();
+  const location = useMemo(() => readBankLocation(query), [query]);
+  const { tab, tx: txInicial } = location;
   // EL PERÍODO ES EL DE LA APP, no uno propio: se elige una vez y sigue igual
   // al saltar entre Bancos y el cierre. Antes cada pantalla arrancaba en el mes
   // corriente y había que volver a agosto en cada pestaña.
   const { year, month, setPeriod } = usePeriod();
-  const [inicial] = useState(periodoInicial);
-  // `?year=&month=` (el deep link del archivo y de los CTAs) manda una vez al
-  // montar: es una petición explícita de ir a ESE mes.
+  // Next keeps this page mounted for same-route chat links. Follow every URL
+  // change, including back/forward, instead of reading it only on first mount.
+  const linkedYear = location.period?.year, linkedMonth = location.period?.month;
   useEffect(() => {
-    if (inicial.explicito) setPeriod(inicial.year, inicial.month);
-    // Sólo al montar: después el período vive en el proveedor.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  // El movimiento que llegó por `?tx=`: la mesa lo selecciona al montar y
-  // luego se suelta, para que navegar no lo reviva.
-  const [txInicial, setTxInicial] = useState<string | null>(inicial.tx);
+    if (linkedYear && linkedMonth && (year !== linkedYear || month !== linkedMonth)) setPeriod(linkedYear, linkedMonth);
+  }, [linkedYear, linkedMonth, year, month, setPeriod]);
   // Remonta el tab activo tras conciliar en la mesa, para que las listas
   // (movimientos/histórico) relean al volver.
   const [version, setVersion] = useState(0);
 
   function irA(t: Tab) {
-    setTab(t);
     const url = t === "conciliacion" ? "/bancos" : `/bancos?tab=${t}`;
     window.history.replaceState(null, "", url);
   }
@@ -103,21 +80,16 @@ export default function BancosPage() {
     setPeriod(y, m);
     // Cambiar de mes deja atrás el movimiento entregado: su `?tx=` en la barra
     // de direcciones prometería una selección que ya no existe.
-    if (txInicial) { setTxInicial(null); window.history.replaceState(null, "", "/bancos"); }
+    if (location.period || txInicial) window.history.replaceState(null, "", "/bancos");
   }
   // ENTREGA DESDE EL ARCHIVO. El tab Movimientos vive en ESTA misma página, así
-  // que «Resolver en la mesa» no puede ser un enlace a /bancos?tx=: Next no
-  // remonta la página por navegar a la misma ruta, y tab/período/tx se leen
-  // UNA vez al montar (arriba). El enlace cambiaba la URL y nada más — visto
-  // en producción: el botón «no hacía nada». Ahora el archivo llama aquí; el
-  // estado cambia de verdad y la URL sólo lo refleja, como en irA/irAlPeriodo.
+  // que no hace falta recargar la página. La URL es la fuente de tab/selección
+  // tanto para este callback como para los enlaces del copiloto.
   function resolverEnLaMesa(tx: { id: string; fecha: string }) {
     const [y, m] = tx.fecha.slice(0, 7).split("-").map(Number);
     if (!Number.isInteger(y) || !Number.isInteger(m)) return;
     setPeriod(y, m);
-    setTxInicial(tx.id);
-    setTab("conciliacion");
-    window.history.replaceState(null, "", `/bancos?year=${y}&month=${m}&tx=${tx.id}`);
+    window.history.replaceState(null, "", `/bancos?year=${y}&month=${m}&tx=${encodeURIComponent(tx.id)}`);
   }
   function moverPeriodo(delta: number) {
     const idx = year * 12 + (month - 1) + delta;
