@@ -20,12 +20,16 @@ import { useCompany } from "@/components/layout/CompanyProvider";
 import {
   X, Loader2, Wrench, Plus, Lock, Users, Trash2, ArrowLeft, CheckCircle2, ShieldCheck, ThumbsUp, ThumbsDown,
   History, ArrowDownRight, ArrowUp, Bookmark, Zap, CircleHelp,
+  SlidersHorizontal,
 } from "lucide-react";
 import { Markdown } from "./Markdown";
 import { TOOL_LABELS, useChat, type ChatContexto, type Message } from "./useChat";
 import { AccionesChat, ChatCard, PildoraRef } from "./ChatCards";
 import { CopilotoMascota } from "./CopilotoMascota";
-import { useModoMascota, useNecesitoRail } from "./useRailCopiloto";
+import { useModoMascota, useNecesitoRail, usePielMascota } from "./useRailCopiloto";
+import { PetFace } from "./PetSkin";
+import { PersonalizarCopiloto } from "./PersonalizarCopiloto";
+import { colorDe, nombreDe } from "@/lib/copiloto/personajes";
 import { colocarJunto, type Caja } from "@/lib/copiloto/colocar";
 import { sugerenciasPara, tituloDeRuta } from "@/lib/copiloto/sugerencias";
 import type { Accion, Card, RefCopiloto } from "@/lib/copiloto/tarjetas";
@@ -74,12 +78,14 @@ export function ChatPanel() {
   const { activeCompany } = useCompany();
   const companyId = activeCompany?.id ?? null;
   const [isOpen, setIsOpen] = useState(false);
-  const [view, setView] = useState<"chat" | "history">("chat");
+  const [view, setView] = useState<"chat" | "history" | "cust">("chat");
   const [input, setInput] = useState("");
   const [refPendiente, setRefPendiente] = useState<RefCopiloto | null>(null);
   const pathname = usePathname() ?? "/";
   const enCierre = pathname.startsWith("/cierre");
   const [modo, setModo] = useModoMascota();
+  const [piel, setPiel] = usePielMascota();
+  const nombrePet = nombreDe(piel);
   // Feedback: id del mensaje al que se le está escribiendo una corrección.
   const [correccionPara, setCorreccionPara] = useState<string | null>(null);
   const [correccionTexto, setCorreccionTexto] = useState("");
@@ -421,7 +427,9 @@ export function ChatPanel() {
   if (!activeCompany) return null;
 
   const contexto =
-    view === "history"
+    view === "cust"
+      ? "Elige cómo te acompaña"
+      : view === "history"
       ? `${memoria.length} ${memoria.length === 1 ? "cosa recordada" : "cosas recordadas"} · ${conversations.length} ${conversations.length === 1 ? "conversación" : "conversaciones"}`
       : `${tituloDeRuta(pathname)} · ${activeCompany.razonSocial}`;
 
@@ -518,7 +526,7 @@ export function ChatPanel() {
   const panel = (
     <div
       role="dialog"
-      aria-label="Copiloto"
+      aria-label={nombrePet}
       className={cn(
         "z-[62] flex flex-col overflow-hidden border-cos-line bg-cos-card print:hidden",
         flotante
@@ -541,18 +549,17 @@ export function ChatPanel() {
     >
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-cos-line-soft py-3 pl-3.5 pr-2.5">
-        {view === "history" ? (
+        {view !== "chat" ? (
           <button onClick={() => setView("chat")} className={BOTON_ICONO} title="Volver">
             <ArrowLeft className="h-4 w-4" />
           </button>
         ) : (
-          <span className="relative h-[30px] w-[30px] flex-none rounded-[10px] bg-cos-brand" aria-hidden>
-            <span className="absolute left-2 top-[11px] h-[7px] w-[5px] rounded-[3px] bg-white" />
-            <span className="absolute right-2 top-[11px] h-[7px] w-[5px] rounded-[3px] bg-white" />
-          </span>
+          <PetFace char={piel.char} color={colorDe(piel)} />
         )}
         <div className="ml-0.5 min-w-0 flex-1">
-          <h3 className="text-[14.5px] font-semibold text-cos-ink">{view === "history" ? "Historial y memoria" : "Copiloto"}</h3>
+          <h3 className="truncate text-[14.5px] font-semibold text-cos-ink">
+            {view === "history" ? "Historial y memoria" : view === "cust" ? "Personalizar" : nombrePet}
+          </h3>
           <p className="truncate text-[11.5px] text-cos-ink-faint">{contexto}</p>
         </div>
         {view === "chat" && conversationId && isMine && (
@@ -564,6 +571,13 @@ export function ChatPanel() {
             {visibility === "COMPANY" ? <Users className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
           </button>
         )}
+        <button
+          onClick={() => setView(view === "cust" ? "chat" : "cust")}
+          className={cn(BOTON_ICONO, view === "cust" && "bg-cos-brand-tint text-cos-brand-ink")}
+          title="Personalizar copiloto"
+        >
+          <SlidersHorizontal className="h-4 w-4" />
+        </button>
         <button
           onClick={() => setView(view === "history" ? "chat" : "history")}
           className={cn(BOTON_ICONO, view === "history" && "bg-cos-brand-tint text-cos-brand-ink")}
@@ -584,7 +598,9 @@ export function ChatPanel() {
         </button>
       </div>
 
-      {view === "history" ? (
+      {view === "cust" ? (
+        <PersonalizarCopiloto piel={piel} onCambio={setPiel} />
+      ) : view === "history" ? (
         /* ── Historial y memoria ── */
         <div className="flex-1 overflow-y-auto overscroll-contain px-3 pb-4 pt-1">
           <p className="px-1 pb-2 pt-3.5 font-mono text-[10px] font-semibold uppercase tracking-[.12em] text-cos-ink-faint">

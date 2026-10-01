@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { PedidoRail } from "@/lib/rail/armar";
+import { PIEL_DEFAULT, sanearPiel, type Piel } from "@/lib/copiloto/personajes";
 
 // El `necesito[]` del rail, compartido por la mascota (pistas al cambiar de
 // pantalla) y el chat (píldoras de sugerencia). Caché de módulo de un minuto
@@ -77,4 +78,38 @@ export function useModoMascota(): [ModoMascota, (m: ModoMascota) => void] {
     return () => window.removeEventListener(EVENTO_MODO, on);
   }, []);
   return [modo, fijarModoMascota];
+}
+
+// ── Personaje de la mascota (localStorage, compartido entre componentes) ────
+// Preferencia del usuario en este navegador; luego vivirá en Configuración.
+
+const LLAVE_PIEL = "cos-pet-skin";
+const EVENTO_PIEL = "cos:pet-skin";
+
+export function leerPiel(): Piel {
+  try {
+    return sanearPiel(JSON.parse(localStorage.getItem(LLAVE_PIEL) ?? "null"));
+  } catch {
+    return { ...PIEL_DEFAULT, colors: {} };
+  }
+}
+
+export function fijarPiel(p: Piel) {
+  try {
+    localStorage.setItem(LLAVE_PIEL, JSON.stringify(p));
+  } catch {
+    /* modo privado: vale para esta pestaña */
+  }
+  window.dispatchEvent(new CustomEvent(EVENTO_PIEL, { detail: p }));
+}
+
+export function usePielMascota(): [Piel, (p: Piel) => void] {
+  const [piel, setPiel] = useState<Piel>(PIEL_DEFAULT);
+  useEffect(() => {
+    setPiel(leerPiel());
+    const on = (e: Event) => setPiel(sanearPiel((e as CustomEvent<Piel>).detail));
+    window.addEventListener(EVENTO_PIEL, on);
+    return () => window.removeEventListener(EVENTO_PIEL, on);
+  }, []);
+  return [piel, fijarPiel];
 }

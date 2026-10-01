@@ -257,49 +257,17 @@
     user-select: none;
     outline: none;
   }
-  .cos-pet-body {
-    position: absolute;
+  /* El cuerpo de la mascota ES la piel del personaje (.cos-skin, abajo):
+     aquí sólo va el movimiento. */
+  .cos-pet .cos-pet-body {
     inset: 0;
-    border-radius: 20px;
-    background: var(--brand);
-    box-shadow: 0 10px 24px -8px oklch(0.4 0.15 258 / 0.55), inset 0 -4px 0 oklch(0 0 0 / 0.12);
+    width: auto;
+    height: auto;
+    box-shadow: 0 10px 24px -8px color-mix(in oklch, var(--pet-c), black 45%), inset 0 -4px 0 oklch(0 0 0 / 0.12);
     animation: cos-pet-bob 3.2s ease-in-out infinite;
     transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.3, 1.4), box-shadow 0.18s;
   }
-  .cos-pet-body::after {
-    content: "";
-    position: absolute;
-    left: 9px;
-    right: 9px;
-    top: 8px;
-    height: 10px;
-    border-radius: 8px;
-    background: oklch(1 0 0 / 0.14);
-  }
-  .cos-pet-eye {
-    position: absolute;
-    top: 21px;
-    width: 11px;
-    height: 14px;
-    border-radius: 6px;
-    background: #fff;
-    overflow: hidden;
-    animation: cos-pet-blink 5.5s infinite;
-    transition: height 0.15s;
-  }
-  .cos-pet-eye.l { left: 15px; }
-  .cos-pet-eye.r { right: 15px; }
-  .cos-pet-eye i {
-    position: absolute;
-    left: 3px;
-    top: 4px;
-    width: 5px;
-    height: 6px;
-    border-radius: 3px;
-    background: var(--ink);
-    transition: transform 0.08s;
-  }
-  [data-theme="dark"] .cos-pet-eye i { background: oklch(0.2 0.02 260); }
+  .cos-pet .cos-skin .eye { animation: cos-pet-blink 5.5s infinite; }
   .cos-pet-dot {
     position: absolute;
     top: -3px;
@@ -317,17 +285,146 @@
   .cos-pet.drag .cos-pet-body {
     transform: scale(1.12) rotate(-8deg);
     animation: none;
-    box-shadow: 0 22px 30px -10px oklch(0.4 0.15 258 / 0.6);
+    box-shadow: 0 22px 30px -10px color-mix(in oklch, var(--pet-c), black 40%);
   }
   .cos-pet.hop .cos-pet-body { animation: cos-pet-hop 0.5s cubic-bezier(0.3, 0.7, 0.4, 1.4); }
   .cos-pet.over .cos-pet-body { transform: scale(1.18); }
-  .cos-pet.over .cos-pet-eye { height: 16px; }
+  .cos-pet.over .cos-skin[data-char="blob"] .eye { height: 16px; }
   .cos-pet:focus-visible .cos-pet-body { outline: 3px solid var(--brand-tint); outline-offset: 3px; }
+  .cos-pet.hop .cos-skin[data-char="shiba"] .ear.l { animation: cos-pet-oreja-l 0.5s ease; }
+  .cos-pet.hop .cos-skin[data-char="shiba"] .ear.r { animation: cos-pet-oreja-r 0.5s ease; }
 
-  /* Modo «Botón fijo»: círculo en la esquina, sin ojos ni arrastre. */
+  /* Modo «Botón fijo»: círculo en la esquina del color elegido, sin piezas. */
   .cos-pet.classic { width: 54px; height: 54px; cursor: pointer; }
   .cos-pet.classic .cos-pet-body { border-radius: 50%; animation: none; }
-  .cos-pet.classic .cos-pet-body::after { display: none; }
+  .cos-pet.classic .cos-skin > span,
+  .cos-pet.classic .cos-skin::after { display: none; }
+
+  /* ── Personajes (src/lib/copiloto/personajes.ts) ─────────────────────────
+     Nueve piezas por personaje; cada uno enseña las suyas. Todo CSS, se
+     recolorea con --pet-c. Caja de 58×58. */
+  .cos-skin {
+    position: absolute;
+    left: 0;
+    top: 0;
+    display: block;
+    width: 58px;
+    height: 58px;
+    background: var(--pet-c);
+    --pet-d: color-mix(in oklch, var(--pet-c), black 30%);
+    --pet-ink: oklch(0.22 0.02 258);
+  }
+  .cos-skin > span { position: absolute; display: none; }
+  .cos-skin .eye { display: block; overflow: hidden; }
+  .cos-skin .eye i { position: absolute; display: block; transition: transform 0.08s; }
+
+  .cos-skin[data-char="blob"] { border-radius: 20px; }
+  .cos-skin[data-char="blob"]::after {
+    content: "";
+    position: absolute;
+    left: 9px;
+    right: 9px;
+    top: 8px;
+    height: 10px;
+    border-radius: 8px;
+    background: oklch(1 0 0 / 0.14);
+  }
+  .cos-skin[data-char="blob"] .eye { top: 21px; width: 11px; height: 14px; border-radius: 6px; background: #fff; transition: height 0.15s; }
+  .cos-skin[data-char="blob"] .eye.l { left: 15px; }
+  .cos-skin[data-char="blob"] .eye.r { right: 15px; }
+  .cos-skin[data-char="blob"] .eye i { left: 3px; top: 4px; width: 5px; height: 6px; border-radius: 3px; background: var(--pet-ink); }
+
+  .cos-skin[data-char="shiba"] { border-radius: 50% 50% 46% 46% / 54% 54% 46% 46%; }
+  .cos-skin[data-char="shiba"] .ear {
+    display: block;
+    top: -8px;
+    width: 21px;
+    height: 22px;
+    background: var(--pet-c);
+    clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  }
+  .cos-skin[data-char="shiba"] .ear.l { left: 3px; transform: rotate(-16deg); }
+  .cos-skin[data-char="shiba"] .ear.r { right: 3px; transform: rotate(16deg); }
+  .cos-skin[data-char="shiba"] .ear::after {
+    content: "";
+    position: absolute;
+    left: 5px;
+    right: 5px;
+    top: 8px;
+    bottom: 0;
+    background: oklch(0.93 0.04 70);
+    clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  }
+  .cos-skin[data-char="shiba"] .mask {
+    display: block;
+    left: 6px;
+    right: 6px;
+    bottom: 2px;
+    height: 29px;
+    border-radius: 50% 50% 46% 46% / 58% 58% 42% 42%;
+    background: oklch(0.975 0.02 85);
+  }
+  .cos-skin[data-char="shiba"] .brow { display: block; top: 16px; width: 7px; height: 4px; border-radius: 50%; background: oklch(0.975 0.02 85); }
+  .cos-skin[data-char="shiba"] .brow.l { left: 14px; }
+  .cos-skin[data-char="shiba"] .brow.r { right: 14px; }
+  .cos-skin[data-char="shiba"] .eye { top: 22px; width: 8px; height: 9px; border-radius: 50%; background: oklch(0.2 0.02 40); }
+  .cos-skin[data-char="shiba"] .eye.l { left: 15px; }
+  .cos-skin[data-char="shiba"] .eye.r { right: 15px; }
+  .cos-skin[data-char="shiba"] .eye i { left: 2px; top: 1.5px; width: 3px; height: 3px; border-radius: 50%; background: #fff; }
+  .cos-skin[data-char="shiba"] .nose {
+    display: block;
+    left: 24px;
+    top: 32px;
+    width: 10px;
+    height: 7px;
+    border-radius: 50% 50% 45% 45% / 40% 40% 60% 60%;
+    background: oklch(0.2 0.02 40);
+  }
+  .cos-skin[data-char="shiba"] .nose::after {
+    content: "";
+    position: absolute;
+    left: 4px;
+    top: 6px;
+    width: 2px;
+    height: 5px;
+    border-radius: 1px;
+    background: oklch(0.2 0.02 40);
+  }
+
+  .cos-skin[data-char="owl"] { border-radius: 48% 48% 44% 44% / 52% 52% 48% 48%; }
+  .cos-skin[data-char="owl"] .ear { display: block; top: -6px; width: 14px; height: 16px; background: var(--pet-d); }
+  .cos-skin[data-char="owl"] .ear.l { left: 5px; clip-path: polygon(0 0, 100% 100%, 0 100%); }
+  .cos-skin[data-char="owl"] .ear.r { right: 5px; clip-path: polygon(100% 0, 100% 100%, 0 100%); }
+  .cos-skin[data-char="owl"] .mask {
+    display: block;
+    left: 13px;
+    right: 13px;
+    bottom: 4px;
+    height: 22px;
+    border-radius: 50%;
+    background: color-mix(in oklch, var(--pet-c), white 55%);
+  }
+  .cos-skin[data-char="owl"] .eye {
+    top: 13px;
+    width: 19px;
+    height: 19px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2.5px solid var(--pet-ink);
+  }
+  .cos-skin[data-char="owl"] .eye.l { left: 7px; }
+  .cos-skin[data-char="owl"] .eye.r { right: 7px; }
+  .cos-skin[data-char="owl"] .eye i { left: 4px; top: 4px; width: 6px; height: 6px; border-radius: 50%; background: var(--pet-ink); }
+  .cos-skin[data-char="owl"] .bridge { display: block; left: 26px; top: 20px; width: 6px; height: 2.5px; background: var(--pet-ink); }
+  .cos-skin[data-char="owl"] .nose {
+    display: block;
+    left: 25px;
+    top: 31px;
+    width: 8px;
+    height: 8px;
+    background: oklch(0.76 0.14 70);
+    clip-path: polygon(0 0, 100% 0, 50% 100%);
+  }
 
   .copiloto-objetivo {
     outline: 2px dashed var(--brand) !important;
@@ -371,13 +468,16 @@
     100% { transform: none; }
   }
   @keyframes cos-pet-blink { 0%, 94%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.1); } }
+  @keyframes cos-pet-oreja-l { 40% { transform: rotate(-30deg); } }
+  @keyframes cos-pet-oreja-r { 40% { transform: rotate(30deg); } }
   @keyframes cos-pet-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
   @keyframes cos-typing { 0%, 60%, 100% { opacity: 0.3; transform: none; } 30% { opacity: 1; transform: translateY(-3px); } }
 
   @media (prefers-reduced-motion: reduce) {
     .cos-pet-body,
     .cos-pet.hop .cos-pet-body,
-    .cos-pet-eye,
+    .cos-pet .cos-skin .eye,
+    .cos-pet.hop .cos-skin .ear,
     .cos-pet-panel,
     .cos-typing i { animation: none !important; }
   }
