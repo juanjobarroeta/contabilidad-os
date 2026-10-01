@@ -127,6 +127,7 @@ export function ChatPanel() {
     isLoading,
     activeTool,
     pendingAction,
+    setPendingAction,
     confirming,
     conversationId,
     fijarConversacion,
@@ -188,10 +189,10 @@ export function ChatPanel() {
       setVisibility(data.visibility);
       setIsMine(!!data.mine);
       setMarcadores([]);
-      cancelAction();
+      setPendingAction(data.pendingAction ?? null);
       if (data.activeManagedRun?.requestId) void retomarAgente(data.activeManagedRun.id, data.activeManagedRun.requestId);
     },
-    [setMessages, fijarConversacion, cancelAction, resetChat, retomarAgente],
+    [setMessages, fijarConversacion, setPendingAction, resetChat, retomarAgente],
   );
 
   async function deleteConversation(id: string) {
