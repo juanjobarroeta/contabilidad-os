@@ -54,7 +54,7 @@ and concurrent confirmations consume the token once. Stale data requires a new c
 
 ## Deployment and operating boundary
 
-Apply `20261001_contabot_objectives` before starting the updated application.
+Apply `20261011_contabot_objectives` before starting the updated application.
 Accounting read/proposal tools also work in the existing in-app chat. Managed
 objectives remain behind `CONTABOT_MANAGED_ENABLED` and the explicit
 `CONTABOT_MANAGED_COMPANY_IDS` allowlist; deploying this code does not expand it.

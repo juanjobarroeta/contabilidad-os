@@ -132,7 +132,7 @@ export async function changeObjective(userId: string, companyId: string, id: str
     } })).id : objective.conversationId;
     const changed = await tx.contaBotObjective.updateMany({ where: { id, companyId, version }, data: action === "pause" ? {
       pausedAt: new Date(), state: "paused", nextAction: "Objetivo pausado por una persona.", version: { increment: 1 },
-    } : { conversationId, pausedAt: null, state: "queued", lastError: null, lastRunEvidenceHash: null, nextCheckAt: new Date(), version: { increment: 1 } } });
+    } : { conversationId, pausedAt: null, state: "queued", nextAction: "Revisión reanudada; pendiente de verificar evidencia.", lastError: null, lastRunEvidenceHash: null, nextCheckAt: new Date(), version: { increment: 1 } } });
     if (!changed.count) throw new ContaBotError(409, "El objetivo cambió. Actualiza la lista antes de continuar.");
     await tx.auditLog.create({ data: { companyId, userId, accion: `contabot.objective.${action}`, entidad: "ContaBotObjective", entidadId: id } });
     return tx.contaBotObjective.findUniqueOrThrow({ where: { id } });
