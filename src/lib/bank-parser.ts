@@ -4,6 +4,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface ParsedTransaction {
+  bankReferenceId?: string;
+  sourceRow?: number;
+  sourcePage?: number;
   fecha: Date;
   descripcion: string;
   monto: number;    // positive = credit, negative = debit
@@ -285,6 +288,7 @@ function parseOFX(content: string): ParseResult {
       fecha,
       descripcion: memo.trim(),
       monto,
+      bankReferenceId: fitid || undefined,
       referencia: fitid ?? undefined,
     });
   }

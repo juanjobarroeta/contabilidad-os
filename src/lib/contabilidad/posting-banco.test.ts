@@ -112,7 +112,7 @@ describe("subcuentaBancoSpec", () => {
 });
 
 describe("IGNORED_TAGS_VALIDOS", () => {
-  it("los dieciséis tags del contrato, y nada más", () => {
+  it("los tags del contrato incluyen la comisión confirmada en el chat", () => {
     // RENT y FINANCIAL_INCOME entraron cuando el flujo de Movimientos ya podía
     // etiquetarlas pero el cierre las rechazaba como "sin categoría".
     // BANK_NOISE, por lo mismo: el importador la etiqueta desde
@@ -122,6 +122,7 @@ describe("IGNORED_TAGS_VALIDOS", () => {
       "ANTICIPO_PROVEEDOR",
       "BANK_NOISE",
       "CAPITAL_CONTRIBUTION",
+      "COMISION",
       "FINANCIAL_INCOME",
       "INTERNAL_TRANSFER",
       "IVA_COMISION",

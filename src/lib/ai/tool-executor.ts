@@ -1,3 +1,4 @@
+import { BANK_STATEMENT_TOOL_NAMES } from "./bank-statement-tools";
 import { prisma } from "@/lib/prisma";
 import {
   detectComplementosPendientes,
@@ -90,6 +91,10 @@ export async function executeToolCall(
   if (["proponer_crear_subcuenta", "proponer_renombrar_cuenta", "proponer_registro_prestamo"].includes(toolName)) {
     const { proposeAccounting } = await import("./accounting-proposals");
     return proposeAccounting(toolName, input, companyId, context);
+  }
+  if (BANK_STATEMENT_TOOL_NAMES.has(toolName)) {
+    const { executeBankStatementTool } = await import("./bank-statement-executor");
+    return executeBankStatementTool(toolName, input, companyId, context);
   }
   // El expediente se despacha antes del switch: sus herramientas viven en su
   // propio módulo (con sus reglas de versionado y de lo verificado a mano) y
@@ -1731,8 +1736,8 @@ async function queryBankTransactions(input: ToolInput, companyId: string) {
     const [agg, count, ingresos, egresos] = await Promise.all([
       prisma.bankTransaction.aggregate({ where, _sum: { monto: true } }),
       prisma.bankTransaction.count({ where }),
-      prisma.bankTransaction.aggregate({ where: { ...where, monto: { gt: 0 } }, _sum: { monto: true } }),
-      prisma.bankTransaction.aggregate({ where: { ...where, monto: { lt: 0 } }, _sum: { monto: true } }),
+      prisma.bankTransaction.aggregate({ where: { AND: [where, { monto: { gt: 0 } }] }, _sum: { monto: true } }),
+      prisma.bankTransaction.aggregate({ where: { AND: [where, { monto: { lt: 0 } }] }, _sum: { monto: true } }),
     ]);
     return JSON.stringify({
       _convencion: "monto positivo = INGRESO (entró dinero); negativo = EGRESO (salió dinero).",
@@ -1750,24 +1755,33 @@ async function queryBankTransactions(input: ToolInput, companyId: string) {
   if (input.sort_by === "monto_asc") orderBy = { monto: "asc" }; // mayor egreso primero
   else if (input.sort_by === "monto_desc") orderBy = { monto: "desc" }; // mayor ingreso primero
 
-  const txs = await prisma.bankTransaction.findMany({
+  const limit = Math.max(1, Math.min(Number(input.limit) || 20, 100));
+  const cursor = typeof input.cursor === "string" ? input.cursor : undefined;
+  if (cursor && !await prisma.bankTransaction.findFirst({ where: { ...where, id: cursor }, select: { id: true } })) return JSON.stringify({ error: "Cursor inválido para esta consulta." });
+  const found = await prisma.bankTransaction.findMany({
     where,
     include: {
       bankAccount: { select: { banco: true, nombre: true, moneda: true } },
       invoice: { select: { uuid: true, total: true, tipo: true } },
+      statementRows: { select: { batchId: true, rowNumber: true, pageNumber: true, status: true }, take: 10 },
       supplier: { select: { razonSocial: true, rfc: true } },
     },
-    orderBy,
-    take: Math.min((input.limit as number) || 20, 50),
+    orderBy: [orderBy, { id: "asc" }],
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    take: limit + 1,
   });
 
+  const txs = found.slice(0, limit);
   return JSON.stringify({
+    total: await prisma.bankTransaction.count({ where }),
+    nextCursor: found.length > limit ? txs[txs.length - 1].id : null,
     _convencion: "monto positivo = INGRESO (entró dinero); monto negativo = EGRESO (salió dinero). El 'mayor egreso' es el monto MÁS NEGATIVO (mayor en valor absoluto entre los negativos).",
     movimientos: txs.map((tx) => ({
       id: tx.id,
       fecha: tx.fecha.toISOString().substring(0, 10),
       descripcion: tx.descripcion,
       referencia: tx.referencia,
+      source: tx.source, importBatchId: tx.importBatchId, bankReferenceId: tx.bankReferenceId, operationTime: tx.operationTime, claveRastreo: tx.claveRastreo, evidence: tx.statementRows,
       monto: Number(tx.monto),
       montoAbsoluto: Math.abs(Number(tx.monto)),
       flujo: Number(tx.monto) >= 0 ? "INGRESO" : "EGRESO",

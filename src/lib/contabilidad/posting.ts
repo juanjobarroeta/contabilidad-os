@@ -197,6 +197,7 @@ export const esParDevolucion = (t: { devolucionDeId: string | null; devolucionPo
 
 export const IGNORED_TAGS_VALIDOS = new Set([
   "PENDING_MONTHLY_CFDI",
+  "COMISION",
   "TAX_PAYMENT",
   "PAYROLL_NO_CFDI",
   "NON_DEDUCTIBLE",
@@ -440,6 +441,9 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     throw new PeriodoNoContabilizableError(compuerta.body.error, compuerta.body.estado);
   }
 
+  const { statementPostingGate } = await import("@/lib/bancos/statements/review");
+  const bankGate = await statementPostingGate(companyId, year, month);
+  if (!bankGate.ok) throw new Error(bankGate.message);
   const warnings: string[] = [];
   const drafts: EntryDraft[] = [];
 
@@ -1444,13 +1448,13 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     if (tx.status === "IGNORED") {
       const tag = tx.notes ?? "";
 
-      if (tag === "PENDING_MONTHLY_CFDI") {
+      if (tag === "PENDING_MONTHLY_CFDI" || tag === "COMISION") {
         // Bank fee, monthly CFDI hasn't arrived yet. Post the expense provisionally
         // to comisiones bancarias (the CFDI match later won't create new entries
         // because the tx is already in MATCHED status at that point — we'd need
         // a re-post, which the user can trigger manually).
-        drafts.push({ ...base, chartAccountId: accComisionesBanc.id, monto: absAmount, tipo: "CARGO" });
-        drafts.push({ ...base, chartAccountId: ctaBanco(tx).id, monto: absAmount, tipo: "ABONO" });
+        drafts.push({ ...base, chartAccountId: accComisionesBanc.id, monto: absAmount, tipo: isCredit ? "ABONO" : "CARGO" });
+        drafts.push({ ...base, chartAccountId: ctaBanco(tx).id, monto: absAmount, tipo: isCredit ? "CARGO" : "ABONO" });
         continue;
       }
 
@@ -1794,6 +1798,8 @@ export async function postMonth(opts: PostMonthOptions): Promise<PostMonthResult
     // Loan confirmations/undo use this same lock. Do not regenerate from a
     // snapshot that predates a newly confirmed or reverted counteraccount.
     await tx.$queryRaw`SELECT id FROM "Company" WHERE id = ${companyId} FOR UPDATE`;
+    const currentBankGate = await statementPostingGate(companyId, year, month, tx);
+    if (!currentBankGate.ok || currentBankGate.hash !== bankGate.hash) throw new Error("La evidencia bancaria cambió durante el cálculo. Revisa los estados antes de contabilizar.");
     const currentLoans = await tx.bankTransaction.findMany({ where: { companyId, fecha: { gte: start, lt: end }, loanAccountId: { not: null } },
       select: { id: true, fecha: true, monto: true, loanAccountId: true, bankAccountId: true, status: true, notes: true } });
     if (loanSnapshot(currentLoans) !== initialLoans) throw new Error("Los préstamos del periodo cambiaron durante el cálculo. Vuelve a contabilizar con la evidencia actualizada.");

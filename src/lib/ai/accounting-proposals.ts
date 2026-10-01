@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { statementPostingGate } from "@/lib/bancos/statements/review";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { CODIGO_AGRUPADOR_OFICIAL } from "@/lib/contabilidad/codigo-agrupador";
@@ -75,7 +76,7 @@ export async function revertLoanPosting(companyId: string, txId: string, userId:
     await refreshPeriodTotals(db, companyId, year, month);
     await db.auditLog.create({ data: { companyId, userId, accion: "contabilidad.prestamo.revertir", entidad: "BankTransaction", entidadId: txId,
       detalle: { accountId: movement.loanAccountId, family: movement.notes } } });
-  }, { isolationLevel: "Serializable" });
+  }, { isolationLevel: "Serializable", timeout: 120000 });
 }
 
 export async function proposeAccounting(name: string, input: Record<string, unknown>, companyId: string, context: ToolContext) {
@@ -91,6 +92,8 @@ export async function proposeAccounting(name: string, input: Record<string, unkn
       const entries = loanLines(row.bank.id, row.account.id, Number(row.movement.monto));
       summary = `Registrar capital de préstamo del ${row.movement.fecha.toISOString().slice(0, 10)} (${row.movement.descripcion}): ` +
         entries.map((line) => `${line.tipo === "CARGO" ? "Cargo" : "Abono"} $${line.monto.toFixed(2)} a ${line.chartAccountId === row.bank.id ? codeOf(row.bank) + " " + row.bank.nombre : codeOf(row.account) + " " + row.account.nombre}`).join("; ") + ". Sin calcular impuestos sobre este capital.";
+      const gate = await statementPostingGate(companyId, row.movement.fecha.getUTCFullYear(), row.movement.fecha.getUTCMonth() + 1, prisma, row.movement.bankAccountId);
+      if (!gate.ok) summary += " Se guardará como borrador con este auxiliar, sin asientos hasta verificar el estado completo.";
       action = { type: "registrar_prestamo", payload: { txId: row.movement.id, accountId: row.account.id, family, expected: row.expected } };
     } else {
       const account = await prisma.chartAccount.findFirst({ where: { id: String(input.chart_account_id ?? ""), companyId, isActive: true } });
@@ -119,6 +122,7 @@ export async function executeAccountingProposal(pa: Extract<ChatPendingAction, {
   try {
     return await prisma.$transaction(async (db) => {
       await db.$queryRaw`SELECT id FROM "Company" WHERE id = ${pa.companyId} FOR UPDATE`;
+      let deferred = false;
       if (pa.type === "registrar_prestamo") {
         const row = await readLoan(db, pa.companyId, pa.payload.txId, pa.payload.accountId, pa.payload.family);
         if (row.expected !== pa.payload.expected) return fail("La evidencia cambió. Pide una propuesta actualizada antes de registrar el préstamo.");
@@ -129,7 +133,9 @@ export async function executeAccountingProposal(pa: Extract<ChatPendingAction, {
         await db.$queryRaw`SELECT id FROM "AccountingPeriod" WHERE id = ${period.id} FOR UPDATE`;
         await assertPeriodoAbierto(db, pa.companyId, year, month);
         if (await db.accountingEntry.count({ where: { companyId: pa.companyId, referencia: row.movement.id, referenciaTipo: "BANK_TX" } })) return fail("Ya existen asientos del movimiento. Revísalos antes de registrar otra vez.");
-        await db.accountingEntry.createMany({ data: loanLines(row.bank.id, row.account.id, Number(row.movement.monto)).map((line) => ({ ...line,
+        const bankGate = await statementPostingGate(pa.companyId, year, month, db, row.movement.bankAccountId);
+        deferred = !bankGate.ok;
+        if (!deferred) await db.accountingEntry.createMany({ data: loanLines(row.bank.id, row.account.id, Number(row.movement.monto)).map((line) => ({ ...line,
           companyId: pa.companyId, fecha: row.movement.fecha, year, month, periodId: period.id,
           descripcion: row.movement.descripcion.slice(0, 200), referencia: row.movement.id, referenciaTipo: "BANK_TX", fuente: "BANCO",
         })) });
@@ -150,8 +156,8 @@ export async function executeAccountingProposal(pa: Extract<ChatPendingAction, {
       }
       await db.auditLog.create({ data: { companyId: pa.companyId, userId, accion: `ai.${pa.type}`, entidad: "ChatPendingAction", entidadId: pa.token,
         detalle: { summary: pa.summary, payload: pa.payload } as Prisma.InputJsonValue } });
-      return { ok: true, message: pa.type === "registrar_prestamo" ? "Préstamo registrado en las cuentas confirmadas. Se conservan al regenerar el mes." : pa.type === "crear_subcuenta" ? "Subcuenta creada sin movimientos ni saldo inicial." : "Cuenta renombrada; código y movimientos conservados." };
-    }, { isolationLevel: "Serializable" });
+      return { ok: true, message: deferred ? "Préstamo guardado como borrador con su auxiliar exacto. Falta verificar el estado completo antes de contabilizar." : pa.type === "registrar_prestamo" ? "Préstamo registrado en las cuentas confirmadas. Se conservan al regenerar el mes." : pa.type === "crear_subcuenta" ? "Subcuenta creada sin movimientos ni saldo inicial." : "Cuenta renombrada; código y movimientos conservados." };
+    }, { isolationLevel: "Serializable", timeout: 120000 });
   } catch (error) {
     return fail(error instanceof Error && error.name.startsWith("Prisma") ? "La contabilidad cambió mientras se confirmaba. Revisa y genera otra propuesta." : error instanceof Error ? error.message : "No se pudo confirmar la propuesta.");
   }

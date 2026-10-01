@@ -7,6 +7,9 @@ vi.mock("../cierre/compuerta-contabilizacion", () => ({
   invalidarCompuertaContabilizacion: vi.fn(),
 }));
 
+// Statement confirmation is exercised end-to-end in statements/review.itest.ts.
+vi.mock("@/lib/bancos/statements/review", () => ({ statementPostingGate: async () => ({ ok: true, hash: "isolated-ledger-fixture", accounts: [] }) }));
+
 import { prisma } from "../prisma";
 import { postMonth } from "./posting";
 import { seedChartOfAccounts } from "./seed-catalog";

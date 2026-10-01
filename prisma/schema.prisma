@@ -115,6 +115,8 @@ model VerificationToken {
 // ─── Companies (Multi-tenant core) ───────────────────────────────────────────
 
 model Company {
+  bankDocumentInbox BankDocumentInbox[]
+  bankReviewDecisions BankReviewDecision[]
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1651,6 +1653,9 @@ model BankTransaction {
   // Lote de importación (estado de cuenta) al que pertenece — habilita el
   // "deshacer última importación": borrar exactamente ese lote sin tocar el resto.
   importBatchId String?
+  statementRows BankStatementRow[]
+  bankReferenceId String?
+  operationTime String?
 
   company               Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
   bankAccount           BankAccount            @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
@@ -1742,6 +1747,24 @@ model ImportBatch {
   source         String // WHATSAPP | UPLOAD | …
   banco          String?
   periodo        String?
+  fileHash       String?
+  parserVersion  Int       @default(1)
+  kind           String    @default("INTERIM") // INTERIM | STATEMENT; format alone never establishes finality
+  declaredAccount String?
+  declaredCurrency String?
+  periodStart    String?   // ISO date, declared coverage; never inferred from first/last movement
+  periodEnd      String?
+  controls       Json?
+  warnings       Json?
+  parsedCount    Int       @default(0)
+  verifiedYear   Int?
+  verifiedMonth  Int?
+  verifiedAt    DateTime?
+  verifiedByUserId String?
+  verificationHash String?
+  reviewAttestation Json?
+  rows           BankStatementRow[]
+
   count          Int       @default(0) // movimientos importados en este lote
   undoneAt       DateTime?
   undoneByUserId String?
@@ -1767,8 +1790,49 @@ model ImportBatch {
   bankAccount  BankAccount       @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
   transactions BankTransaction[]
 
+  @@unique([bankAccountId, fileHash])
+  @@index([companyId, verifiedYear, verifiedMonth])
   @@index([companyId, createdAt])
   @@index([bankAccountId])
+}
+
+// Immutable extracted evidence. Linking/resolution changes are audited; the
+// original parsed payload and source coordinates are never rewritten.
+model BankStatementRow {
+  id          String @id @default(cuid())
+  batchId     String
+  rowNumber   Int
+  pageNumber  Int?
+  parsed      Json
+  movementId  String?
+  status      String // NEW | LINKED | REVIEW | EXCLUDED
+  reason      String
+  candidateIds String[] @default([])
+  decidedAt   DateTime?
+  decidedByUserId String?
+  batch       ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  movement    BankTransaction? @relation(fields: [movementId], references: [id], onDelete: SetNull)
+
+  @@unique([batchId, rowNumber])
+  @@index([movementId])
+}
+
+// Pair decisions survive removal of an operational duplicate. Snapshots retain
+// both original movements, evidence links and the exact ledger correction.
+model BankReviewDecision {
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id          String @id @default(cuid())
+  companyId   String
+  bankAccountId String
+  pairKey     String
+  fingerprint String
+  action      String
+  reason      String
+  snapshot    Json
+  userId      String
+  createdAt   DateTime @default(now())
+  @@unique([companyId, pairKey, fingerprint])
+  @@index([companyId, bankAccountId])
 }
 
 /// Lápida de un movimiento IMPORTADO que se borró a mano (duplicado por un
@@ -10422,4 +10486,18 @@ model SyntageArchivo {
 
   @@unique([rfc, tipo, ref])
   @@index([rfc, tipo])
+}
+
+// Short-lived originals waiting for WhatsApp account confirmation. Never put bytes in model context.
+model BankDocumentInbox {
+  id String @id @default(cuid())
+  companyId String
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  bytes Bytes
+  filename String
+  mime String
+  metadata Json
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  @@index([companyId, expiresAt])
 }

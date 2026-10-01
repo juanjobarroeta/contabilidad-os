@@ -216,6 +216,7 @@ export function GestionBancos({
   const [importReport, setImportReport] = useState<{
     imported: number;
     posiblesDuplicados: number;
+    pending: number;
     descartadas: { fila: number; motivo: string }[];
   } | null>(null);
   // Historial de lotes importados (con su PDF de evidencia cuando lo hay).
@@ -374,8 +375,8 @@ export function GestionBancos({
     } finally { setBusy(""); }
   }
 
-  /** PDF/imagen del estado de cuenta → extracción con IA (upload-pdf). Si los
-   *  saldos no cuadran, el servidor NO importa y pedimos confirmación (force).
+  /** PDF/imagen → original y filas de revisión. Los fallos de controles
+   *  se conservan pendientes; no hay atajo para forzar la contabilización.
    *  PDFs con contraseña (Banamex, Santander…): el servidor responde 422
    *  needsPassword, aquí se pide y se reintenta. La contraseña buena se
    *  recuerda para el resto de la bolsa (12 estados = 1 sola pregunta). */
@@ -386,13 +387,14 @@ export function GestionBancos({
       const form = new FormData();
       form.append("file", file);
       if (password) form.append("password", password);
-      const res = await fetch(`/api/bancos/${selectedId}/upload-pdf${qs}`, { method: "POST", body: form });
+      const uploadQuery = new URLSearchParams(qs); uploadQuery.set("month", `${year}-${String(month).padStart(2, "0")}`);
+      const res = await fetch(`/api/bancos/${selectedId}/upload-pdf?${uploadQuery}`, { method: "POST", body: form });
       return { res, data: await res.json() };
     };
 
     for (let intento = 0; intento < 4; intento++) {
       // eslint-disable-next-line prefer-const
-      let { res, data } = await enviar("");
+      const { res, data } = await enviar("");
       if (res.status === 422 && data?.needsPassword) {
         const entered = prompt(`${file.name}\n\n${data.error ?? "Este PDF requiere contraseña."}`);
         if (entered == null || entered === "") {
@@ -402,29 +404,6 @@ export function GestionBancos({
         continue;
       }
       pdfPassRef.current = password; // funcionó (o no hizo falta): recordar para la bolsa
-      if (res.ok && data?.needsReview) {
-        const n = data?.extraction?.transactions?.length ?? 0;
-        // El servidor YA calculó por qué no cuadra, y con números: «El banco
-        // declara 126 retiros y se extrajeron 119: faltan 7». Aquí había un
-        // texto fijo que hablaba de «saldos» y de «posible página faltante»
-        // aunque el problema fuera otro — el diagnóstico exacto se calculaba y
-        // se tiraba, y el usuario decidía a ciegas si importar.
-        const motivos: string[] = Array.isArray(data?.extraction?.warnings)
-          ? data.extraction.warnings
-          : [];
-        const detalle = motivos.length > 0
-          ? motivos.map((m: string) => `• ${m}`).join("\n")
-          : "Los saldos del estado no cuadran con la suma de los movimientos.";
-        if (
-          n > 0 &&
-          confirm(
-            `${file.name}\n\nSe extrajeron ${n} movimientos, pero la revisión no cuadra:\n\n${detalle}\n\n` +
-            `Importar de todos modos deja el periodo con esas diferencias. ¿Continuar?`
-          )
-        ) {
-          ({ data } = await enviar("?force=1"));
-        }
-      }
       return data;
     }
     return { ok: false, message: "PDF con contraseña — demasiados intentos" };
@@ -460,7 +439,7 @@ export function GestionBancos({
       // se procesa en secuencia — cada PDF es una extracción con IA, y el
       // orden hace legible el progreso. El resumen acumula todos los archivos.
       let imported = 0;
-      let posiblesDuplicados = 0;
+      let posiblesDuplicados = 0, pending = 0;
       const descartadas: { fila: number; motivo: string }[] = [];
       const errores: string[] = [];
       for (let i = 0; i < files.length; i++) {
@@ -470,6 +449,7 @@ export function GestionBancos({
           const data = await importarArchivo(file);
           if (data?.ok) {
             imported += data.imported ?? 0;
+            pending += data.pending ?? 0;
             posiblesDuplicados += data.posiblesDuplicados ?? 0;
             descartadas.push(...(data.descartadas ?? []));
           } else {
@@ -483,12 +463,13 @@ export function GestionBancos({
         files.length === 1 && errores.length === 1
           ? errores[0]
           : `✓ ${imported} movimiento(s) importados de ${files.length} archivo(s)` +
-            (posiblesDuplicados > 0 ? ` · ${posiblesDuplicados} omitidos por duplicados` : "") +
+            (posiblesDuplicados > 0 ? ` · ${posiblesDuplicados} vinculados a operaciones existentes` : "") +
+            (pending > 0 ? ` · ${pending} filas por revisar en Estados y duplicados` : "") +
             (errores.length > 0 ? ` · ${errores.length} archivo(s) con problema: ${errores.join("; ")}` : "")
       );
       setImportReport(
-        descartadas.length > 0 || posiblesDuplicados > 0
-          ? { imported, posiblesDuplicados, descartadas }
+        descartadas.length > 0 || posiblesDuplicados > 0 || pending > 0
+          ? { imported, posiblesDuplicados, pending, descartadas }
           : null
       );
       await Promise.all([loadTxs(), loadAccounts(), loadLotes()]);
@@ -702,9 +683,10 @@ export function GestionBancos({
                       <> {importReport.descartadas.length} fila{importReport.descartadas.length === 1 ? " se descartó" : "s se descartaron"} (ver detalle).</>
                     )}
                     {importReport.posiblesDuplicados > 0 && (
-                      <> {importReport.posiblesDuplicados} se omit{importReport.posiblesDuplicados === 1 ? "ió" : "ieron"} por parecer duplicado{importReport.posiblesDuplicados === 1 ? "" : "s"} de movimientos ya existentes.</>
+                      <> {importReport.posiblesDuplicados} filas respaldan operaciones existentes; se conservó el original.</>
                     )}
                   </p>
+                  <p className="mt-2">{importReport.pending} filas por revisar. <a className="underline" href={`/bancos?tab=estados&year=${year}&month=${month}`}>Abrir Estados y duplicados</a></p>
                   {importReport.descartadas.length > 0 && (
                     <details className="mt-1.5">
                       <summary className="cursor-pointer font-medium underline decoration-dotted underline-offset-2">

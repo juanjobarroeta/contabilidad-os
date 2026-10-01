@@ -61,6 +61,9 @@ export async function DELETE(req: Request, { params }: Params) {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
 
+  if (await prisma.bankStatementRow.count({ where: { movementId: txId } }) || await prisma.accountingEntry.count({ where: { companyId: tx.companyId, referencia: txId } })) {
+    return NextResponse.json({ error: "Usa Bancos → Estados para revisar esta operación y conservar su evidencia y efecto contable." }, { status: 409 });
+  }
   if (tx.loanAccountId) return NextResponse.json({ error: "Deshaz primero la categoría del préstamo para revertir sus asientos antes de borrar el movimiento." }, { status: 409 });
 
   if (tx.status === "MATCHED" || tx.invoiceId || tx.taxDeclarationId || tx.conciliacionDetalles.length > 0) {

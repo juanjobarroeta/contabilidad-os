@@ -5,6 +5,8 @@ vi.mock("@/lib/auth", () => ({ auth: async () => ({ user: { id: actor } }) }));
 vi.mock("@/lib/subscription", () => ({ gateEscritura: async () => null }));
 // Exercise the real posting engine; close readiness has separate integration coverage.
 vi.mock("@/lib/cierre/compuerta-contabilizacion", () => ({ evaluarCompuertaContabilizacion: async () => ({ ok: true }), invalidarCompuertaContabilizacion: vi.fn() }));
+import { persistStatementTransactions } from "@/lib/bancos/statements/ingest";
+import { accountReview, previewReview, executeReview, type ReviewOperation } from "@/lib/bancos/statements/review";
 import { prisma } from "@/lib/prisma";
 import { POST, DELETE } from "@/app/api/ai/confirm/route";
 import { executeAccountingRead } from "./accounting-executor";
@@ -29,7 +31,7 @@ async function confirm(token: string, method = "POST") {
   return (method === "DELETE" ? DELETE : POST)(req);
 }
 async function movement(id = "accounting-tools-tx", monto = -1000) {
-  return prisma.bankTransaction.create({ data: { id, companyId: A, bankAccountId: "accounting-tools-bank", fecha: new Date("2026-09-15T12:00:00Z"), descripcion: "Synthetic documented loan", tipo: monto < 0 ? "DEBITO" : "CREDITO", monto } });
+  return prisma.bankTransaction.create({ data: { id, companyId: A, bankAccountId: "accounting-tools-bank", bankReferenceId: id, fecha: new Date("2026-09-15T12:00:00Z"), descripcion: "Synthetic documented loan", tipo: monto < 0 ? "DEBITO" : "CREDITO", monto } });
 }
 const loanInput = { transaction_id: "accounting-tools-tx", chart_account_id: "accounting-tools-debtor", familia: "LOAN_GIVEN" };
 
@@ -127,6 +129,13 @@ describe.skipIf(process.env.DB_TESTS_SKIP === "1")("accounting chat tools agains
     const entries = () => prisma.accountingEntry.findMany({ where: { companyId: A, referencia: "accounting-tools-tx" }, orderBy: { tipo: "asc" } });
     const expected = [{ chartAccountId: "accounting-tools-bank-ledger", tipo: "ABONO", monto: 1000 }, { chartAccountId: "accounting-tools-debtor", tipo: "CARGO", monto: 1000 }];
     const normalize = (rows: Awaited<ReturnType<typeof entries>>) => rows.map((row) => ({ chartAccountId: row.chartAccountId, tipo: row.tipo, monto: Number(row.monto) })).sort((a, b) => a.chartAccountId.localeCompare(b.chartAccountId));
+    expect(await entries()).toHaveLength(0); // Provisional statement: exact account is saved without a posting.
+    const doc = await persistStatementTransactions({ companyId:A,bankAccountId:"accounting-tools-bank",periodo:"2026-09",transactions:[{fecha:new Date("2026-09-15T12:00:00Z"),monto:-1000,descripcion:"Synthetic documented loan",bankReferenceId:"accounting-tools-tx"}],archivo:{bytes:Buffer.from("Synthetic statement"),nombre:"test.csv",mime:"text/csv"} });
+    const scope = { companyId:A,bankAccountId:"accounting-tools-bank",year:2026,month:9 };
+    const operation: ReviewOperation = {type:"verify",batchId:doc.batchId,opening:2000,closing:1000,credits:0,debits:1000,creditCount:0,debitCount:1,countsUnavailable:false,periodStart:"2026-09-01",periodEnd:"2026-09-30",accountConfirmed:true,coverageConfirmed:true,originalReviewed:true,reason:"Synthetic original reviewed for loan test"};
+    const request = {...scope,expected:(await accountReview(scope)).hash,operation};
+    const preview = await previewReview(request);await executeReview({...request,effectExpected:preview.effectHash},U);
+    await postMonth({ companyId:A,year:2026,month:9 });
     expect(normalize(await entries())).toEqual(expected);
     expect(await aprobarSugerencia("accounting-tools-tx", "NON_DEDUCTIBLE")).toMatchObject({ ok: false, status: 409 });
     expect(await reconcileTransaction("accounting-tools-tx", "unrelated-invoice", A)).toMatchObject({ ok: false, error: expect.stringContaining("préstamo") });

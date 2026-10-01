@@ -80,6 +80,8 @@ async function motorDelPeriodo(
     if (hit && Date.now() - hit.at < VENTANA_MEMO_MS) return hit.pasos;
   }
   const hechos = await cargarHechosCierre(companyId, year, month, opts.hoy ?? new Date());
+  const { statementPostingGate } = await import("@/lib/bancos/statements/review");
+  hechos.extras.bankStatements = await statementPostingGate(companyId, year, month);
   const pasos = decidirPasos(hechos);
   if (memoizable) {
     // Sin LRU: al llenarse se vacía entera. Es una caché de latencia, no de verdad.

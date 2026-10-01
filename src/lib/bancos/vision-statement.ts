@@ -56,16 +56,20 @@ REGLAS:
 5. Extrae TODOS los movimientos, en orden cronológico.
 6. Extrae el saldo inicial y el saldo final del periodo tal como aparecen.
 7. Si un dato no aparece, usa null. NO inventes.
+8. periodoInicio/periodoFin son la cobertura DECLARADA del documento, no las fechas de sus movimientos. moneda es el código ISO impreso. pagina es el número de página física del archivo recibido, contando desde 1.
 
 SCHEMA:
 {
   "banco": string | null,
   "numeroCuenta": string | null,
   "periodo": string | null,
+  "moneda": string | null,
+  "periodoInicio": "YYYY-MM-DD" | null,
+  "periodoFin": "YYYY-MM-DD" | null,
   "saldoInicial": number | null,
   "saldoFinal": number | null,
   "movimientos": [
-    { "fecha": "YYYY-MM-DD", "descripcion": string, "monto": number, "referencia": string | null, "saldo": number | null, "sublineas": string[] }
+    { "fecha": "YYYY-MM-DD", "descripcion": string, "monto": number, "referencia": string | null, "saldo": number | null, "sublineas": string[], "pagina": number | null }
   ]
 }
 
@@ -79,6 +83,10 @@ NO metas esas líneas dentro de "descripcion": ahí va sólo el renglón princip
 const USER_PROMPT = "Extrae los movimientos y saldos de este estado de cuenta siguiendo el schema exacto. Solo JSON.";
 
 export interface StatementExtraction {
+  moneda?: string | null;
+  periodoInicio?: string | null;
+  periodoFin?: string | null;
+  controlesDeclarados?: { credits: number | null; debits: number | null; creditCount: number | null; debitCount: number | null };
   banco: string | null;
   numeroCuenta: string | null;
   periodo: string | null;
@@ -100,12 +108,16 @@ export interface StatementExtraction {
 }
 
 type RawExtraction = {
+  moneda?: string | null;
+  periodoInicio?: string | null;
+  periodoFin?: string | null;
   banco: string | null;
   numeroCuenta: string | null;
   periodo: string | null;
   saldoInicial: number | null;
   saldoFinal: number | null;
   movimientos: {
+    pagina?: number | null;
     fecha: string;
     descripcion: string;
     monto: number;
@@ -168,13 +180,15 @@ export async function extractStatementFromDocument(
         "No se pudo partir el PDF por páginas; se leyó por rangos sobre el documento completo.",
       );
     }
-    raws = await Promise.all(
-      recortes.map((r) =>
-        r.pdf
-          ? extraerDeDocumento(r.pdf, "application/pdf", costCtx, [r.desde, r.hasta])
-          : extraerDeDocumento(buf, mediaType, costCtx, [r.desde, r.hasta]),
-      ),
-    );
+    raws = await Promise.all(recortes.map(async (r) => {
+      const raw = r.pdf
+        ? await extraerDeDocumento(r.pdf, "application/pdf", costCtx, [1, r.hasta - r.desde + 1])
+        : await extraerDeDocumento(buf, mediaType, costCtx, [r.desde, r.hasta]);
+      return { ...raw, movimientos: (raw.movimientos ?? []).map((m) => ({ ...m,
+        pagina: Number.isInteger(m.pagina) && m.pagina! >= 1 && m.pagina! <= (r.pdf ? r.hasta - r.desde + 1 : paginas)
+          ? m.pagina! + (r.pdf ? r.desde - 1 : 0) : null,
+      })) };
+    }));
   } else {
     raws = [await extraerDeDocumento(buf, mediaType, costCtx, null)];
   }
@@ -186,6 +200,9 @@ export async function extractStatementFromDocument(
   // entre dos páginas se contara dos veces, lo delata el conteo del banco.
   const cabeza = raws.find((r) => r.saldoInicial != null) ?? raws[0];
   const raw: RawExtraction = {
+    moneda: cabeza?.moneda ?? null,
+    periodoInicio: cabeza?.periodoInicio ?? null,
+    periodoFin: cabeza?.periodoFin ?? null,
     banco: raws.find((r) => r.banco)?.banco ?? null,
     numeroCuenta: raws.find((r) => r.numeroCuenta)?.numeroCuenta ?? null,
     periodo: raws.find((r) => r.periodo)?.periodo ?? null,
@@ -219,6 +236,7 @@ export async function extractStatementFromDocument(
         .map((x) => x.trim());
       return {
         fecha: d,
+        ...(Number.isInteger(m.pagina) && m.pagina! > 0 && (paginas === 0 || m.pagina! <= paginas) ? { sourcePage: m.pagina! } : {}),
         descripcion: (m.descripcion ?? "").trim() || "Movimiento",
         monto: m.monto,
         referencia: m.referencia ?? undefined,
@@ -292,6 +310,10 @@ export async function extractStatementFromDocument(
   }
 
   return {
+    moneda: raw.moneda ?? null,
+    periodoInicio: raw.periodoInicio ?? null,
+    periodoFin: raw.periodoFin ?? null,
+    controlesDeclarados: { credits: controles?.depositos?.total ?? null, debits: controles?.retiros?.total ?? null, creditCount: controles?.depositos?.conteo ?? null, debitCount: controles?.retiros?.conteo ?? null },
     banco: raw.banco ?? null,
     numeroCuenta: raw.numeroCuenta ?? null,
     periodo: raw.periodo ?? null,
