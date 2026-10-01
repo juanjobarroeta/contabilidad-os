@@ -16,7 +16,7 @@ const take = DOCUMENT_EVIDENCE_LIMIT + 1;
 const invoiceSelect = {
   id: true, uuid: true, fecha: true, tipo: true, tipoSat: true, status: true,
   metodoPago: true, moneda: true, sustituidoPorUuid: true,
-  naturaleza: true, naturalezaManual: true, naturalezaRevision: true, usoCfdi: true, formaPago: true,
+  naturaleza: true, naturalezaManual: true, naturalezaRevision: true, usoCfdi: true, formaPago: true, contraparteRfc: true,
   regimenAssignment: { select: {
     revision: true,
     allocations: { select: { regimenCode: true, basisPoints: true }, orderBy: { regimenCode: "asc" } },
@@ -24,7 +24,7 @@ const invoiceSelect = {
 } satisfies Prisma.InvoiceSelect;
 const paymentSelect = {
   id: true, parentUuid: true, fechaPago: true, numParcialidad: true,
-  pagoInvoice: { select: { uuid: true, status: true, sustituidoPorUuid: true } },
+  pagoInvoice: { select: { id: true, uuid: true, status: true, sustituidoPorUuid: true } },
 } satisfies Prisma.PagoDoctoRelacionadoSelect;
 
 /** Caller must authorize company membership. Read-only, repeatable snapshot. */
@@ -119,11 +119,12 @@ export async function readRegimenDocumentSnapshot(db: Prisma.TransactionClient, 
       totalMicros: decimalToSafeMicros(moneyByInvoice.get(row.id)?.total ?? null),
       regimenCodes: invoiceRegimenPeriodContext({ fecha: row.fecha, ...company })?.regimenCodes ?? [],
       assignment: row.regimenAssignment,
+      supplierRfc: row.contraparteRfc,
       expense: { naturaleza: row.naturaleza, naturalezaManual: row.naturalezaManual, naturalezaRevision: row.naturalezaRevision,
         usoCfdi: row.usoCfdi, formaPago: row.formaPago },
     });
     const paymentEvidence = (row: Prisma.PagoDoctoRelacionadoGetPayload<{ select: typeof paymentSelect }>): RegimenPaymentEvidence => ({
-      id: row.id, parentUuid: row.parentUuid, repUuid: row.pagoInvoice.uuid, status: row.pagoInvoice.status,
+      id: row.id, repInvoiceId: row.pagoInvoice.id, parentUuid: row.parentUuid, repUuid: row.pagoInvoice.uuid, status: row.pagoInvoice.status,
       supersededBy: row.pagoInvoice.sustituidoPorUuid,
       fechaPago: row.fechaPago?.toISOString() ?? null,
       amountMicros: decimalToSafeMicros(moneyByPayment.get(row.id) ?? null), installment: row.numParcialidad,

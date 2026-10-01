@@ -21,6 +21,7 @@ export interface RegimenInvoiceEvidence {
   totalMicros: number | null;
   regimenCodes: string[];
   assignment: { revision: number; allocations: InvoiceRegimenAllocationInput[] } | null;
+  supplierRfc?: string | null;
   expense?: {
     naturaleza: string | null;
     naturalezaRevision: boolean;
@@ -32,6 +33,7 @@ export interface RegimenInvoiceEvidence {
 
 export interface RegimenPaymentEvidence {
   id: string;
+  repInvoiceId?: string;
   parentUuid: string;
   repUuid: string | null;
   status: string;
