@@ -1,6 +1,6 @@
 {
   "fuente": "estatales.src.json (curado a mano)",
-  "generado": "2026-09-13",
+  "generado": "2026-10-01",
   "entradas": [
     {
       "clave": "AGU-C-CIVIL-AGUASCALIENTES",
@@ -329,6 +329,24 @@
       "fechaPublicacion": null,
       "ultimaReforma": "2026-06-18",
       "vigenciaFallback": "2026-06-18",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "BCN-L-INGRESOS-BAJA-CALIFORNIA-EJE",
+      "titulo": "Ley de Ingresos del Estado de Baja California para el Ejercicio Fiscal 2026",
+      "url": "https://www.congresobc.gob.mx/Documentos/ProcesoParlamentario/Leyes/TOMO_II/20260217_LEYINGRESOSESTADO2026.PDF",
+      "ambito": "ESTATAL",
+      "entidad": "BCN",
+      "municipio": null,
+      "tipo": "Ley",
+      "idArchivo": "manual-446",
+      "fechaPublicacion": null,
+      "ultimaReforma": "2026-02-17",
+      "vigenciaFallback": "2026-02-17",
       "materias": [
         "fiscal",
         "hacienda_publica"
@@ -1005,6 +1023,24 @@
       "excluida": null
     },
     {
+      "clave": "CHH-L-INGRESOS-CHIHUAHUA-EJERCICIO",
+      "titulo": "Ley de Ingresos del Estado de Chihuahua para el Ejercicio Fiscal 2026",
+      "url": "https://www.congresochihuahua2.gob.mx/biblioteca/decretos/archivosDecretos/17402.docx",
+      "ambito": "ESTATAL",
+      "entidad": "CHH",
+      "municipio": null,
+      "tipo": "Ley",
+      "idArchivo": "manual-448",
+      "fechaPublicacion": null,
+      "ultimaReforma": "2025-12-24",
+      "vigenciaFallback": "2025-12-24",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ],
+      "excluida": null
+    },
+    {
       "clave": "CHH-L-JUSTICIA-ADMINISTRATIVA-CHIH",
       "titulo": "Ley de Justicia Administrativa del Estado de Chihuahua",
       "url": "https://www.congresochihuahua2.gob.mx/biblioteca/leyes/archivosLeyes/1513.pdf",
@@ -1354,6 +1390,24 @@
       "excluida": null
     },
     {
+      "clave": "CMX-L-INGRESOS-CIUDAD-MEXICO-EJERC",
+      "titulo": "Ley de Ingresos de la Ciudad de México para el Ejercicio Fiscal 2026",
+      "url": "https://servidoresx3.finanzas.cdmx.gob.mx/documentos/LeyIngresos_2026.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "CMX",
+      "municipio": null,
+      "tipo": "Ley",
+      "idArchivo": "manual-441",
+      "fechaPublicacion": null,
+      "ultimaReforma": "2025-12-19",
+      "vigenciaFallback": "2025-12-19",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ],
+      "excluida": null
+    },
+    {
       "clave": "CMX-L-JUSTICIA-ADMINISTRATIVA-CIUD",
       "titulo": "Ley de Justicia Administrativa de la Ciudad de México",
       "url": "https://data.consejeria.cdmx.gob.mx/images/leyes/leyes/LEY_%20DE_JUSTICIA_ADMINISTRATIVA_DE_LA_CDMX_3.1.pdf",
@@ -1589,6 +1643,24 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "manual-92",
+      "fechaPublicacion": null,
+      "ultimaReforma": "2025-12-30",
+      "vigenciaFallback": "2025-12-30",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "COA-L-INGRESOS-COAHUILA-ZARAGOZA-E",
+      "titulo": "Ley de Ingresos del Estado de Coahuila de Zaragoza para el Ejercicio Fiscal 2026",
+      "url": "https://www.congresocoahuila.gob.mx/transparencia/03/Leyes_Coahuila/coa932026.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "COA",
+      "municipio": null,
+      "tipo": "Ley",
+      "idArchivo": "manual-447",
       "fechaPublicacion": null,
       "ultimaReforma": "2025-12-30",
       "vigenciaFallback": "2025-12-30",
@@ -2518,6 +2590,24 @@
       "excluida": null
     },
     {
+      "clave": "GUA-L-INGRESOS-GUANAJUATO-EJERCICI",
+      "titulo": "Ley de Ingresos para el Estado de Guanajuato para el Ejercicio Fiscal de 2026",
+      "url": "https://congreso-gto.s3.amazonaws.com/uploads/reforma/pdf/3687/LIEG_2026.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "GUA",
+      "municipio": null,
+      "tipo": "Ley",
+      "idArchivo": "manual-444",
+      "fechaPublicacion": null,
+      "ultimaReforma": "2025-12-30",
+      "vigenciaFallback": "2025-12-30",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ],
+      "excluida": null
+    },
+    {
       "clave": "GUA-L-JUSTICIA-ALTERNATIVA-GUANAJU",
       "titulo": "Ley de Justicia Alternativa del Estado de Guanajuato",
       "url": "https://congreso-gto.s3.amazonaws.com/uploads/reforma/pdf/3067/20201230.pdf",
@@ -3072,6 +3162,24 @@
       "fechaPublicacion": null,
       "ultimaReforma": "2024-02-24",
       "vigenciaFallback": "2024-02-24",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "JAL-L-INGRESOS-JALISCO-EJERCICIO-F",
+      "titulo": "Ley de Ingresos del Estado de Jalisco para el Ejercicio Fiscal 2026",
+      "url": "https://congresoweb.congresojal.gob.mx/bibliotecavirtual/legislacion/Ingresos/Documentos_PDF-Ingresos/Ley%20de%20Ingresos%20del%20Estado%20de%20Jalisco-240226.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "JAL",
+      "municipio": null,
+      "tipo": "Ley",
+      "idArchivo": "manual-443",
+      "fechaPublicacion": null,
+      "ultimaReforma": "2026-02-24",
+      "vigenciaFallback": "2026-02-24",
       "materias": [
         "fiscal",
         "hacienda_publica"
@@ -4393,6 +4501,24 @@
       "excluida": null
     },
     {
+      "clave": "NLE-L-INGRESOS-NUEVO-LEON-EJERCICI",
+      "titulo": "Ley de Ingresos del Estado de Nuevo León para el Ejercicio Fiscal 2026 (dictamen aprobado)",
+      "url": "https://www.hcnl.gob.mx/trabajo_legislativo/pdf/lxxvii/AP_20752%20Ley%20de%20Ingresos%20del%20Estado%202026.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "NLE",
+      "municipio": null,
+      "tipo": "Ley",
+      "idArchivo": "manual-442",
+      "fechaPublicacion": null,
+      "ultimaReforma": "2025-12-31",
+      "vigenciaFallback": "2025-12-31",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ],
+      "excluida": null
+    },
+    {
       "clave": "NLE-L-JUSTICIA-ADMINISTRATIVA-MUNI",
       "titulo": "Ley de Justicia Administrativa para el Estado y Municipios de Nuevo León",
       "url": "https://www.hcnl.gob.mx/trabajo_legislativo/leyes/pdf/LEY%20DE%20JUSTICIA%20ADMINISTRATIVA%20PARA%20EL%20ESTADO%20Y%20MUNICIPIOS.pdf",
@@ -4864,6 +4990,24 @@
       "excluida": null
     },
     {
+      "clave": "PUE-L-INGRESOS-PUEBLA-EJERCICIO-FI",
+      "titulo": "Ley de Ingresos del Estado de Puebla, para el Ejercicio Fiscal 2026",
+      "url": "https://ojp.puebla.gob.mx/media/k2/attachments/Ley_de_Ingresos_del_Estado_de_Puebla,_para_el_Ejercicio_Fiscal_2026_EV_27112025.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "PUE",
+      "municipio": null,
+      "tipo": "Ley",
+      "idArchivo": "manual-445",
+      "fechaPublicacion": null,
+      "ultimaReforma": "2025-11-27",
+      "vigenciaFallback": "2025-11-27",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ],
+      "excluida": null
+    },
+    {
       "clave": "PUE-L-MECANISMOS-ALTERNATIVOS-SOLU",
       "titulo": "Ley de Mecanismos Alternativos de Solución de Controversias del Estado Libre y Soberano de Puebla",
       "url": "https://ojp.puebla.gob.mx/media/k2/attachments/Ley_de_Mecanismos_Alternativos_de_Solución_de_Controversias_del_Estado_Libre_y_Soberano_de_Puebla_T4_23032023.pdf",
@@ -5136,6 +5280,24 @@
       "municipio": null,
       "tipo": "Ley",
       "idArchivo": "manual-294",
+      "fechaPublicacion": null,
+      "ultimaReforma": "2025-12-23",
+      "vigenciaFallback": "2025-12-23",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "QUE-L-INGRESOS-QUERETARO-EJERCICIO",
+      "titulo": "Ley de Ingresos del Estado de Querétaro para el Ejercicio Fiscal 2026",
+      "url": "https://queretaro.gob.mx/documents/20121/1743648/20_LEY_DE_INGRESOS_DEL_ESTADO_DE_QUER%C3%89TARO_PARA_EL_EJERCICIO_FISCAL+2026.pdf/59daf21b-2602-fb0c-eea4-763d2459b050?t=1773785466697",
+      "ambito": "ESTATAL",
+      "entidad": "QUE",
+      "municipio": null,
+      "tipo": "Ley",
+      "idArchivo": "manual-450",
       "fechaPublicacion": null,
       "ultimaReforma": "2025-12-23",
       "vigenciaFallback": "2025-12-23",
@@ -6139,6 +6301,24 @@
       "excluida": null
     },
     {
+      "clave": "SON-L-INGRESOS-PRESUPUESTO-INGRESO",
+      "titulo": "Ley de Ingresos y Presupuesto de Ingresos del Estado de Sonora para el Ejercicio Fiscal 2026 (dictamen)",
+      "url": "https://gestion.api.congresoson.gob.mx/publico/descarga?uuid=dd9d9c45-2109-4104-ade6-0f666f16f0b5",
+      "ambito": "ESTATAL",
+      "entidad": "SON",
+      "municipio": null,
+      "tipo": "Ley",
+      "idArchivo": "manual-449",
+      "fechaPublicacion": null,
+      "ultimaReforma": "2025-12-12",
+      "vigenciaFallback": "2025-12-12",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ],
+      "excluida": null
+    },
+    {
       "clave": "SON-L-JUSTICIA-ADMINISTRATIVA-SONO",
       "titulo": "Ley de Justicia Administrativa para el Estado de Sonora",
       "url": "https://gestion.api.congresoson.gob.mx/assets/archivos/2024/08/yjRFtwyh_PuY1dUGfQLOf_Xe7OgqUtz.pdf",
@@ -6656,6 +6836,24 @@
       "fechaPublicacion": null,
       "ultimaReforma": "2026-08-18",
       "vigenciaFallback": "2026-08-18",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ],
+      "excluida": null
+    },
+    {
+      "clave": "TAM-L-INGRESOS-TAMAULIPAS-EJERCICI",
+      "titulo": "Ley de Ingresos del Estado de Tamaulipas para el Ejercicio Fiscal 2026 (Periódico Oficial, Ed. Vespertina 150)",
+      "url": "https://po.tamaulipas.gob.mx/wp-content/uploads/2025/12/cl-150-161225_EV.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "TAM",
+      "municipio": null,
+      "tipo": "Ley",
+      "idArchivo": "manual-451",
+      "fechaPublicacion": null,
+      "ultimaReforma": "2025-12-16",
+      "vigenciaFallback": "2025-12-16",
       "materias": [
         "fiscal",
         "hacienda_publica"

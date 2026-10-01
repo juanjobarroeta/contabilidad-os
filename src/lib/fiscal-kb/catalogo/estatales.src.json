@@ -4002,6 +4002,157 @@
       "url": "https://www.congresozac.gob.mx/65/ley&cual=112&tipo=pdf",
       "ultimaReforma": "2025-12-18",
       "verificado": "2026-09-12"
+    },
+    {
+      "entidad": "CMX",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Ingresos de la Ciudad de México para el Ejercicio Fiscal 2026",
+      "url": "https://servidoresx3.finanzas.cdmx.gob.mx/documentos/LeyIngresos_2026.pdf",
+      "ultimaReforma": "2025-12-19",
+      "verificado": "2026-10-01",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ],
+      "nota": "Copia de la Secretaría de Administración y Finanzas (la de la Gaceta no descarga por TLS)."
+    },
+    {
+      "entidad": "NLE",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Ingresos del Estado de Nuevo León para el Ejercicio Fiscal 2026 (dictamen aprobado)",
+      "url": "https://www.hcnl.gob.mx/trabajo_legislativo/pdf/lxxvii/AP_20752%20Ley%20de%20Ingresos%20del%20Estado%202026.pdf",
+      "ultimaReforma": "2025-12-31",
+      "verificado": "2026-10-01",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ],
+      "nota": "Dictamen 20752/LXXVII con el decreto; el congreso aún no publica el compilado. Rechazó subir el ISN a 4%."
+    },
+    {
+      "entidad": "JAL",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Ingresos del Estado de Jalisco para el Ejercicio Fiscal 2026",
+      "url": "https://congresoweb.congresojal.gob.mx/bibliotecavirtual/legislacion/Ingresos/Documentos_PDF-Ingresos/Ley%20de%20Ingresos%20del%20Estado%20de%20Jalisco-240226.pdf",
+      "ultimaReforma": "2026-02-24",
+      "verificado": "2026-10-01",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ],
+      "nota": "Art. 13: ISN 3.0%; art. 9: 5% trabajo no subordinado."
+    },
+    {
+      "entidad": "GUA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Ingresos para el Estado de Guanajuato para el Ejercicio Fiscal de 2026",
+      "url": "https://congreso-gto.s3.amazonaws.com/uploads/reforma/pdf/3687/LIEG_2026.pdf",
+      "ultimaReforma": "2025-12-30",
+      "verificado": "2026-10-01",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ]
+    },
+    {
+      "entidad": "PUE",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Ingresos del Estado de Puebla, para el Ejercicio Fiscal 2026",
+      "url": "https://ojp.puebla.gob.mx/media/k2/attachments/Ley_de_Ingresos_del_Estado_de_Puebla,_para_el_Ejercicio_Fiscal_2026_EV_27112025.pdf",
+      "ultimaReforma": "2025-11-27",
+      "verificado": "2026-10-01",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ],
+      "nota": "Art. 16: impuesto sobre erogaciones por remuneraciones al trabajo personal, 3%."
+    },
+    {
+      "entidad": "BCN",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Ingresos del Estado de Baja California para el Ejercicio Fiscal 2026",
+      "url": "https://www.congresobc.gob.mx/Documentos/ProcesoParlamentario/Leyes/TOMO_II/20260217_LEYINGRESOSESTADO2026.PDF",
+      "ultimaReforma": "2026-02-17",
+      "verificado": "2026-10-01",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ]
+    },
+    {
+      "entidad": "COA",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Ingresos del Estado de Coahuila de Zaragoza para el Ejercicio Fiscal 2026",
+      "url": "https://www.congresocoahuila.gob.mx/transparencia/03/Leyes_Coahuila/coa932026.pdf",
+      "ultimaReforma": "2025-12-30",
+      "verificado": "2026-10-01",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ]
+    },
+    {
+      "entidad": "CHH",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Ingresos del Estado de Chihuahua para el Ejercicio Fiscal 2026",
+      "url": "https://www.congresochihuahua2.gob.mx/biblioteca/decretos/archivosDecretos/17402.docx",
+      "ultimaReforma": "2025-12-24",
+      "verificado": "2026-10-01",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ],
+      "nota": "Versión Word del decreto LXVIII/APLIE/0459/2025 (el PDF es escaneo). Art. 8: estímulo ISN 20/10/5% por tamaño."
+    },
+    {
+      "entidad": "SON",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Ingresos y Presupuesto de Ingresos del Estado de Sonora para el Ejercicio Fiscal 2026 (dictamen)",
+      "url": "https://gestion.api.congresoson.gob.mx/publico/descarga?uuid=dd9d9c45-2109-4104-ade6-0f666f16f0b5",
+      "ultimaReforma": "2025-12-12",
+      "verificado": "2026-10-01",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ],
+      "nota": "Dictamen de la Comisión de Hacienda con el texto de la ley (el Boletín Oficial responde 403)."
+    },
+    {
+      "entidad": "QUE",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Ingresos del Estado de Querétaro para el Ejercicio Fiscal 2026",
+      "url": "https://queretaro.gob.mx/documents/20121/1743648/20_LEY_DE_INGRESOS_DEL_ESTADO_DE_QUER%C3%89TARO_PARA_EL_EJERCICIO_FISCAL+2026.pdf/59daf21b-2602-fb0c-eea4-763d2459b050?t=1773785466697",
+      "ultimaReforma": "2025-12-23",
+      "verificado": "2026-10-01",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ],
+      "nota": "Prontuario del Poder Ejecutivo; La Sombra de Arteaga trae el número completo (113 MB)."
+    },
+    {
+      "entidad": "TAM",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Ingresos del Estado de Tamaulipas para el Ejercicio Fiscal 2026 (Periódico Oficial, Ed. Vespertina 150)",
+      "url": "https://po.tamaulipas.gob.mx/wp-content/uploads/2025/12/cl-150-161225_EV.pdf",
+      "ultimaReforma": "2025-12-16",
+      "verificado": "2026-10-01",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ],
+      "nota": "El mismo número trae el Presupuesto de Egresos (art. 60: 1 de los 3 puntos del ISN a seguridad pública)."
     }
   ]
 }
