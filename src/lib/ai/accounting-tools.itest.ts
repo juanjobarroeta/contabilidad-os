@@ -12,6 +12,8 @@ import { proposeAccounting, revertLoanPosting } from "./accounting-proposals";
 import { getChatPendingAction } from "./pending-action";
 import { postMonth } from "@/lib/contabilidad/posting";
 import { seedChartOfAccounts } from "@/lib/contabilidad/seed-catalog";
+import { aprobarSugerencia } from "@/lib/bancos/sugerencias-concepto";
+import { reconcileTransaction } from "@/lib/conciliacion";
 
 async function cleanup() {
   await prisma.auditLog.deleteMany({ where: { companyId: { in: [A, B] } } });
@@ -125,6 +127,10 @@ describe.skipIf(process.env.DB_TESTS_SKIP === "1")("accounting chat tools agains
     const entries = () => prisma.accountingEntry.findMany({ where: { companyId: A, referencia: "accounting-tools-tx" }, orderBy: { tipo: "asc" } });
     const expected = [{ chartAccountId: "accounting-tools-bank-ledger", tipo: "ABONO", monto: 1000 }, { chartAccountId: "accounting-tools-debtor", tipo: "CARGO", monto: 1000 }];
     const normalize = (rows: Awaited<ReturnType<typeof entries>>) => rows.map((row) => ({ chartAccountId: row.chartAccountId, tipo: row.tipo, monto: Number(row.monto) })).sort((a, b) => a.chartAccountId.localeCompare(b.chartAccountId));
+    expect(normalize(await entries())).toEqual(expected);
+    expect(await aprobarSugerencia("accounting-tools-tx", "NON_DEDUCTIBLE")).toMatchObject({ ok: false, status: 409 });
+    expect(await reconcileTransaction("accounting-tools-tx", "unrelated-invoice", A)).toMatchObject({ ok: false, error: expect.stringContaining("préstamo") });
+    expect(await prisma.bankTransaction.findUnique({ where: { id: "accounting-tools-tx" } })).toMatchObject({ status: "IGNORED", notes: "LOAN_GIVEN", loanAccountId: "accounting-tools-debtor" });
     expect(normalize(await entries())).toEqual(expected);
     expect(await prisma.accountingPeriod.findUnique({ where: { companyId_year_month: { companyId: A, year: 2026, month: 9 } } })).toMatchObject({ entriesCount: 2 });
     await postMonth({ companyId: A, year: 2026, month: 9 });

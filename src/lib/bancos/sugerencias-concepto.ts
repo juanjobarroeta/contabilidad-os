@@ -206,6 +206,7 @@ export async function aprobarSugerencia(
     include: { conciliacionDetalles: { select: { id: true }, take: 1 } },
   });
   if (!tx) return { ok: false, error: "Movimiento no encontrado", status: 404 };
+  if (tx.loanAccountId) return { ok: false, error: "Deshaz primero el préstamo registrado antes de cambiar su categoría.", status: 409 };
   if (tx.invoiceId || tx.conciliacionDetalles.length > 0) {
     return { ok: false, error: "El movimiento ya está conciliado con un CFDI", status: 409 };
   }
@@ -268,10 +269,11 @@ export async function aprobarSugerencia(
   });
   if (existing > 0) {
     // Aseguramos al menos que el movimiento quede etiquetado y devolvemos éxito.
-    await prisma.bankTransaction.update({
-      where: { id: txId },
+    const changed = await prisma.bankTransaction.updateMany({
+      where: { id: txId, companyId, loanAccountId: null },
       data: { status: "IGNORED", invoiceId: null, notes: familia },
     });
+    if (!changed.count) return { ok: false, error: "El movimiento cambió. Revisa su registro antes de categorizarlo.", status: 409 };
     rastroTraspaso?.();
     return { ok: true, created: false, entries: existing };
   }
@@ -287,7 +289,14 @@ export async function aprobarSugerencia(
     };
   }
 
-  await prisma.$transaction(async (db) => {
+  const applied = await prisma.$transaction(async (db) => {
+    // Claim before creating entries. A concurrent confirmed loan must not be
+    // overwritten by a proposal prepared while the movement was unassigned.
+    const changed = await db.bankTransaction.updateMany({
+      where: { id: txId, companyId, loanAccountId: null },
+      data: { status: "IGNORED", invoiceId: null, notes: familia },
+    });
+    if (!changed.count) return false;
     const periodRow = await db.accountingPeriod.upsert({
       where: { companyId_year_month: { companyId, year, month } },
       update: {},
@@ -311,14 +320,9 @@ export async function aprobarSugerencia(
       })),
     });
 
-    // Marca el movimiento como categorizado: IGNORED + etiqueta de familia, la
-    // misma que postMonth lee de `notes`, para que el cierre regenere el mismo
-    // asiento en lugar de bloquear el mes por "sin conciliar".
-    await db.bankTransaction.update({
-      where: { id: txId },
-      data: { status: "IGNORED", invoiceId: null, notes: familia },
-    });
+    return true;
   });
+  if (!applied) return { ok: false, error: "El movimiento cambió. Revisa su registro antes de categorizarlo.", status: 409 };
 
   rastroTraspaso?.();
   return { ok: true, created: true, entries: renglones.length };
