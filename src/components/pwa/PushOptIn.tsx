@@ -3,18 +3,7 @@
 import { useEffect, useState } from "react";
 import { Bell, Loader2, Check } from "lucide-react";
 import { useCompany } from "@/components/layout/CompanyProvider";
-
-const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-
-// VAPID public key (base64url) → Uint8Array for PushManager.subscribe.
-function urlBase64ToUint8Array(base64: string): Uint8Array {
-  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
-  const b64 = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const raw = atob(b64);
-  const out = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
-  return out;
-}
+import { activarPush, estadoPush } from "@/lib/pwa/push-cliente";
 
 type State = "checking" | "unsupported" | "idle" | "enabling" | "enabled" | "denied";
 
@@ -26,20 +15,10 @@ export function PushOptIn() {
   const [state, setState] = useState<State>("checking");
 
   useEffect(() => {
-    if (!VAPID_PUBLIC_KEY) { setState("unsupported"); return; }
-    if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
-      setState("unsupported");
-      return;
-    }
-    if (Notification.permission === "denied") { setState("denied"); return; }
-    navigator.serviceWorker.ready
-      .then((reg) => reg.pushManager.getSubscription())
-      .then((sub) => setState(sub ? "enabled" : "idle"))
-      .catch(() => setState("idle"));
+    void estadoPush().then(setState);
   }, []);
 
   async function enable() {
-    if (!VAPID_PUBLIC_KEY) return;
     setState("enabling");
     // Watchdog: never spin forever — if something stalls, reset so the user
     // can retry (and we log why).
@@ -48,32 +27,7 @@ export function PushOptIn() {
       setState("idle");
     }, 20000);
     try {
-      const permission = await Notification.requestPermission();
-      if (permission !== "granted") {
-        setState(permission === "denied" ? "denied" : "idle");
-        return;
-      }
-      // Register the SW ourselves — ServiceWorkerRegister attaches to the
-      // `load` event, which is often already fired by the time React hydrates,
-      // leaving navigator.serviceWorker.ready pending forever. register()
-      // resolves regardless and updates to the latest sw.js (with the push
-      // handler), which skipWaiting/claim activate immediately.
-      await navigator.serviceWorker.register("/sw.js");
-      const reg = await navigator.serviceWorker.ready;
-      const sub =
-        (await reg.pushManager.getSubscription()) ??
-        (await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) as BufferSource,
-        }));
-      const res = await fetch("/api/push/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...sub.toJSON(), companyId: activeCompany?.id ?? null }),
-      });
-      setState(res.ok ? "enabled" : "idle");
-      // Fire a one-off confirmation push so the user sees it works immediately.
-      if (res.ok) fetch("/api/push/test", { method: "POST" }).catch(() => {});
+      setState(await activarPush(activeCompany?.id ?? null));
     } catch (err) {
       console.error("[push] no se pudo activar:", err);
       setState("idle");

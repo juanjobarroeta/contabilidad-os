@@ -1,4 +1,4 @@
-import type { MesHistorial, ResumenHistorial } from "@/lib/onboarding/historial";
+import type { Estimacion, MesHistorial, ResumenHistorial } from "@/lib/onboarding/historial";
 
 /** Respuesta de GET /api/onboarding/estado. */
 export interface EstadoAlta {
@@ -11,6 +11,8 @@ export interface EstadoAlta {
   /** El catálogo de cuentas de la CE, cuando ya llegó del SAT. */
   catalogo?: { anio: number; mes: number; cuentas: number } | null;
   empleados?: number;
+  /** Cuánto falta, en rangos (historial.estimarTiempos). */
+  estimacion?: Estimacion;
 }
 
 /** 0..1 del historial (meses cerrados descargados). */

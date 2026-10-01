@@ -112,7 +112,10 @@ async function main() {
       info = `${res.importados} nuevos · ${res.balanzas} balanzas · ${res.archivosNuevos} archivos${res.catalogo ? ` · catálogo ${res.catalogo.total} cuentas` : ""}`;
       resumen.ok++;
       resumen.importados += res.importados;
-      console.log(`[${i + 1}/${elegibles.length}] ${c.rfc} ✅ ${res.importados} períodos nuevos (${Date.now() - t0}ms)`);
+      console.log(
+        `[${i + 1}/${elegibles.length}] ${c.rfc} ✅ ${res.importados} períodos nuevos · ${res.archivosNuevos} archivos` +
+          `${res.catalogo ? ` · catálogo ${res.catalogo.nombre} (${res.catalogo.total} cuentas, ${res.catalogo.creadas} nuevas)` : ""} (${Date.now() - t0}ms)`,
+      );
     } catch (e) {
       if (e instanceof BuzonAccesoError) {
         resumen.sinBuzon++;

@@ -249,6 +249,7 @@ export function OnboardingMascota() {
           {paso === "fiel" && <PantallaFiel onCreada={(id) => guardar({ companyId: id })} onListo={avanzar} />}
           {paso === "historial" && companyId && (
             <PantallaHistorial
+              companyId={companyId}
               estado={estado}
               onSeguir={avanzar}
               onCambiarAnios={async (anios) => {

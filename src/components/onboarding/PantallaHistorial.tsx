@@ -9,8 +9,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useEffect, useRef, useState } from "react";
-import { Info } from "lucide-react";
-import { cifraCorta, MESES_LARGOS, narrar, type EventoHistorial, type MesHistorial } from "@/lib/onboarding/historial";
+import { Bell, Info } from "lucide-react";
+import { cifraCorta, MESES_LARGOS, narrar, rangoHumano, type EventoHistorial, type MesHistorial } from "@/lib/onboarding/historial";
+import { activarPush, estadoPush, type EstadoPush } from "@/lib/pwa/push-cliente";
 import { LINEAS, t } from "@/lib/onboarding/lineas";
 import { Burbuja, Slot, useEscena } from "./escena";
 import type { EstadoAlta } from "./tipos";
@@ -27,10 +28,12 @@ interface Renglon extends EventoHistorial {
 }
 
 export function PantallaHistorial({
+  companyId,
   estado,
   onCambiarAnios,
   onSeguir,
 }: {
+  companyId: string;
   estado: EstadoAlta | null;
   onCambiarAnios: (anios: number) => Promise<void>;
   onSeguir: () => void;
@@ -39,6 +42,21 @@ export function PantallaHistorial({
   const [log, setLog] = useState<Renglon[]>([]);
   const [pop, setPop] = useState<Set<string>>(new Set());
   const [aniosAbierto, setAniosAbierto] = useState(false);
+  const [push, setPush] = useState<EstadoPush | null>(null);
+
+  useEffect(() => {
+    void estadoPush().then(setPush);
+  }, []);
+
+  async function avisarme() {
+    try {
+      const r = await activarPush(companyId, { probar: false });
+      setPush(r);
+      if (r === "enabled") void decir(LINEAS.teAviso);
+    } catch {
+      setPush("idle");
+    }
+  }
   const previo = useRef<MesHistorial[] | null | undefined>(undefined);
   const yaDijo = useRef(new Set<string>());
 
@@ -135,8 +153,8 @@ export function PantallaHistorial({
         <div className="ob-honest">
           <Info size={16} />
           <span>
-            El SAT entrega por tandas y con límite por RFC: esto tarda de horas a un par de días. <b>No tienes que esperar aquí:</b> en
-            cuanto tenga lo reciente, entras y yo sigo trabajando.{" "}
+            El SAT entrega por tandas y con límite por RFC. <b>No tienes que esperar aquí:</b> sigue con tu alta y yo sigo
+            trabajando; te aviso cuando esté.{" "}
             <button type="button" className="font-semibold text-cos-brand-ink hover:underline" onClick={() => setAniosAbierto((v) => !v)}>
               ¿Cuántos años?
             </button>
@@ -162,6 +180,20 @@ export function PantallaHistorial({
             )}
           </span>
         </div>
+
+        {estado.estimacion && (
+          <div className="flex flex-wrap items-center gap-2 text-[13px]">
+            <span className={cn("rounded-full border px-3 py-1 font-semibold", estado.estimacion.reciente.listo ? "border-cos-jade bg-cos-jade-tint text-cos-jade-ink" : "border-cos-line bg-cos-card text-cos-ink")}>
+              Lo reciente: {estado.estimacion.reciente.listo ? "listo ✓" : rangoHumano(estado.estimacion.reciente)}
+            </span>
+            <span className={cn("rounded-full border px-3 py-1 font-semibold", estado.estimacion.completo.listo ? "border-cos-jade bg-cos-jade-tint text-cos-jade-ink" : "border-cos-line bg-cos-card text-cos-ink")}>
+              Tus {estado.empresa.anios} {estado.empresa.anios === 1 ? "año" : "años"}: {estado.estimacion.completo.listo ? "listo ✓" : rangoHumano(estado.estimacion.completo)}
+            </span>
+            {estado.estimacion.frenadoPorSat && (
+              <span className="text-cos-amber-ink">El SAT pidió esperar: puede tardar hasta un día más.</span>
+            )}
+          </div>
+        )}
 
         <div className="ob-panel ob-bf">
           <div>
@@ -247,17 +279,16 @@ export function PantallaHistorial({
         </div>
 
         <div className="ob-acts">
-          <div className={cn("ob-acts ob-later", resumen.recienteListo && "show")}>
-            <button type="button" className="ob-btn p" onClick={onSeguir} tabIndex={resumen.recienteListo ? 0 : -1}>
-              Seguir: conectar mi banco
-            </button>
-            <span className="ob-fine">El historial sigue bajando mientras tanto.</span>
-          </div>
-          {!resumen.recienteListo && (
-            <button type="button" className="ob-btn g" onClick={onSeguir}>
-              Seguir sin esperar
+          <button type="button" className="ob-btn p" onClick={onSeguir}>
+            {resumen.recienteListo ? "Seguir: conectar mi banco" : "Seguir, yo sigo descargando"}
+          </button>
+          {push === "idle" && !estado.estimacion?.completo.listo && (
+            <button type="button" className="ob-btn o" onClick={() => void avisarme()}>
+              <Bell size={15} /> Avísame cuando termine
             </button>
           )}
+          {push === "enabled" && <span className="ob-fine">Te aviso cuando tenga lo reciente y cuando termine.</span>}
+          {push === "denied" && <span className="ob-fine">Las notificaciones están bloqueadas: te aviso dentro de la app.</span>}
         </div>
       </div>
     </div>
