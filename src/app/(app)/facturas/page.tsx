@@ -29,6 +29,7 @@ import { estadoRepFactura } from "@/lib/facturas/complementos-vista";
 import { RegimenAssignmentPanel } from "@/components/facturas/RegimenAssignmentPanel";
 import { RegimenAllocationReadiness } from "@/components/facturas/RegimenAllocationReadiness";
 import { PpdRegimenReadiness } from "@/components/facturas/PpdRegimenReadiness";
+import { DeductionReviewPanel } from "@/components/facturas/DeductionReviewPanel";
 
 // ── Types (mirrors /api/facturas) ─────────────────────────────────────────────
 interface Invoice {
@@ -722,6 +723,12 @@ export default function FacturasPage() {
         periodo={periodo}
         refreshKey={regimenReadinessRevision}
         onReviewParent={abrirFacturaParaAsignar}
+      />
+      <DeductionReviewPanel
+        companyId={activeCompany.id}
+        periodo={periodo}
+        refreshKey={regimenReadinessRevision}
+        onReviewInvoice={abrirFacturaParaAsignar}
       />
 
       {/* filter chips */}
