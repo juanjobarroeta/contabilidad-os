@@ -9,6 +9,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { Prisma } from "@prisma/client";
+import { agregarObligacionesFaltantes, tiposDeCsf } from "@/lib/obligaciones-seed";
 import { prisma } from "@/lib/prisma";
 import { evaluarCambioCumplimiento, hashContenido } from "./diff";
 import type { ComplianceResult, CsfPerfil, ResultadoOpinion, TipoCumplimiento } from "./types";
@@ -115,6 +116,14 @@ export async function persistComplianceResult(
       vigencia: !esCsf && result.vigencia ? toDate(result.vigencia) : null,
     },
   });
+
+  // Una CSF nueva con obligaciones que no vigilábamos: se agregan (sólo
+  // agregar; las que el SAT quitó quedan como hallazgo para que alguien decida).
+  if (esCsf) {
+    await agregarObligacionesFaltantes(companyId, tiposDeCsf(result.perfil.obligaciones), "CSF").catch((e) =>
+      console.warn("[cumplimiento] no se pudieron agregar obligaciones de la CSF:", e instanceof Error ? e.message : e),
+    );
+  }
 
   for (const h of hallazgos) {
     const dedupeKey = `${h.checkClave}|${h.referencias.join(",")}`;

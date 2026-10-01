@@ -296,6 +296,7 @@ model Company {
   accountingEntries    AccountingEntry[]
   accounts             ChartAccount[]
   ceBalanzas           CeBalanzaMes[]
+  ceArchivos           CeArchivo[]
   postingOverrides     PostingCuentaOverride[]
   accountingPeriods    AccountingPeriod[]
   satSyncRequests      SatSyncRequest[]
@@ -7370,6 +7371,30 @@ model ReglaClasificacion {
 // esta unidad?). Se alimenta re-descargando los registros B de Syntage; una
 // balanza re-presentada (complementaria) REEMPLAZA su período completo.
 // ─────────────────────────────────────────────────────────────────────────────
+/// Todo XML de Contabilidad Electrónica bajado del SAT (buzón, e.firma), tal
+/// cual: balanzas (BN/BC), catálogo (CT), pólizas (PL) y auxiliares (XF/XC).
+/// No se descarta nada de lo que se bajó; CeBalanzaMes y ChartAccount se
+/// derivan de aquí. `importadoEn` marca el catálogo ya aplicado a ChartAccount.
+model CeArchivo {
+  id          String    @id @default(cuid())
+  companyId   String
+  anio        Int
+  mes         Int
+  /// BN | BC | CT | PL | XF | XC | ? (del nombre del archivo del SAT)
+  tipo        String
+  nombre      String
+  xml         String
+  hash        String
+  importadoEn DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, nombre])
+  @@index([companyId, tipo, anio, mes])
+}
+
 model CeBalanzaMes {
   id        String   @id @default(cuid())
   companyId String

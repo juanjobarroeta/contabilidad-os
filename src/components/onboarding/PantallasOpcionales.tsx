@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, Copy, Plus, X } from "lucide-react";
 import { LINEAS } from "@/lib/onboarding/lineas";
 import { Burbuja, Slot, useEscena } from "./escena";
+import { CuentasDelCatalogo } from "@/components/bancos/CuentasDelCatalogo";
 import { cn } from "@/lib/utils";
 
 const BANCOS: Array<[string, string]> = [
@@ -74,7 +75,7 @@ export function PantallaBancos({ companyId, onSeguir }: { companyId: string; onS
         setError(j?.error ?? "No pude registrar la cuenta.");
         return;
       }
-      setListo(`${nombre.trim()} ••${numero.trim().slice(-4)}`);
+      setListo(`${nombre.trim()} ••${numero.trim().slice(-4)} registrada`);
       festejar();
       void decir(LINEAS.bancoListo);
     } finally {
@@ -94,6 +95,14 @@ export function PantallaBancos({ companyId, onSeguir }: { companyId: string; onS
         <p className="ob-sub">
           Con tus movimientos cruzo cada pago con su factura. Sin banco, tu estado de resultados cuadra; tu balance tiene que esperar.
         </p>
+        <CuentasDelCatalogo
+          companyId={companyId}
+          onRegistradas={(n) => {
+            setListo(`${n === 1 ? "1 cuenta registrada" : `${n} cuentas registradas`} desde tu catálogo`);
+            festejar();
+            void decir(LINEAS.bancoListo);
+          }}
+        />
         <div className="ob-banks">
           {BANCOS.map(([n, i]) => (
             <button key={n} type="button" className={cn("ob-bank", banco === n && "on")} disabled={!!listo} onClick={(e) => elegir(n, e.currentTarget)}>
@@ -123,7 +132,7 @@ export function PantallaBancos({ companyId, onSeguir }: { companyId: string; onS
         {listo && (
           <div className="ob-okline">
             <Check size={18} strokeWidth={2.5} />
-            {listo} registrada · sube su estado de cuenta en Bancos
+            {listo} · sube su estado de cuenta en Bancos
           </div>
         )}
         <div className="ob-acts">

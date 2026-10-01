@@ -36,6 +36,7 @@ import { Loading } from "@/components/ui/feedback";
 import { ConciliacionWorkbench } from "@/components/contabilidad/ConciliacionWorkbench";
 import { ExpedienteEnContexto } from "@/components/expediente/ExpedienteEnContexto";
 import { GestionBancos } from "@/components/bancos/GestionBancos";
+import { CuentasDelCatalogo } from "@/components/bancos/CuentasDelCatalogo";
 import { readBankLocation, type BankTab as Tab } from "@/lib/bancos/navigation";
 import { TopTabsBar } from "@/components/layout/TopTabsBar";
 import { SelectorPeriodo } from "@/components/ui/SelectorPeriodo";
@@ -176,7 +177,10 @@ function BancosContent() {
             onApplied={() => setVersion((v) => v + 1)}
           />
         ) : (
-          <GestionBancos key={`${tab}-${version}`} vista={tab} onResolverEnLaMesa={resolverEnLaMesa} />
+          <>
+            <CuentasDelCatalogo companyId={activeCompany.id} className="mb-4" onRegistradas={() => setVersion((v) => v + 1)} />
+            <GestionBancos key={`${tab}-${version}`} vista={tab} onResolverEnLaMesa={resolverEnLaMesa} />
+          </>
         )}
       </div>
       </div>

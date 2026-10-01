@@ -24,6 +24,8 @@ export interface ComplementoNomina {
   nombre: string | null;
   curp: string | null;
   nss: string | null;
+  /** NumEmpleado del Receptor del complemento (la clave que usa la empresa). */
+  numEmpleado?: string | null;
   /** FechaInicioRelLaboral del Receptor del complemento (ISO date). */
   fechaInicioRelLaboral: string | null;
   tipoContrato: string | null;
@@ -124,6 +126,7 @@ export function parseComplementoNomina(rawXml: string | null | undefined): Compl
     nombre,
     curp: rAttr("Curp"),
     nss: rAttr("NumSeguridadSocial"),
+    numEmpleado: rAttr("NumEmpleado"),
     fechaInicioRelLaboral: rAttr("FechaInicioRelLaboral"),
     tipoContrato: rAttr("TipoContrato"),
     tipoRegimen: rAttr("TipoRegimen"),
