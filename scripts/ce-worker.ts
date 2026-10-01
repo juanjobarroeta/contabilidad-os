@@ -32,9 +32,10 @@ import { planIncluyeSyntage } from "../src/lib/planes";
 const prisma = new PrismaClient();
 
 async function main() {
-  const soloRfc = process.env.RFC;
-  const soloId = process.env.COMPANY_ID;
-  const anios = process.env.ANIOS?.split(",").map((s) => Number(s.trim())).filter((n) => Number.isFinite(n));
+  // Vacías = sin filtro (Railway no deja borrar una variable desde la API: se vacía).
+  const soloRfc = process.env.RFC?.trim() || undefined;
+  const soloId = process.env.COMPANY_ID?.trim() || undefined;
+  const anios = process.env.ANIOS?.split(",").map((s) => Number(s.trim())).filter((n) => Number.isInteger(n) && n > 2000);
   const force = process.env.FORCE === "1";
   const limit = process.env.LIMIT ? Number(process.env.LIMIT) : undefined;
   const pausaMs = process.env.PAUSA_MS ? Number(process.env.PAUSA_MS) : 3000;
