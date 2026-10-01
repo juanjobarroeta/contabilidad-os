@@ -21,7 +21,7 @@ import { ingestLey, ingestDoc, ingestCatalogoLote, IngestResult } from "@/lib/fi
 //                catalogo/manuales.ts: 320+ ordenamientos federales, reglamentos
 //                y leyes estatales). `vigencia` opcional: la usa una fuente sin
 //                «Última reforma DOF» en su encabezado.
-//   type "doc" → SAT guías by URL (GUIA-PAGOS | GUIA-CFDI-GLOBAL); RMF needs a
+//   type "doc" → SAT guías by URL (GUIA-CFDI | GUIA-PAGOS | GUIA-CFDI-GLOBAL); RMF needs a
 //                local file and therefore the CLI, not this route.
 //   catalogo   → recorre TODO el catálogo por lotes con presupuesto de tiempo
 //                (la request muere a los 300 s): devuelve `siguiente` para que
