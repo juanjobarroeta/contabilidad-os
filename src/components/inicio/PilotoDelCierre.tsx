@@ -13,6 +13,7 @@
 // ce-readiness, nomina/hub) — cero backend nuevo para este lente.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { atributoCopiloto } from "@/lib/copiloto/objetivos";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { ArrowRight, Check, Lock, TriangleAlert } from "lucide-react";
@@ -301,7 +302,16 @@ export function PilotoDelCierre() {
             )}
             <ul className="mt-2 space-y-1">
               {vencidas.slice(0, 4).map((o, i) => (
-                <li key={i} className="flex items-baseline justify-between gap-3 text-[12.5px]">
+                <li
+                  key={i}
+                  className="flex items-baseline justify-between gap-3 text-[12.5px]"
+                  data-copiloto={atributoCopiloto({
+                    tipo: "obligacion",
+                    id: o.descripcion,
+                    titulo: o.descripcion,
+                    datos: { estatus: "vencida", vencio: o.dueDateFmt },
+                  })}
+                >
                   <span className="text-cos-ink-soft">
                     {o.descripcion} · venció {o.dueDateFmt} ({Math.abs(o.daysUntil)} día
                     {Math.abs(o.daysUntil) === 1 ? "" : "s"})
@@ -442,7 +452,7 @@ function Cifra({
   tono?: "jade" | "amber";
 }) {
   return (
-    <div>
+    <div data-copiloto={atributoCopiloto({ tipo: "kpi", id: label, titulo: label, ...(sub ? { datos: { detalle: sub } } : {}) })}>
       <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-cos-ink-faint">
         {label}
       </p>

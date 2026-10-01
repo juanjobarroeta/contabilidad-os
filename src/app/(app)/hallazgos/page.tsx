@@ -1,5 +1,6 @@
 "use client";
 
+import { atributoCopiloto } from "@/lib/copiloto/objetivos";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
@@ -302,7 +303,16 @@ function HallazgoCard({
   const cta = h.estado === "ABIERTO" && !snoozed ? ctaParaHallazgo(h.checkClave) : null;
 
   return (
-    <Card className="rounded-card border-cos-line p-4 shadow-card">
+    <Card
+      className="rounded-card border-cos-line p-4 shadow-card"
+      data-copiloto={atributoCopiloto({
+        tipo: "hallazgo",
+        id: h.id,
+        titulo: h.mensaje.slice(0, 100),
+        datos: { check: h.checkClave, severidad: sev.label, estado: h.estado },
+        updatedAt: h.updatedAt,
+      })}
+    >
       <div className="flex items-start gap-3">
         <div className="mt-0.5 shrink-0">
           <SevIcon className={`h-5 w-5 ${sev.tone === "danger" ? "text-cos-red-ink" : sev.tone === "warning" ? "text-cos-amber-ink" : "text-cos-brand-ink"}`} />

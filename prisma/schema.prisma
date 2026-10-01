@@ -5878,6 +5878,10 @@ model ChatMessage {
   feedback       String?
   correccion     String?   @db.Text
   feedbackAt     DateTime?
+  // Tarjetas y botones de la respuesta (sólo assistant): lo que el copiloto
+  // pintó debajo del texto con mostrar_tarjeta / ofrecer_acciones, más la
+  // marca «Guardado en memoria». Ver src/lib/copiloto/tarjetas.ts.
+  cards          Json?
 
   conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 

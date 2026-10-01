@@ -23,6 +23,7 @@
 // riesgo cero; la separación real puede venir después, con la app a la vista.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { atributoCopiloto } from "@/lib/copiloto/objetivos";
 import { Fragment, useEffect, useState, useCallback, useRef } from "react";
 import {
   Landmark, Upload, Sparkles, Loader2, Link2, Search, CheckCircle2,
@@ -919,7 +920,19 @@ export function GestionBancos({
                     <span className="h-px flex-1 bg-cos-line-soft" />
                   </div>
                 )}
-                <Card className={"rounded-card p-4 shadow-card " + (matched ? "border-cos-jade-tint bg-cos-jade-tint/40" : "border-cos-line")}>
+                <Card
+                  className={"rounded-card p-4 shadow-card " + (matched ? "border-cos-jade-tint bg-cos-jade-tint/40" : "border-cos-line")}
+                  data-copiloto={atributoCopiloto({
+                    tipo: "movimiento",
+                    id: m.id,
+                    titulo: (m.contraparteNombre ?? m.descripcion).slice(0, 100),
+                    datos: {
+                      estatus: matched ? "conciliado" : ignored ? "ignorado" : m.invoiceId ? "pendiente" : "sin conciliar, sin CFDI",
+                      monto: String(m.monto),
+                      fecha: String(m.fecha).slice(0, 10),
+                    },
+                  })}
+                >
                   <div className="flex items-start gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-3">

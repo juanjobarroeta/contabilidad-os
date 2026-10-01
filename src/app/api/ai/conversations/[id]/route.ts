@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { loadAccessibleConversation } from "@/lib/ai/conversation-access";
+import { sanearRef, sanearTarjetas } from "@/lib/copiloto/tarjetas";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -18,7 +19,7 @@ export async function GET(_req: Request, { params }: Params) {
   const messages = await prisma.chatMessage.findMany({
     where: { conversationId: id },
     orderBy: { createdAt: "asc" },
-    select: { id: true, role: true, content: true, createdAt: true, feedback: true },
+    select: { id: true, role: true, content: true, createdAt: true, feedback: true, cards: true, meta: true },
   });
 
   return NextResponse.json({
@@ -26,7 +27,12 @@ export async function GET(_req: Request, { params }: Params) {
     title: conv.title,
     visibility: conv.visibility,
     mine: isOwner,
-    messages,
+    // La traza (meta) no sale: sólo la referencia que el usuario adjuntó.
+    messages: messages.map(({ meta, cards, ...m }) => {
+      const ref = m.role === "user" ? sanearRef((meta as { ref?: unknown } | null)?.ref) : null;
+      const tarjetas = m.role === "assistant" ? sanearTarjetas(cards) : [];
+      return { ...m, ...(ref ? { ref } : {}), ...(tarjetas.length ? { cards: tarjetas } : {}) };
+    }),
   });
 }
 

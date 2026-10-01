@@ -174,3 +174,36 @@ export async function reabrirNota(companyId: string, notaId: string): Promise<No
   const fila = await prisma.expedienteNota.findUnique({ where: { id: notaId }, select: SELECT_NOTA });
   return fila ? aNota(fila) : null;
 }
+
+// ── La memoria del copiloto ────────────────────────────────────────────────
+// «Lo que recuerdo» en el chat son las notas que el copiloto escribió desde la
+// app: llevan `datos.origen = "copiloto"` (y la conversación de la que salen).
+// Olvidar una es BORRARLA, y sólo se pueden borrar ésas: el resto de la
+// bitácora es el rastro del trabajo y no se toca desde el chat.
+
+export const ORIGEN_COPILOTO = "copiloto";
+
+/** Las notas que el copiloto guardó desde el chat, más nuevas primero. */
+export async function notasDelCopiloto(companyId: string, limite = 30): Promise<NotaExpediente[]> {
+  const filas = await prisma.expedienteNota.findMany({
+    where: { companyId, datos: { path: ["origen"], equals: ORIGEN_COPILOTO } },
+    orderBy: { createdAt: "desc" },
+    take: limite,
+    select: SELECT_NOTA,
+  });
+  return filas.map(aNota);
+}
+
+/** Olvida una nota del copiloto. false si no existe o no es del copiloto. */
+export async function olvidarNotaDelCopiloto(companyId: string, notaId: string): Promise<boolean> {
+  const r = await prisma.expedienteNota.deleteMany({
+    where: { id: notaId, companyId, datos: { path: ["origen"], equals: ORIGEN_COPILOTO } },
+  });
+  return r.count > 0;
+}
+
+/** De una lista de notas, la conversación del copiloto de la que salió cada una. */
+export function conversacionDeNota(n: Pick<NotaExpediente, "datos">): string | null {
+  const d = n.datos as { origen?: unknown; conversationId?: unknown } | null;
+  return d && d.origen === ORIGEN_COPILOTO && typeof d.conversationId === "string" ? d.conversationId : null;
+}

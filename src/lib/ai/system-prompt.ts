@@ -10,6 +10,11 @@ export interface ContextoNavegacion {
   /** Ruta de la app (pathname + query), p.ej. "/bancos?tab=historico". */
   ruta?: string;
   /**
+   * El elemento de la pantalla sobre el que el usuario soltó la mascota (o que
+   * adjuntó como referencia). Llega saneado (src/lib/copiloto/tarjetas.ts).
+   */
+  ref?: { tipo: string; id: string; titulo: string; datos?: Record<string, string> };
+  /**
    * Bloque del cierre guiado ya redactado (src/lib/cierre/contexto.ts). Va
    * DESPUÉS del breakpoint de caché junto a la navegación: cambia con cada
    * paso. Se recibe hecho para que este módulo no dependa del cierre.
@@ -32,11 +37,26 @@ export interface ContextoNavegacion {
  */
 function navegacionBlock(ctx?: ContextoNavegacion): string {
   const ruta = ctx?.ruta?.trim();
-  if (!ruta) return "";
+  const ref = refBlock(ctx);
+  if (!ruta) return ref;
   return `
 
 ## Dónde está el usuario ahora
-Tiene abierta la página \`${ruta}\` de la app. Úsala para resolver referencias como "esto", "aquí", "este mes" o "lo que ves": /dashboard es la portada de obligaciones, /bancos es conciliación bancaria (tabs: conciliacion, movimientos, cuentas, historico), /facturas son los CFDIs, /declaraciones son impuestos, /nomina es nómina, /contabilidad/* es el cierre contable y sus reportes, /cumplimiento es opinión de cumplimiento y CSF. Si la ruta no te dice nada, ignórala.`;
+Tiene abierta la página \`${ruta}\` de la app. Úsala para resolver referencias como "esto", "aquí", "este mes" o "lo que ves": /dashboard es la portada de obligaciones, /bancos es conciliación bancaria (tabs: conciliacion, movimientos, cuentas, historico), /facturas son los CFDIs, /declaraciones son impuestos, /nomina es nómina, /contabilidad/* es el cierre contable y sus reportes, /cumplimiento es opinión de cumplimiento y CSF. Si la ruta no te dice nada, ignórala.${ref}`;
+}
+
+/** «Explícame esto»: el registro exacto que el usuario señaló en pantalla. */
+function refBlock(ctx?: ContextoNavegacion): string {
+  const ref = ctx?.ref;
+  if (!ref) return "";
+  const datos = ref.datos && Object.keys(ref.datos).length
+    ? `\nLo que ve en pantalla: ${Object.entries(ref.datos).map(([k, v]) => `${k}: ${v}`).join("; ")}.`
+    : "";
+  return `
+
+## Elemento señalado
+El usuario señaló este elemento de la pantalla y su mensaje se refiere a él: **${ref.tipo}** «${ref.titulo}» (id \`${ref.id}\`).${datos}
+Carga ESE registro con tus herramientas antes de responder (por id cuando la herramienta lo acepte) y explícalo en concreto; no respondas en general.`;
 }
 
 /**

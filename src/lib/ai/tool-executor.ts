@@ -58,6 +58,8 @@ export type ToolContext = {
   userId?: string;
   /** Periodo y paso del cierre guiado abierto en pantalla (default de las tools de cierre). */
   cierre?: { year: number; month: number; paso?: string };
+  /** "copiloto" = el chat de la app: sus notas del expediente son la memoria visible del chat. */
+  origen?: "copiloto";
 };
 
 const MXN = (n: number) => n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
@@ -90,6 +92,10 @@ export async function executeToolCall(
       // mano. La fuente "usuario" se reserva para lo que se captura en la
       // página del expediente, donde la persona escribe el valor ella misma.
       autor: "agente",
+      datosNota:
+        context.origen === "copiloto" && context.conversationId
+          ? { origen: "copiloto", conversationId: context.conversationId }
+          : undefined,
     });
   }
 

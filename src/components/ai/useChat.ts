@@ -6,12 +6,14 @@
 // el drawer (ChatPanel) y la pantalla del cierre usen EL MISMO chat en vez de
 // dos implementaciones que se desincronizan.
 //
-// No cambia el protocolo: mismos eventos (conversation, text, replace,
-// tool_start, pending_action, done, error) y el mismo contrato de confirmación
-// por tap (nada se ejecuta hasta /api/ai/confirm).
+// Protocolo: conversation, text, replace, tool_start, pending_action, done,
+// error y `card` (tarjetas y botones bajo la respuesta, ver
+// lib/copiloto/tarjetas.ts). El contrato de confirmación por tap no cambia:
+// nada se ejecuta hasta /api/ai/confirm, y un botón sólo manda un turno.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useCallback, useRef, useState } from "react";
+import type { Card, RefCopiloto } from "@/lib/copiloto/tarjetas";
 
 export interface Message {
   role: "user" | "assistant";
@@ -21,6 +23,23 @@ export interface Message {
   feedback?: "up" | "down" | null;
   /** Cierre guiado: paso al que pertenece el mensaje (aperturas de paso). */
   paso?: string | null;
+  /** Tarjetas, botones y marca de memoria bajo la respuesta (sólo assistant). */
+  cards?: Card[];
+  /** El elemento adjunto a la pregunta («Explícame esto»; sólo user). */
+  ref?: RefCopiloto;
+  /**
+   * Avance en vivo de la tarjeta «pasos»: cuántas herramientas arrancaron
+   * desde que se pintó. null/undefined = turno terminado (todo hecho).
+   */
+  pasosInicios?: number | null;
+}
+
+/** Cuántos pasos ya se marcan hechos, dado el avance en vivo. */
+export function pasosHechos(total: number, inicios: number | null | undefined): number {
+  if (inicios == null) return total;
+  // La primera herramienta es el paso 1 corriendo; cada una que arranca
+  // después da por hecho el anterior. El último sólo se cierra con `done`.
+  return Math.max(0, Math.min(total - 1, inicios - 1));
 }
 
 export interface PendingAction {
@@ -35,6 +54,14 @@ export interface ChatContexto {
   ruta?: string;
   /** Cierre guiado: periodo y paso abiertos. Habilita las tools y el bloque del cierre. */
   cierre?: { year: number; month: number; paso?: string };
+  /** El elemento adjunto al turno (se manda sólo con el turno que lo lleva). */
+  ref?: RefCopiloto;
+}
+
+/** Cómo viaja al modelo una pregunta vieja que llevaba referencia. */
+function contenidoParaModelo(m: Message): string {
+  if (!m.ref) return m.content;
+  return `${m.content}\n\n[Sobre: ${m.ref.tipo} «${m.ref.titulo}» (id ${m.ref.id})]`;
 }
 
 interface Opciones {
@@ -68,6 +95,9 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
   messagesRef.current = messages;
 
   const reset = useCallback(() => {
+    // El ref también: quien hace reset() y enviar() en el mismo tick (abrir
+    // el chat con una pregunta lista) no debe mandar el hilo anterior.
+    messagesRef.current = [];
     setMessages([]);
     setPendingAction(null);
     setActiveTool(null);
@@ -76,11 +106,13 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
 
   /** Manda un turno. `texto` ya viene limpio; la UI decide de dónde sale. */
   const enviar = useCallback(
-    async (texto: string) => {
+    async (texto: string, opciones?: { ref?: RefCopiloto }) => {
       const contenido = texto.trim();
       if (!contenido || !companyId) return;
+      const ref = opciones?.ref;
 
-      const historial = [...messagesRef.current, { role: "user" as const, content: contenido }];
+      const nuevo: Message = { role: "user", content: contenido, ...(ref ? { ref } : {}) };
+      const historial = [...messagesRef.current, nuevo];
       setMessages(historial);
       setIsLoading(true);
       setActiveTool(null);
@@ -93,10 +125,15 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            messages: historial.map((m) => ({ role: m.role, content: m.content })),
+            // La referencia del turno nuevo va en `contexto.ref`; la de los
+            // turnos viejos viaja dentro del texto para que «esto» no se pierda.
+            // Los mensajes sólo-tarjeta (texto vacío) no se mandan.
+            messages: historial
+              .filter((m) => m.content.trim())
+              .map((m, i, arr) => ({ role: m.role, content: i === arr.length - 1 ? m.content : contenidoParaModelo(m) })),
             companyId,
             conversationId: convRef.current,
-            contexto: contexto(),
+            contexto: { ...contexto(), ...(ref ? { ref } : {}) },
           }),
         });
         if (!res.ok) {
@@ -119,6 +156,7 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
           nueva?: boolean;
           action?: PendingAction;
           messageId?: string | null;
+          card?: Card;
         }) => {
           if (data.type === "conversation") {
             if (data.id) fijarConversacion(data.id);
@@ -143,19 +181,37 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
               if (last?.role === "assistant") last.content = assistantText;
               return [...upd];
             });
+          } else if (data.type === "card") {
+            const card = data.card;
+            if (!card) return;
+            setMessages((prev) => {
+              const upd = [...prev];
+              const last = upd[upd.length - 1];
+              const msg: Message = last?.role === "assistant" ? { ...last } : { role: "assistant", content: assistantText };
+              msg.cards = [...(msg.cards ?? []), card];
+              if (card.type === "pasos") msg.pasosInicios = 0;
+              if (last?.role === "assistant") upd[upd.length - 1] = msg;
+              else upd.push(msg);
+              return upd;
+            });
           } else if (data.type === "tool_start") {
             setActiveTool(data.tool ?? null);
+            setMessages((prev) => {
+              const last = prev[prev.length - 1];
+              if (last?.role !== "assistant" || last.pasosInicios == null) return prev;
+              return [...prev.slice(0, -1), { ...last, pasosInicios: last.pasosInicios + 1 }];
+            });
           } else if (data.type === "done") {
             setActiveTool(null);
-            if (data.messageId) {
-              const mid = data.messageId;
-              setMessages((prev) => {
-                const upd = [...prev];
-                const last = upd[upd.length - 1];
-                if (last?.role === "assistant") last.id = mid;
-                return upd;
-              });
-            }
+            const mid = data.messageId;
+            setMessages((prev) => {
+              const upd = [...prev];
+              const last = upd[upd.length - 1];
+              if (last?.role === "assistant") {
+                upd[upd.length - 1] = { ...last, ...(mid ? { id: mid } : {}), pasosInicios: null };
+              }
+              return upd;
+            });
           } else if (data.type === "error") {
             setMessages((prev) => [...prev, { role: "assistant", content: `Error: ${data.error}` }]);
           }
@@ -187,6 +243,12 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
       } finally {
         setIsLoading(false);
         setActiveTool(null);
+        // Si el turno se cortó, los pasos no se quedan girando para siempre.
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last?.role !== "assistant" || last.pasosInicios == null) return prev;
+          return [...prev.slice(0, -1), { ...last, pasosInicios: null }];
+        });
       }
     },
     [companyId, contexto, fijarConversacion, onTurnoTerminado]
