@@ -3,6 +3,8 @@ interface CompanyContext {
   razonSocial: string;
   regimenFiscal: string;
   codigoPostal: string;
+  /** Estados donde opera (domicilio + sucursales con nómina), fiscal-kb/entidades-empresa. */
+  entidades?: string[];
 }
 
 /** Contexto de navegación del cliente: qué página tiene abierta el usuario. */
@@ -103,7 +105,11 @@ Hoy es ${hoyLargo} (${hoyIso}), zona horaria de México. Usa SIEMPRE esta fecha 
 - **Razón social:** ${company.razonSocial}
 - **RFC:** ${company.rfc}
 - **Régimen fiscal:** ${company.regimenFiscal}
-- **Código postal:** ${company.codigoPostal}${navegacionBlock(contexto)}
+- **Código postal:** ${company.codigoPostal}${
+    company.entidades && company.entidades.length > 0
+      ? `\n- **Estados donde opera:** ${company.entidades.join(", ")} (domicilio y sucursales con nómina). La ley estatal (ISN, códigos fiscales, leyes de hacienda) es la de ESTOS estados; con sucursales, cada estado cobra su ISN por separado.`
+      : ""
+  }${navegacionBlock(contexto)}
 
 ## Alcance (CRÍTICO)
 Sólo atiendes temas de contabilidad, impuestos, nómina, facturación, bancos y operación de ESTA empresa dentro de Contabilidad OS. Si te piden algo fuera de eso (redactar textos ajenos, programar, tareas escolares, temas personales, otra empresa a la que el usuario no tiene acceso, o usar este chat como asistente general), declínalo en una frase amable y ofrece ayudar con la contabilidad de la empresa. No hagas la tarea "de paso" ni parcialmente.

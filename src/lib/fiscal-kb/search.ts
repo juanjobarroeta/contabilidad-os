@@ -38,6 +38,11 @@ export interface FiscalSearchOptions {
   /** Ámbito (FEDERAL | ESTATAL | MUNICIPAL | INTERNACIONAL) y entidad (PUE, CMX) del ordenamiento. */
   ambito?: string;
   entidad?: string;
+  /**
+   * Estados permitidos: la ley federal (sin entidad) entra siempre; la estatal
+   * y municipal sólo de estas entidades. Vacío/ausente = sin filtro.
+   */
+  entidades?: readonly string[];
   /** Sólo TESIS: Épocas cortas («9a.», «11a.»), tipo de criterio, y si entran las interrumpidas/superadas (default no). */
   epocas?: readonly string[];
   tipoCriterio?: "JURISPRUDENCIA" | "AISLADA";
@@ -170,16 +175,20 @@ function filtroFuentes(fuentes?: string[]) {
 }
 
 /** Condiciones sobre el DOCUMENTO (fuente, materias, ámbito, entidad) que comparten los tres brazos. */
-function filtroDocumento(opts: Pick<FiscalSearchOptions, "fuentes" | "materias" | "ambito" | "entidad" | "epocas" | "tipoCriterio" | "incluirNoVigentes">) {
+function filtroDocumento(opts: Pick<FiscalSearchOptions, "fuentes" | "materias" | "ambito" | "entidad" | "entidades" | "epocas" | "tipoCriterio" | "incluirNoVigentes">) {
   const materias = opts.materias && opts.materias.length > 0 ? Prisma.sql`AND d."materias" && ${[...opts.materias]}::text[]` : Prisma.empty;
   const ambito = opts.ambito ? Prisma.sql`AND d."ambito" = ${opts.ambito}::"AmbitoJuridico"` : Prisma.empty;
   const entidad = opts.entidad ? Prisma.sql`AND d."entidad" = ${opts.entidad}` : Prisma.empty;
+  const entidades =
+    opts.entidades && opts.entidades.length > 0
+      ? Prisma.sql`AND (d."entidad" IS NULL OR d."entidad" = ANY(${[...opts.entidades]}::text[]))`
+      : Prisma.empty;
   const epocas = opts.epocas && opts.epocas.length > 0 ? Prisma.sql`AND d."epoca" IN (${Prisma.join([...opts.epocas])})` : Prisma.empty;
   const tipo = opts.tipoCriterio ? Prisma.sql`AND d."tipoCriterio" = ${opts.tipoCriterio}::"TipoCriterio"` : Prisma.empty;
   // Una tesis interrumpida, sustituida o superada no fundamenta nada hoy; sólo
   // entra si se pide explícitamente (historia de un criterio).
   const vigentes = opts.incluirNoVigentes ? Prisma.empty : Prisma.sql`AND (d."estadoCriterio" IS NULL OR d."estadoCriterio" = 'VIGENTE')`;
-  return Prisma.sql`${filtroFuentes(opts.fuentes)} ${materias} ${ambito} ${entidad} ${epocas} ${tipo} ${vigentes}`;
+  return Prisma.sql`${filtroFuentes(opts.fuentes)} ${materias} ${ambito} ${entidad} ${entidades} ${epocas} ${tipo} ${vigentes}`;
 }
 
 /** Brazo vector: vecinos más cercanos por coseno. */

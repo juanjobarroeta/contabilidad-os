@@ -20,3 +20,15 @@ describe("prompt del copiloto: reglas operativas del CFDI", () => {
     expect(p).toMatch(/TODAS las opciones válidas/);
   });
 });
+
+describe("prompt del copiloto: estados donde opera", () => {
+  it("lista domicilio y sucursales cuando se conocen", () => {
+    const p = buildSystemPrompt({ ...empresa, entidades: ["PUE", "JAL"] });
+    expect(p).toContain("**Estados donde opera:** PUE, JAL");
+    expect(p).toContain("cada estado cobra su ISN por separado");
+  });
+
+  it("sin entidades no agrega la línea", () => {
+    expect(buildSystemPrompt(empresa)).not.toContain("Estados donde opera");
+  });
+});
