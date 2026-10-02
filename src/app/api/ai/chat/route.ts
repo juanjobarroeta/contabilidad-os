@@ -27,6 +27,7 @@ import { managedContaBotEnabled, ContaBotError } from "@/lib/contabot/config";
 import { beginManagedTurn, syncManagedSession } from "@/lib/contabot/runtime";
 import { requireContaBotAccess } from "@/lib/contabot/access";
 import { MAX_BODY_BYTES, sanearHistorial } from "@/lib/ai/historial";
+import { marcarCacheDeConversacion } from "@/lib/ai/cache-conversacion";
 import { fuentesDesdeToolResult, verificarRespuesta, type FuenteVerificacion } from "@/lib/ai/verificacion";
 import {
   ejecutarPresentacion,
@@ -354,7 +355,10 @@ export async function POST(req: Request) {
             max_tokens: 4096,
             system: systemBlocks,
             tools: availableTools,
-            messages: currentMessages,
+            // Sin esto cada ronda reenviaba sin caché el historial y los
+            // tool_result de las rondas anteriores: ~0.29 USD por ronda medido
+            // (1-oct-2026, 59 rondas = 17 USD en una sola empresa PRO).
+            messages: marcarCacheDeConversacion(currentMessages),
             stream: true,
           };
           let response;

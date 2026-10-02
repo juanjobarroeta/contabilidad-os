@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { marcarCacheDeConversacion } from "@/lib/ai/cache-conversacion";
 import { tools } from "@/lib/ai/tools";
 import { executeToolCall } from "@/lib/ai/tool-executor";
 import { meteredCreate } from "@/lib/costos/anthropic";
@@ -117,7 +118,7 @@ export async function correrPasadaEmpresa(companyId: string, hoy = new Date()): 
     const res = await meteredCreate(
       anthropic,
       { companyId, userId: null, subtipo: "contador.pasada" },
-      { model: MODELO, max_tokens: MAX_TOKENS, system, tools: TOOLS_PASADA, messages },
+      { model: MODELO, max_tokens: MAX_TOKENS, system, tools: TOOLS_PASADA, messages: marcarCacheDeConversacion(messages) },
     );
 
     const usos = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
