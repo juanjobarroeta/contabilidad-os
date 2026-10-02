@@ -42,6 +42,7 @@ export type DocumentView = {
   source: string;
   updatedAt: string;
   total?: number;
+  currency?: string;
   uuid?: string | null;
   recipient?: string;
   period?: string;
@@ -54,4 +55,4 @@ export type DocumentView = {
   stampable: boolean;
 };
 
-export type StampReview = { token: string; view: DocumentView; payloads: { id: string; payload: Record<string, unknown> }[] };
+export type StampReview = { token: string; amountToStamp: number; view: DocumentView; payloads: { id: string; payload: Record<string, unknown> }[] };

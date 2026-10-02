@@ -26,10 +26,19 @@ export const preparePayrollSchema = z.object({
 
 /** Same user turn + normalized input returns the same draft. The durable claim
  * is committed before provider calls; uncertain calls are never auto-replayed. */
-export async function prepareDocument(name: string, raw: Record<string, unknown>, companyId: string, userId: string, conversationId: string) {
+export async function prepareDocument(name: string, raw: Record<string, unknown>, companyId: string, userId: string, conversationId: string, userMessageId?: string) {
   await assertPuedeEscribir(userId);
   const input = name === "preparar_prefactura" ? prepareInvoiceSchema.parse(raw) : preparePayrollSchema.parse(raw);
-  const message = await prisma.chatMessage.findFirst({ where: { conversationId, role: "user" }, orderBy: { createdAt: "desc" }, select: { id: true } });
+  let message = userMessageId
+    ? await prisma.chatMessage.findFirst({ where: { id: userMessageId, conversationId, role: "user" }, select: { id: true, createdAt: true, meta: true } })
+    : null;
+  if (userMessageId && !message) throw new Error("No se encontró la solicitud de este turno.");
+  // Automatic follow-ups do not mint new invoice intents. Tie their work to
+  // the preceding human request so a resumed model cannot duplicate a draft.
+  if (!message || (message.meta as { seguimiento?: boolean } | null)?.seguimiento) {
+    const preceding = await prisma.chatMessage.findMany({ where: { conversationId, role: "user", ...(message ? { createdAt: { lte: message.createdAt } } : {}) }, orderBy: { createdAt: "desc" }, take: 50, select: { id: true, createdAt: true, meta: true } });
+    message = preceding.find((m) => !(m.meta as { seguimiento?: boolean } | null)?.seguimiento) ?? null;
+  }
   if (!message) throw new Error("Hace falta la solicitud del usuario en esta conversación.");
   const key = createHash("sha256").update(JSON.stringify(["mochi-document-prepare-v1", companyId, conversationId, message.id, name, input])).digest("hex");
   let action;

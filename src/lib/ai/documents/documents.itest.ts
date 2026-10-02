@@ -6,6 +6,7 @@ vi.mock("@/lib/subscription", () => ({ assertPuedeEscribir: async () => ({}), ga
 vi.mock("@/lib/facturapi", () => ({ ensureFacturapiCustomer: async () => ({ ok: true, facturapiId: "synthetic-customer" }), getFacturapiClient: () => ({ invoices: { create: mock.payrollStamp } }) }));
 vi.mock("@/lib/pac", () => ({ getPacProvider: () => ({ createDraft: mock.pacCreate, stampDraft: mock.pacStamp }) }));
 vi.mock("@/lib/costos/record", () => ({ recordTimbrado: async () => {} }));
+import { persistChatUserTurn } from "@/lib/ai/user-turn";
 import { prisma } from "@/lib/prisma";
 import { executeDocumentTool } from "./executor";
 import { readDocument } from "./read";
@@ -56,6 +57,15 @@ describe.skipIf(skip)("Mochi documents: real DB and synthetic PAC only", () => {
     conv = (await prisma.chatConversation.create({ data: { companyId: A, userId: U, visibility: "COMPANY", title: "Synthetic documents" } })).id;
     await prisma.chatMessage.create({ data: { conversationId: conv, role: "user", content: "Prepare the synthetic document" } });
   });
+  it("retrieves historical invoices in their original currency without reissuing them", async () => {
+    const old = await prisma.invoice.create({ data: { companyId: A, tipo: "INGRESO", fecha: new Date("2025-01-10"), formaPago: "03", metodoPago: "PUE", usoCfdi: "G03", subtotal: 100, total: 100, moneda: "USD", status: "STAMPED", uuid: randomUUID(), contraparteNombre: "Historical receiver", contraparteRfc: "HIS250110AA1", rawXml: "synthetic-xml" } });
+    const view = await readDocument({ kind: "factura", companyId: A, id: old.id });
+    expect(view).toMatchObject({ currency: "USD", total: 100, stampable: false });
+    const search = JSON.parse(await executeDocumentTool("buscar_documentos", { kind: "factura", q: "Historical receiver" }, A, { userId: U, conversationId: conv }));
+    expect(search.results).toContainEqual(expect.objectContaining({ id: old.id, currency: "USD" }));
+    expect(mock.pacStamp).not.toHaveBeenCalled();
+  });
+
   it("prepares once, retrieves the durable draft, and never stamps during preparation", async () => {
     const ref = await draft();
     expect(await draft()).toEqual(ref);
@@ -68,6 +78,21 @@ describe.skipIf(skip)("Mochi documents: real DB and synthetic PAC only", () => {
     expect(search.documents).toContainEqual(ref);
     expect(mock.pacCreate).toHaveBeenCalledOnce();
   });
+  it("anchors first-turn legacy preparation and automatic follow-ups to one human request", async () => {
+    const fresh = await prisma.chatConversation.create({ data: { companyId: A, userId: U } });
+    const messageInput = { conversationId: fresh.id, userId: U, requestId: "synthetic-request-id", content: "Prepare invoice" };
+    const userMessageId = await persistChatUserTurn(messageInput);
+    expect(await persistChatUserTurn(messageInput)).toBe(userMessageId);
+    await expect(persistChatUserTurn({ ...messageInput, content: "Different request" })).rejects.toThrow(/otro contenido/);
+    const first = JSON.parse(await executeDocumentTool("preparar_prefactura", input(), A, { userId: U, conversationId: fresh.id, userMessageId, inApp: true }));
+    expect(first.error).toBeUndefined();
+    const followup = await persistChatUserTurn({ ...messageInput, requestId: "automatic-followup", content: "Continue", meta: { seguimiento: true } });
+    const resumed = JSON.parse(await executeDocumentTool("preparar_prefactura", input(), A, { userId: U, conversationId: fresh.id, userMessageId: followup, inApp: true }));
+    expect(resumed.documents).toEqual(first.documents);
+    expect(mock.pacCreate).toHaveBeenCalledOnce();
+    expect(mock.pacStamp).not.toHaveBeenCalled();
+  });
+
   it("blocks foreign documents, foreign conversations and viewer writes before PAC calls", async () => {
     const ref = await draft();
     const foreign = await prisma.chatConversation.create({ data: { companyId: B, userId: U } });
@@ -135,6 +160,19 @@ describe.skipIf(skip)("Mochi documents: real DB and synthetic PAC only", () => {
     expect((await readDocument(ref)).stampable).toBe(false);
     expect((await cargarPrefactura(ref.id!))?.status).toBe("REVISAR_TIMBRADO");
   });
+  it("prepares payroll through the agent tool once and returns a durable document card reference", async () => {
+    const args = { employee_ids: [employee], periodo_inicio: "2026-09-01", periodo_fin: "2026-09-15", fecha_pago: "2026-09-15", dias_pagados: 15 };
+    const context = { userId: U, conversationId: conv, inApp: true };
+    const first = JSON.parse(await executeDocumentTool("preparar_nomina", args, A, context));
+    expect(first.error).toBeUndefined();
+    expect(first.documents).toEqual([{ kind: "nomina", companyId: A, id: expect.any(String) }]);
+    const again = JSON.parse(await executeDocumentTool("preparar_nomina", args, A, context));
+    expect(again.documents).toEqual(first.documents);
+    expect(await prisma.payrollRun.count({ where: { companyId: A } })).toBe(1);
+    expect(await prisma.stagedAction.count({ where: { companyId: A, type: "mochi_document_prepare", status: "DONE", payload: { path: ["conversationId"], equals: conv } } })).toBe(1);
+    expect(mock.payrollStamp).not.toHaveBeenCalled();
+  });
+
   it("atomically rejects overlapping chat payroll preparations", async () => {
     const results = await Promise.all([createPayrollRun(payrollInput(), { preventEmployeeOverlap: true }), createPayrollRun(payrollInput(), { preventEmployeeOverlap: true })]);
     expect(results.filter((r) => r.ok)).toHaveLength(1);
@@ -161,6 +199,22 @@ describe.skipIf(skip)("Mochi documents: real DB and synthetic PAC only", () => {
     expect(old.downloads).toHaveLength(2);
     expect(mock.payrollStamp).toHaveBeenCalledOnce();
   });
+  it("reviews only the remaining receipts and amount in a partially stamped payroll", async () => {
+    const second = await prisma.employee.create({ data: { companyId: A, nombre: "Second", apellidoPaterno: "Synthetic", rfc: `SYN${randomUUID().slice(0, 10)}`, curp: "SYN010101HDFXXX01", nss: "12345678902", codigoPostal: "06600", fechaIngreso: new Date("2025-01-01"), tipoContrato: "01", tipoJornada: "01", salarioDiario: 600, salarioDiarioIntegrado: 625, periodicidadPago: "04" } });
+    const run = await createPayrollRun({ ...payrollInput(), employeeIds: [employee, second.id] });
+    const rows = await prisma.payrollItem.findMany({ where: { payrollRunId: run.runId! } });
+    const done = rows.find((r) => r.employeeId === employee)!;
+    const pending = rows.find((r) => r.employeeId === second.id)!;
+    await prisma.payrollItem.update({ where: { id: done.id }, data: { cfdiUuid: randomUUID() } });
+    const ref = { kind: "nomina" as const, companyId: A, id: run.runId! };
+    const review = await reviewDocument(ref, U, conv);
+    expect(review.payloads.map((r) => r.id)).toEqual([pending.id]);
+    expect(review.amountToStamp).toBe(Number(pending.netoAPagar));
+    expect(review.amountToStamp).toBeLessThan(review.view.total!);
+    expect((await confirmDocumentStamp(ref, review.token, U, conv, req())).ok).toBe(true);
+    expect(mock.payrollStamp).toHaveBeenCalledOnce();
+  });
+
   it("guards the final PAC payload against edits after preview and blocks ambiguous payroll retries", async () => {
     const run = await createPayrollRun(payrollInput());
     const item = await prisma.payrollItem.findFirstOrThrow({ where: { payrollRunId: run.runId! } });

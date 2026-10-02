@@ -128,7 +128,7 @@ export function RepresentacionImpresa({ invoiceId, previewUrl, onClose }: { invo
               className="inline-flex items-center gap-1.5 rounded-control border border-cos-line px-3 py-1.5 text-[13px] font-semibold text-cos-ink hover:bg-cos-paper disabled:opacity-50">
               <Printer className="h-4 w-4" /> Imprimir / Guardar PDF
             </button>
-            <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-control text-cos-ink-soft hover:bg-cos-paper"><X className="h-5 w-5" /></button>
+            <button onClick={onClose} aria-label="Cerrar representación" className="grid h-8 w-8 place-items-center rounded-control text-cos-ink-soft hover:bg-cos-paper"><X className="h-5 w-5" /></button>
           </div>
         </div>
 

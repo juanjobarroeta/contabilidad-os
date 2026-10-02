@@ -148,7 +148,7 @@ export async function executeManagedCall(session: ContaBotSession, action: Funct
       const context = (session.context ?? {}) as ToolContext;
       result = await executeToolCall(action.name, args, session.companyId, {
         cierre: context.cierre, conversationId: session.conversationId,
-        userId: session.userId, inApp: canWrite, origen: "copiloto",
+        userId: session.userId, userMessageId: session.userMessageId ?? undefined, inApp: canWrite, origen: "copiloto",
       });
       card = documentCardFromResult(action.name, result) ?? undefined;
       if (action.name === "anotar_expediente" && JSON.parse(result).nota_id && typeof args.titulo === "string") {

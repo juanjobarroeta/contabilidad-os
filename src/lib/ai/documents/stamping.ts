@@ -29,11 +29,12 @@ export async function documentStampState(ref: DocumentRef) {
     if (!savedIdentity || documentFingerprint(savedIdentity) !== documentFingerprint(identity)) throw new Error("La prefactura no tiene una revisión fiscal vigente del emisor y receptor. Ábrela en Facturas, vuelve a guardarla y revisa el PDF actualizado antes de timbrar.");
     const payload = { ...draft.payload as Record<string, unknown> };
     const fingerprint = documentFingerprint({ ref, draftId: draft.draftId, updatedAt: draft.updatedAt, total: draft.total, payload });
-    return { view, fingerprint, draft, payloads: [{ id: draft.id, payload }], hashes: {} as Record<string, string> };
+    return { view, fingerprint, draft, amountToStamp: Number(draft.total), payloads: [{ id: draft.id, payload }], hashes: {} as Record<string, string> };
   }
   const receipts = view.receipts!.filter((r) => !r.uuid);
   const payloads: StampReview["payloads"] = [];
   const hashes: Record<string, string> = {};
+  let amountToStamp = 0;
   // Bound database work; never approve a silently truncated payroll batch.
   if (receipts.length > 100) throw new Error("Este lote supera 100 recibos. Revísalo y tímbrelo desde Nómina.");
   for (const receipt of receipts) {
@@ -41,17 +42,19 @@ export async function documentStampState(ref: DocumentRef) {
     if (!calculated.ok) throw new Error(`${receipt.employee}: ${calculated.error}`);
     const prepared = await emitNominaCfdi(calculated.stampInput, { preview: true });
     if (!prepared.ok || !prepared.preview) throw new Error(`${receipt.employee}: ${prepared.error ?? "No se pudo preparar el recibo."}`);
+    if (typeof prepared.netoAPagar !== "number" || !Number.isFinite(prepared.netoAPagar)) throw new Error("No se pudo verificar el importe del recibo.");
+    amountToStamp += prepared.netoAPagar;
     hashes[receipt.id] = prepared.preview.hash;
     payloads.push({ id: receipt.id, payload: prepared.preview.payload });
   }
   const current = await readDocument(ref);
   if (current.updatedAt !== view.updatedAt || !current.stampable || documentFingerprint(current.receipts) !== documentFingerprint(view.receipts)) throw new Error("La nómina cambió durante la revisión. Vuelve a abrirla.");
-  return { view, fingerprint: documentFingerprint({ ref, company, period: view.period, paymentDate: view.paymentDate, receipts: view.receipts, hashes }), payloads, hashes, draft: null };
+  return { view, fingerprint: documentFingerprint({ ref, company, period: view.period, paymentDate: view.paymentDate, receipts: view.receipts, hashes }), payloads, hashes, draft: null, amountToStamp: Math.round(amountToStamp * 100) / 100 };
 }
 
 export async function reviewDocument(ref: DocumentRef, userId: string, conversationId: string): Promise<StampReview> {
   const state = await documentStampState(ref);
-  return { view: state.view, payloads: state.payloads, token: signReview({ ref, userId, conversationId, fingerprint: state.fingerprint }) };
+  return { view: state.view, payloads: state.payloads, amountToStamp: state.amountToStamp, token: signReview({ ref, userId, conversationId, fingerprint: state.fingerprint }) };
 }
 
 type Outcome = { ok: boolean; message: string; documents: DocumentRef[] };

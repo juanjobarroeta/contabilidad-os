@@ -81,9 +81,8 @@ try {
   await page.getByRole("button", { name: "Ver recibo", exact: true }).click();
   await page.getByText("BORRADOR", { exact: true }).first().waitFor();
   await page.screenshot({ path: `${out}/payroll-preview-mobile.png`, fullPage: true });
-  // Reset nested preview through navigation; no issue call ever sent.
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await page.evaluate(({ conversationId, companyId }) => window.dispatchEvent(new CustomEvent("cos:ask-ai", { detail: { conversationId, companyId } })), { conversationId, companyId: tag });
+  await page.getByRole("button", { name: "Cerrar representación", exact: true }).click();
+  await close();
   await open("CFDI");
   const downloadEvent = page.waitForEvent("download");
   await page.getByRole("button", { name: "XML", exact: true }).click();

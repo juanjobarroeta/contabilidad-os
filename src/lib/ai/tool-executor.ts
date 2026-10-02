@@ -61,6 +61,8 @@ export type ToolContext = {
   conversationId?: string;
   inApp?: boolean;
   userId?: string;
+  /** Trusted current user message, persisted before tools run. */
+  userMessageId?: string;
   /** Periodo y paso del cierre guiado abierto en pantalla (default de las tools de cierre). */
   cierre?: { year: number; month: number; paso?: string };
   /** "copiloto" = el chat de la app: sus notas del expediente son la memoria visible del chat. */
@@ -84,6 +86,7 @@ export async function executeToolCall(
   companyId: string,
   context: ToolContext = {}
 ): Promise<string> {
+  if (toolName === "preview_factura" && context.origen === "copiloto") return JSON.stringify({ error: "Usa preparar_prefactura para entregar el documento y su revisión dentro del chat." });
   if (DOCUMENT_TOOL_NAMES.has(toolName)) {
     const { executeDocumentTool } = await import("./documents/executor");
     return executeDocumentTool(toolName, input, companyId, context);

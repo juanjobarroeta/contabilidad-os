@@ -154,7 +154,6 @@ export async function emitNominaCfdi(input: EmitNominaInput, options: { preview?
       concepto: d.concepto,
       importe: d.importe,
     }));
-    console.log(`[nomina] ${employee.nombre}: desglose precalculado percepciones=${totalPercepciones} deducciones=${totalDeducciones} neto=${netoAPagar}`);
   } else {
     const sueldoBruto = input.sueldoBruto ?? +(Number(employee.salarioDiario) * input.diasPagados).toFixed(2);
 
@@ -175,7 +174,6 @@ export async function emitNominaCfdi(input: EmitNominaInput, options: { preview?
       salarioDiario: Number(employee.salarioDiario),
     });
     const imssObrero = imssCalc.obrero.total;
-    const imssPatronal = imssCalc.patronal.total;
     const infonavitDeduccion = calcularInfonavit({
       tipoDescuento: (employee as Employee & { tipoDescuentoInfonavit?: string | null }).tipoDescuentoInfonavit ?? null,
       descuentoInfonavit: employee.descuentoInfonavit === null ? null : Number(employee.descuentoInfonavit),
@@ -229,8 +227,6 @@ export async function emitNominaCfdi(input: EmitNominaInput, options: { preview?
         : []),
     ];
 
-    // Log for debugging
-    console.log(`[nomina] ${employee.nombre}: bruto=${sueldoBruto} ISR=${isrCalc.isrRetenido} IMSS_obrero=${imssObrero} IMSS_patronal=${imssPatronal} INFONAVIT=${infonavitDeduccion} neto=${netoAPagar}`);
   }
 
   // ── Identidad fiscal del receptor (CP y nombre EXACTOS del SAT) ────────

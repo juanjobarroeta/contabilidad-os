@@ -7,7 +7,7 @@ export async function readDocument(input: DocumentRef): Promise<DocumentView> {
   const ref = documentRefSchema.parse(input);
   const company = await prisma.company.findUnique({ where: { id: ref.companyId }, select: { id: true, razonSocial: true, rfc: true } });
   if (!company) throw new Error("Empresa no encontrada.");
-  const base: DocumentView = { ref, company, title: documentTitles[ref.kind], status: "Consulta", source: "ContabilidadOS", updatedAt: new Date().toISOString(), downloads: [], stampable: false };
+  const base: DocumentView = { ref, company, title: documentTitles[ref.kind], status: "Consulta", source: "ContabilidadOS", currency: "MXN", updatedAt: new Date().toISOString(), downloads: [], stampable: false };
   const query = new URLSearchParams({ companyId: ref.companyId, year: String(ref.year), month: String(ref.month) });
   if (["balanza", "polizas", "catalogo", "iva", "isr", "retenciones"].includes(ref.kind)) {
     if (ref.year && ref.month) base.period = `${ref.year}-${String(ref.month).padStart(2, "0")}`;
@@ -47,9 +47,9 @@ export async function readDocument(input: DocumentRef): Promise<DocumentView> {
     }
     return { ...base, status: "BORRADOR — sin timbrar", recipient: `${item.employee.nombre} ${item.employee.apellidoPaterno} (${item.employee.rfc})`, period: item.payrollRun.periodo, total: Number(item.netoAPagar), previewUrl: `/api/nomina/recibos/preview?companyId=${encodeURIComponent(ref.companyId)}&payrollItemId=${encodeURIComponent(item.id)}` };
   }
-  const row = await prisma.invoice.findFirst({ where: { id: ref.id, companyId: ref.companyId }, select: { id: true, uuid: true, tipo: true, status: true, fecha: true, updatedAt: true, total: true, rawXml: true, facturapiId: true, contraparteNombre: true, contraparteRfc: true, customer: { select: { razonSocial: true, rfc: true } } } });
+  const row = await prisma.invoice.findFirst({ where: { id: ref.id, companyId: ref.companyId }, select: { id: true, uuid: true, tipo: true, status: true, fecha: true, updatedAt: true, total: true, moneda: true, rawXml: true, facturapiId: true, contraparteNombre: true, contraparteRfc: true, customer: { select: { razonSocial: true, rfc: true } } } });
   if (!row) throw new Error("CFDI no encontrado en esta empresa.");
-  return { ...base, title: row.tipo === "NOMINA" ? "CFDI de nómina" : "CFDI", status: row.status, uuid: row.uuid, total: Number(row.total), period: row.fecha.toISOString().slice(0, 10), updatedAt: row.updatedAt.toISOString(), invoiceId: row.id,
+  return { ...base, title: row.tipo === "NOMINA" ? "CFDI de nómina" : "CFDI", status: row.status, uuid: row.uuid, total: Number(row.total), currency: row.moneda, period: row.fecha.toISOString().slice(0, 10), updatedAt: row.updatedAt.toISOString(), invoiceId: row.id,
     recipient: row.customer ? `${row.customer.razonSocial} (${row.customer.rfc})` : row.contraparteNombre ? `${row.contraparteNombre} (${row.contraparteRfc ?? ""})` : undefined,
     source: row.rawXml ? "XML del CFDI" : "Registro del CFDI; verifica disponibilidad de archivos",
     downloads: [...(row.rawXml || row.facturapiId ? [{ label: "XML", href: `/api/facturas/${row.id}/download?format=xml` }] : []), ...(row.facturapiId ? [{ label: "PDF", href: `/api/facturas/${row.id}/download?format=pdf` }] : [])],
