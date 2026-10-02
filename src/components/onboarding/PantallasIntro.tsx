@@ -16,7 +16,7 @@ const espera = (ms: number, reducir: boolean) => new Promise((r) => setTimeout(r
 
 // ── 01 · Bienvenida ─────────────────────────────────────────────────────────
 
-export function PantallaHola({ pagado, onPerfil }: { pagado: boolean; onPerfil: (p: Perfil) => void }) {
+export function PantallaHola({ pagado, onPerfil }: { pagado: boolean; onPerfil: (p: Perfil) => Promise<boolean> }) {
   const { decir, nombre, mirar, reducir } = useEscena();
   const [elegido, setElegido] = useState<Perfil | null>(null);
 
@@ -33,7 +33,7 @@ export function PantallaHola({ pagado, onPerfil }: { pagado: boolean; onPerfil: 
     mirar(el);
     await decir(LINEAS.perfil(p));
     await espera(700, reducir);
-    onPerfil(p);
+    if (!await onPerfil(p)) setElegido(null);
   }
 
   return (

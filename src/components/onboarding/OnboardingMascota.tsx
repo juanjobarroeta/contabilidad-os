@@ -24,6 +24,8 @@ import {
   PASOS_ALTA,
   PROGRESO_INICIAL,
   sanearProgreso,
+  sanearAgregar,
+  rutaManual,
   tonoSugerido,
   type PasoAlta,
   type Perfil,
@@ -37,6 +39,8 @@ import { PantallaHistorial } from "./PantallaHistorial";
 import { PantallaBancos, PantallaEquipo } from "./PantallasOpcionales";
 import { avanceHistorial, type EstadoAlta } from "./tipos";
 import { cn } from "@/lib/utils";
+import { solicitar } from "@/lib/onboarding/solicitar";
+import { InvitacionesPendientes, type InvitacionPendiente } from "./InvitacionesPendientes";
 
 interface Contexto {
   invitado: boolean;
@@ -63,16 +67,25 @@ export function OnboardingMascota() {
   const [paso, setPaso] = useState<PasoAlta>("hola");
   const [reducir, setReducir] = useState(false);
   const [estado, setEstado] = useState<EstadoAlta | null>(null);
+  const [invitaciones, setInvitaciones] = useState<InvitacionPendiente[]>([]);
+  const [errorGuardado, setErrorGuardado] = useState<string | null>(null);
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [retorno, setRetorno] = useState<string | null>(null);
+  const colaGuardado = useRef<Promise<boolean>>(Promise.resolve(true));
 
   // Carga: contexto (invitación, empresas) + progreso guardado → modo y pantalla.
   useEffect(() => {
     let vivo = true;
     (async () => {
-      const [rc, rp] = await Promise.all([
-        fetch("/api/onboarding/contexto").then((r) => (r.ok ? r.json() : null)).catch(() => null),
-        fetch("/api/onboarding/progreso").then((r) => (r.ok ? r.json() : null)).catch(() => null),
-      ]);
+      const [rc, rp, ri] = await Promise.all([
+        "/api/onboarding/contexto", "/api/onboarding/progreso", "/api/invitations/pendientes",
+      ].map(async (url) => {
+        const r = await solicitar(url);
+        if (!r.ok) throw new Error("No pude cargar tu alta. Intenta de nuevo.");
+        return r.json();
+      }));
       if (!vivo) return;
+      setInvitaciones(Array.isArray(ri) ? ri : []);
       const c: Contexto = {
         invitado: !!rc?.invitado,
         despachoNombre: rc?.despachoNombre ?? null,
@@ -80,13 +93,26 @@ export function OnboardingMascota() {
         empresas: Number(rc?.empresas ?? 0),
       };
       const guardado = rp?.progreso ? sanearProgreso(rp.progreso) : null;
+      const agregado = sanearAgregar(rp?.agregar);
       setCtx(c);
       const enCurso = guardado && guardado.companyId && (PASOS_ALTA as readonly string[]).includes(guardado.paso);
-      const agregar = fromEmpresas || !!explicitReturn || (c.empresas > 0 && !enCurso);
+      const agregar = fromEmpresas || !!explicitReturn || (agregado && agregado.paso !== "listo") || (c.empresas > 0 && !enCurso);
       if (agregar) {
+        const reanudar = agregado && agregado.paso !== "listo";
+        const destino = explicitReturn ?? (reanudar ? agregado.returnTo : null) ?? (fromEmpresas ? "/configuracion/empresas" : "/dashboard");
+        if (!reanudar) {
+          const r = await solicitar("/api/onboarding/progreso", {
+            method: "PATCH", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ flujo: "agregar", reiniciar: true, paso: "fiel", companyId: null, returnTo: destino }),
+          });
+          if (!r.ok) throw new Error("No pude guardar el inicio del alta. Intenta de nuevo.");
+        }
+        if (!vivo) return;
+        setRetorno(destino);
         setModo("agregar");
-        setProgreso({ ...PROGRESO_INICIAL, perfil: guardado?.perfil ?? null, tono: guardado?.tono ?? "bal", tonoElegido: true });
-        setPaso("fiel");
+        const inicio = reanudar && agregado.companyId ? agregado.paso as PasoAlta : "fiel";
+        setProgreso({ ...PROGRESO_INICIAL, paso: inicio, companyId: reanudar ? agregado.companyId : null, perfil: guardado?.perfil ?? null, tono: guardado?.tono ?? "bal", tonoElegido: true });
+        setPaso(inicio);
         return;
       }
       const p = guardado ?? { ...PROGRESO_INICIAL };
@@ -97,7 +123,7 @@ export function OnboardingMascota() {
       if (!p.companyId && PASOS_ALTA.indexOf(inicio) > PASOS_ALTA.indexOf("fiel")) inicio = "fiel";
       if (inicio === "hola" && c.invitado) inicio = "personaje";
       setPaso(inicio);
-    })();
+    })().catch((e) => { if (vivo) setErrorCarga(e instanceof Error ? e.message : "No pude cargar tu alta."); });
     return () => {
       vivo = false;
     };
@@ -111,14 +137,24 @@ export function OnboardingMascota() {
   const guardar = useCallback(
     (cambio: Partial<Progreso>) => {
       setProgreso((p) => ({ ...p, ...cambio }));
-      if (modo !== "alta") return;
-      void fetch("/api/onboarding/progreso", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(cambio),
-      }).catch(() => {});
+      const task = colaGuardado.current.then(async () => {
+        try {
+          const r = await solicitar("/api/onboarding/progreso", {
+            method: "PATCH", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...cambio, ...(modo === "agregar" ? { flujo: "agregar", returnTo: retorno } : {}) }),
+          });
+          if (!r.ok) throw new Error("No pude guardar tu avance. Intenta de nuevo antes de salir.");
+          setErrorGuardado(null);
+          return true;
+        } catch (e) {
+          setErrorGuardado(e instanceof Error ? e.message : "No pude guardar tu avance.");
+          return false;
+        }
+      });
+      colaGuardado.current = task;
+      return task;
     },
-    [modo],
+    [modo, retorno],
   );
 
   const companyId = progreso.companyId;
@@ -142,26 +178,26 @@ export function OnboardingMascota() {
   }, [companyId, paso]);
 
   const pasos = modo === "agregar" ? PASOS_AGREGAR : PASOS_ALTA;
-  const successHref = explicitReturn ?? (fromEmpresas ? "/configuracion/empresas" : "/dashboard");
+  const successHref = retorno ?? explicitReturn ?? (fromEmpresas ? "/configuracion/empresas" : "/dashboard");
 
   const ir = useCallback(
-    (siguiente: PasoAlta) => {
-      setPaso(siguiente);
-      guardar({ paso: siguiente });
+    async (siguiente: PasoAlta) => {
+      if (await guardar({ paso: siguiente })) setPaso(siguiente);
     },
     [guardar],
   );
 
-  const avanzar = useCallback(() => {
+  const avanzar = useCallback(async () => {
     const i = pasos.indexOf(paso);
     if (i < pasos.length - 1) return ir(pasos[i + 1]);
     // Fin del alta.
     if (modo === "agregar") {
+      if (!await guardar({ paso: "listo" })) return;
       router.push(successHref);
       router.refresh();
       return;
     }
-    guardar({ paso: "recorrido" });
+    if (!await guardar({ paso: "recorrido" })) return;
     try {
       localStorage.setItem(LLAVE_RECORRIDO, "1");
     } catch {
@@ -184,11 +220,12 @@ export function OnboardingMascota() {
     fijarPiel(p);
   }
 
-  const elegirPerfil = (p: Perfil) => {
-    const cambio: Partial<Progreso> = { perfil: p };
+  const elegirPerfil = async (p: Perfil) => {
+    const cambio: Partial<Progreso> = { perfil: p, paso: "personaje" };
     if (!progreso.tonoElegido) cambio.tono = tonoSugerido(p);
-    guardar(cambio);
-    ir("personaje");
+    if (!await guardar(cambio)) return false;
+    setPaso("personaje");
+    return true;
   };
 
   const historialEnMarcha = !!companyId && !!estado && estado.resumen.total > 0;
@@ -199,7 +236,7 @@ export function OnboardingMascota() {
 
   const despachoAdmin = ctx?.despachoRol === "OWNER" || ctx?.despachoRol === "ADMIN";
 
-  if (!modo || !ctx) return <div className="ob" />;
+  if (!modo || !ctx) return <div className="ob">{errorCarga && <div className="m-auto p-6" role="alert">{errorCarga}<button type="button" className="ob-btn p" onClick={() => window.location.reload()}>Reintentar</button></div>}</div>;
 
   return (
     <div className={cn("ob", reducir && "reduce")}>
@@ -235,6 +272,8 @@ export function OnboardingMascota() {
         </header>
 
         <Pantalla key={paso} paso={paso}>
+          {errorGuardado && <div role="alert" className="ob-err mx-auto mb-4 max-w-3xl">{errorGuardado}<button type="button" className="ob-btn g" onClick={() => void guardar(progreso).then((ok) => { if (ok) window.location.reload(); })}>Reintentar guardado</button></div>}
+          {!fromEmpresas && <InvitacionesPendientes invitaciones={invitaciones} />}
           {paso === "hola" && <PantallaHola pagado={pagado} onPerfil={elegirPerfil} />}
           {paso === "personaje" && (
             <PantallaPersonaje
@@ -246,7 +285,7 @@ export function OnboardingMascota() {
             />
           )}
           {paso === "confianza" && <PantallaConfianza onListo={avanzar} />}
-          {paso === "fiel" && <PantallaFiel onCreada={(id) => guardar({ companyId: id })} onListo={avanzar} />}
+          {paso === "fiel" && <PantallaFiel onCreada={(id) => guardar({ companyId: id, paso: "historial" })} onListo={avanzar} manualHref={rutaManual(modo === "agregar", modo === "agregar" ? successHref : explicitReturn)} />}
           {paso === "historial" && companyId && (
             <PantallaHistorial
               companyId={companyId}

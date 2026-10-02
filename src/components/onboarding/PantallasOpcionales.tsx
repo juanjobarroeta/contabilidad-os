@@ -13,6 +13,7 @@ import { LINEAS } from "@/lib/onboarding/lineas";
 import { Burbuja, Slot, useEscena } from "./escena";
 import { CuentasDelCatalogo } from "@/components/bancos/CuentasDelCatalogo";
 import { cn } from "@/lib/utils";
+import { solicitar } from "@/lib/onboarding/solicitar";
 
 const BANCOS: Array<[string, string]> = [
   ["BBVA", "BB"],
@@ -58,7 +59,7 @@ export function PantallaBancos({ companyId, onSeguir }: { companyId: string; onS
     setEnviando(true);
     setError(null);
     try {
-      const res = await fetch("/api/bancos", {
+      const res = await solicitar("/api/bancos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -78,6 +79,8 @@ export function PantallaBancos({ companyId, onSeguir }: { companyId: string; onS
       setListo(`${nombre.trim()} ••${numero.trim().slice(-4)} registrada`);
       festejar();
       void decir(LINEAS.bancoListo);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No pude registrar la cuenta. Intenta de nuevo.");
     } finally {
       setEnviando(false);
     }
@@ -208,14 +211,18 @@ export function PantallaEquipo({
     setEnviando(true);
     const resultado: Enviado[] = [];
     for (const f of lista) {
-      const url = despachoAdmin ? "/api/despacho/members" : `/api/companies/${companyId}/members`;
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: f.email, role: f.rol }),
-      });
-      const j = (await res.json().catch(() => null)) as { tempPassword?: string | null; error?: string } | null;
-      resultado.push(res.ok ? { email: f.email, tempPassword: j?.tempPassword ?? null } : { email: f.email, tempPassword: null, error: j?.error ?? "No se pudo" });
+      try {
+        const url = despachoAdmin ? "/api/despacho/members" : `/api/companies/${companyId}/members`;
+        const res = await solicitar(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: f.email, role: f.rol }),
+        });
+        const j = (await res.json().catch(() => null)) as { tempPassword?: string | null; error?: string } | null;
+        resultado.push(res.ok ? { email: f.email, tempPassword: j?.tempPassword ?? null } : { email: f.email, tempPassword: null, error: j?.error ?? "No se pudo" });
+      } catch (e) {
+        resultado.push({ email: f.email, tempPassword: null, error: e instanceof Error ? e.message : "No pude dar acceso. Intenta de nuevo." });
+      }
     }
     setEnviados((e) => [...e, ...resultado]);
     setFilas([{ email: "", rol: roles[0].role }]);

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { BankAccountTipo } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
+import { leerClabe } from "@/lib/bancos/clabe";
 
 // GET /api/bancos?companyId=xxx
 // Autz: sesión web O token de servicio (Authorization: Bearer <jwt>), para que
@@ -103,6 +104,8 @@ export async function POST(req: Request) {
   if (!member || member.role === "VIEWER") {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
+  const parsedClabe = leerClabe(clabe);
+  if (!parsedClabe.ok) return NextResponse.json({ error: parsedClabe.error }, { status: 400 });
 
   // Ligada a su cuenta contable (sugerencias del catálogo): debe ser de la empresa.
   if (chartAccountId !== undefined && chartAccountId !== null) {
@@ -119,7 +122,7 @@ export async function POST(req: Request) {
         banco,
         nombre,
         numeroCuenta,
-        clabe,
+        clabe: parsedClabe.clabe,
         moneda: moneda ?? "MXN",
         ...(tipo ? { tipo } : {}),
         ...(chartAccountId ? { chartAccountId } : {}),
