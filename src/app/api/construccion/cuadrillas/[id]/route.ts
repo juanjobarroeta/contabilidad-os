@@ -29,7 +29,7 @@ async function loadAndGuard(id: string, req: Request) {
   });
   if (!cuadrilla) throw new AuthzError(404, "Cuadrilla no encontrada");
   await requireWriter(cuadrilla.companyId, req);
-  await requireModule(cuadrilla.companyId, "CONSTRUCCION_CUADRILLAS");
+  await requireModule(cuadrilla.companyId, "CONSTRUCCION");
   return cuadrilla;
 }
 

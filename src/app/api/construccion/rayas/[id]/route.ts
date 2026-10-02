@@ -21,7 +21,7 @@ async function loadRaya(id: string, req: Request, write = false) {
   if (!raya) throw new AuthzError(404, "Raya no encontrada");
   if (write) await requireWriter(raya.companyId, req);
   else await requireMembership(raya.companyId, undefined, req);
-  await requireModule(raya.companyId, "CONSTRUCCION_CUADRILLAS");
+  await requireModule(raya.companyId, "CONSTRUCCION");
   return raya;
 }
 

@@ -24,6 +24,29 @@ type Rule = { methods: "read" | "write" | "all"; pattern: string };
 const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /**
+ * DESTAJO (mano de obra de las obras: cuadrillas, sus miembros y las rayas
+ * semanales). Por ahora en TODOS los roles, cada uno con su tramo — el mismo
+ * reparto que las requisiciones: el residente captura, contabilidad captura
+ * y autoriza la raya, tesorería la ve y la paga. Autorizar y pagar son
+ * sub-acciones de 3 segmentos que se listan aparte, rol por rol.
+ */
+const DESTAJO_LECTURA: Rule[] = [
+  { methods: "read", pattern: "cuadrillas" },
+  { methods: "read", pattern: "cuadrillas/*" },
+  { methods: "read", pattern: "cuadrillas/*/miembros" },
+  { methods: "read", pattern: "rayas" },
+  { methods: "read", pattern: "rayas/*" },
+];
+const DESTAJO_CAPTURA: Rule[] = [
+  { methods: "all", pattern: "cuadrillas" },
+  { methods: "all", pattern: "cuadrillas/*" },
+  { methods: "all", pattern: "cuadrillas/*/miembros" },
+  { methods: "all", pattern: "cuadrillas/*/miembros/*" },
+  { methods: "all", pattern: "rayas" },
+  { methods: "all", pattern: "rayas/*" },
+];
+
+/**
  * TESORERÍA (p. ej. Katia): sólo la cola de pagos que admin ya mandó a
  * tesorería — ver y ejecutar pagos, vincular movimientos bancarios y
  * consultar el contexto que esa pantalla necesita (proveedores, CFDIs,
@@ -59,6 +82,9 @@ const TESORERIA_RULES: Rule[] = [
   { methods: "all", pattern: "pagos-proveedor/*" },
   { methods: "all", pattern: "solicitudes-compra/*/pagar" },
   { methods: "all", pattern: "solicitudes-compra/*/vincular-bt" },
+  // Destajo: ve las rayas y paga las autorizadas
+  ...DESTAJO_LECTURA,
+  { methods: "all", pattern: "rayas/*/pagar" },
 ];
 
 /**
@@ -117,6 +143,9 @@ const RESIDENTE_RULES: Rule[] = [
   // y por lo tanto quedan bloqueadas — `*` es un solo segmento.
   { methods: "all", pattern: "solicitudes-compra" },
   { methods: "all", pattern: "solicitudes-compra/*" },
+  // Destajo: captura cuadrillas, sus miembros y las rayas de su obra
+  // (autorizar y pagar quedan fuera, igual que en requisiciones).
+  ...DESTAJO_CAPTURA,
 ];
 
 /**
@@ -185,6 +214,9 @@ const CONTABILIDAD_RULES: Rule[] = [
   { methods: "all", pattern: "pagos-proveedor/*" },
   { methods: "all", pattern: "adjudicaciones" },
   { methods: "all", pattern: "adjudicaciones/*" },
+  // Destajo: captura y AUTORIZA la raya (como autoriza las compras)
+  ...DESTAJO_CAPTURA,
+  { methods: "all", pattern: "rayas/*/aprobar" },
 ];
 
 const RULES: Partial<Record<ConstruccionRol, Rule[]>> = {
@@ -408,9 +440,9 @@ const PAGINA_RULES: Record<string, Rule[]> = {
  * es un grant y su bundle amplía el allowlist.
  */
 const ROL_PAGINAS: Partial<Record<ConstruccionRol, string[]>> = {
-  TESORERIA: ["pagos"],
-  RESIDENTE: ["obras", "requisiciones", "caja", "proveedores", "gastos"],
-  CONTABILIDAD: ["compras", "pagos", "requisiciones", "proveedores", "edos-prov", "obras"],
+  TESORERIA: ["pagos", "destajo"],
+  RESIDENTE: ["obras", "requisiciones", "caja", "proveedores", "gastos", "destajo"],
+  CONTABILIDAD: ["compras", "pagos", "requisiciones", "proveedores", "edos-prov", "obras", "destajo"],
 };
 
 function matches(pattern: string, path: string): boolean {
