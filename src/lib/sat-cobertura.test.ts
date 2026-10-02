@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { esCoberturaSospechosa, coberturaSospechosa, periodoCerrado, UMBRAL_COBERTURA } from "./sat-cobertura";
+import { esCoberturaSospechosa, coberturaSospechosa, periodoCerrado, UMBRAL_COBERTURA, satDijoSinSolapes } from "./sat-cobertura";
 
 // Los ocho meses de MARGOM pasaron el control anterior —«las dos solicitudes
 // llegaron a FINISHED»— con 63, 49, 80, 47 y 3 facturas. Estos casos fijan qué
@@ -106,5 +106,34 @@ describe("coberturaSospechosa y el mes en curso", () => {
     );
     expect(r.map((x) => x.periodo)).toEqual(["2025-04", "2024-01"]);
     expect(r.reduce((s, x) => s + x.faltanCuandoMenos, 0)).toBe(5361);
+  });
+});
+
+describe("satDijoSinSolapes (la unión de los rangos, no la suma)", () => {
+  const fila = (desde: string, hasta: string, cfdisFound: number, tipo = "EMITIDOS") => ({
+    year: 2026, month: 9, tipo, status: "FINISHED", desde, hasta, cfdisFound, createdAt: hasta,
+  });
+
+  it("«del 1 a ayer» pedido cada día cuenta el mes una vez (el caso de septiembre ~10x)", () => {
+    // 1→2, 1→3, … 1→30: cada día el SAT reporta lo acumulado.
+    const filas = Array.from({ length: 29 }, (_, i) => fila("2026-09-01T00:00:00Z", `2026-09-${String(i + 2).padStart(2, "0")}T23:59:59Z`, (i + 2) * 30));
+    expect(satDijoSinSolapes(filas).get("2026-9")).toBe(900);
+  });
+
+  it("los tramos disjuntos suman; emitidos y recibidos también", () => {
+    const m = satDijoSinSolapes([
+      fila("2026-09-01T00:00:00Z", "2026-09-15T23:59:59Z", 200),
+      fila("2026-09-16T00:00:00Z", "2026-09-30T23:59:59Z", 310),
+      fila("2026-09-01T00:00:00Z", "2026-09-30T23:59:59Z", 40, "RECIBIDOS"),
+    ]);
+    expect(m.get("2026-9")).toBe(550);
+  });
+
+  it("ignora lo que no terminó y los tipos que no son descarga", () => {
+    const m = satDijoSinSolapes([
+      { ...fila("2026-09-01T00:00:00Z", "2026-09-30T23:59:59Z", 99), status: "IN_PROGRESS" },
+      fila("2026-09-01T00:00:00Z", "2026-09-30T23:59:59Z", 7, "METADATA"),
+    ]);
+    expect(m.get("2026-9")).toBeUndefined();
   });
 });

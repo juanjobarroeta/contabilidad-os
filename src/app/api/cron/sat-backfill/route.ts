@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
 import { submitSatSync, verifyAndImportSatSync } from "@/lib/sat-sync";
-import { coberturaSospechosa, type CoberturaPeriodo } from "@/lib/sat-cobertura";
+import { coberturaSospechosa, satDijoSinSolapes, type CoberturaPeriodo } from "@/lib/sat-cobertura";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (or GET) /api/cron/sat-backfill
@@ -87,29 +87,12 @@ async function coberturaDe(
     // tantas veces como se haya pedido (submitSatSync crea fila nueva pasada la
     // ventana de 24h). Con tramos hay varias filas legítimas, una por rango
     // disjunto, y ésas sí suman. Ver sat-cobertura para la medición que lo cazó.
-    prisma.$queryRaw<Array<{ year: number; month: number; cfdis: bigint }>>`
-      WITH ultima_por_rango AS (
-        -- Una fila por rango pedido: la más reciente.
-        SELECT DISTINCT ON ("year", "month", "tipo", "desde", "hasta")
-               "year", "month", "tipo", "cfdisFound",
-               ("desde" IS NOT NULL) AS con_rango
-        FROM "SatSyncRequest"
-        WHERE "companyId" = ${companyId} AND "status" = 'FINISHED'
-        ORDER BY "year", "month", "tipo", "desde", "hasta", "createdAt" DESC
-      ), hay_tramos AS (
-        -- ¿Ese (mes, tipo) llegó a pedirse en tramos?
-        SELECT "year", "month", "tipo", bool_or(con_rango) AS con_tramos
-        FROM ultima_por_rango GROUP BY "year", "month", "tipo"
-      )
-      SELECT u."year", u."month", SUM(u."cfdisFound")::bigint AS cfdis
-      FROM ultima_por_rango u
-      JOIN hay_tramos h
-        ON h."year" = u."year" AND h."month" = u."month" AND h."tipo" = u."tipo"
-      -- Si hubo tramos, los tramos SON el mes: la fila del mes completo (sin
-      -- rango) cubre los mismos días y sumarla lo cuenta dos veces.
-      WHERE u.con_rango = h.con_tramos
-      GROUP BY u."year", u."month"
-    `,
+    // Rangos enciman (sat-sync pide «del 1 a ayer» cada día): la unión, no la
+    // suma. Ver satDijoSinSolapes.
+    prisma.satSyncRequest.findMany({
+      where: { companyId, status: "FINISHED" },
+      select: { year: true, month: true, tipo: true, status: true, desde: true, hasta: true, cfdisFound: true, createdAt: true },
+    }),
     prisma.$queryRaw<Array<{ year: number; month: number; n: bigint }>>`
       SELECT EXTRACT(YEAR FROM "fecha")::int AS year,
              EXTRACT(MONTH FROM "fecha")::int AS month,
@@ -120,7 +103,7 @@ async function coberturaDe(
     `,
   ]);
 
-  const satPor = new Map(solicitudes.map((r) => [`${r.year}-${r.month}`, Number(r.cfdis ?? 0)]));
+  const satPor = satDijoSinSolapes(solicitudes);
   const nuestrasPor = new Map(facturas.map((r) => [`${r.year}-${r.month}`, Number(r.n)]));
 
   return periodos.map(({ year, month }) => ({
