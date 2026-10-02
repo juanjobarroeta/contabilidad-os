@@ -14,7 +14,6 @@ import { REGIMEN_MAP } from "@/lib/obligaciones";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Money, Alert, RetryButton } from "@/components/ui";
 import { Download, Loader2, FileText, AlertTriangle, CheckCircle2, Sparkles, Check } from "lucide-react";
-import { RevisionIvaCobro, type CobroReviewRow } from "./RevisionIvaCobro";
 
 const CARD = "rounded-card border border-cos-line bg-cos-card shadow-card print:border-2";
 const THEAD = "bg-cos-paper text-[11px] uppercase tracking-[0.02em] text-cos-ink-faint";
@@ -54,7 +53,9 @@ function VerMas({ restantes, total, onClick, colSpan }: { restantes: number; tot
 
 
 // ── IVA PANEL ────────────────────────────────────────────────────────────────
-interface IvaRow extends CobroReviewRow {
+interface IvaRow {
+  fechaCfdi?: string; fechasCobro?: string[]; fuenteCobro?: string;
+  evidenciaCobro?: { id: string; fecha: string; monto: number; referencia: string }[];
   id: string; fecha: string; uuid: string | null; serie: string | null; folio: string | null;
   contraparte: string; rfc: string; subtotal: number; tasa: number | null; importe: number; metodoPago: string;
   sinPagoConciliado?: boolean;
@@ -107,12 +108,10 @@ interface IvaData {
   depositosSinFactura?: { count: number; total: number; ivaPotencial: number };
 }
 
-export function IvaPanel({ companyId, year, month, onCobroSaved }: { companyId: string; year: number; month: number; onCobroSaved?: () => void }) {
+export function IvaPanel({ companyId, year, month }: { companyId: string; year: number; month: number }) {
   const [data, setData] = useState<IvaData | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
-  const [reviewRow, setReviewRow] = useState<IvaRow | null>(null);
-  useEffect(() => { setReviewRow(null); }, [companyId,year,month]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -131,6 +130,11 @@ export function IvaPanel({ companyId, year, month, onCobroSaved }: { companyId: 
   }, [companyId, year, month]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const refresh = (e: Event) => { if ((e as CustomEvent<{companyId:string}>).detail?.companyId === companyId) void load(); };
+    window.addEventListener("cos:data-changed", refresh);
+    return () => window.removeEventListener("cos:data-changed", refresh);
+  }, [companyId, load]);
 
   const [savingSaldo, setSavingSaldo] = useState(false);
   const [saldoError, setSaldoError] = useState<string | null>(null);
@@ -182,7 +186,6 @@ export function IvaPanel({ companyId, year, month, onCobroSaved }: { companyId: 
     <div className="space-y-5">
       <DownloadCsvButton href={`/api/papeles/iva?companyId=${companyId}&year=${year}&month=${month}&format=csv`} />
       {data.advertencias?.map((message)=><div key={message} role="status" className="rounded-card border border-cos-amber bg-cos-amber-tint px-4 py-3 text-sm text-cos-amber-ink">{message}</div>)}
-      {reviewRow&&<RevisionIvaCobro key={reviewRow.id} row={reviewRow} companyId={companyId} onCancel={()=>setReviewRow(null)} onSaved={()=>{setReviewRow(null);void load();onCobroSaved?.();}}/>}
 
       <IvaSection
         title={data.cobrosPue?.determinado===false?"IVA trasladado — estimación pendiente de revisión":"IVA trasladado (cobrado)"}
@@ -192,7 +195,6 @@ export function IvaPanel({ companyId, year, month, onCobroSaved }: { companyId: 
         excluidoLabel="no cobrado"
         onToggleExcluir={(id, next) => toggleExcluir(id, next, "ivaNoCausado")}
         toggling={toggling}
-        onReview={setReviewRow}
       />
       {data.ppdIngresoPendiente && data.ppdIngresoPendiente.count > 0 && (
         <div className="flex items-start gap-2.5 rounded-card border border-cos-line bg-cos-paper px-4 py-3 text-[13px] text-cos-ink-soft">
@@ -448,10 +450,9 @@ function SaldoFavorAnteriorLine({
   );
 }
 
-function IvaSection({ title, subtitle, rows, onToggleExcluir, onReview, toggling, totalLabel = "Total", excluidoLabel = "excluido", complementoLabel = "cobrado (REP)" }: {
+function IvaSection({ title, subtitle, rows, onToggleExcluir, toggling, totalLabel = "Total", excluidoLabel = "excluido", complementoLabel = "cobrado (REP)" }: {
   title: string; subtitle: string; rows: IvaRow[];
   onToggleExcluir?: (id: string, next: boolean) => void; toggling?: string | null;
-  onReview?: (row:IvaRow)=>void;
   totalLabel?: string; excluidoLabel?: string;
   /** Un PPD armado desde el complemento: «cobrado (REP)» en ingresos, «pagado (REP)» en egresos. */
   complementoLabel?: string;
@@ -546,7 +547,6 @@ function IvaSection({ title, subtitle, rows, onToggleExcluir, onReview, toggling
               <td className={`px-3 py-1.5 text-right ${r.excluidoAcreditamiento || r.sinComplementoPago || r.sinPagoConciliado || r.emisorEnLista69B ? "line-through" : ""}`}><Money value={r.importe} size={12} weight={500} /></td>
               {acciones && (
               <td className="px-3 py-1.5 text-right">
-                  {onReview&&r.fingerprint&&<button onClick={()=>onReview(r)} className="mb-1 mr-1 rounded-control border border-cos-line px-2 py-1 text-[11px] font-medium hover:bg-cos-paper">Revisar cobro</button>}
                   {!r.emisorEnLista69B && (r.excluidoAcreditamiento || r.metodoPago === "PUE") && (
                     <button
                       onClick={() => onToggleExcluir!(r.id, !r.excluidoAcreditamiento)}

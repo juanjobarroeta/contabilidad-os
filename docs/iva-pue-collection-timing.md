@@ -17,11 +17,20 @@ Equal amounts are not proof of duplication. A repeated evidence ID is counted
 once; separate movements remain separate. Allocations conserve cents and never
 recognize more than the invoice tax across periods.
 
-An authorized accountant can select **Revisar cobro** in the IVA workpaper,
-record the legal treatment and, when needed, document one full collection with
-its actual date and supporting reference. The review records actor, time,
-reason and invoice fingerprint in an atomic audit entry. Stale or conflicting
-reviews are rejected. VIEWER access is read-only.
+Mochi handles missing evidence in the existing conversation. It inspects the
+invoice and receipt using `query_iva_cobro`, uses reconciliation tools when a
+bank match is missing, and asks only for facts or documents not already
+available. `proponer_revision_iva_cobro` stages a documented receipt/treatment
+review in the existing Confirm/Cancel card. Confirmed bank evidence already
+assigns the month automatically; it does not require another review ritual.
+There is no dedicated PUE review screen, form or workpaper action. The workpaper
+only displays the calculation and evidence.
+
+Confirmation records actor, time, reason, conversation and invoice fingerprint
+atomically. Changed bank evidence or invoice reviews invalidate a staged card.
+VIEWER access is read-only. Both the existing chat and the managed agent expose
+these capabilities; the capability version rotates old managed sessions so
+they receive the new tool definitions without discarding conversation history.
 
 ## Unresolved evidence
 
@@ -78,7 +87,8 @@ The migration `20261013_pue_collection_timing` adds only nullable
 Prisma and apply migrations before serving this code. Existing PUE invoices
 without adequate receipt evidence become explicitly preliminary.
 
-Unit and PostgreSQL integration tests cover the September/October and
+Unit and PostgreSQL integration tests cover chat inspection/proposal/confirmation,
+cancellation, changed evidence, the September/October and
 December/January boundaries, cent conservation, real equal payments, duplicate
 evidence, splits, changed statements, missing evidence, legal-treatment review,
 tenant/role isolation, concurrency and preservation of filed records. The
@@ -90,5 +100,5 @@ with `IN_APP_CRON=0` and a dedicated synthetic auth secret:
 TEST_DATABASE_URL=postgresql://localhost/contabilidad_os_test \
 AUTH_SECRET=pue-iva-synthetic-local-only \
 PUE_SMOKE_ORIGIN=http://127.0.0.1:3219 \
-node scripts/smoke-pue-iva.mjs
+npx tsx scripts/smoke-pue-iva.mjs
 ```

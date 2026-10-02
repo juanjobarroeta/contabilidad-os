@@ -216,6 +216,11 @@ export function DeclaracionWorkspace() {
   }, [activeCompany, month, year]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const refresh = (e: Event) => { if ((e as CustomEvent<{companyId:string}>).detail?.companyId === activeCompany?.id) void load(); };
+    window.addEventListener("cos:data-changed", refresh);
+    return () => window.removeEventListener("cos:data-changed", refresh);
+  }, [activeCompany?.id, load]);
 
   function shiftMonth(delta: number) {
     let m = month + delta, y = year;
@@ -631,7 +636,7 @@ function PapelesTab({ companyId, month, year, onChanged }: { companyId: string; 
         </a>
       </div>
 
-      {sub === "iva" && <IvaPanel companyId={companyId} year={year} month={month} onCobroSaved={onChanged} />}
+      {sub === "iva" && <IvaPanel companyId={companyId} year={year} month={month} />}
       {/* IsrPanel ya incluye el editor de coeficiente (con la fuente correcta del
           motor); onCoefSaved refresca el total del padre (Resumen/Presentar). */}
       {sub === "isr" && <IsrPanel companyId={companyId} year={year} month={month} onCoefSaved={onChanged} />}

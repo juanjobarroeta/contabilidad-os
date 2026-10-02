@@ -35,6 +35,7 @@ export const PENDING_ACTION_TTL_MS = 15 * 60 * 1000; // 15 min
 
 /** Tipos de acción reversibles que el asistente puede proponer. */
 export type PendingActionType =
+  | "iva_collection_review"
   | "bank_statement_review"
   | AccountingProposal["type"]
   | "conciliar"
@@ -66,6 +67,7 @@ interface BasePending {
 }
 
 export type ChatPendingAction =
+  | (BasePending & { type: "iva_collection_review"; payload: import("@/lib/fiscal/iva-pue-review").PueReviewProposal })
   | (BasePending & { type: "bank_statement_review"; payload: import("@/lib/bancos/statements/review").ReviewRequest })
   | (BasePending & AccountingProposal)
   | (BasePending & { type: "conciliar"; payload: { txId: string; invoiceId: string } })
@@ -125,6 +127,7 @@ export type ChatPendingAction =
 /** True si el tipo es una acción reversible permitida (lista blanca estricta). */
 export function isReversibleType(type: string): type is PendingActionType {
   return (
+    type === "iva_collection_review" ||
     type === "bank_statement_review" || type === "crear_subcuenta" || type === "renombrar_cuenta" || type === "registrar_prestamo" ||
     type === "conciliar" ||
     type === "categorizacion" ||
@@ -206,6 +209,7 @@ export async function clearChatPendingAction(conversationId: string): Promise<vo
 // ── Stage (lo único que hacen las herramientas "proponer_*") ─────────────────
 
 type StagePayload =
+  | { type: "iva_collection_review"; payload: import("@/lib/fiscal/iva-pue-review").PueReviewProposal }
   | { type: "bank_statement_review"; payload: import("@/lib/bancos/statements/review").ReviewRequest }
   | AccountingProposal
   | { type: "conciliar"; payload: { txId: string; invoiceId: string } }
@@ -288,6 +292,21 @@ async function ejecutar(
   confirmingUserId: string,
 ): Promise<ExecuteResult> {
   switch (pa.type) {
+    case "iva_collection_review": {
+      if (pa.payload.input.companyId !== pa.companyId)
+        return { ok: false, error: "La revisión no pertenece a esta empresa." };
+      const { savePueReview } = await import("@/lib/fiscal/iva-pue-review");
+      try {
+        const result = await savePueReview(
+          pa.payload.invoiceId, pa.payload.input, confirmingUserId, pa.payload,
+        );
+        return result.status === 200
+          ? { ok: true, message: "Revisión de cobro registrada. El motor recalcula el IVA por la evidencia de cobro y conserva las contradicciones pendientes. Las declaraciones y pólizas guardadas no cambiaron." }
+          : { ok: false, error: result.error ?? "No se pudo registrar la revisión." };
+      } catch {
+        return { ok: false, error: "La evidencia cambió o no se pudo completar la revisión. Pide a Mochi que consulte de nuevo antes de confirmar." };
+      }
+    }
     case "bank_statement_review": {
       if (pa.payload.companyId !== pa.companyId) return { ok: false, error: "La propuesta no pertenece a esta empresa." };
       const { executeReview } = await import("@/lib/bancos/statements/review");

@@ -24,7 +24,9 @@ assert(
   process.env.AUTH_SECRET?.startsWith("pue-iva-synthetic-"),
   "Dedicated synthetic AUTH_SECRET required",
 );
+process.env.DATABASE_URL = dbUrl.href;
 const prisma = new PrismaClient({ datasourceUrl: dbUrl.href });
+const { executePueIvaTool } = await import("../src/lib/ai/pue-iva-executor.ts");
 const id = `pue-browser-${randomUUID()}`;
 const users = [`${id}-owner`, `${id}-viewer`];
 const out = process.env.PUE_SMOKE_ARTIFACTS ?? "/tmp/cos-pue-browser";
@@ -132,42 +134,99 @@ try {
       },
     },
   });
+  const conversationId = `${id}-chat`;
+  await prisma.chatConversation.create({
+    data: {
+      id: conversationId,
+      companyId: id,
+      userId: users[0],
+      visibility: "COMPANY",
+      title: "Synthetic PUE collection",
+    },
+  });
+  const context = { userId: users[0], conversationId, inApp: true };
+  const evidence = JSON.parse(
+    await executePueIvaTool(
+      "query_iva_cobro",
+      { invoice_id: invoice.id },
+      id,
+      context,
+    ),
+  );
+  const proposal = JSON.parse(
+    await executePueIvaTool(
+      "proponer_revision_iva_cobro",
+      {
+        invoice_id: invoice.id,
+        expected: evidence.expected,
+        tratamiento: "FLUJO_GENERAL",
+        fecha_cobro: "2026-09-30",
+        evidencia: "Synthetic receipt September 30, folio 42",
+        motivo:
+          "Synthetic review: ordinary cash IVA, verified contract and correct tax breakdown, no special Art 18-A treatment.",
+      },
+      id,
+      context,
+    ),
+  );
+  assert.equal(proposal.pending, true);
+  await prisma.chatMessage.create({
+    data: { conversationId, role: "assistant", content: proposal.summary },
+  });
   browser = await chromium.launch({ headless: true });
   const owner = await contextFor(0),
     page = await owner.newPage();
   page.setDefaultTimeout(60_000);
-  page.on("pageerror", (error) => failures.push(error.message));
+  page.on("pageerror", (error) => {
+    failures.push(error.message);
+    console.error("Browser error:", error.message);
+  });
+  page.on("requestfailed", (request) => {
+    if (new URL(request.url()).origin === origin.origin)
+      console.error("Local request failed:", request.url(), request.failure()?.errorText);
+  });
   await page.goto(
     new URL("/impuestos/papeles?month=10&year=2026", origin).href,
     { waitUntil: "domcontentloaded", timeout: 90_000 },
   );
-  await page
-    .getByRole("button", { name: "Revisar cobro", exact: true })
-    .click();
-  const form = page.getByRole("form", { name: "Revisar cobro e IVA" });
-  await form.getByLabel("Tratamiento revisado").selectOption("FLUJO_GENERAL");
-  await form.getByRole("checkbox").check();
-  await form.getByLabel("Fecha efectiva del cobro completo").fill("2026-09-30");
-  await form
-    .getByLabel("Referencia del documento que acredita el cobro")
-    .fill("Synthetic receipt September 30, folio 42");
-  await form
-    .getByLabel("Motivo y fundamento de la revisión")
-    .fill(
-      "Synthetic review: ordinary collection under LIVA 1-B; verified no special 18-A treatment and correct invoice tax.",
-    );
-  await form.screenshot({ path: `${out}/review-desktop.png` });
-  await page.setViewportSize({ width: 390, height: 844 });
-  await form.scrollIntoViewIfNeeded();
-  assert(
-    await form.evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
-    "Review form must fit mobile",
+  await page.getByRole("heading", { name: /IVA trasladado/ }).waitFor();
+  assert.equal(
+    await page.getByRole("form", { name: "Revisar cobro e IVA" }).count(),
+    0,
   );
-  await form.screenshot({ path: `${out}/review-mobile.png` });
-  await form
-    .getByRole("button", { name: "Confirmar revisión", exact: true })
-    .click();
-  await form.waitFor({ state: "hidden" });
+  assert.equal(
+    await page
+      .getByRole("button", { name: "Revisar cobro", exact: true })
+      .count(),
+    0,
+  );
+  await page.evaluate(
+    ({ conversationId, companyId }) =>
+      window.dispatchEvent(
+        new CustomEvent("cos:ask-ai", {
+          detail: { conversationId, companyId },
+        }),
+      ),
+    { conversationId, companyId: id },
+  );
+  await page.getByRole("button", { name: "Confirmar", exact: true }).waitFor();
+  await page.screenshot({
+    path: `${out}/mochi-proposal-desktop.png`,
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page
+    .getByRole("button", { name: "Confirmar", exact: true })
+    .scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: `${out}/mochi-proposal-mobile.png`,
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "Confirmar", exact: true }).click();
+  await page.getByText(/Listo. Revisión de cobro registrada/).waitFor();
+  await page
+    .getByRole("heading", { name: "IVA trasladado (cobrado)", exact: true })
+    .waitFor();
   const url = (month) =>
     new URL(`/api/papeles/iva?companyId=${id}&year=2026&month=${month}`, origin)
       .href;
@@ -191,7 +250,7 @@ try {
     0,
   );
   console.log(
-    "PASS real review form: September IVA 2000 / October 0, audited, no saved return or journal changed",
+    "PASS existing Mochi confirmation card and automatic workpaper refresh: September IVA 2000 / October 0, audited, no saved return or journal changed",
   );
   await page.setViewportSize({ width: 1365, height: 1000 });
   await page.goto(
@@ -199,7 +258,7 @@ try {
     { waitUntil: "domcontentloaded" },
   );
   await page
-    .getByRole("button", { name: "Revisar cobro", exact: true })
+    .getByRole("heading", { name: "IVA trasladado (cobrado)", exact: true })
     .waitFor();
   await page.screenshot({
     path: `${out}/september-workpaper.png`,
@@ -270,6 +329,7 @@ try {
   assert.deepEqual(failures, []);
   console.log(`PASS browser smoke; screenshots: ${out}`);
 } catch (error) {
+  if (failures.length) console.error("Browser errors:", failures);
   const page = browser?.contexts()[0]?.pages()[0];
   if (page) {
     await page
@@ -284,4 +344,6 @@ try {
   await prisma.company.deleteMany({ where: { id } });
   await prisma.user.deleteMany({ where: { id: { in: users } } });
   await prisma.$disconnect();
+  const { prisma: shared } = await import("../src/lib/prisma.ts");
+  await shared.$disconnect();
 }

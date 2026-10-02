@@ -24,6 +24,9 @@ describe("prompt del copiloto: reglas operativas del CFDI", () => {
     expect(p).not.toContain("Esto no viene en las leyes");
     expect(p).not.toContain("recomienda fecharlo en el mes del cobro");
     expect(p).toContain("Art. 18-A");
+    expect(p).toContain("query_iva_cobro");
+    expect(p).toContain("proponer_revision_iva_cobro");
+    expect(p).not.toContain("IVA → Revisar cobro");
   });
 });
 

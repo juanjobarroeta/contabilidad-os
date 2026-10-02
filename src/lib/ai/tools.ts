@@ -9,9 +9,11 @@ import { toolsExpediente } from "@/lib/expediente/tools";
 import { toolsSolicitudes } from "@/lib/solicitudes/tools";
 import { bankStatementTools } from "./bank-statement-tools";
 import { accountingTools } from "./accounting-tools";
+import { pueIvaTools } from "./pue-iva-tools";
 
 export const tools: Anthropic.Tool[] = [
   ...accountingTools,
+  ...pueIvaTools,
   ...bankStatementTools,
   // La memoria de la empresa (expediente): hechos duraderos y bitácora de
   // trabajo. Van primero porque son las que hacen que el copiloto deje de

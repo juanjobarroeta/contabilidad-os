@@ -519,7 +519,7 @@ export async function POST(req: Request) {
     if (!ivaFromAcuse && !pos.iva.cobrosPue.determinado) {
       return NextResponse.json({
         code: "IVA_COBRO_REVIEW_REQUIRED",
-        error: "El IVA PUE sigue preliminar. Confirma el cobro y su tratamiento en el papel de IVA, o registra las cifras completas del acuse real del SAT.",
+        error: "El IVA PUE sigue preliminar. Confirma con Mochi el cobro y su tratamiento, o registra las cifras completas del acuse real del SAT.",
       }, { status: 422 });
     }
     if (!ivaFromAcuse) {

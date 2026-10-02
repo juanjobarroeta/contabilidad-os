@@ -127,9 +127,10 @@ export async function loadPueIncomeCollections(
   companyId: string,
   from: Date,
   to: Date,
+  snapshot?: Prisma.TransactionClient,
 ) {
-  return prisma.$transaction(
-    async (db) => {
+  const read =
+    async (db: Prisma.TransactionClient) => {
       const period = pueDay(from).slice(0, 7);
       const invoices = await db.invoice.findMany({
         where: {
@@ -448,12 +449,11 @@ export async function loadPueIncomeCollections(
         asignaciones: rows.map((r) => ({ ...r.result, uuid: r.invoice.uuid })),
       };
       return { rows, summary };
-    },
-    {
-      isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
-      timeout: 30000,
-    },
-  );
+    };
+  return snapshot ? read(snapshot) : prisma.$transaction(read, {
+    isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
+    timeout: 30000,
+  });
 }
 
 export function pueCollectionWarnings(
@@ -462,7 +462,7 @@ export function pueCollectionWarnings(
   return [
     ...(!summary.determinado
       ? [
-          `IVA PUE preliminar: ${summary.pendientes.length} CFDI(s) requieren confirmar el cobro o el tratamiento fiscal. No uses la estimación como declaración definitiva; revisa el papel de IVA.`,
+          `IVA PUE preliminar: ${summary.pendientes.length} CFDI(s) requieren confirmar el cobro o el tratamiento fiscal. No uses la estimación como declaración definitiva; pide a Mochi revisar la evidencia.`,
         ]
       : []),
     ...summary.periodosARevisar.map(

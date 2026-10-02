@@ -326,7 +326,7 @@ export function decidirChecklist(i: ChecklistInputs): ChecklistItem[] {
     estado: i.isrPagar == null || i.iva.cobrosPueDeterminados === false ? "atencion" : "listo",
     detalle:
       i.iva.cobrosPueDeterminados === false
-        ? "IVA PUE preliminar: falta confirmar el cobro o el tratamiento fiscal. Revisa el papel de IVA antes de presentar."
+        ? "IVA PUE preliminar: falta confirmar el cobro o el tratamiento fiscal. Resuelve la evidencia con Mochi antes de presentar."
         : i.isrPagar == null
         ? `${ivaTexto}. El ISR provisional no se pudo determinar (falta el coeficiente de utilidad o la tarifa del ejercicio); revísalo en los papeles de trabajo.`
         : `${ivaTexto} · ISR provisional a pagar ${formatCurrency(i.isrPagar)}.`,

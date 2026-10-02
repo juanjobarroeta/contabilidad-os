@@ -27,6 +27,8 @@ export const CAPABILITIES = {
   query_ppd_cartera: "read",
   query_sat_sync_status: "read",
   query_tax_position: "read",
+  query_iva_cobro: "read",
+  proponer_revision_iva_cobro: "proposal",
   query_declaracion_checklist: "read",
   query_complementos_pendientes: "read",
   query_complementos_recibidos_pendientes: "read",
