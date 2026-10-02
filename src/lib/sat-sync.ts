@@ -21,6 +21,7 @@ import { importarNominaHistorica } from "./nomina/historia-import";
 import { revertirDerivadosDeCancelada } from "./automotriz/revertir-cancelada";
 import { liberarSustituidosPor } from "./cfdi-sustitucion";
 import { etiquetaTramo, isoLocal, type Tramo } from "./sat-tramos";
+import { decidirNuevaSolicitud, VIDA_SOLICITUD_SAT_HORAS, type DecisionSolicitud } from "./sat-reintentos";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared, session-free SAT Descarga Masiva logic.
@@ -40,8 +41,62 @@ import { etiquetaTramo, isoLocal, type Tramo } from "./sat-tramos";
 // instead of creating a new one. SAT keeps requests alive ~72h; we use 24h
 // to be safe and to retry if something got stuck.
 export const REUSE_WINDOW_HOURS = 24;
-const REUSABLE_STATUSES = ["PENDING", "ACCEPTED", "IN_PROGRESS", "FINISHED"] as const;
 type ReusableStatus = "PENDING" | "ACCEPTED" | "IN_PROGRESS" | "FINISHED";
+const EN_VUELO: ReusableStatus[] = ["PENDING", "ACCEPTED", "IN_PROGRESS"];
+
+/**
+ * Condición de reúso de una solicitud ya hecha:
+ *   · en vuelo: mientras el SAT la conserve (72 h). Antes era 24 h, y pasado
+ *     ese lapso se creaba OTRA para el mismo mes sin verificar nunca la
+ *     anterior — 6,255 solicitudes de metadata quedaron IN_PROGRESS para
+ *     siempre (medido 2026-10-02) y cada nueva gastó cuota del rango;
+ *   · terminada: 24 h (se vuelve a pedir al día siguiente para recoger lo
+ *     timbrado después).
+ */
+function reusable(ahora = new Date()) {
+  return {
+    OR: [
+      { status: { in: EN_VUELO }, createdAt: { gte: new Date(ahora.getTime() - VIDA_SOLICITUD_SAT_HORAS * 3_600_000) } },
+      { status: "FINISHED" as ReusableStatus, createdAt: { gte: new Date(ahora.getTime() - REUSE_WINDOW_HOURS * 3_600_000) } },
+    ],
+  };
+}
+
+/**
+ * Marca EXPIRED lo que lleva más de 72 h en vuelo: el SAT ya la descartó y
+ * verificarla sólo devuelve error. Sin esto, la cola crecía sin tope y cada
+ * corrida gastaba su presupuesto en verificar fantasmas. Idempotente y barato.
+ */
+export async function expirarSolicitudesVencidas(): Promise<number> {
+  const corte = new Date(Date.now() - VIDA_SOLICITUD_SAT_HORAS * 3_600_000);
+  const r = await prisma.satSyncRequest.updateMany({
+    where: { status: { in: EN_VUELO }, createdAt: { lt: corte } },
+    data: { status: "EXPIRED", errorMessage: "Vencida: el SAT conserva una solicitud 72 h y ésta no se verificó a tiempo." },
+  });
+  return r.count;
+}
+
+export type TipoSolicitud = "EMITIDOS" | "RECIBIDOS" | "METADATA_EMITIDOS" | "METADATA_RECIBIDOS";
+export type BloqueoSolicitud = { tipo: TipoSolicitud; motivo: Exclude<DecisionSolicitud, { pedir: true }>["motivo"]; detalle: string };
+
+/**
+ * ¿Se vuelve a pedir EXACTAMENTE este rango? Mira el historial del rango por
+ * lado (las filas viejas sin rango cuentan como el mes completo) y aplica
+ * sat-reintentos: nunca tras 5002, nunca tras dos fallos, y espera tras uno.
+ */
+async function decidirRango(
+  companyId: string, year: number, month: number, tipo: TipoSolicitud,
+  desde: Date, hasta: Date, esMesCompleto: boolean, force: boolean,
+): Promise<DecisionSolicitud> {
+  const previas = await prisma.satSyncRequest.findMany({
+    where: {
+      companyId, year, month, tipo,
+      OR: [{ desde, hasta }, ...(esMesCompleto ? [{ desde: null, hasta: null }] : [])],
+    },
+    select: { status: true, errorMessage: true, createdAt: true },
+  });
+  return decidirNuevaSolicitud(previas, new Date(), { force });
+}
 
 // Timeout explícito del cliente HTTPS hacia el SAT. NO es cosmético: el
 // HttpsWebClient de @nodecfdi tiene un bug en su manejador de timeout — si el
@@ -93,12 +148,16 @@ export type SubmitSatSyncResult =
       year: number;
       warnings?: string[];
       message?: string;
+      /** Lados que NO se pidieron por decisión nuestra (cuota, intentos, espera). */
+      bloqueos?: BloqueoSolicitud[];
     }
   | {
       ok: false;
-      status: number; // suggested HTTP status for the route layer
+      /** 400 = el periodo aún no tiene días completos · 429 = en espera (fallo reciente) · 422 = rechazo/cuota/FIEL. */
+      status: number;
       error: string;
       warnings?: string[];
+      bloqueos?: BloqueoSolicitud[];
     };
 
 /**
@@ -129,7 +188,6 @@ export async function submitSatSync(
   // identifica la solicitud, y reutilizar el tramo de al lado dejaría un hueco.
   const mismoRango = rango ? { desde: rango.desde, hasta: rango.hasta } : {};
   if (!force) {
-    const cutoff = new Date(Date.now() - REUSE_WINDOW_HOURS * 60 * 60 * 1000);
     const [reEmitidos, reRecibidos] = await Promise.all([
       prisma.satSyncRequest.findFirst({
         where: {
@@ -138,8 +196,7 @@ export async function submitSatSync(
           month,
           tipo: "EMITIDOS",
           ...mismoRango,
-          status: { in: REUSABLE_STATUSES as unknown as ReusableStatus[] },
-          createdAt: { gte: cutoff },
+          ...reusable(),
         },
         orderBy: { createdAt: "desc" },
       }),
@@ -150,8 +207,7 @@ export async function submitSatSync(
           month,
           tipo: "RECIBIDOS",
           ...mismoRango,
-          status: { in: REUSABLE_STATUSES as unknown as ReusableStatus[] },
-          createdAt: { gte: cutoff },
+          ...reusable(),
         },
         orderBy: { createdAt: "desc" },
       }),
@@ -234,7 +290,6 @@ export async function submitSatSync(
   const period = DateTimePeriod.create(new DateTime(startIso), new DateTime(endIso));
 
   // Re-check what we already have (in case we fell through from the reuse path)
-  const cutoff = new Date(Date.now() - REUSE_WINDOW_HOURS * 60 * 60 * 1000);
   const [existingEmitidos, existingRecibidos] = await Promise.all([
     prisma.satSyncRequest.findFirst({
       where: {
@@ -243,8 +298,7 @@ export async function submitSatSync(
         month,
         tipo: "EMITIDOS",
         ...mismoRango,
-        status: { in: REUSABLE_STATUSES as unknown as ReusableStatus[] },
-        createdAt: { gte: cutoff },
+        ...reusable(),
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -255,8 +309,7 @@ export async function submitSatSync(
         month,
         tipo: "RECIBIDOS",
         ...mismoRango,
-        status: { in: REUSABLE_STATUSES as unknown as ReusableStatus[] },
-        createdAt: { gte: cutoff },
+        ...reusable(),
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -267,9 +320,22 @@ export async function submitSatSync(
   const reusedEmitidos = !!existingEmitidos;
   const reusedRecibidos = !!existingRecibidos;
   const warnings: string[] = [];
+  const bloqueos: BloqueoSolicitud[] = [];
+  // ¿Es el mes completo? (sin tramo y sin recorte a «ayer»): las filas viejas
+  // sin rango también cuentan como historial de este rango.
+  const esMesCompleto = !rango && effectiveEnd.getTime() === requestedEnd.getTime();
+  const decidir = async (tipo: "EMITIDOS" | "RECIBIDOS") => {
+    const d = await decidirRango(companyId, year, month, tipo, periodDesde, periodHasta, esMesCompleto, force);
+    if (!d.pedir) {
+      bloqueos.push({ tipo, motivo: d.motivo, detalle: d.detalle });
+      warnings.push(`${tipo.toLowerCase()}: ${d.detalle}`);
+      console.log(`[sat/sync] ${tipo.toLowerCase()} ${startIso}→${endIso} no se pide: ${d.motivo} — ${d.detalle}`);
+    }
+    return d.pedir;
+  };
 
   // Request emitidos only if we don't have a reusable one
-  if (!emitidosRequestId) {
+  if (!emitidosRequestId && (await decidir("EMITIDOS"))) {
     try {
       const emitidosResult = await service.query(
         QueryParameters.create()
@@ -303,7 +369,7 @@ export async function submitSatSync(
     }
   }
 
-  if (!recibidosRequestId) {
+  if (!recibidosRequestId && (await decidir("RECIBIDOS"))) {
     try {
       const recibidosResult = await service.query(
         QueryParameters.create()
@@ -340,6 +406,19 @@ export async function submitSatSync(
 
   // Both failed — surface the actual SAT error messages
   if (!emitidosRequestId && !recibidosRequestId) {
+    // Nada se pidió por decisión nuestra: no es un rechazo del SAT. En espera
+    // → 429 (benigno, se reintenta solo); cuota/intentos → 422 con «5002» en
+    // el texto, que es lo que los crons ya tratan como «este rango está muerto».
+    if (bloqueos.length === 2) {
+      const soloEspera = bloqueos.every((b) => b.motivo === "en_espera");
+      return {
+        ok: false,
+        status: soloEspera ? 429 : 422,
+        error: soloEspera ? `En espera: ${warnings.join(" | ")}` : `Rango agotado (5002): ${warnings.join(" | ")}`,
+        warnings,
+        bloqueos,
+      };
+    }
     console.error("[sat/sync] BOTH requests rejected:", { companyId, year, month, warnings });
     return {
       ok: false,
@@ -347,6 +426,7 @@ export async function submitSatSync(
       error:
         warnings.length > 0 ? warnings.join(" | ") : "SAT rechazó ambas solicitudes sin mensaje de error",
       warnings,
+      bloqueos: bloqueos.length ? bloqueos : undefined,
     };
   }
 
@@ -359,6 +439,7 @@ export async function submitSatSync(
     month,
     year,
     warnings: warnings.length > 0 ? warnings : undefined,
+    bloqueos: bloqueos.length ? bloqueos : undefined,
   };
 }
 
@@ -370,7 +451,7 @@ export async function submitSatSync(
  * el SAT no asignó uno.
  */
 async function registrarCuotaQuemada(
-  companyId: string, year: number, month: number, tipo: "EMITIDOS" | "RECIBIDOS",
+  companyId: string, year: number, month: number, tipo: TipoSolicitud,
   desde: Date, hasta: Date, errorMessage: string,
 ): Promise<void> {
   try {
@@ -640,7 +721,7 @@ export async function verifyAndImportSatSync(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Periodo de un mes, recortado a ayer (SAT rechaza rangos que incluyen hoy). */
-function buildMonthPeriod(year: number, month: number): DateTimePeriod | null {
+function buildMonthPeriod(year: number, month: number): { period: DateTimePeriod; desde: Date; hasta: Date; esMesCompleto: boolean } | null {
   const lastDay = new Date(year, month, 0).getDate();
   const pad = (n: number) => String(n).padStart(2, "0");
   const requestedEnd = new Date(year, month - 1, lastDay, 23, 59, 59);
@@ -653,7 +734,12 @@ function buildMonthPeriod(year: number, month: number): DateTimePeriod | null {
     [effectiveEnd.getFullYear(), pad(effectiveEnd.getMonth() + 1), pad(effectiveEnd.getDate())].join("-") +
     "T" +
     [pad(effectiveEnd.getHours()), pad(effectiveEnd.getMinutes()), pad(effectiveEnd.getSeconds())].join(":");
-  return DateTimePeriod.create(new DateTime(startIso), new DateTime(endIso));
+  return {
+    period: DateTimePeriod.create(new DateTime(startIso), new DateTime(endIso)),
+    desde: new Date(year, month - 1, 1),
+    hasta: effectiveEnd,
+    esMesCompleto: effectiveEnd.getTime() === requestedEnd.getTime(),
+  };
 }
 
 export interface CancelSyncResult {
@@ -696,10 +782,9 @@ export async function syncCancelacionesPeriodo(
     return { ok: false, status: "error", error: err instanceof Error ? err.message : "Error FIEL" };
   }
   const service = buildService(fiel);
-  const period = buildMonthPeriod(year, month);
-  if (!period) return { ok: true, status: "empty" };
-
-  const cutoff = new Date(Date.now() - REUSE_WINDOW_HOURS * 60 * 60 * 1000);
+  const mesPeriodo = buildMonthPeriod(year, month);
+  if (!mesPeriodo) return { ok: true, status: "empty" };
+  const { period, desde, hasta, esMesCompleto } = mesPeriodo;
   const sides: Array<{ tipo: "METADATA_EMITIDOS" | "METADATA_RECIBIDOS"; download: "issued" | "received" }> = [
     { tipo: "METADATA_EMITIDOS", download: "issued" },
     { tipo: "METADATA_RECIBIDOS", download: "received" },
@@ -712,13 +797,18 @@ export async function syncCancelacionesPeriodo(
     const existing = await prisma.satSyncRequest.findFirst({
       where: {
         companyId, year, month, tipo: side.tipo,
-        status: { in: REUSABLE_STATUSES as unknown as ReusableStatus[] },
-        createdAt: { gte: cutoff },
+        ...reusable(),
       },
       orderBy: { createdAt: "desc" },
     });
     if (existing) {
       requestIds.push(existing.requestId);
+      continue;
+    }
+    // Mismo freno que el XML: nunca tras 5002, nunca tras dos fallos, espera tras uno.
+    const decision = await decidirRango(companyId, year, month, side.tipo, desde, hasta, esMesCompleto, false);
+    if (!decision.pedir) {
+      rechazos.push(`${side.tipo}: ${decision.detalle}`);
       continue;
     }
     try {
@@ -731,12 +821,16 @@ export async function syncCancelacionesPeriodo(
       if (res.getStatus().isAccepted()) {
         const reqId = res.getRequestId();
         await prisma.satSyncRequest.create({
-          data: { companyId, year, month, tipo: side.tipo, requestId: reqId, status: "ACCEPTED" },
+          data: { companyId, year, month, tipo: side.tipo, requestId: reqId, status: "ACCEPTED", desde, hasta },
         });
         requestIds.push(reqId);
       } else {
         // Rechazo del SAT (típicamente 5002, cuota vitalicia del período).
-        rechazos.push(formatSatError(side.tipo, res.getStatus().getCode(), res.getStatus().getMessage()));
+        const code = res.getStatus().getCode();
+        const msg = formatSatError(side.tipo, code, res.getStatus().getMessage());
+        rechazos.push(msg);
+        // Sin la fila, el 5002 de metadata se repetía en cada corrida (no se guardaba).
+        if (code === 5002) await registrarCuotaQuemada(companyId, year, month, side.tipo, desde, hasta, msg);
       }
     } catch (e) {
       console.error("[sat/cancel-sync] query error:", e);

@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { mesesCompletos } from "./sat-cobertura";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SAT sync / backfill status — answers "¿ya se descargaron mis CFDIs?".
@@ -53,8 +54,8 @@ export async function getSatSyncStatus(
       },
     }),
     prisma.satSyncRequest.findMany({
-      where: { companyId, status: "FINISHED" },
-      select: { year: true, month: true, tipo: true },
+      where: { companyId, tipo: { in: ["EMITIDOS", "RECIBIDOS"] } },
+      select: { year: true, month: true, tipo: true, status: true, desde: true, hasta: true },
     }),
     prisma.satSyncRequest.aggregate({
       where: { companyId },
@@ -66,15 +67,17 @@ export async function getSatSyncStatus(
   const periods = inRangePeriods(backfillYears, company?.fechaInicioOperaciones ?? null, now);
 
   // Which periods have BOTH tipos finished?
-  const byPeriod = new Map<string, Set<string>>();
-  for (const r of finished) {
-    const key = `${r.year}-${String(r.month).padStart(2, "0")}`;
-    if (!byPeriod.has(key)) byPeriod.set(key, new Set());
-    byPeriod.get(key)!.add(r.tipo);
-  }
+  // Meses cerrados: completos cuando la unión de los rangos FINISHED de cada
+  // lado cubre el mes. El mes en curso nunca puede cubrirse por rango (se
+  // pide «del 1 a ayer»): basta una fila FINISHED por lado.
+  const mesesOk = mesesCompletos(finished);
+  const enCurso = `${now.getFullYear()}-${now.getMonth() + 1}`;
+  const ladosEnCurso = new Set(finished.filter((r) => r.status === "FINISHED" && `${r.year}-${r.month}` === enCurso).map((r) => r.tipo));
   const isComplete = (key: string) => {
-    const t = byPeriod.get(key);
-    return !!t && t.has("EMITIDOS") && t.has("RECIBIDOS");
+    const [y, m] = key.split("-").map(Number);
+    const k = `${y}-${m}`;
+    if (k === enCurso) return ladosEnCurso.has("EMITIDOS") && ladosEnCurso.has("RECIBIDOS");
+    return mesesOk.has(k);
   };
 
   const keys = periods.map((p) => `${p.year}-${String(p.month).padStart(2, "0")}`);

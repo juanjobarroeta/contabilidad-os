@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { esCoberturaSospechosa, coberturaSospechosa, periodoCerrado, UMBRAL_COBERTURA, satDijoSinSolapes } from "./sat-cobertura";
+import { esCoberturaSospechosa, coberturaSospechosa, periodoCerrado, UMBRAL_COBERTURA, satDijoSinSolapes, mesCompleto, mesesCompletos } from "./sat-cobertura";
 
 // Los ocho meses de MARGOM pasaron el control anterior —«las dos solicitudes
 // llegaron a FINISHED»— con 63, 49, 80, 47 y 3 facturas. Estos casos fijan qué
@@ -135,5 +135,38 @@ describe("satDijoSinSolapes (la unión de los rangos, no la suma)", () => {
       fila("2026-09-01T00:00:00Z", "2026-09-30T23:59:59Z", 7, "METADATA"),
     ]);
     expect(m.get("2026-9")).toBeUndefined();
+  });
+});
+
+describe("mesCompleto (unión de rangos terminados)", () => {
+  const f = (tipo: string, d: Date | null, h: Date | null, status = "FINISHED") => ({ tipo, status, desde: d, hasta: h });
+  const dia = (d: number, fin = false) => (fin ? new Date(2026, 8, d, 23, 59, 59) : new Date(2026, 8, d, 0, 0, 0));
+
+  it("mes completo por ambos lados → completo; filas sin rango valen como mes completo", () => {
+    expect(mesCompleto([f("EMITIDOS", dia(1), dia(30, true)), f("RECIBIDOS", null, null)], 2026, 9)).toBe(true);
+  });
+
+  it("«del 1 a ayer» de un mes cerrado NO lo completa", () => {
+    expect(mesCompleto([f("EMITIDOS", dia(1), dia(29, true)), f("RECIBIDOS", dia(1), dia(30, true))], 2026, 9)).toBe(false);
+  });
+
+  it("dos tramos contiguos sí lo completan; con hueco no", () => {
+    const tramos = [f("EMITIDOS", dia(1), dia(15, true)), f("EMITIDOS", dia(16), dia(30, true)), f("RECIBIDOS", null, null)];
+    expect(mesCompleto(tramos, 2026, 9)).toBe(true);
+    const conHueco = [f("EMITIDOS", dia(1), dia(14, true)), f("EMITIDOS", dia(16), dia(30, true)), f("RECIBIDOS", null, null)];
+    expect(mesCompleto(conHueco, 2026, 9)).toBe(false);
+  });
+
+  it("sólo un lado, o filas FAILED, no cuentan", () => {
+    expect(mesCompleto([f("EMITIDOS", null, null)], 2026, 9)).toBe(false);
+    expect(mesCompleto([f("EMITIDOS", null, null), f("RECIBIDOS", null, null, "FAILED")], 2026, 9)).toBe(false);
+  });
+
+  it("mesesCompletos agrupa por mes", () => {
+    const s = mesesCompletos([
+      { year: 2026, month: 8, ...f("EMITIDOS", null, null) }, { year: 2026, month: 8, ...f("RECIBIDOS", null, null) },
+      { year: 2026, month: 9, ...f("EMITIDOS", null, null) },
+    ]);
+    expect([...s]).toEqual(["2026-8"]);
   });
 });

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { submitSatSync, verifyAndImportSatSync } from "@/lib/sat-sync";
+import { expirarSolicitudesVencidas, submitSatSync, verifyAndImportSatSync } from "@/lib/sat-sync";
 import { mesCerrado, pedirMesCerrado } from "@/lib/sat-sync-politica";
 import { notifyIvaChanges } from "@/lib/iva-change-notify";
 import { notifyNewInvoices } from "@/lib/notify-new-invoices";
@@ -73,6 +73,8 @@ async function handle(req: Request) {
     : DEFAULT_MONTHS_BACK;
 
   const startedAt = Date.now();
+  // Lo que lleva más de 72 h en vuelo ya no existe en el SAT: fuera de la cola.
+  const expiradas = await expirarSolicitudesVencidas();
 
   // Eligible companies: active, auto-sync on, and FIEL fully configured.
   const companies = await prisma.company.findMany({
@@ -153,8 +155,9 @@ async function handle(req: Request) {
 
         const submitted = await submitSatSync(company.id, year, month);
         if (!submitted.ok) {
-          // Period not complete yet (400) is expected/benign — skip quietly.
-          if (submitted.status !== 400) {
+          // 400 = el periodo aún no tiene días completos; 429 = el rango falló
+          // hace poco en el SAT y se reintenta solo. Ninguno es un error.
+          if (submitted.status !== 400 && submitted.status !== 429) {
             errors.push({ companyId: company.id, rfc: company.rfc, error: submitted.error });
             // FIEL vencida/inválida: el sync de ESTA empresa está muerto hasta
             // que renueven la e.firma — avisar a quienes la operan (una vez).
@@ -246,6 +249,7 @@ async function handle(req: Request) {
     monthsBack,
     submitted: totalSubmitted,
     imported: totalImported,
+    expiradas,
     notified: totalNotified,
     conciliated: totalConciliated,
     fielAvisos,

@@ -164,3 +164,61 @@ export function satDijoSinSolapes(solicitudes: SolicitudConteo[]): Map<string, n
   }
   return out;
 }
+
+// ─── ¿El mes quedó pedido COMPLETO? ──────────────────────────────────────────
+//
+// sat-backfill y el estado del alta marcaban un mes «hecho» en cuanto había
+// una fila FINISHED de cada lado, sin mirar el rango: un tramo 04-01→04-15 lo
+// daba por completo, y un «del 1 a ayer» de un mes ya cerrado también. Lo
+// correcto es la UNIÓN de los rangos terminados de cada lado: cubre el mes si
+// va del día 1 a las 00:00 al último día a las 23:59:59 sin huecos.
+
+export interface SolicitudRango {
+  tipo: string;
+  status: string;
+  desde: Date | string | null;
+  hasta: Date | string | null;
+}
+
+/** Tolerancia entre rangos contiguos (23:59:59 → 00:00:00 del día siguiente). */
+const HUECO_MAX_MS = 1_000;
+
+/** ¿Los rangos FINISHED de `tipo` cubren el mes entero (hora local, como se piden al SAT)? */
+export function ladoCubreMes(filas: SolicitudRango[], year: number, month: number, tipo: string): boolean {
+  const inicio = new Date(year, month - 1, 1, 0, 0, 0).getTime();
+  const fin = new Date(year, month, 0, 23, 59, 59).getTime();
+  const rangos = filas
+    .filter((f) => f.status === "FINISHED" && f.tipo === tipo)
+    // Filas viejas sin rango = el mes completo.
+    .map((f) => ({ d: f.desde ? new Date(f.desde).getTime() : inicio, h: f.hasta ? new Date(f.hasta).getTime() : fin }))
+    .sort((a, b) => a.d - b.d);
+  if (rangos.length === 0) return false;
+  let cubierto = -Infinity;
+  for (const r of rangos) {
+    if (cubierto === -Infinity) {
+      if (r.d > inicio) return false;
+      cubierto = r.h;
+      continue;
+    }
+    if (r.d > cubierto + HUECO_MAX_MS) return false; // hueco
+    cubierto = Math.max(cubierto, r.h);
+  }
+  return cubierto >= fin - HUECO_MAX_MS;
+}
+
+/** El mes está completo cuando emitidos Y recibidos cubren el mes entero. */
+export function mesCompleto(filas: SolicitudRango[], year: number, month: number): boolean {
+  return ladoCubreMes(filas, year, month, "EMITIDOS") && ladoCubreMes(filas, year, month, "RECIBIDOS");
+}
+
+/** Claves «y-m» (mes sin cero) de los meses completos, a partir de todas las solicitudes de la empresa. */
+export function mesesCompletos(filas: Array<SolicitudRango & { year: number; month: number }>): Set<string> {
+  const porMes = new Map<string, Array<SolicitudRango & { year: number; month: number }>>();
+  for (const f of filas) {
+    const k = `${f.year}-${f.month}`;
+    porMes.set(k, [...(porMes.get(k) ?? []), f]);
+  }
+  const out = new Set<string>();
+  for (const [k, fs] of porMes) if (mesCompleto(fs, fs[0].year, fs[0].month)) out.add(k);
+  return out;
+}
