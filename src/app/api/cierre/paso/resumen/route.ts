@@ -7,7 +7,7 @@ import { esClavePaso } from "@/lib/cierre/claves";
 import { quedoStaged, TIPO_DE_TOOL, toolsAProbar } from "@/lib/cierre/acciones";
 import { evaluarCierre } from "@/lib/cierre/evaluar";
 import { executeToolCall } from "@/lib/ai/tool-executor";
-import { getChatPendingAction } from "@/lib/ai/pending-action";
+import { getChatPendingActions } from "@/lib/ai/pending-action";
 import { conversacionDelPeriodo } from "@/lib/cierre/pase-diario";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -77,11 +77,10 @@ async function tarjetaDelPaso(args: {
     if (!paso) return null;
     const candidatas = toolsAProbar(paso);
 
-    // Si ya hay una propuesta Y es de este paso, se respeta tal cual (puede ser
-    // la que el contador está a punto de tocar). Si es de otro paso, la del
-    // paso abierto la sustituye: una propuesta a la vez, la del contexto.
-    const yaHay = await getChatPendingAction(conversationId);
-    if (yaHay && candidatas.some((t) => TIPO_DE_TOOL[t] === yaHay.type)) {
+    // Si ya hay una propuesta de este paso, se respeta tal cual (puede ser la
+    // que el contador está a punto de tocar). Las de otros pasos conviven.
+    const yaHay = (await getChatPendingActions(conversationId)).find((pa) => candidatas.some((t) => TIPO_DE_TOOL[t] === pa.type));
+    if (yaHay) {
       return { type: yaHay.type, summary: yaHay.summary, token: yaHay.token, expiresAt: yaHay.expiresAt };
     }
 
@@ -93,7 +92,7 @@ async function tarjetaDelPaso(args: {
         cierre: { year, month, paso: clave },
       });
       if (!quedoStaged(salida)) continue;
-      const pa = await getChatPendingAction(conversationId);
+      const pa = (await getChatPendingActions(conversationId)).at(-1);
       if (pa) return { type: pa.type, summary: pa.summary, token: pa.token, expiresAt: pa.expiresAt };
     }
     return null;

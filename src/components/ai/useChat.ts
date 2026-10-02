@@ -28,6 +28,8 @@ export interface Message {
   cards?: Card[];
   /** El elemento adjunto a la pregunta («Explícame esto»; sólo user). */
   ref?: RefCopiloto;
+  /** Mensaje que escribió la app (seguimiento tras confirmar): va al modelo, no se pinta. */
+  oculto?: boolean;
   /**
    * Avance en vivo de la tarjeta «pasos»: cuántas herramientas arrancaron
    * desde que se pintó. null/undefined = turno terminado (todo hecho).
@@ -136,11 +138,26 @@ function esperarOVolver(ms: number, signal: AbortSignal): Promise<void> {
 const MS_ENTRE_INTENTOS = 4000;
 const MAX_ESPERA_MS = 4 * 60_000;
 
+/** Lo que la app le dice a Mochi tras ejecutar una tarjeta (no se pinta). */
+export function textoSeguimiento(resumen: string, resultado: string): string {
+  return (
+    `[Seguimiento automático, no lo escribió el usuario] Confirmé la tarjeta «${resumen.slice(0, 300)}». ` +
+    `Resultado: ${resultado.slice(0, 300)} ` +
+    "Sigue con el objetivo de esta conversación: si quedó algo que te pedí (otro movimiento, otra tarjeta), prepáralo ahora; " +
+    "si el resultado quedó como borrador o a medias, dime en una frase qué falta para completarlo. " +
+    "Si ya no queda nada, dilo en una línea. No repitas lo ya explicado."
+  );
+}
+
 export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirmada }: Opciones) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [activeTool, setActiveTool] = useState<string | null>(null);
-  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  // Varias tarjetas pendientes a la vez; cada una se confirma por su token.
+  const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
+  const pendingAction = pendingActions[0] ?? null;
+  /** Compat: las pantallas que pintan una sola tarjeta (cierre). */
+  const setPendingAction = useCallback((pa: PendingAction | null) => setPendingActions(pa ? [pa] : []), []);
   const [confirming, setConfirming] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   // El id vive también en un ref: `enviar` no debe recrearse (ni perder el hilo)
@@ -165,7 +182,7 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
     // el chat con una pregunta lista) no debe mandar el hilo anterior.
     messagesRef.current = [];
     setMessages([]);
-    setPendingAction(null);
+    setPendingActions([]);
     setActiveTool(null);
     fijarConversacion(null);
   }, [fijarConversacion]);
@@ -173,7 +190,7 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
   const observarAgente = useCallback(async (id: string, requestId: string, signal: AbortSignal) => {
     await watchManagedRun(id, requestId, signal, (snapshot) => {
       setActiveTool(snapshot.activeTool);
-      setPendingAction(snapshot.pendingAction);
+      setPendingActions(snapshot.pendingActions ?? (snapshot.pendingAction ? [snapshot.pendingAction] : []));
       if (snapshot.message?.content || snapshot.message?.cards?.length) {
         const message = snapshot.message!;
         setMessages((prev) => {
@@ -243,7 +260,7 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
 
   /** Manda un turno. `texto` ya viene limpio; la UI decide de dónde sale. */
   const enviar = useCallback(
-    async (texto: string, opciones?: { ref?: RefCopiloto }) => {
+    async (texto: string, opciones?: { ref?: RefCopiloto; seguimiento?: boolean }) => {
       const contenido = texto.trim();
       if (!contenido || !companyId) return;
       observerRef.current?.abort();
@@ -251,7 +268,8 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
       observerRef.current = observer;
       const ref = opciones?.ref;
 
-      const nuevo: Message = { role: "user", content: contenido, ...(ref ? { ref } : {}) };
+      const seguimiento = !!opciones?.seguimiento;
+      const nuevo: Message = { role: "user", content: contenido, ...(ref ? { ref } : {}), ...(seguimiento ? { oculto: true } : {}) };
       const historial = [...messagesRef.current, nuevo];
       setMessages(historial);
       setIsLoading(true);
@@ -275,7 +293,7 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
             companyId,
             requestId: crypto.randomUUID(),
             conversationId: convRef.current,
-            contexto: { ...contexto(), ...(ref ? { ref } : {}) },
+            contexto: { ...contexto(), ...(ref ? { ref } : {}), ...(seguimiento ? { seguimiento: true } : {}) },
           }),
         });
         if (!res.ok) {
@@ -306,6 +324,7 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
           id?: string;
           nueva?: boolean;
           action?: PendingAction;
+          actions?: PendingAction[];
           messageId?: string | null;
           card?: Card;
         }) => {
@@ -313,8 +332,10 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
           if (data.type === "conversation") {
             if (data.id) fijarConversacion(data.id);
             if (data.nueva) nuevaConv = true;
+          } else if (data.type === "pending_actions") {
+            setPendingActions(data.actions ?? []);
           } else if (data.type === "pending_action") {
-            if (data.action) setPendingAction(data.action);
+            if (data.action) setPendingActions([data.action]);
           } else if (data.type === "text") {
             assistantText += data.text ?? "";
             setMessages((prev) => {
@@ -426,46 +447,71 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
     [companyId, contexto, fijarConversacion, onTurnoTerminado, observarAgente, recuperarTurno]
   );
 
-  const confirmar = useCallback(async () => {
-    if (!pendingAction || !convRef.current || confirming) return;
+  const quitarTarjeta = useCallback((token: string) => setPendingActions((prev) => prev.filter((p) => p.token !== token)), []);
+
+  /** Confirma la tarjeta del token (default: la primera). */
+  const confirmar = useCallback(async (token?: string) => {
+    const pa = token ? pendingActions.find((p) => p.token === token) : pendingActions[0];
+    if (!pa || !convRef.current || confirming) return;
     setConfirming(true);
     try {
       const res = await fetch("/api/ai/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversationId: convRef.current, token: pendingAction.token }),
+        body: JSON.stringify({ conversationId: convRef.current, token: pa.token }),
       });
       const data = await res.json().catch(() => ({}));
       const ok = res.ok && data.ok;
-      if (ok || res.status === 409) setPendingAction(null);
+      if (ok || res.status === 409) quitarTarjeta(pa.token);
+      const resultado = ok ? (data.message ?? "Acción realizada.") : null;
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: ok ? `Listo. ${data.message ?? "Acción realizada."}` : `No se pudo completar: ${data.error ?? "Inténtalo de nuevo."}`,
+          // Un borrador no es «Listo»: que no parezca terminado.
+          content: ok ? (/borrador/i.test(resultado!) ? resultado! : `Listo. ${resultado}`) : `No se pudo completar: ${data.error ?? "Inténtalo de nuevo."}`,
         },
       ]);
-      if (ok) onAccionConfirmada?.();
+      if (ok) {
+        onAccionConfirmada?.();
+        // Mochi trabaja por objetivos: tras ejecutar la última tarjeta, sigue
+        // solo (la siguiente propuesta o lo que falta) en vez de quedarse mudo.
+        const quedan = pendingActions.filter((p) => p.token !== pa.token).length;
+        if (quedan === 0) {
+          seguimientoPendiente.current = textoSeguimiento(pa.summary, resultado!);
+        }
+      }
     } catch {
       setMessages((prev) => [...prev, { role: "assistant", content: "No se pudo completar la acción. Inténtalo de nuevo." }]);
     } finally {
       setConfirming(false);
     }
-  }, [pendingAction, confirming, onAccionConfirmada]);
+  }, [pendingActions, confirming, onAccionConfirmada, quitarTarjeta]);
+
+  // El seguimiento sale cuando termina la confirmación (confirming → false),
+  // con el «Listo.» ya en el historial.
+  const seguimientoPendiente = useRef<string | null>(null);
+  useEffect(() => {
+    if (confirming || isLoading || !seguimientoPendiente.current) return;
+    const texto = seguimientoPendiente.current;
+    seguimientoPendiente.current = null;
+    void enviar(texto, { seguimiento: true });
+  }, [confirming, isLoading, enviar]);
 
   /** Cancel the durable proposal, not only its visible card. */
-  const cancelar = useCallback(async () => {
-    if (!pendingAction || !convRef.current || confirming) return;
+  const cancelar = useCallback(async (token?: string) => {
+    const pa = token ? pendingActions.find((p) => p.token === token) : pendingActions[0];
+    if (!pa || !convRef.current || confirming) return;
     setConfirming(true);
     try {
       const response = await fetch("/api/ai/confirm", { method: "DELETE", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversationId: convRef.current, token: pendingAction.token }) });
+        body: JSON.stringify({ conversationId: convRef.current, token: pa.token }) });
       const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error ?? "No se pudo cancelar la propuesta.");
-      setPendingAction(null);
+      if (!response.ok && response.status !== 409) throw new Error(result.error ?? "No se pudo cancelar la propuesta.");
+      quitarTarjeta(pa.token);
     } catch (error) { setMessages((prev) => [...prev, { role: "assistant", content: error instanceof Error ? error.message : "No se pudo cancelar la propuesta." }]); }
     finally { setConfirming(false); }
-  }, [pendingAction, confirming]);
+  }, [pendingActions, confirming, quitarTarjeta]);
 
   const enviarFeedback = useCallback(async (id: string, feedback: "up" | "down" | null, correccion?: string) => {
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, feedback } : m)));
@@ -486,6 +532,8 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
     isLoading,
     activeTool,
     pendingAction,
+    pendingActions,
+    setPendingActions,
     confirming,
     conversationId,
     fijarConversacion,

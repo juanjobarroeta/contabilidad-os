@@ -139,7 +139,8 @@ export function ChatPanel() {
     isLoading,
     activeTool,
     pendingAction,
-    setPendingAction,
+    pendingActions,
+    setPendingActions,
     confirming,
     conversationId,
     fijarConversacion,
@@ -196,16 +197,17 @@ export function ChatPanel() {
           feedback: m.feedback ?? null,
           ...(m.cards ? { cards: m.cards } : {}),
           ...(m.ref ? { ref: m.ref } : {}),
+          ...(m.oculto ? { oculto: true } : {}),
         })),
       );
       fijarConversacion(data.id);
       setVisibility(data.visibility);
       setIsMine(!!data.mine);
       setMarcadores([]);
-      setPendingAction(data.pendingAction ?? null);
+      setPendingActions(data.pendingActions ?? (data.pendingAction ? [data.pendingAction] : []));
       if (data.activeManagedRun?.requestId) void retomarAgente(data.activeManagedRun.id, data.activeManagedRun.requestId);
     },
-    [setMessages, fijarConversacion, setPendingAction, resetChat, retomarAgente],
+    [setMessages, fijarConversacion, setPendingActions, resetChat, retomarAgente],
   );
 
   async function deleteConversation(id: string) {
@@ -776,7 +778,7 @@ export function ChatPanel() {
                 </div>
               ))}
 
-            {messages.map((msg, i) => [
+            {messages.map((msg, i) => msg.oculto ? [] : [
               ...marcadores.filter((m) => m.antesDe === i).map((m, k) => separador(m.texto, `sep${i}-${k}`)),
               <div key={i} className="contents">
                 {renderMensaje(msg, i)}
@@ -795,16 +797,16 @@ export function ChatPanel() {
 
             {/* Tarjeta de confirmación: el asistente PROPUSO una acción reversible.
                 El tap de "Confirmar" es lo único que la ejecuta. */}
-            {pendingAction && !isLoading && (
-              <div className="rounded-[13px] border border-cos-brand/40 bg-cos-brand-tint/60 p-3.5">
+            {!isLoading && pendingActions.map((pa) => (
+              <div key={pa.token} className="rounded-[13px] border border-cos-brand/40 bg-cos-brand-tint/60 p-3.5">
                 <div className="flex items-center gap-1.5 text-[12px] font-semibold text-cos-brand-ink">
                   <ShieldCheck className="h-4 w-4" /> Confirmación requerida
                 </div>
-                <p className="mt-1.5 text-[13.5px] leading-relaxed text-cos-ink">{pendingAction.summary}</p>
+                <p className="mt-1.5 text-[13.5px] leading-relaxed text-cos-ink">{pa.summary}</p>
                 <p className="mt-1 text-[11.5px] text-cos-ink-faint">Nada se ejecuta hasta que toques Confirmar. Esta acción es reversible.</p>
                 <div className="mt-3 flex items-center gap-2">
                   <button
-                    onClick={confirmAction}
+                    onClick={() => void confirmAction(pa.token)}
                     disabled={confirming}
                     className="inline-flex items-center gap-1.5 rounded-control bg-cos-jade px-3.5 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                   >
@@ -812,7 +814,7 @@ export function ChatPanel() {
                     Confirmar
                   </button>
                   <button
-                    onClick={cancelAction}
+                    onClick={() => void cancelAction(pa.token)}
                     disabled={confirming}
                     className="inline-flex items-center gap-1.5 rounded-control border border-cos-line bg-cos-card px-3.5 py-2 text-[13px] font-semibold text-cos-ink transition-colors hover:bg-cos-paper disabled:opacity-50"
                   >
@@ -820,7 +822,7 @@ export function ChatPanel() {
                   </button>
                 </div>
               </div>
-            )}
+            ))}
 
 
             <div ref={messagesEndRef} />

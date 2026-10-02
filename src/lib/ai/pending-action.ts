@@ -174,31 +174,96 @@ function genToken(): string {
 }
 
 // ── Persistencia (stage / read / clear) ──────────────────────────────────────
+//
+// Varias tarjetas a la vez: la columna guarda una LISTA de propuestas, cada una
+// con su token (se confirma o cancela por token). Una fila vieja con un solo
+// objeto se lee como lista de uno.
+
+/** Máximo de tarjetas pendientes por conversación. */
+export const MAX_PENDIENTES = 10;
+
+/** La columna Json → propuestas vigentes (sin las vencidas). Acepta el formato viejo (un objeto). */
+export function leerPendientes(raw: unknown, now = Date.now()): ChatPendingAction[] {
+  const lista = Array.isArray(raw) ? raw : raw && typeof raw === "object" ? [raw] : [];
+  return (lista as ChatPendingAction[]).filter((pa) => pa && typeof pa.token === "string" && pa.expiresAt > now);
+}
+
+/** JSON con llaves ordenadas: jsonb de Postgres reordena las llaves al guardar. */
+function estable(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(estable).join(",")}]`;
+  if (v && typeof v === "object") {
+    return `{${Object.keys(v as object).sort().map((k) => `${JSON.stringify(k)}:${estable((v as Record<string, unknown>)[k])}`).join(",")}}`;
+  }
+  return JSON.stringify(v) ?? "null";
+}
+
+/** Misma acción sobre el mismo objetivo: no se apila dos veces. */
+export function mismaAccion(a: Pick<ChatPendingAction, "type" | "payload">, b: Pick<ChatPendingAction, "type" | "payload">): boolean {
+  return a.type === b.type && estable(a.payload) === estable(b.payload);
+}
+
+function aJson(lista: ChatPendingAction[]) {
+  return lista.length ? (lista as unknown as Prisma.InputJsonValue) : Prisma.DbNull;
+}
 
 async function persist(conversationId: string, action: ChatPendingAction): Promise<ChatPendingAction> {
-  await prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "ChatConversation" WHERE id = ${conversationId} FOR UPDATE`;
     const conversation = await tx.chatConversation.findUniqueOrThrow({ where: { id: conversationId }, select: { companyId: true, pendingAction: true } });
     if (conversation.companyId !== action.companyId) throw new Error("La propuesta no pertenece a esta empresa.");
-    const current = conversation.pendingAction as ChatPendingAction | null;
-    if (current && current.expiresAt > Date.now()) throw new Error("Ya hay una propuesta pendiente. Confírmala o cancélala antes de preparar otra.");
-    await tx.chatConversation.update({ where: { id: conversationId }, data: { pendingAction: action as unknown as Prisma.InputJsonValue } });
+    const vigentes = leerPendientes(conversation.pendingAction);
+    const repetida = vigentes.find((pa) => mismaAccion(pa, action));
+    if (repetida) return repetida;
+    if (vigentes.length >= MAX_PENDIENTES) {
+      throw new Error(`Ya hay ${MAX_PENDIENTES} propuestas pendientes. Confirma o cancela alguna antes de preparar otra.`);
+    }
+    await tx.chatConversation.update({ where: { id: conversationId }, data: { pendingAction: aJson([...vigentes, action]) } });
+    return action;
   });
-  return action;
 }
 
-/** Lee la acción pendiente (si existe y no expiró). */
-export async function getChatPendingAction(conversationId: string): Promise<ChatPendingAction | null> {
+/** Todas las propuestas vigentes de la conversación, en el orden en que se prepararon. */
+export async function getChatPendingActions(conversationId: string): Promise<ChatPendingAction[]> {
   const conv = await prisma.chatConversation.findUnique({
     where: { id: conversationId },
     select: { pendingAction: true },
   });
-  const pa = conv?.pendingAction as ChatPendingAction | null;
-  if (!pa || pa.expiresAt <= Date.now()) return null;
-  return pa;
+  return leerPendientes(conv?.pendingAction);
 }
 
-/** Borra la acción pendiente (DbNull para realmente vaciar la columna Json). */
+/** La primera propuesta vigente (pantallas que sólo pintan una, como el cierre). */
+export async function getChatPendingAction(conversationId: string): Promise<ChatPendingAction | null> {
+  return (await getChatPendingActions(conversationId))[0] ?? null;
+}
+
+/** Busca una propuesta por token (vencida incluida, para poder decir «expiró»). */
+export async function findChatPendingAction(conversationId: string, token: string): Promise<ChatPendingAction | null> {
+  const conv = await prisma.chatConversation.findUnique({ where: { id: conversationId }, select: { pendingAction: true } });
+  const raw = conv?.pendingAction;
+  const lista = (Array.isArray(raw) ? raw : raw && typeof raw === "object" ? [raw] : []) as unknown as ChatPendingAction[];
+  return lista.find((pa) => pa?.token === token) ?? null;
+}
+
+/**
+ * Saca UNA propuesta de la lista, atómicamente (compare-and-swap bajo lock):
+ * dos taps simultáneos no consumen la misma tarjeta. Devuelve la propuesta si
+ * este llamado fue quien la sacó; null si ya no estaba.
+ */
+export async function takeChatPendingAction(conversationId: string, token: string): Promise<ChatPendingAction | null> {
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "ChatConversation" WHERE id = ${conversationId} FOR UPDATE`;
+    const conv = await tx.chatConversation.findUnique({ where: { id: conversationId }, select: { pendingAction: true } });
+    const raw = conv?.pendingAction;
+    const lista = (Array.isArray(raw) ? raw : raw && typeof raw === "object" ? [raw] : []) as unknown as ChatPendingAction[];
+    const tomada = lista.find((pa) => pa?.token === token) ?? null;
+    if (!tomada) return null;
+    const resto = leerPendientes(lista.filter((pa) => pa !== tomada));
+    await tx.chatConversation.update({ where: { id: conversationId }, data: { pendingAction: aJson(resto) } });
+    return tomada;
+  });
+}
+
+/** Borra todas las propuestas (DbNull para realmente vaciar la columna Json). */
 export async function clearChatPendingAction(conversationId: string): Promise<void> {
   await prisma.chatConversation.update({
     where: { id: conversationId },

@@ -4,8 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { gateEscritura } from "@/lib/subscription";
 import {
-  getChatPendingAction,
-  clearChatPendingAction,
+  findChatPendingAction,
+  takeChatPendingAction,
   executeChatPendingAction,
   decideConfirm,
 } from "@/lib/ai/pending-action";
@@ -59,25 +59,23 @@ export async function POST(req: Request) {
   const gate = await gateEscritura(userId);
   if (gate) return gate;
 
-  const pa = await getChatPendingAction(conversationId);
+  // Puede haber varias tarjetas: se busca la del token tocado.
+  const pa = await findChatPendingAction(conversationId, body.token);
   const decision = decideConfirm(pa, body.token, Date.now());
-  if (decision.status === "none") {
-    return NextResponse.json({ error: "No hay ninguna acción pendiente de confirmar." }, { status: 409 });
+  if (decision.status === "none" || decision.status === "mismatch") {
+    return NextResponse.json({ error: "Esta propuesta ya fue atendida o ya no existe." }, { status: 409 });
   }
   if (decision.status === "expired") {
-    await clearChatPendingAction(conversationId);
+    await takeChatPendingAction(conversationId, body.token);
     return NextResponse.json(
       { error: "La propuesta expiró. Pídele al asistente que la genere de nuevo." },
       { status: 409 },
     );
   }
-  if (decision.status === "mismatch") {
-    return NextResponse.json({ error: "Esta propuesta ya no es la vigente." }, { status: 409 });
-  }
 
   // Defensa en profundidad: la acción staged DEBE pertenecer a esta empresa.
   if (pa!.companyId !== conv.companyId) {
-    await clearChatPendingAction(conversationId);
+    await takeChatPendingAction(conversationId, body.token);
     return NextResponse.json({ error: "La acción no corresponde a esta empresa." }, { status: 409 });
   }
 
@@ -90,12 +88,10 @@ export async function POST(req: Request) {
     }
   }
 
-  // Compare-and-swap: concurrent confirmations/cancellations cannot consume
-  // the same card twice or clear a newer card while another request runs.
-  const claimed = await prisma.chatConversation.updateMany({ where: { id: conversationId,
-    pendingAction: { path: ["token"], equals: body.token },
-  }, data: { pendingAction: (await import("@prisma/client")).Prisma.DbNull } });
-  if (!claimed.count) return NextResponse.json({ error: "La propuesta ya fue atendida o cambió." }, { status: 409 });
+  // Compare-and-swap bajo lock: dos taps simultáneos no consumen la misma
+  // tarjeta, y sacar ésta no toca las demás pendientes.
+  const claimed = await takeChatPendingAction(conversationId, body.token);
+  if (!claimed) return NextResponse.json({ error: "La propuesta ya fue atendida o cambió." }, { status: 409 });
   if (req.method === "DELETE") {
     return NextResponse.json({ ok: true, message: "Propuesta cancelada." });
   }

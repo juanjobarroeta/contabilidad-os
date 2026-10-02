@@ -41,3 +41,15 @@ describe("prompt del copiloto: estados donde opera", () => {
     expect(buildSystemPrompt(empresa)).not.toContain("Estados donde opera");
   });
 });
+
+describe("prompt del copiloto: piensa como contador", () => {
+  const p = buildSystemPrompt(empresa);
+  it("trata el depósito erróneo como pasivo en Acreedores diversos, no como ingreso ni duplicado", () => {
+    expect(p).toContain("Depósito recibido por error / a devolver");
+    expect(p).toContain("Acreedores diversos");
+    expect(p).toContain("La devolución NO es un duplicado");
+  });
+  it("prohíbe mostrar claves internas al usuario", () => {
+    expect(p).toContain("NUNCA le muestres al usuario claves internas");
+  });
+});

@@ -11,7 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { POST, DELETE } from "@/app/api/ai/confirm/route";
 import { executeAccountingRead } from "./accounting-executor";
 import { proposeAccounting, revertLoanPosting } from "./accounting-proposals";
-import { getChatPendingAction } from "./pending-action";
+import { getChatPendingAction, getChatPendingActions } from "./pending-action";
 import { postMonth } from "@/lib/contabilidad/posting";
 import { seedChartOfAccounts } from "@/lib/contabilidad/seed-catalog";
 import { aprobarSugerencia } from "@/lib/bancos/sugerencias-concepto";
@@ -88,13 +88,18 @@ describe.skipIf(process.env.DB_TESTS_SKIP === "1")("accounting chat tools agains
     expect(await prisma.chartAccount.findUnique({ where: { id: account.id } })).toMatchObject({ subcuenta: "1170-002", nombre: "Synthetic corrected name" });
   });
 
-  it("does not overwrite pending proposals, cancels durably, and rejects viewers and double confirmation", async () => {
+  it("keeps several pending proposals side by side, cancels durably, and rejects viewers and double confirmation", async () => {
     const one = await proposal("proponer_renombrar_cuenta", { chart_account_id: "accounting-tools-debtor", nombre: "First proposal" });
     const two = await proposal("proponer_renombrar_cuenta", { chart_account_id: "accounting-tools-debtor", nombre: "Second proposal" });
-    expect(two.error).toContain("pendiente");
-    expect((await getChatPendingAction("accounting-tools-conv"))?.token).toBe(one.token);
+    expect(two.pending).toBe(true);
+    expect(two.token).not.toBe(one.token);
+    // The same proposal again reuses its card instead of stacking a duplicate.
+    expect((await proposal("proponer_renombrar_cuenta", { chart_account_id: "accounting-tools-debtor", nombre: "First proposal" })).token).toBe(one.token);
+    expect((await getChatPendingActions("accounting-tools-conv")).map((p) => p.token)).toEqual([one.token, two.token]);
     actor = V; expect((await confirm(one.token)).status).toBe(403); actor = U;
     expect((await confirm(one.token, "DELETE")).status).toBe(200);
+    expect((await getChatPendingActions("accounting-tools-conv")).map((p) => p.token)).toEqual([two.token]);
+    expect((await confirm(two.token, "DELETE")).status).toBe(200);
     expect(await getChatPendingAction("accounting-tools-conv")).toBeNull();
     const next = await proposal("proponer_renombrar_cuenta", { chart_account_id: "accounting-tools-debtor", nombre: "Confirmed once" });
     const results = await Promise.all([confirm(next.token), confirm(next.token)]);
