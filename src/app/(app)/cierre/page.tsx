@@ -654,7 +654,7 @@ function CierrePageInner() {
                       <Loader2 className="h-3.5 w-3.5 animate-spin" /> Abriendo el hilo…
                     </p>
                   )}
-                  {messages.map((m, i) => (
+                  {messages.map((m, i) => m.oculto ? null : (
                     <div key={i} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
                       <div
                         className={cn(

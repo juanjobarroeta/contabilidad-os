@@ -197,6 +197,7 @@ export function ChatPanel() {
           feedback: m.feedback ?? null,
           ...(m.cards ? { cards: m.cards } : {}),
           ...(m.ref ? { ref: m.ref } : {}),
+          ...(m.oculto ? { oculto: true } : {}),
         })),
       );
       fijarConversacion(data.id);
@@ -777,7 +778,7 @@ export function ChatPanel() {
                 </div>
               ))}
 
-            {messages.map((msg, i) => [
+            {messages.map((msg, i) => msg.oculto ? [] : [
               ...marcadores.filter((m) => m.antesDe === i).map((m, k) => separador(m.texto, `sep${i}-${k}`)),
               <div key={i} className="contents">
                 {renderMensaje(msg, i)}

@@ -51,8 +51,9 @@ export async function GET(_req: Request, { params }: Params) {
     // La traza (meta) no sale: sólo la referencia que el usuario adjuntó.
     messages: messages.map(({ meta, cards, ...m }) => {
       const ref = m.role === "user" ? sanearRef((meta as { ref?: unknown } | null)?.ref) : null;
+      const oculto = m.role === "user" && (meta as { seguimiento?: unknown } | null)?.seguimiento === true;
       const tarjetas = m.role === "assistant" ? sanearTarjetas(cards) : [];
-      return { ...m, ...(ref ? { ref } : {}), ...(tarjetas.length ? { cards: tarjetas } : {}) };
+      return { ...m, ...(ref ? { ref } : {}), ...(oculto ? { oculto: true } : {}), ...(tarjetas.length ? { cards: tarjetas } : {}) };
     }),
   });
 }

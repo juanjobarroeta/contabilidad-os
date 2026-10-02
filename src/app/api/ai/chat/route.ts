@@ -72,7 +72,7 @@ export async function POST(req: Request) {
     companyId?: string;
     conversationId?: string;
     requestId?: string;
-    contexto?: { ruta?: unknown; ref?: unknown; cierre?: { year?: unknown; month?: unknown; paso?: unknown } };
+    contexto?: { ruta?: unknown; ref?: unknown; seguimiento?: unknown; cierre?: { year?: unknown; month?: unknown; paso?: unknown } };
   };
   try {
     body = JSON.parse(rawBody);
@@ -89,6 +89,9 @@ export async function POST(req: Request) {
   // El elemento sobre el que el usuario soltó la mascota («Explícame esto»):
   // con tipo e id, el modelo carga ESE registro con sus herramientas.
   const refActual = sanearRef(contexto?.ref) ?? undefined;
+  // Turno automático tras confirmar una tarjeta: el «mensaje del usuario» lo
+  // escribió la app; se guarda marcado para no pintarlo al reabrir.
+  const seguimiento = contexto?.seguimiento === true;
 
   // Cierre guiado: si el usuario está en /cierre, el periodo y el paso viajan
   // en el contexto. Con ellos el copiloto recibe el estado de los doce pasos y
@@ -255,7 +258,7 @@ export async function POST(req: Request) {
         requestId: typeof body.requestId === "string" && /^[a-zA-Z0-9-]{16,64}$/.test(body.requestId) ? body.requestId : randomUUID(),
         text: nuevoMensajeUsuario,
         instructions: systemBlocks.map((block) => block.text).join("\n\n"),
-        context: { cierre: cierreCtx }, ref: refActual,
+        context: { cierre: cierreCtx }, ref: refActual, seguimiento,
       });
       // The database queue and recovery cron survive this callback/browser.
       after(async () => {
@@ -585,7 +588,7 @@ export async function POST(req: Request) {
               authorId: userId,
               // La referencia de «Explícame esto» se guarda para volver a
               // pintar la píldora al reabrir la conversación.
-              ...(refActual ? { meta: { ref: { ...refActual } } } : {}),
+              ...(refActual || seguimiento ? { meta: { ...(refActual ? { ref: { ...refActual } } : {}), ...(seguimiento ? { seguimiento: true } : {}) } } : {}),
             },
           });
           if (assistantText.trim() || cardsTurno.length) {

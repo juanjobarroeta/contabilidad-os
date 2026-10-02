@@ -26,6 +26,8 @@ export interface StartTurn {
   instructions: string;
   context?: ToolContext;
   ref?: unknown;
+  /** Turno automático tras confirmar una tarjeta: el mensaje del usuario no se pinta. */
+  seguimiento?: boolean;
   objectiveRunId?: string;
 }
 
@@ -68,7 +70,7 @@ export async function beginManagedTurn(input: StartTurn): Promise<ContaBotSessio
       const history = priorMessages.reverse().map((m) => `${m.role}: ${m.content.slice(0, 3000)}`).join("\n");
       const userMessage = await tx.chatMessage.create({ data: {
         conversationId: input.conversationId, authorId: input.userId, role: "user", content: input.text,
-        meta: json({ requestId: input.requestId, ...(input.ref ? { ref: input.ref } : {}) }),
+        meta: json({ requestId: input.requestId, ...(input.ref ? { ref: input.ref } : {}), ...(input.seguimiento ? { seguimiento: true } : {}) }),
       } });
       const assistant = await tx.chatMessage.create({ data: {
         conversationId: input.conversationId, role: "assistant", content: "",

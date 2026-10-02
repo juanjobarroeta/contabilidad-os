@@ -28,6 +28,8 @@ export interface Message {
   cards?: Card[];
   /** El elemento adjunto a la pregunta («Explícame esto»; sólo user). */
   ref?: RefCopiloto;
+  /** Mensaje que escribió la app (seguimiento tras confirmar): va al modelo, no se pinta. */
+  oculto?: boolean;
   /**
    * Avance en vivo de la tarjeta «pasos»: cuántas herramientas arrancaron
    * desde que se pintó. null/undefined = turno terminado (todo hecho).
@@ -135,6 +137,17 @@ function esperarOVolver(ms: number, signal: AbortSignal): Promise<void> {
 
 const MS_ENTRE_INTENTOS = 4000;
 const MAX_ESPERA_MS = 4 * 60_000;
+
+/** Lo que la app le dice a Mochi tras ejecutar una tarjeta (no se pinta). */
+export function textoSeguimiento(resumen: string, resultado: string): string {
+  return (
+    `[Seguimiento automático, no lo escribió el usuario] Confirmé la tarjeta «${resumen.slice(0, 300)}». ` +
+    `Resultado: ${resultado.slice(0, 300)} ` +
+    "Sigue con el objetivo de esta conversación: si quedó algo que te pedí (otro movimiento, otra tarjeta), prepáralo ahora; " +
+    "si el resultado quedó como borrador o a medias, dime en una frase qué falta para completarlo. " +
+    "Si ya no queda nada, dilo en una línea. No repitas lo ya explicado."
+  );
+}
 
 export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirmada }: Opciones) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -247,7 +260,7 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
 
   /** Manda un turno. `texto` ya viene limpio; la UI decide de dónde sale. */
   const enviar = useCallback(
-    async (texto: string, opciones?: { ref?: RefCopiloto }) => {
+    async (texto: string, opciones?: { ref?: RefCopiloto; seguimiento?: boolean }) => {
       const contenido = texto.trim();
       if (!contenido || !companyId) return;
       observerRef.current?.abort();
@@ -255,7 +268,8 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
       observerRef.current = observer;
       const ref = opciones?.ref;
 
-      const nuevo: Message = { role: "user", content: contenido, ...(ref ? { ref } : {}) };
+      const seguimiento = !!opciones?.seguimiento;
+      const nuevo: Message = { role: "user", content: contenido, ...(ref ? { ref } : {}), ...(seguimiento ? { oculto: true } : {}) };
       const historial = [...messagesRef.current, nuevo];
       setMessages(historial);
       setIsLoading(true);
@@ -279,7 +293,7 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
             companyId,
             requestId: crypto.randomUUID(),
             conversationId: convRef.current,
-            contexto: { ...contexto(), ...(ref ? { ref } : {}) },
+            contexto: { ...contexto(), ...(ref ? { ref } : {}), ...(seguimiento ? { seguimiento: true } : {}) },
           }),
         });
         if (!res.ok) {
@@ -449,20 +463,40 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
       const data = await res.json().catch(() => ({}));
       const ok = res.ok && data.ok;
       if (ok || res.status === 409) quitarTarjeta(pa.token);
+      const resultado = ok ? (data.message ?? "Acción realizada.") : null;
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: ok ? `Listo. ${data.message ?? "Acción realizada."}` : `No se pudo completar: ${data.error ?? "Inténtalo de nuevo."}`,
+          // Un borrador no es «Listo»: que no parezca terminado.
+          content: ok ? (/borrador/i.test(resultado!) ? resultado! : `Listo. ${resultado}`) : `No se pudo completar: ${data.error ?? "Inténtalo de nuevo."}`,
         },
       ]);
-      if (ok) onAccionConfirmada?.();
+      if (ok) {
+        onAccionConfirmada?.();
+        // Mochi trabaja por objetivos: tras ejecutar la última tarjeta, sigue
+        // solo (la siguiente propuesta o lo que falta) en vez de quedarse mudo.
+        const quedan = pendingActions.filter((p) => p.token !== pa.token).length;
+        if (quedan === 0) {
+          seguimientoPendiente.current = textoSeguimiento(pa.summary, resultado!);
+        }
+      }
     } catch {
       setMessages((prev) => [...prev, { role: "assistant", content: "No se pudo completar la acción. Inténtalo de nuevo." }]);
     } finally {
       setConfirming(false);
     }
   }, [pendingActions, confirming, onAccionConfirmada, quitarTarjeta]);
+
+  // El seguimiento sale cuando termina la confirmación (confirming → false),
+  // con el «Listo.» ya en el historial.
+  const seguimientoPendiente = useRef<string | null>(null);
+  useEffect(() => {
+    if (confirming || isLoading || !seguimientoPendiente.current) return;
+    const texto = seguimientoPendiente.current;
+    seguimientoPendiente.current = null;
+    void enviar(texto, { seguimiento: true });
+  }, [confirming, isLoading, enviar]);
 
   /** Cancel the durable proposal, not only its visible card. */
   const cancelar = useCallback(async (token?: string) => {
