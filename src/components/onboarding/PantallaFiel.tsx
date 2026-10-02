@@ -16,6 +16,7 @@ import { LINEAS, t } from "@/lib/onboarding/lineas";
 import { REGIMENES_ALTA } from "@/lib/onboarding/regimenes";
 import { Burbuja, Slot, useEscena } from "./escena";
 import { cn } from "@/lib/utils";
+import { solicitar } from "@/lib/onboarding/solicitar";
 
 interface Archivo {
   nombre: string;
@@ -65,10 +66,12 @@ async function json<T>(res: Response): Promise<T & { error?: string }> {
 export function PantallaFiel({
   onCreada,
   onListo,
+  manualHref,
 }: {
   /** La empresa ya existe (con e.firma): se guarda en el progreso. */
-  onCreada: (companyId: string) => void;
+  onCreada: (companyId: string) => Promise<boolean>;
   onListo: () => void;
+  manualHref: string;
 }) {
   const { decir, festejar, mirar, tono, perfil, reducir } = useEscena();
   const [cer, setCer] = useState<Archivo | null>(null);
@@ -98,42 +101,47 @@ export function PantallaFiel({
 
   async function tomarArchivo(f: File | undefined, cual: "cer" | "key") {
     if (!f) return;
-    setError(null);
-    const nombre = f.name.toLowerCase();
-    // Si lo soltaron en la caja equivocada, lo acomodamos por extensión.
-    const real = nombre.endsWith(".key") ? "key" : nombre.endsWith(".cer") ? "cer" : cual;
-    const a: Archivo = { nombre: f.name, b64: await leerB64(f), kb: Math.max(1, Math.round(f.size / 102.4) / 10) };
-    if (real === "key") {
-      setKey(a);
-      setTimeout(() => inPass.current?.focus(), 50);
-      mirar(inPass.current);
-      void decir(LINEAS.llave);
-      return;
-    }
-    setCer(a);
-    const res = await fetch("/api/onboarding/fiel", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accion: "leer", cer: a.b64 }),
-    });
-    const j = await json<InfoCert>(res);
-    if (!res.ok) {
-      setCer(null);
-      setError(j.error ?? "No pude leer el certificado.");
-      void decir(LINEAS.fielError(j.error ?? "no pude leer el certificado"));
-      return;
-    }
-    setInfo(j);
-    setTimeout(() => mirar(refCert.current), 50);
-    if (!j.esFiel) {
-      void decir(
-        LINEAS.fielError("este certificado es del CSD (el sello para facturar), no de la e.firma. Sube el .cer de tu e.firma, el que usas para entrar al portal del SAT."),
-      );
-    } else if (!j.vigente) {
-      void decir(LINEAS.fielError("el certificado está vencido. Renuévalo en el SAT y sube los archivos nuevos."));
-    } else {
-      await decir(LINEAS.certLeido(j.razonSocial || "tu empresa", j.rfc, fechaCorta(j.validoHasta)));
-      mirar(null);
+    try {
+      setError(null);
+      const nombre = f.name.toLowerCase();
+      // Si lo soltaron en la caja equivocada, lo acomodamos por extensión.
+      const real = nombre.endsWith(".key") ? "key" : nombre.endsWith(".cer") ? "cer" : cual;
+      const a: Archivo = { nombre: f.name, b64: await leerB64(f), kb: Math.max(1, Math.round(f.size / 102.4) / 10) };
+      if (real === "key") {
+        setKey(a);
+        setTimeout(() => inPass.current?.focus(), 50);
+        mirar(inPass.current);
+        void decir(LINEAS.llave);
+        return;
+      }
+      setCer(a);
+      setInfo(null);
+      const res = await solicitar("/api/onboarding/fiel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accion: "leer", cer: a.b64 }),
+      });
+      const j = await json<InfoCert>(res);
+      if (!res.ok) {
+        setCer(null);
+        setError(j.error ?? "No pude leer el certificado.");
+        void decir(LINEAS.fielError(j.error ?? "no pude leer el certificado"));
+        return;
+      }
+      setInfo(j);
+      setTimeout(() => mirar(refCert.current), 50);
+      if (!j.esFiel) {
+        void decir(
+          LINEAS.fielError("este certificado es del CSD (el sello para facturar), no de la e.firma. Sube el .cer de tu e.firma, el que usas para entrar al portal del SAT."),
+        );
+      } else if (!j.vigente) {
+        void decir(LINEAS.fielError("el certificado está vencido. Renuévalo en el SAT y sube los archivos nuevos."));
+      } else {
+        await decir(LINEAS.certLeido(j.razonSocial || "tu empresa", j.rfc, fechaCorta(j.validoHasta)));
+        mirar(null);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No pude leer el archivo. Intenta de nuevo.");
     }
   }
 
@@ -145,70 +153,76 @@ export function PantallaFiel({
 
   async function conectar() {
     if (!cer || !key || !password || !mandato) return;
-    setError(null);
-    setFase("validando");
-    setChecks({ esFiel: "run", vigente: "run", llave: "run" });
-    mirar(refChecks.current);
-    void decir(LINEAS.validando);
-    const res = await fetch("/api/onboarding/fiel", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accion: "validar", cer: cer.b64, key: key.b64, password }),
-    });
-    const j = await json<{ ok: boolean; checks: { esFiel: boolean; vigente: boolean; llave: boolean | null } }>(res);
-    if (!res.ok || !j.checks) {
+    try {
+      setError(null);
+      setFase("validando");
+      setChecks({ esFiel: "run", vigente: "run", llave: "run" });
+      mirar(refChecks.current);
+      void decir(LINEAS.validando);
+      const res = await solicitar("/api/onboarding/fiel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accion: "validar", cer: cer.b64, key: key.b64, password }),
+      });
+      const j = await json<{ ok: boolean; checks: { esFiel: boolean; vigente: boolean; llave: boolean | null } }>(res);
+      if (!res.ok || !j.checks) {
+        setFase("archivos");
+        setChecks({ esFiel: "espera", vigente: "espera", llave: "espera" });
+        setError(j.error ?? "No pude validar la e.firma.");
+        return;
+      }
+      // Los checks se van marcando uno por uno (el resultado ya es real).
+      const orden: Array<["esFiel" | "vigente" | "llave", boolean | null]> = [
+        ["llave", j.checks.llave],
+        ["vigente", j.checks.vigente],
+        ["esFiel", j.checks.esFiel],
+      ];
+      for (const [k, v] of orden) {
+        await espera(450, reducir);
+        setChecks((c) => ({ ...c, [k]: v == null ? "nr" : v ? "ok" : "bad" }));
+      }
+      if (!j.ok) {
+        setFase("archivos");
+        setError(j.error ?? "La e.firma no es válida.");
+        void decir(LINEAS.fielError(j.error ?? "la e.firma no es válida"));
+        return;
+      }
+      festejar();
+      setFase("csf");
+      void decir(t(LINEAS.leyendoCsf, tono));
+      const rc = await solicitar("/api/onboarding/fiel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accion: "csf", cer: cer.b64, key: key.b64, password }),
+      }, 130_000);
+      const jc = await json<{ datos: DatosFiscales | null }>(rc);
+      const d = rc.ok ? jc.datos : null;
+      if (d && d.regimenFiscal && /^\d{5}$/.test(d.codigoPostal)) {
+        setDatos(d);
+        await crear(d);
+        return;
+      }
+      setDatos(
+        d ?? {
+          razonSocial: info?.razonSocial ?? "",
+          regimenFiscal: info?.rfc.length === 12 ? "601" : "",
+          codigoPostal: "",
+          domicilioFiscal: "",
+          regimenes: [],
+          fechaInicioRegimen: null,
+          csfObligaciones: [],
+          email: "",
+          telefono: "",
+          actividadEconomica: "",
+        },
+      );
+      setFase("confirma");
+      void decir(LINEAS.confirmaDatos);
+    } catch (e) {
       setFase("archivos");
       setChecks({ esFiel: "espera", vigente: "espera", llave: "espera" });
-      setError(j.error ?? "No pude validar la e.firma.");
-      return;
+      setError(e instanceof Error ? e.message : "No pude conectar con el SAT. Intenta de nuevo.");
     }
-    // Los checks se van marcando uno por uno (el resultado ya es real).
-    const orden: Array<["esFiel" | "vigente" | "llave", boolean | null]> = [
-      ["llave", j.checks.llave],
-      ["vigente", j.checks.vigente],
-      ["esFiel", j.checks.esFiel],
-    ];
-    for (const [k, v] of orden) {
-      await espera(450, reducir);
-      setChecks((c) => ({ ...c, [k]: v == null ? "nr" : v ? "ok" : "bad" }));
-    }
-    if (!j.ok) {
-      setFase("archivos");
-      setError(j.error ?? "La e.firma no es válida.");
-      void decir(LINEAS.fielError(j.error ?? "la e.firma no es válida"));
-      return;
-    }
-    festejar();
-    setFase("csf");
-    void decir(t(LINEAS.leyendoCsf, tono));
-    const rc = await fetch("/api/onboarding/fiel", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accion: "csf", cer: cer.b64, key: key.b64, password }),
-    });
-    const jc = await json<{ datos: DatosFiscales | null }>(rc);
-    const d = rc.ok ? jc.datos : null;
-    if (d && d.regimenFiscal && /^\d{5}$/.test(d.codigoPostal)) {
-      setDatos(d);
-      await crear(d);
-      return;
-    }
-    setDatos(
-      d ?? {
-        razonSocial: info?.razonSocial ?? "",
-        regimenFiscal: info?.rfc.length === 12 ? "601" : "",
-        codigoPostal: "",
-        domicilioFiscal: "",
-        regimenes: [],
-        fechaInicioRegimen: null,
-        csfObligaciones: [],
-        email: "",
-        telefono: "",
-        actividadEconomica: "",
-      },
-    );
-    setFase("confirma");
-    void decir(LINEAS.confirmaDatos);
   }
 
   async function leerCsfManual(f: File | undefined) {
@@ -217,7 +231,7 @@ export function PantallaFiel({
     try {
       const fd = new FormData();
       fd.append("file", f);
-      const res = await fetch("/api/onboarding/parse-csf", { method: "POST", body: fd });
+      const res = await solicitar("/api/onboarding/parse-csf", { method: "POST", body: fd }, 130_000);
       const j = await json<{ extracted?: Record<string, unknown> }>(res);
       const x = j.extracted;
       if (!res.ok || !x) {
@@ -237,6 +251,8 @@ export function PantallaFiel({
         actividadEconomica: s("actividadEconomica") || datos.actividadEconomica,
       });
       setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No pude leer la constancia. Intenta de nuevo.");
     } finally {
       setLeyendoCsf(false);
     }
@@ -244,86 +260,95 @@ export function PantallaFiel({
 
   async function crear(d: DatosFiscales, desdeConfirma = false) {
     if (!cer || !key || !info) return;
-    setFase("creando");
-    setError(null);
-    void decir(LINEAS.creando);
-    const regimenes =
-      d.regimenes.length > 0
-        ? d.regimenes
-        : [{ code: d.regimenFiscal, label: REGIMENES_ALTA.find((r) => r.value === d.regimenFiscal)?.label ?? d.regimenFiscal, since: d.fechaInicioRegimen }];
-    const res = await fetch("/api/companies", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        rfc: info.rfc,
-        razonSocial: d.razonSocial || info.razonSocial,
-        regimenFiscal: d.regimenFiscal,
-        codigoPostal: d.codigoPostal,
-        domicilioFiscal: d.domicilioFiscal || undefined,
-        email: d.email || undefined,
-        telefono: d.telefono || undefined,
-        actividadEconomica: d.actividadEconomica || undefined,
-        fielCer: cer.b64,
-        fielKey: key.b64,
-        fielPassword: password,
-        aceptaMandatoEfirma: true,
-        fechaInicioRegimen: d.fechaInicioRegimen ?? undefined,
-        regimenes,
-        csfObligaciones: d.csfObligaciones,
-        // El plan se elige antes (precios → pago) o lo pone el despacho que invitó.
-        satBackfillYears: 5,
-      }),
-    });
-    const j = await json<{ id?: string; companyId?: string; codigo?: string; code?: string }>(res);
-    let companyId = res.ok ? j.id : undefined;
-    // RFC ya dado de alta y el usuario ya entra: le guardamos la e.firma
-    // (mismo PATCH que Configuración, que la valida y arranca la descarga) y
-    // seguimos con esa empresa.
-    if (!companyId && res.status === 409 && j.companyId) {
-      const rp = await fetch(`/api/companies/${j.companyId}`, {
-        method: "PATCH",
+    try {
+      setFase("creando");
+      setError(null);
+      void decir(LINEAS.creando);
+      const regimenes =
+        d.regimenes.length > 0
+          ? d.regimenes
+          : [{ code: d.regimenFiscal, label: REGIMENES_ALTA.find((r) => r.value === d.regimenFiscal)?.label ?? d.regimenFiscal, since: d.fechaInicioRegimen }];
+      const res = await solicitar("/api/companies", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fielCer: cer.b64, fielKey: key.b64, fielPassword: password, aceptaMandatoEfirma: true }),
-      });
-      if (rp.ok) companyId = j.companyId;
-      else j.error = (await json(rp)).error ?? j.error;
-    }
-    if (!companyId) {
+        body: JSON.stringify({
+          rfc: info.rfc,
+          razonSocial: d.razonSocial || info.razonSocial,
+          regimenFiscal: d.regimenFiscal,
+          codigoPostal: d.codigoPostal,
+          domicilioFiscal: d.domicilioFiscal || undefined,
+          email: d.email || undefined,
+          telefono: d.telefono || undefined,
+          actividadEconomica: d.actividadEconomica || undefined,
+          fielCer: cer.b64,
+          fielKey: key.b64,
+          fielPassword: password,
+          aceptaMandatoEfirma: true,
+          fechaInicioRegimen: d.fechaInicioRegimen ?? undefined,
+          regimenes,
+          csfObligaciones: d.csfObligaciones,
+          // El plan se elige antes (precios → pago) o lo pone el despacho que invitó.
+          satBackfillYears: 5,
+        }),
+      }, 130_000);
+      const j = await json<{ id?: string; companyId?: string; codigo?: string; code?: string }>(res);
+      let companyId = res.ok ? j.id : undefined;
+      // RFC ya dado de alta y el usuario ya entra: le guardamos la e.firma
+      // (mismo PATCH que Configuración, que la valida y arranca la descarga) y
+      // seguimos con esa empresa.
+      if (!companyId && res.status === 409 && j.companyId) {
+        const rp = await solicitar(`/api/companies/${j.companyId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fielCer: cer.b64, fielKey: key.b64, fielPassword: password, aceptaMandatoEfirma: true }),
+        }, 130_000);
+        if (rp.ok) companyId = j.companyId;
+        else j.error = (await json(rp)).error ?? j.error;
+      }
+      if (!companyId) {
+        setFase(desdeConfirma ? "confirma" : "archivos");
+        setError(j.error ?? "No se pudo dar de alta la empresa. Intenta de nuevo en un momento.");
+        void decir(LINEAS.fielError(j.error ?? "no se pudo dar de alta la empresa"));
+        return;
+      }
+      if (!await onCreada(companyId)) {
+        setFase(desdeConfirma ? "confirma" : "archivos");
+        setError("La empresa se creó, pero no pude guardar tu avance. Reintenta el guardado antes de seguir.");
+        return;
+      }
+      festejar();
+      await decir(LINEAS.conectado);
+      setFase("opinion");
+      setOpinion({ estado: "run", texto: "Consultando al SAT…", valor: "" });
+      setTimeout(() => mirar(refOpi.current), 50);
+      void decir(t(LINEAS.opinion, tono));
+      const ro = await solicitar("/api/onboarding/opinion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId }),
+      }, 130_000).catch(() => null);
+      const jo = ro ? await json<{ resultado?: string }>(ro) : null;
+      if (ro?.ok && jo?.resultado) {
+        const positiva = jo.resultado === "POSITIVA";
+        setOpinion({
+          estado: positiva ? "ok" : "warn",
+          texto: "Consultada hoy · la encuentras en Cumplimiento",
+          valor: positiva ? "Positiva ✓" : jo.resultado === "NEGATIVA" ? "Negativa" : "Sin opinión",
+        });
+        if (positiva) festejar();
+        await decir(t(LINEAS.opinionResultado(jo.resultado), tono));
+      } else {
+        setOpinion({ estado: "warn", texto: "El SAT no respondió; la pido más tarde", valor: "Pendiente" });
+        await decir(LINEAS.opinionNoDisponible);
+      }
+      setFase("listo");
+      mirar(null);
+      await espera(1200, reducir);
+      onListo();
+    } catch (e) {
       setFase(desdeConfirma ? "confirma" : "archivos");
-      setError(j.error ?? "No se pudo dar de alta la empresa. Intenta de nuevo en un momento.");
-      void decir(LINEAS.fielError(j.error ?? "no se pudo dar de alta la empresa"));
-      return;
+      setError(e instanceof Error ? e.message : "No pude terminar el alta. Intenta de nuevo.");
     }
-    onCreada(companyId);
-    festejar();
-    await decir(LINEAS.conectado);
-    setFase("opinion");
-    setOpinion({ estado: "run", texto: "Consultando al SAT…", valor: "" });
-    setTimeout(() => mirar(refOpi.current), 50);
-    void decir(t(LINEAS.opinion, tono));
-    const ro = await fetch("/api/onboarding/opinion", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ companyId }),
-    });
-    const jo = await json<{ resultado?: string }>(ro);
-    if (ro.ok && jo.resultado) {
-      const positiva = jo.resultado === "POSITIVA";
-      setOpinion({
-        estado: positiva ? "ok" : "warn",
-        texto: "Consultada hoy · la encuentras en Cumplimiento",
-        valor: positiva ? "Positiva ✓" : jo.resultado === "NEGATIVA" ? "Negativa" : "Sin opinión",
-      });
-      if (positiva) festejar();
-      await decir(t(LINEAS.opinionResultado(jo.resultado), tono));
-    } else {
-      setOpinion({ estado: "warn", texto: "El SAT no respondió; la pido más tarde", valor: "Pendiente" });
-      await decir(LINEAS.opinionNoDisponible);
-    }
-    setFase("listo");
-    mirar(null);
-    await espera(1200, reducir);
-    onListo();
   }
 
   const listo = !!(cer && key && password && mandato && info?.esFiel && info.vigente);
@@ -484,7 +509,7 @@ export function PantallaFiel({
         </div>
         <p className="ob-fine">
           ¿No tienes tu e.firma a la mano?{" "}
-          <Link href="/onboarding/manual" className="font-semibold text-cos-brand-ink hover:underline">
+          <Link href={manualHref} className="font-semibold text-cos-brand-ink hover:underline">
             Conectar después
           </Link>{" "}
           (das de alta tus datos a mano y la conectas desde Configuración; sin ella no descargo tu historial).

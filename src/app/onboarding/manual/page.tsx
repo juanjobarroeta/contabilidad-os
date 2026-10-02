@@ -1,12 +1,14 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signOut } from "next-auth/react";
 import Link from "next/link";
 import { Building2, Loader2, CheckCircle2, ChevronRight, Upload, Eye, EyeOff, FileKey2, Sparkles, AlertCircle, ArrowLeft, FileText, X, ListChecks, RefreshCw, CreditCard, ExternalLink, Lock, PenLine } from "lucide-react";
 import { mapCsfObligacion, TIPO_DESC } from "@/lib/obligaciones";
 import { rutaRetornoSegura } from "@/lib/ruta-retorno";
+import { InvitacionesPendientes } from "@/components/onboarding/InvitacionesPendientes";
+import { solicitar } from "@/lib/onboarding/solicitar";
 
 // ── Types for the multi-document onboarding package ───────────────────────
 type DocType = "CSF" | "TARJETA_IMSS" | "ACUSE_ANUAL" | "ACUSE_MENSUAL" | "OTRO";
@@ -194,6 +196,7 @@ function OnboardingPageInner() {
 
   const [step, setStep] = useState(0); // start on AI step
   const [loading, setLoading] = useState(false);
+  const creada = useRef<string | null>(null);
   const [error, setError] = useState("");
   const [showCsdPassword, setShowCsdPassword] = useState(false);
   const [showFielPassword, setShowFielPassword] = useState(false);
@@ -425,6 +428,18 @@ function OnboardingPageInner() {
     setStep((s) => s - 1);
   }
 
+  async function terminarAlta(companyId: string) {
+    if (fromEmpresas || explicitReturn) {
+      const r = await solicitar("/api/onboarding/progreso", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ flujo: "agregar", paso: "listo", companyId, returnTo: successHref }),
+      });
+      if (!r.ok) throw new Error("La empresa se creó, pero no pude guardar el final del alta. Intenta de nuevo.");
+    }
+    router.push(successHref);
+    router.refresh();
+  }
+
   async function handleSubmit(omitirCredenciales = false) {
     // La Carta Manifiesto sólo aplica si de verdad se sube un CSD: exigirla
     // con las manos vacías era una trampa (checkbox obligatorio u «Omitir»
@@ -441,6 +456,8 @@ function OnboardingPageInner() {
     setError("");
     setLoading(true);
     try {
+      // A retry of the progress save must not create the company a second time.
+      if (creada.current) return await terminarAlta(creada.current);
       // Encode CSD files if provided
       let csdCer: string | undefined;
       let csdKey: string | undefined;
@@ -526,8 +543,9 @@ function OnboardingPageInner() {
         );
       }
 
-      router.push(successHref);
-      router.refresh();
+      const nueva = await res.json() as { id: string };
+      creada.current = nueva.id;
+      await terminarAlta(nueva.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error inesperado");
     } finally {
@@ -593,20 +611,7 @@ function OnboardingPageInner() {
           {/* Invitado con invitación sin aceptar: que NO siga el wizard. El
               enlace es el factor de posesión (sólo se guarda su hash), así que
               aquí se orienta — aceptar sigue requiriendo abrir el enlace. */}
-          {!fromEmpresas && invitacionesCliente.length > 0 && (
-            <div className="mb-4 rounded-xl border border-cos-jade-ink/25 bg-cos-jade-tint px-4 py-3">
-              <p className="text-[13.5px] font-semibold text-cos-jade-ink">
-                Te invitaron a {invitacionesCliente[0].empresa}
-                {invitacionesCliente.length > 1 ? ` (y ${invitacionesCliente.length - 1} más)` : ""}
-              </p>
-              <p className="mt-1 text-[12.5px] leading-relaxed text-cos-jade-ink/90">
-                No necesitas crear una empresa ni contratar un plan: esa empresa ya está
-                configurada y pagada{invitacionesCliente[0].despacho ? ` por ${invitacionesCliente[0].despacho}` : " por tu despacho"}.
-                Abre el enlace de invitación que te compartieron y acepta ahí — si ya no lo
-                tienes, pide que te lo reenvíen.
-              </p>
-            </div>
-          )}
+          {!fromEmpresas && <InvitacionesPendientes invitaciones={invitacionesCliente} />}
           <h1 className="text-xl font-bold text-cos-ink mb-1">
             {fromEmpresas ? "Agregar nueva empresa" : "Configura tu empresa"}
           </h1>

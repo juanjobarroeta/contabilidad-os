@@ -6,6 +6,8 @@
 // página retome donde se quedó. Puro: lo usan la ruta y la UI.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { rutaRetornoSegura } from "@/lib/ruta-retorno";
+
 /** Pantallas del alta, en orden. `recorrido` y `app` viven ya dentro de la app. */
 export const PASOS = ["hola", "personaje", "confianza", "fiel", "historial", "bancos", "equipo", "recorrido", "app", "listo"] as const;
 export type Paso = (typeof PASOS)[number];
@@ -52,4 +54,30 @@ export function mezclarProgreso(actual: Progreso, cambio: Partial<Progreso>, opt
   const siguiente = sanearProgreso({ ...actual, ...cambio });
   if (!opts.permitirRetroceso && PASOS.indexOf(siguiente.paso) < PASOS.indexOf(actual.paso)) siguiente.paso = actual.paso;
   return siguiente;
+}
+
+export const PASOS_AGREGAR = ["fiel", "historial", "listo"] as const;
+export interface ProgresoAgregar {
+  paso: (typeof PASOS_AGREGAR)[number];
+  companyId: string | null;
+  returnTo: string | null;
+}
+
+/** Separate from the user's first-run progress and companion preferences. */
+export function sanearAgregar(v: unknown): ProgresoAgregar | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const o = v as Record<string, unknown>;
+  return {
+    paso: PASOS_AGREGAR.includes(o.paso as ProgresoAgregar["paso"]) ? o.paso as ProgresoAgregar["paso"] : "fiel",
+    companyId: sanearProgreso(o).companyId,
+    returnTo: rutaRetornoSegura(typeof o.returnTo === "string" ? o.returnTo : null),
+  };
+}
+
+export function rutaManual(fromEmpresas: boolean, returnTo: string | null): string {
+  const query = new URLSearchParams();
+  if (fromEmpresas) query.set("from", "empresas");
+  const safe = rutaRetornoSegura(returnTo);
+  if (safe) query.set("returnTo", safe);
+  return `/onboarding/manual${query.size ? `?${query}` : ""}`;
 }

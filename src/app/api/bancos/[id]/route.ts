@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import { getEffectiveCompanyMembership, requireUser, AuthzError } from "@/lib/authz";
 import { filtroBusquedaArchivo, mesesDelSelector } from "@/lib/bancos/busqueda-archivo";
 import { sugerenciasDevolucion } from "@/lib/bancos/devoluciones-repo";
+import { leerClabe } from "@/lib/bancos/clabe";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -284,13 +285,15 @@ export async function PATCH(req: Request, { params }: Params) {
   if (!member || member.role === "VIEWER") return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
 
   const { banco, nombre, numeroCuenta, clabe, moneda } = await req.json();
+  const parsedClabe = leerClabe(clabe);
+  if (!parsedClabe.ok) return NextResponse.json({ error: parsedClabe.error }, { status: 400 });
   const updated = await prisma.bankAccount.update({
     where: { id },
     data: {
       ...(banco !== undefined ? { banco } : {}),
       ...(nombre !== undefined ? { nombre } : {}),
       ...(numeroCuenta !== undefined ? { numeroCuenta } : {}),
-      ...(clabe !== undefined ? { clabe: clabe || null } : {}),
+      ...(clabe !== undefined ? { clabe: parsedClabe.clabe } : {}),
       ...(moneda !== undefined ? { moneda } : {}),
     },
   });

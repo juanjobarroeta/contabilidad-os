@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { accessibleCompaniesWhere } from "@/lib/companies/accessible";
 
 // GET /api/onboarding/contexto — le dice al wizard de onboarding si el usuario
 // llegó por una INVITACIÓN (su despacho nació con condiciones predefinidas):
@@ -18,7 +19,7 @@ export async function GET() {
   });
   // Empresas a las que ya entra: con alguna, /onboarding es «agregar otra»
   // (sin bienvenida ni recorrido).
-  const empresas = await prisma.companyMember.count({ where: { userId: session.user.id } });
+  const empresas = await prisma.company.count({ where: await accessibleCompaniesWhere(session.user.id) });
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { subscriptionStatus: true },
