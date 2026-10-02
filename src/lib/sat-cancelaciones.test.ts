@@ -5,6 +5,8 @@ import {
   mesesBacklogCancelaciones,
   mesesVentanaCancelable,
   mesesConMetadataAgotada,
+  pedirMetadataMes,
+  DIAS_RECONSULTA_METADATA,
   ordenEmpresasPorAntiguedad,
 } from "./sat-cancelaciones";
 
@@ -190,5 +192,28 @@ describe("mesesConMetadataAgotada", () => {
     const f = [{ year: 2026, month: 7, tipo: "METADATA_EMITIDOS", fallos: 2 }];
     expect(mesesConMetadataAgotada(f, 2).has("2026-7")).toBe(true);
     expect(mesesConMetadataAgotada(f, 5).has("2026-7")).toBe(false);
+  });
+});
+
+describe("pedirMetadataMes", () => {
+  const hoy = new Date(2026, 9, 2, 12); // 2-oct-2026
+  const fin = (tipo: string, diasAtras: number) => ({ tipo, status: "FINISHED", createdAt: new Date(hoy.getTime() - diasAtras * 86_400_000) });
+
+  it("mes en curso y anterior: siempre", () => {
+    const recientes = [fin("METADATA_EMITIDOS", 0), fin("METADATA_RECIBIDOS", 0)];
+    expect(pedirMetadataMes(2026, 10, recientes, hoy)).toBe(true);
+    expect(pedirMetadataMes(2026, 9, recientes, hoy)).toBe(true);
+  });
+
+  it(`mes cerrado viejo: sólo si no se consultó en ${DIAS_RECONSULTA_METADATA} días (ambos lados)`, () => {
+    expect(pedirMetadataMes(2026, 3, [fin("METADATA_EMITIDOS", 2), fin("METADATA_RECIBIDOS", 2)], hoy)).toBe(false);
+    expect(pedirMetadataMes(2026, 3, [fin("METADATA_EMITIDOS", 2)], hoy)).toBe(true);
+    expect(pedirMetadataMes(2026, 3, [fin("METADATA_EMITIDOS", 9), fin("METADATA_RECIBIDOS", 9)], hoy)).toBe(true);
+    expect(pedirMetadataMes(2026, 3, [], hoy)).toBe(true);
+  });
+
+  it("un 5002 agota el mes de inmediato", () => {
+    const s = mesesConMetadataAgotada([{ year: 2026, month: 4, tipo: "METADATA_EMITIDOS", fallos: 1, cuota: true }]);
+    expect(s.has("2026-4")).toBe(true);
   });
 });

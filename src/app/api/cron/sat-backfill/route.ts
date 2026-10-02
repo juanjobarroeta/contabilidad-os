@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
-import { submitSatSync, verifyAndImportSatSync } from "@/lib/sat-sync";
-import { coberturaSospechosa, satDijoSinSolapes, type CoberturaPeriodo } from "@/lib/sat-cobertura";
+import { expirarSolicitudesVencidas, submitSatSync, verifyAndImportSatSync, type SubmitSatSyncResult } from "@/lib/sat-sync";
+import { coberturaSospechosa, mesesCompletos, satDijoSinSolapes, type CoberturaPeriodo } from "@/lib/sat-cobertura";
+import { mesCerrado } from "@/lib/sat-sync-politica";
+import { partirMes, etiquetaTramo } from "@/lib/sat-tramos";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (or GET) /api/cron/sat-backfill
@@ -31,6 +33,10 @@ export const maxDuration = 300;
 const MAX_NEW_SUBMITS_PER_COMPANY = 8;
 const MAX_PERIODS_TOUCHED_PER_COMPANY = 30;
 const MAX_COMPANIES_PER_RUN = 25;
+// Meses con la cuota del mes completo quemada que se rellenan EN TRAMOS por
+// empresa y corrida: cada uno son 4 solicitudes (2 tramos × 2 lados).
+const MAX_MESES_EN_TRAMOS_POR_CORRIDA = 1;
+const TRAMOS_POR_MES = 2;
 
 function isAuthorized(req: Request): boolean {
   const secret = process.env.CRON_SECRET;
@@ -53,23 +59,47 @@ function backfillPeriods(years: number): Array<{ year: number; month: number }> 
   return out;
 }
 
-/** Set of "year-month" periods that are FULLY imported (both tipos FINISHED). */
+/**
+ * Meses «year-month» pedidos COMPLETOS: la unión de los rangos FINISHED de cada
+ * lado cubre el mes entero. Antes bastaba una fila FINISHED por lado, sin mirar
+ * el rango: un tramo o un «del 1 a ayer» daban el mes por hecho.
+ */
 async function finishedPeriods(companyId: string): Promise<Set<string>> {
   const rows = await prisma.satSyncRequest.findMany({
-    where: { companyId, status: "FINISHED" },
-    select: { year: true, month: true, tipo: true },
+    where: { companyId, tipo: { in: ["EMITIDOS", "RECIBIDOS"] } },
+    select: { year: true, month: true, tipo: true, status: true, desde: true, hasta: true },
   });
-  const byPeriod = new Map<string, Set<string>>();
-  for (const r of rows) {
-    const key = `${r.year}-${r.month}`;
-    if (!byPeriod.has(key)) byPeriod.set(key, new Set());
-    byPeriod.get(key)!.add(r.tipo);
+  return mesesCompletos(rows);
+}
+
+/**
+ * El mes completo tiene la cuota quemada (5002) en algún lado: se pide en
+ * tramos, que son otra llave de cuota. Las solicitudes de tramo quedan
+ * guardadas con su rango, así que la siguiente corrida las reutiliza y
+ * verifica sin gastar nada; si un tramo también está quemado, la decisión de
+ * sat-reintentos lo salta sin tocar al SAT.
+ */
+async function rellenarEnTramos(companyId: string, year: number, month: number): Promise<{ submits: number; importadas: number; tramos: string[] }> {
+  let submits = 0, importadas = 0;
+  const tramos: string[] = [];
+  for (const t of partirMes(year, month, TRAMOS_POR_MES)) {
+    const sub = await submitSatSync(companyId, year, month, false, t);
+    if (!sub.ok) { tramos.push(`${etiquetaTramo(t)}: ${sub.status === 429 ? "en espera" : sub.error.slice(0, 60)}`); continue; }
+    if (!sub.reusedEmitidos && sub.emitidosRequestId) submits++;
+    if (!sub.reusedRecibidos && sub.recibidosRequestId) submits++;
+    const ver = await verifyAndImportSatSync(companyId, sub.emitidosRequestId, sub.recibidosRequestId);
+    const imp = ver.ok && typeof ver.imported === "number" ? ver.imported : 0;
+    importadas += imp;
+    tramos.push(`${etiquetaTramo(t)}: ${ver.ok ? `${ver.status} +${imp}` : ver.error.slice(0, 60)}`);
   }
-  const done = new Set<string>();
-  for (const [key, tipos] of byPeriod) {
-    if (tipos.has("EMITIDOS") && tipos.has("RECIBIDOS")) done.add(key);
-  }
-  return done;
+  return { submits, importadas, tramos };
+}
+
+/** ¿El mes completo quedó sin poder pedirse (cuota o intentos agotados) en algún lado? */
+function mesQuemado(r: SubmitSatSyncResult): boolean {
+  const b = r.bloqueos ?? [];
+  if (b.some((x) => x.motivo === "cuota_agotada" || x.motivo === "intentos_agotados")) return true;
+  return !r.ok && r.error.includes("5002");
 }
 
 /**
@@ -119,8 +149,9 @@ async function handle(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const startedAt = Date.now();
-
+    const startedAt = Date.now();
+  // Lo que lleva más de 72 h en vuelo ya no existe en el SAT: fuera de la cola.
+  const expiradas = await expirarSolicitudesVencidas();
   // Gap-driven selection: every FIEL company with a backfill order, NOT just the
   // ones still flagged incomplete. We recompute the real outstanding gap below and
   // trust that over the completed flag — so raising satBackfillYears (or any lost
@@ -151,7 +182,13 @@ async function handle(req: Request) {
   let companiesCompleted = 0;
   const perCompany: Array<{
     rfc: string; touched: number; remaining: number; done: boolean; coberturaDudosa?: number;
+    /** Meses del mes completo con cuota quemada en esta corrida (se rellenan en tramos). */
+    quemados?: number;
+    /** Meses que no se pidieron por un fallo reciente del SAT (se reintentan solos). */
+    enEspera?: number;
+    tramos?: Array<{ periodo: string; importadas: number; detalle: string[] }>;
   }> = [];
+  let totalEnTramos = 0;
   // Meses marcados «hechos» que no cuadran con lo que el SAT dijo tener.
   const coberturaDudosa: Array<{
     rfc: string;
@@ -161,7 +198,10 @@ async function handle(req: Request) {
 
   for (const company of companies) {
     try {
+      // Sólo meses CERRADOS: el mes en curso es de sat-sync («del 1 a ayer»,
+      // rango nuevo cada día) y nunca puede quedar «completo» por rango.
       const allPeriods = backfillPeriods(company.satBackfillYears).filter((p) => {
+        if (!mesCerrado(p.year, p.month, new Date())) return false;
         if (!company.fechaInicioOperaciones) return true;
         const monthEnd = new Date(p.year, p.month, 0, 23, 59, 59);
         return monthEnd >= company.fechaInicioOperaciones;
@@ -223,7 +263,10 @@ async function handle(req: Request) {
 
       let newSubmits = 0;
       let touched = 0;
-      let quotaHit = false;
+      let quemados = 0;
+      let enEspera = 0;
+      let mesesEnTramos = 0;
+      const tramosHechos: Array<{ periodo: string; importadas: number; detalle: string[] }> = [];
 
       for (const { year, month } of allPeriods) {
         if (done.has(`${year}-${month}`)) continue; // already imported
@@ -233,9 +276,25 @@ async function handle(req: Request) {
         // quota when it creates fresh ones. Defer brand-new periods once we hit
         // the per-run new-submit cap so we don't trip SAT's 5002.
         const submitted = await submitSatSync(company.id, year, month);
+        if (mesQuemado(submitted)) {
+          // Antes: `break` — un mes quemado paraba la carga de TODOS los meses
+          // anteriores de la empresa, para siempre. Ahora el mes se rellena en
+          // tramos (otra llave de cuota) y se sigue con los demás.
+          quemados++;
+          if (mesesEnTramos < MAX_MESES_EN_TRAMOS_POR_CORRIDA) {
+            mesesEnTramos++;
+            const r = await rellenarEnTramos(company.id, year, month);
+            totalSubmitted += r.submits;
+            totalImported += r.importadas;
+            if (r.submits > 0) newSubmits++;
+            tramosHechos.push({ periodo: `${year}-${String(month).padStart(2, "0")}`, importadas: r.importadas, detalle: r.tramos });
+            totalEnTramos++;
+          }
+          if (!submitted.ok) continue;
+        }
         if (!submitted.ok) {
           if (submitted.status === 400) continue; // period not complete yet — benign
-          if (submitted.error.includes("5002")) { quotaHit = true; break; } // quota — stop, resume next run
+          if (submitted.status === 429) { enEspera++; continue; } // fallo reciente del SAT: se reintenta solo
           errors.push({ companyId: company.id, rfc: company.rfc, error: submitted.error });
           continue;
         }
@@ -264,7 +323,7 @@ async function handle(req: Request) {
       // Recompute completion after this run's imports.
       const doneNow = await finishedPeriods(company.id);
       const remaining = allPeriods.filter((p) => !doneNow.has(`${p.year}-${p.month}`)).length;
-      const isDone = remaining === 0 && !quotaHit;
+      const isDone = remaining === 0;
       if (isDone) {
         await prisma.company.update({
           where: { id: company.id },
@@ -278,6 +337,9 @@ async function handle(req: Request) {
         remaining,
         done: isDone,
         coberturaDudosa: dudosas,
+        quemados: quemados || undefined,
+        enEspera: enEspera || undefined,
+        tramos: tramosHechos.length ? tramosHechos : undefined,
       });
     } catch (e) {
       console.error(`[cron/sat-backfill] company ${company.id} failed:`, e);
@@ -295,6 +357,8 @@ async function handle(req: Request) {
     companiesCompleted,
     submitted: totalSubmitted,
     imported: totalImported,
+    expiradas,
+    mesesEnTramos: totalEnTramos,
     perCompany,
     coberturaDudosa,
     errors,

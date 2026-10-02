@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
-import { syncCancelacionesPeriodo } from "@/lib/sat-sync";
+import { expirarSolicitudesVencidas, syncCancelacionesPeriodo } from "@/lib/sat-sync";
 import {
   mesesBacklogCancelaciones,
   mesesConMetadataAgotada,
   mesesVentanaCancelable,
   ordenEmpresasPorAntiguedad,
+  pedirMetadataMes,
+  DIAS_RECONSULTA_METADATA,
 } from "@/lib/sat-cancelaciones";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -91,17 +93,46 @@ async function periodosHistoricosPendientes(
  * intentos de ese mes (visto en producción: 23 fallos, cero éxitos).
  */
 async function periodosMetadataAgotada(companyId: string): Promise<Set<string>> {
-  const fallidos = await prisma.satSyncRequest.groupBy({
-    by: ["year", "month", "tipo"],
+  const fallidos = await prisma.satSyncRequest.findMany({
     where: {
       companyId,
       status: "FAILED",
       tipo: { in: ["METADATA_EMITIDOS", "METADATA_RECIBIDOS"] },
     },
-    _count: { _all: true },
+    select: { year: true, month: true, tipo: true, errorMessage: true },
   });
-  return mesesConMetadataAgotada(
-    fallidos.map((f) => ({ year: f.year, month: f.month, tipo: f.tipo, fallos: f._count._all })),
+  const porClave = new Map<string, { year: number; month: number; tipo: string; fallos: number; cuota: boolean }>();
+  for (const f of fallidos) {
+    const k = `${f.year}-${f.month}-${f.tipo}`;
+    const e = porClave.get(k) ?? { year: f.year, month: f.month, tipo: f.tipo, fallos: 0, cuota: false };
+    e.fallos++;
+    if ((f.errorMessage ?? "").includes("5002")) e.cuota = true;
+    porClave.set(k, e);
+  }
+  return mesesConMetadataAgotada([...porClave.values()]);
+}
+
+/**
+ * De la ventana rodante, los meses que TOCA consultar hoy: el actual y el
+ * anterior siempre; los demás, cada DIAS_RECONSULTA_METADATA días. Es lo que
+ * baja la cola de ~600 solicitudes nuevas al día a unas decenas.
+ */
+async function periodosQueTocan(
+  companyId: string,
+  ventana: Array<{ year: number; month: number }>,
+  hoy: Date,
+): Promise<Array<{ year: number; month: number }>> {
+  const recientes = await prisma.satSyncRequest.findMany({
+    where: {
+      companyId,
+      tipo: { in: ["METADATA_EMITIDOS", "METADATA_RECIBIDOS"] },
+      status: "FINISHED",
+      createdAt: { gte: new Date(hoy.getTime() - DIAS_RECONSULTA_METADATA * 86_400_000) },
+    },
+    select: { year: true, month: true, tipo: true, status: true, createdAt: true },
+  });
+  return ventana.filter((p) =>
+    pedirMetadataMes(p.year, p.month, recientes.filter((r) => r.year === p.year && r.month === p.month), hoy),
   );
 }
 
@@ -156,6 +187,8 @@ async function handle(req: Request) {
     );
   }
   const startedAt = Date.now();
+  // Lo que lleva más de 72 h en vuelo ya no existe en el SAT: fuera de la cola.
+  const expiradas = await expirarSolicitudesVencidas();
 
   const empresasSinOrden = await prisma.company.findMany({
     where: {
@@ -219,6 +252,10 @@ async function handle(req: Request) {
         histPeriodos += delaEmpresa.length;
         if (delaEmpresa.length > 0) histCompanies++;
       } else {
+        // Cadencia: el mes actual y el anterior en cada corrida; los demás de la
+        // ventana legal, una vez a la semana. Una cancelación no urge al minuto
+        // y cada solicitud gasta cuota vitalicia del rango.
+        delaEmpresa = await periodosQueTocan(company.id, delaEmpresa, now);
         // También en la ventana rodante: un mes que ya agotó sus intentos no
         // se vuelve a pedir — cada reintento consume cuota VITALICIA del SAT.
         const agotados = await periodosMetadataAgotada(company.id);
@@ -284,6 +321,7 @@ async function handle(req: Request) {
     modoHistorico: historico,
     companies: companies.length,
     companiesProcessed,
+    expiradas,
     // La fase A se cortó por presupuesto: la siguiente corrida retoma por las
     // empresas más atrasadas (el orden es por antigüedad de consulta).
     faseATruncada,

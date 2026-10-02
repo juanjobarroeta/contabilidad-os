@@ -71,6 +71,8 @@ export interface IntentoFallido {
   month: number;
   tipo: string;
   fallos: number;
+  /** Alguno de los fallos fue 5002: la cuota vitalicia de ese rango ya no existe. */
+  cuota?: boolean;
 }
 
 /**
@@ -97,9 +99,47 @@ export function mesesConMetadataAgotada(
   const out = new Set<string>();
   for (const f of fallidos) {
     if (!f.tipo.startsWith("METADATA_")) continue;
-    if (f.fallos >= maxIntentos) out.add(`${f.year}-${f.month}`);
+    // Un 5002 agota de inmediato: no hay «intentos que queden» para ese rango.
+    if (f.cuota || f.fallos >= maxIntentos) out.add(`${f.year}-${f.month}`);
   }
   return out;
+}
+
+/** Cada cuántos días se vuelve a consultar la metadata de un mes cerrado que sigue en ventana legal. */
+export const DIAS_RECONSULTA_METADATA = 7;
+
+export interface SolicitudMetadata {
+  tipo: string;
+  status: string;
+  createdAt: Date | string;
+}
+
+/**
+ * ¿Toca volver a pedir la metadata (cancelaciones) de este mes?
+ *
+ * La ventana legal son 5–16 meses y el cron corre cada 4 h: pedir todos los
+ * meses en cada corrida eran ~600 solicitudes nuevas al día (medido
+ * 2026-10-02: 6,255 en vuelo sin verificar), y cada una gasta cuota vitalicia
+ * del rango. Una cancelación es rara y no urge al minuto:
+ *   · el mes en curso y el anterior: cada corrida (el reúso de 24 h acota);
+ *   · los demás meses de la ventana: a lo más cada DIAS_RECONSULTA_METADATA
+ *     días — si ambos lados terminaron hace menos, se salta.
+ * PURA: recibe las solicitudes de metadata de ESE mes.
+ */
+export function pedirMetadataMes(
+  year: number,
+  month: number,
+  solicitudes: SolicitudMetadata[],
+  hoy: Date,
+  dias = DIAS_RECONSULTA_METADATA,
+): boolean {
+  const mesActual = hoy.getFullYear() * 12 + hoy.getMonth();
+  const mes = year * 12 + (month - 1);
+  if (mesActual - mes <= 1) return true;
+  const corte = hoy.getTime() - dias * 86_400_000;
+  const recientes = (tipo: string) =>
+    solicitudes.some((s) => s.tipo === tipo && s.status === "FINISHED" && new Date(s.createdAt).getTime() >= corte);
+  return !(recientes("METADATA_EMITIDOS") && recientes("METADATA_RECIBIDOS"));
 }
 
 /**

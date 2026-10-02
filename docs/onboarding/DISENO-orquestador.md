@@ -225,3 +225,18 @@ límite de datos, no del diseño.
 3. El paquete de evidencia + la convocatoria al agente para el nivel 3.
 4. El cross-check de CFDIs con cancelados.
 5. La cara de asistente (surface las decisiones; niveles 2 pre-resueltos).
+
+## Fallos, cuota y reintentos en la carga del SAT (2-oct-2026)
+
+Lo que pasa cuando algo falla mientras se carga una empresa, y quién lo resuelve.
+
+| Situación | Antes | Ahora |
+|---|---|---|
+| El SAT acepta la solicitud y luego la verificación dice «Error no controlado» | La fila queda FAILED, no se reutiliza, y sat-backfill (10 min) y sat-sync (4 h) vuelven a pedir el MISMO rango hasta que el SAT contesta 5002 (de por vida). Así se quemaron agosto y septiembre en 14 empresas. | `sat-reintentos`: tras un fallo se espera 12 h; tras dos fallos del mismo rango no hay tercer intento (es el que devuelve 5002). Vale para XML y metadata. |
+| 5002 en el mes completo | `break`: la empresa dejaba de cargar TODOS los meses anteriores. Nueva empresa a medio llenar para siempre. | El mes se pide en dos tramos (otra llave de cuota) y la carga sigue con los demás meses. Si los tramos también están quemados, el mes queda marcado «quota» en el historial del alta y no cuesta nada más. |
+| Solicitud en vuelo más de 72 h | Se verificaba otra vez o se duplicaba; 6,255 de metadata quedaron IN_PROGRESS para siempre. | `expirarSolicitudesVencidas` al inicio de cada cron: pasan a EXPIRED. Las en vuelo se reutilizan hasta 72 h (antes 24 h), así que no se duplican. |
+| Metadata (cancelaciones) de la ventana legal | Todos los meses (5–16) en cada corrida: ~600 solicitudes nuevas al día. | Mes actual y anterior en cada corrida; los demás una vez a la semana. Un 5002 de metadata se guarda y agota el mes de inmediato. |
+| «Mes hecho» | Una fila FINISHED por lado, sin mirar el rango: un tramo o un «del 1 a ayer» lo daban por completo. | Completo sólo si la unión de rangos FINISHED cubre el mes por ambos lados (`mesesCompletos`). sat-backfill sólo toca meses cerrados; el mes en curso es de sat-sync. |
+| e.firma vencida o revocada | El sync avisa (push) una vez por corrida; el backfill la lista en `errors`. | Igual: sólo el cliente puede renovarla. En la cartera de hoy: BAHJ, TEGJ y TMA no cargan nada desde julio, agosto y septiembre; CARE vence el 10-nov. |
+
+Dónde se ve: el resumen de `sat-backfill` trae `expiradas`, `mesesEnTramos` y, por empresa, `quemados`, `enEspera` y el detalle de `tramos`; el historial del alta (`estado-alta`) pinta cada mes como hecho / pendiente / quota. Lo que sigue necesitando a una persona: renovar la e.firma, y un mes cuyos tramos también estén quemados (la salida es `sat-repesca` con más tramos, o la vía por UUID).
