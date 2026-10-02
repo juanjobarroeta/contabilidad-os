@@ -18,6 +18,8 @@ import {
 const putSchema = z.object({
   nombre: z.string().min(1).max(120).optional(),
   employeeId: z.string().min(1).nullable().optional(),
+  // Ligar un miembro capturado sólo con nombre a su Trabajador (con tarifa).
+  trabajadorId: z.string().min(1).nullable().optional(),
   rolEnCuadrilla: z.string().max(40).nullable().optional(),
   isActive: z.boolean().optional(),
 });
@@ -49,11 +51,31 @@ export const PUT = withAuthz(
     ctx: { params: Promise<{ id: string; miembroId: string }> }
   ) => {
     const { id, miembroId } = await ctx.params;
-    await loadAndGuard(id, miembroId, req);
+    const miembro = await loadAndGuard(id, miembroId, req);
     const body = await req.json().catch(() => ({}));
     const parsed = putSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    }
+    // Referencias de la MISMA empresa que la cuadrilla.
+    const companyId = miembro.cuadrilla.companyId;
+    if (parsed.data.trabajadorId) {
+      const t = await prisma.trabajador.findUnique({
+        where: { id: parsed.data.trabajadorId },
+        select: { companyId: true },
+      });
+      if (!t || t.companyId !== companyId) {
+        return NextResponse.json({ error: "Trabajador inválido" }, { status: 400 });
+      }
+    }
+    if (parsed.data.employeeId) {
+      const e = await prisma.employee.findUnique({
+        where: { id: parsed.data.employeeId },
+        select: { companyId: true },
+      });
+      if (!e || e.companyId !== companyId) {
+        return NextResponse.json({ error: "Empleado inválido" }, { status: 400 });
+      }
     }
     const updated = await prisma.cuadrillaMiembro.update({
       where: { id: miembroId },
