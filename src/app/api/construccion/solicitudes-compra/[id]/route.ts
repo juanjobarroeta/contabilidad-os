@@ -250,6 +250,18 @@ export const DELETE = withAuthz(
       );
     }
 
+    // Con pagos aplicados, borrar arrastraría las aplicaciones en cascada y
+    // dejaría los pagos como anticipos huérfanos: hay que desaplicarlos antes.
+    const aplicaciones = await prisma.pagoAplicacion.count({
+      where: { adjudicacion: { solicitudId: id } },
+    });
+    if (aplicaciones > 0) {
+      return NextResponse.json(
+        { error: `Esta requisición tiene ${aplicaciones} pago(s) aplicado(s). Desaplícalos en Estados de cuenta antes de eliminarla.` },
+        { status: 409 }
+      );
+    }
+
     // Orden hijo→padre para no despertar los RESTRICT del árbol (cotización↔
     // partida y adjudicación↔cotización); mismo orden que el PUT rebuild y el
     // script de limpieza. Las aplicaciones de pago caen en cascada desde la
