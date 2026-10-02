@@ -143,8 +143,8 @@ describe.skipIf(skip)("managed ContaBot with real Postgres and synthetic provide
       transaction_id: movement.id, invoice_id: invoice.id,
     }, "call_own_invoice"));
     const conversation = await prisma.chatConversation.findUniqueOrThrow({ where: { id: session.conversationId } });
-    expect(conversation.pendingAction).toMatchObject({ type: "conciliar", companyId: A,
-      payload: { txId: movement.id, invoiceId: invoice.id } });
+    expect(conversation.pendingAction).toMatchObject([{ type: "conciliar", companyId: A,
+      payload: { txId: movement.id, invoiceId: invoice.id } }]);
     expect((await prisma.bankTransaction.findUniqueOrThrow({ where: { id: movement.id } })).invoiceId).toBeNull();
   });
 

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   decideConfirm,
   leerPendientes,
+  mismaAccion,
   isReversibleType,
   calcPosponerHasta,
   IRREVERSIBLE_TYPES,
@@ -119,5 +120,15 @@ describe("leerPendientes (varias tarjetas por conversación)", () => {
   it("acepta el formato viejo (un solo objeto) y la columna vacía", () => {
     expect(leerPendientes(staged()).map((p) => p.token)).toEqual(["pa_abc"]);
     expect(leerPendientes(null)).toEqual([]);
+  });
+});
+
+describe("mismaAccion", () => {
+  it("ignora el orden de las llaves (jsonb las reordena) y distingue objetivos", () => {
+    const a = staged({ payload: { txId: "tx_1", invoiceId: "inv_1" } } as Partial<ChatPendingAction>);
+    const b = staged({ payload: { invoiceId: "inv_1", txId: "tx_1" } } as Partial<ChatPendingAction>);
+    const c = staged({ payload: { txId: "tx_2", invoiceId: "inv_1" } } as Partial<ChatPendingAction>);
+    expect(mismaAccion(a, b)).toBe(true);
+    expect(mismaAccion(a, c)).toBe(false);
   });
 });

@@ -371,7 +371,8 @@ describe.skipIf(process.env.DB_TESTS_SKIP === "1")(
         (await proposeIva(inv.id, { fecha_cobro: "2026-02-30" })).error,
       ).toContain("real");
       const first = await proposeIva(inv.id);
-      expect((await proposeIva(inv.id)).error).toContain("pendiente");
+      // La misma propuesta otra vez reusa su tarjeta (no se apila un duplicado).
+      expect((await proposeIva(inv.id)).token).toBe(first.token);
       actor = V;
       expect((await chatConfirm(first.token)).status).toBe(403);
       actor = U;

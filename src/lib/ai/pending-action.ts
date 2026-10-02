@@ -188,9 +188,18 @@ export function leerPendientes(raw: unknown, now = Date.now()): ChatPendingActio
   return (lista as ChatPendingAction[]).filter((pa) => pa && typeof pa.token === "string" && pa.expiresAt > now);
 }
 
+/** JSON con llaves ordenadas: jsonb de Postgres reordena las llaves al guardar. */
+function estable(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(estable).join(",")}]`;
+  if (v && typeof v === "object") {
+    return `{${Object.keys(v as object).sort().map((k) => `${JSON.stringify(k)}:${estable((v as Record<string, unknown>)[k])}`).join(",")}}`;
+  }
+  return JSON.stringify(v) ?? "null";
+}
+
 /** Misma acción sobre el mismo objetivo: no se apila dos veces. */
-function mismaAccion(a: ChatPendingAction, b: ChatPendingAction): boolean {
-  return a.type === b.type && JSON.stringify(a.payload) === JSON.stringify(b.payload);
+export function mismaAccion(a: Pick<ChatPendingAction, "type" | "payload">, b: Pick<ChatPendingAction, "type" | "payload">): boolean {
+  return a.type === b.type && estable(a.payload) === estable(b.payload);
 }
 
 function aJson(lista: ChatPendingAction[]) {
