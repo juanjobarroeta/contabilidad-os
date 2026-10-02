@@ -39,7 +39,7 @@ async function loadAndGuard(
     throw new AuthzError(404, "Miembro no encontrado");
   }
   await requireWriter(miembro.cuadrilla.companyId, req);
-  await requireModule(miembro.cuadrilla.companyId, "CONSTRUCCION_CUADRILLAS");
+  await requireModule(miembro.cuadrilla.companyId, "CONSTRUCCION");
   return miembro;
 }
 

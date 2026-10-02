@@ -38,7 +38,7 @@ export const GET = withAuthz(async (req: Request) => {
   });
   if (!proyecto) throw new AuthzError(404, "Proyecto no encontrado");
   await requireMembership(proyecto.companyId, undefined, req);
-  await requireModule(proyecto.companyId, "CONSTRUCCION_CUADRILLAS");
+  await requireModule(proyecto.companyId, "CONSTRUCCION");
 
   const cuadrillas = await prisma.cuadrilla.findMany({
     where: { proyectoId, isActive: true },
@@ -66,7 +66,7 @@ export const POST = withAuthz(async (req: Request) => {
   });
   if (!proyecto) throw new AuthzError(404, "Proyecto no encontrado");
   await requireWriter(proyecto.companyId, req);
-  await requireModule(proyecto.companyId, "CONSTRUCCION_CUADRILLAS");
+  await requireModule(proyecto.companyId, "CONSTRUCCION");
 
   try {
     const created = await prisma.cuadrilla.create({

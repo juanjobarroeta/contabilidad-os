@@ -20,7 +20,7 @@ import {
   requireWriter,
   withAuthz,
 } from "@/lib/authz";
-import { buildPartidasAndOffers } from "@/lib/construccion/requisicion-offers";
+import { buildPartidasAndOffers, ivaTasaSchema } from "@/lib/construccion/requisicion-offers";
 import { moneyPush, notificarConstruccion } from "@/lib/construccion/push";
 
 const putSchema = z.object({
@@ -39,6 +39,7 @@ const putSchema = z.object({
         cantidad: z.number().positive(),
         precioUnitario: z.number().nonnegative().optional(),
         presupuestoPartidaId: z.string().optional(),
+        ivaTasa: ivaTasaSchema,
       })
     )
     .min(1),

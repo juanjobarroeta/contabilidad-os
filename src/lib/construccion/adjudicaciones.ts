@@ -12,6 +12,26 @@ import type { Prisma } from "@prisma/client";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+export type LineaIva = { importe: number; ivaTasa: number | null };
+
+/**
+ * Desglose de un pagable a partir de sus líneas SIN IVA, cada una con su tasa
+ * (null = exento, 0 = tasa 0 %, 0.16 = gravado). El IVA se redondea por
+ * línea y luego se suma — como el CFDI traslada por concepto —, así el total
+ * cuadra al centavo con la factura que va a llegar.
+ */
+export function desgloseIva(lineas: LineaIva[]): { subtotal: number; iva: number; total: number } {
+  let subtotal = 0;
+  let iva = 0;
+  for (const l of lineas) {
+    subtotal += l.importe;
+    iva += round2(l.importe * (l.ivaTasa ?? 0));
+  }
+  subtotal = round2(subtotal);
+  iva = round2(iva);
+  return { subtotal, iva, total: round2(subtotal + iva) };
+}
+
 /**
  * (Re)build the per-supplier adjudicaciones for a solicitud from its current
  * per-concepto awards. Idempotent for the POR_PAGAR set: existing unpaid
@@ -27,7 +47,8 @@ export async function generateAdjudicaciones(
     select: {
       id: true,
       companyId: true,
-      partidas: { select: { importe: true, cotizacionGanadoraId: true } },
+      origen: true,
+      partidas: { select: { importe: true, ivaTasa: true, cotizacionGanadoraId: true } },
       cotizaciones: {
         select: {
           id: true,
@@ -53,19 +74,30 @@ export async function generateAdjudicaciones(
   });
 
   const cotById = new Map(sol.cotizaciones.map((c) => [c.id, c]));
-  const totalByCot = new Map<string, number>();
+  const lineasByCot = new Map<string, LineaIva[]>();
   for (const p of sol.partidas) {
     if (!p.cotizacionGanadoraId) continue;
-    totalByCot.set(
-      p.cotizacionGanadoraId,
-      round2((totalByCot.get(p.cotizacionGanadoraId) ?? 0) + Number(p.importe))
-    );
+    const arr = lineasByCot.get(p.cotizacionGanadoraId) ?? [];
+    arr.push({
+      importe: Number(p.importe),
+      ivaTasa: p.ivaTasa == null ? null : Number(p.ivaTasa),
+    });
+    lineasByCot.set(p.cotizacionGanadoraId, arr);
   }
 
+  // Sólo las requisiciones de OBRA (origen null) llevan IVA en el pagable.
+  // Hospital (y cualquier origen futuro) conserva total = Σ importe, sin
+  // desglose: su flujo de factura/pago no se toca desde aquí.
+  const conIva = sol.origen == null;
+
   let created = 0;
-  for (const [cotId, total] of totalByCot) {
+  for (const [cotId, lineas] of lineasByCot) {
     const c = cotById.get(cotId);
     if (!c) continue;
+    const d = desgloseIva(lineas);
+    const montos = conIva
+      ? { total: d.total, subtotal: d.subtotal, iva: d.iva }
+      : { total: d.subtotal };
     await tx.solicitudAdjudicacion.create({
       data: {
         companyId: sol.companyId,
@@ -76,7 +108,7 @@ export async function generateAdjudicaciones(
         tieneCredito: c.tieneCredito,
         diasCredito: c.diasCredito ?? null,
         diasEntrega: c.diasEntrega ?? null,
-        total,
+        ...montos,
       },
     });
     created++;

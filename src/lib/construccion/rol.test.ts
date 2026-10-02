@@ -129,6 +129,33 @@ describe("enforceConstruccionRol", () => {
   });
 });
 
+describe("destajo: cada rol con su tramo (como requisiciones)", () => {
+  it("el residente captura cuadrillas, miembros y rayas, pero no autoriza ni paga", () => {
+    expect(allowed("RESIDENTE", "POST", "/api/construccion/cuadrillas")).toBe(true);
+    expect(allowed("RESIDENTE", "POST", "/api/construccion/cuadrillas/abc/miembros")).toBe(true);
+    expect(allowed("RESIDENTE", "PATCH", "/api/construccion/cuadrillas/abc/miembros/xyz")).toBe(true);
+    expect(allowed("RESIDENTE", "POST", "/api/construccion/rayas")).toBe(true);
+    expect(allowed("RESIDENTE", "PATCH", "/api/construccion/rayas/abc")).toBe(true);
+    expect(allowed("RESIDENTE", "POST", "/api/construccion/rayas/abc/aprobar")).toBe(false);
+    expect(allowed("RESIDENTE", "POST", "/api/construccion/rayas/abc/pagar")).toBe(false);
+  });
+
+  it("contabilidad captura y autoriza la raya, pero no la paga", () => {
+    expect(allowed("CONTABILIDAD", "POST", "/api/construccion/rayas")).toBe(true);
+    expect(allowed("CONTABILIDAD", "POST", "/api/construccion/rayas/abc/aprobar")).toBe(true);
+    expect(allowed("CONTABILIDAD", "POST", "/api/construccion/rayas/abc/pagar")).toBe(false);
+  });
+
+  it("tesorería ve y paga, pero no captura ni autoriza", () => {
+    expect(allowed("TESORERIA", "GET", "/api/construccion/rayas")).toBe(true);
+    expect(allowed("TESORERIA", "GET", "/api/construccion/cuadrillas")).toBe(true);
+    expect(allowed("TESORERIA", "POST", "/api/construccion/rayas/abc/pagar")).toBe(true);
+    expect(allowed("TESORERIA", "POST", "/api/construccion/rayas")).toBe(false);
+    expect(allowed("TESORERIA", "POST", "/api/construccion/cuadrillas")).toBe(false);
+    expect(allowed("TESORERIA", "POST", "/api/construccion/rayas/abc/aprobar")).toBe(false);
+  });
+});
+
 describe("soloVeSusCajas", () => {
   it("el residente sólo ve las cajas que él abrió", () => {
     expect(soloVeSusCajas("RESIDENTE")).toBe(true);

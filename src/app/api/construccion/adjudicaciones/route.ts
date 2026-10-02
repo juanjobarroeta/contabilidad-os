@@ -70,6 +70,10 @@ export const GET = withAuthz(async (req: Request) => {
       diasCredito: a.diasCredito,
       diasEntrega: a.diasEntrega,
       total: a.total,
+      // Desglose (null = adjudicación anterior al IVA por línea: su total es
+      // el que se registró entonces, sin IVA separado).
+      subtotal: a.subtotal,
+      iva: a.iva,
       aplicado,
       saldo: legacyPaid ? 0 : Math.max(0, Number(a.total) - aplicado),
       estado: a.estado,

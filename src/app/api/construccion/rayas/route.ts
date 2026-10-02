@@ -58,7 +58,7 @@ export const GET = withAuthz(async (req: Request) => {
   });
   if (!proyecto) throw new AuthzError(404, "Proyecto no encontrado");
   await requireMembership(proyecto.companyId, undefined, req);
-  await requireModule(proyecto.companyId, "CONSTRUCCION_CUADRILLAS");
+  await requireModule(proyecto.companyId, "CONSTRUCCION");
 
   const rayas = await prisma.rayaSemanal.findMany({
     where: {
@@ -86,7 +86,7 @@ export const POST = withAuthz(async (req: Request) => {
   });
   if (!cuadrilla) throw new AuthzError(404, "Cuadrilla no encontrada");
   await requireWriter(cuadrilla.companyId, req);
-  await requireModule(cuadrilla.companyId, "CONSTRUCCION_CUADRILLAS");
+  await requireModule(cuadrilla.companyId, "CONSTRUCCION");
 
   const totalDestajo = round2(
     parsed.data.trabajos.reduce((a, t) => a + (t.importeDestajo || 0), 0)

@@ -23,7 +23,7 @@ export const POST = withAuthz(
     });
     if (!raya) throw new AuthzError(404, "Raya no encontrada");
     await requireWriter(raya.companyId, req);
-    await requireModule(raya.companyId, "CONSTRUCCION_CUADRILLAS");
+    await requireModule(raya.companyId, "CONSTRUCCION");
     if (raya.estado !== "BORRADOR") {
       return NextResponse.json(
         { error: `Transición inválida: ${raya.estado} → APROBADA` },
