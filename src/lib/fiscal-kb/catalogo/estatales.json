@@ -3416,6 +3416,24 @@
       "excluida": null
     },
     {
+      "clave": "MEX-L-INGRESOS-MEXICO-EJERCICIO-FI",
+      "titulo": "Ley de Ingresos del Estado de México para el Ejercicio Fiscal 2026",
+      "url": "https://legislacion.edomex.gob.mx/sites/legislacion.edomex.gob.mx/files/files/pdf/ley/vig/leyvig289.pdf",
+      "ambito": "ESTATAL",
+      "entidad": "MEX",
+      "municipio": null,
+      "tipo": "Ley",
+      "idArchivo": "manual-452",
+      "fechaPublicacion": null,
+      "ultimaReforma": "2025-12-17",
+      "vigenciaFallback": "2025-12-17",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ],
+      "excluida": null
+    },
+    {
       "clave": "MEX-L-MEDIACION-CONCILIACION-PROMO",
       "titulo": "Ley de Mediación, Conciliación y Promoción de la Paz Social para el Estado de México",
       "url": "https://legislacion.edomex.gob.mx/sites/legislacion.edomex.gob.mx/files/files/pdf/ley/vig/leyvig173.pdf",

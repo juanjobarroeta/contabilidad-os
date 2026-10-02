@@ -4153,6 +4153,20 @@
         "hacienda_publica"
       ],
       "nota": "El mismo número trae el Presupuesto de Egresos (art. 60: 1 de los 3 puntos del ISN a seguridad pública)."
+    },
+    {
+      "entidad": "MEX",
+      "municipio": null,
+      "tipo": "Ley",
+      "titulo": "Ley de Ingresos del Estado de México para el Ejercicio Fiscal 2026",
+      "url": "https://legislacion.edomex.gob.mx/sites/legislacion.edomex.gob.mx/files/files/pdf/ley/vig/leyvig289.pdf",
+      "ultimaReforma": "2025-12-17",
+      "verificado": "2026-10-01",
+      "materias": [
+        "fiscal",
+        "hacienda_publica"
+      ],
+      "nota": "Decreto 238, Gaceta del Gobierno 17-dic-2025. Archivo cotejado (copia del usuario, 21 págs.); el servidor de edomex no responde desde el entorno de desarrollo. Arts. 10-11: pago anual anticipado y subsidios del impuesto sobre erogaciones (ISN); la tasa está en el Código Financiero art. 57."
     }
   ]
 }
