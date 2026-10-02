@@ -23,9 +23,16 @@ const ALLOWED = (process.env.API_ALLOWED_ORIGINS ?? "")
   .map((s) => s.trim())
   .filter(Boolean);
 
+// Previews de Vercel de Bartiz (una URL por rama: bartiz-git-<rama>-<equipo>
+// y bartiz-<hash>-<equipo>). Sin esto cada preview falla el login con
+// «Load failed». Patrón anclado al proyecto Y al equipo: un tercero no puede
+// crear un subdominio bajo ese scope. Las rutas usan bearer token y no se
+// envían credenciales, así que el riesgo es el mismo que el de producción.
+const PREVIEW_ORIGIN = /^https:\/\/bartiz-[a-z0-9-]+-juans-projects-92ecaef1\.vercel\.app$/;
+
 function isAllowed(origin: string | null): boolean {
   if (!origin) return false;
-  return ALLOWED.includes(origin);
+  return ALLOWED.includes(origin) || PREVIEW_ORIGIN.test(origin);
 }
 
 function withCors(res: NextResponse, origin: string | null): NextResponse {
