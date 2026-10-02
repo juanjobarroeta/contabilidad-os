@@ -7,12 +7,13 @@
  *   solicitado   — requisiciones enviadas (PENDIENTE+): lo adjudicado usa su
  *                  total real; lo pendiente se estima con la oferta más baja.
  *   comprometido — adjudicaciones autorizadas (costo comprometido: se devenga
- *                  al comprometer, no al pagar) + gastos aprobados/pagados.
+ *                  al comprometer, no al pagar) + gastos aprobados/pagados
+ *                  + rayas de mano de obra autorizadas/pagadas.
  *   facturado    — CFDIs vinculados (atribución) a requisiciones/gastos del
  *                  proyecto.
  *   pagadoReal   — Σ aplicaciones de pagos sobre las adjudicaciones del
  *                  proyecto (+ adjudicaciones PAGADA legacy sin aplicaciones)
- *                  + gastos PAGADO.
+ *                  + gastos PAGADO + rayas PAGADA.
  *
  * presupuestoTotal (contexto): montoTotal del presupuesto base del proyecto.
  */
@@ -113,6 +114,20 @@ export const GET = withAuthz(
     solicitado += gastosAprobados + gastosPagados;
     pagadoReal += gastosPagados;
 
+    // Mano de obra (rayas de destajo/jornales): autorizada compromete, pagada
+    // cuenta como pagado real — igual que los gastos. Se expone aparte para
+    // que la obra muestre cuánto se le ha ido en mano de obra.
+    const rayas = await prisma.rayaSemanal.groupBy({
+      by: ["estado"],
+      where: { proyectoId: id, estado: { in: ["APROBADA", "PAGADA"] } },
+      _sum: { total: true },
+    });
+    const moAutorizada = Number(rayas.find((r) => r.estado === "APROBADA")?._sum.total ?? 0);
+    const moPagada = Number(rayas.find((r) => r.estado === "PAGADA")?._sum.total ?? 0);
+    comprometido += moAutorizada + moPagada;
+    solicitado += moAutorizada + moPagada;
+    pagadoReal += moPagada;
+
     // Facturado: CFDIs vinculados (atribución) a requisiciones o gastos del
     // proyecto.
     const [solicitudIds, gastoIds] = await Promise.all([
@@ -143,6 +158,11 @@ export const GET = withAuthz(
       comprometido: round2(comprometido),
       facturado: round2(facturado),
       pagadoReal: round2(pagadoReal),
+      // Ya incluida en comprometido/pagadoReal; aquí su desglose.
+      manoDeObra: {
+        comprometida: round2(moAutorizada + moPagada),
+        pagada: round2(moPagada),
+      },
     });
   }
 );

@@ -5,7 +5,7 @@
  * A RayaSemanal is a per-cuadrilla, per-week cash-flow event. Creating
  * one sums the line-items (trabajos) and per-miembro detalles; the
  * server recomputes totalDestajo on every write. Marking PAGADA is a
- * separate endpoint that also creates the BankTransaction.
+ * separate endpoint that records the payment (no bank movement).
  */
 
 import { NextResponse } from "next/server";
@@ -103,6 +103,10 @@ export const POST = withAuthz(async (req: Request) => {
           semanaFin: new Date(parsed.data.semanaFin),
           notas: parsed.data.notas,
           totalDestajo,
+          // Raya capturada a mano: sus detalles son el reparto del destajo
+          // (no jornales aparte), así que vale su destajo. Las rayas con
+          // jornales se generan desde la asistencia (cuadrillas/[id]/raya).
+          total: totalDestajo,
           trabajos: {
             create: parsed.data.trabajos.map((t) => ({
               presupuestoPartidaId: t.presupuestoPartidaId,

@@ -73,6 +73,8 @@ const OPERACIONES: Record<string, (tx: Tx, companyId: string) => Promise<unknown
     tx.estimacionTemplate.deleteMany({ where: { companyId } }),
   Gasto: (tx, companyId) => tx.gasto.deleteMany({ where: { companyId } }),
   ReembolsoSemanal: (tx, companyId) => tx.reembolsoSemanal.deleteMany({ where: { companyId } }),
+  Asistencia: (tx, companyId) => tx.asistencia.deleteMany({ where: { companyId } }),
+  Trabajador: (tx, companyId) => tx.trabajador.deleteMany({ where: { companyId } }),
   RayaSemanal: (tx, companyId) => tx.rayaSemanal.deleteMany({ where: { companyId } }),
   Cuadrilla: (tx, companyId) => tx.cuadrilla.deleteMany({ where: { companyId } }),
   Pago: (tx, companyId) => tx.pago.deleteMany({ where: { companyId } }),

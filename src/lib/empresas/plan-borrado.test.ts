@@ -61,6 +61,8 @@ const MODELOS_CON_COMPANY_ID_EN_SCHEMA = [
   "Pago",
   "Cuadrilla",
   "RayaSemanal",
+  "Trabajador",
+  "Asistencia",
   "Gasto",
   "ReembolsoSemanal",
   // canales / asistente

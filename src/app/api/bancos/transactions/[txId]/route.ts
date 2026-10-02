@@ -206,7 +206,21 @@ export async function PATCH(req: Request, { params }: Params) {
   async function clearConstruccionLinks() {
     if (tx?.gastoPagado) await prisma.gasto.update({ where: { id: tx.gastoPagado.id }, data: { bankTransactionId: null } });
     if (tx?.reembolsoPagado) await prisma.reembolsoSemanal.update({ where: { id: tx.reembolsoPagado.id }, data: { bankTransactionId: null } });
-    if (tx?.rayaPagada) await prisma.rayaSemanal.update({ where: { id: tx.rayaPagada.id }, data: { bankTransactionId: null } });
+    if (tx?.rayaPagada) {
+      // Si la raya quedó PAGADA sólo por esta conciliación (tesorería nunca
+      // registró el pago), al desvincular regresa a APROBADA; si tesorería
+      // sí lo registró, sigue PAGADA y sólo pierde el vínculo bancario.
+      const ry = await prisma.rayaSemanal.findUnique({
+        where: { id: tx.rayaPagada.id },
+        select: { pagoRegistradoAt: true },
+      });
+      await prisma.rayaSemanal.update({
+        where: { id: tx.rayaPagada.id },
+        data: ry?.pagoRegistradoAt
+          ? { bankTransactionId: null }
+          : { bankTransactionId: null, estado: "APROBADA", pagadaAt: null },
+      });
+    }
     if (tx?.solicitudCompraPagada) await prisma.solicitudCompra.update({ where: { id: tx.solicitudCompraPagada.id }, data: { bankTransactionId: null } });
   }
 
@@ -265,11 +279,14 @@ export async function PATCH(req: Request, { params }: Params) {
         break;
       }
       if (rayaId) {
-        const ry = await prisma.rayaSemanal.findUnique({ where: { id: rayaId }, select: { id: true, companyId: true, bankTransactionId: true } });
+        const ry = await prisma.rayaSemanal.findUnique({ where: { id: rayaId }, select: { id: true, companyId: true, bankTransactionId: true, estado: true, pagadaAt: true } });
         if (!ry || ry.companyId !== tx.companyId) return NextResponse.json({ error: "Raya inválida" }, { status: 400 });
         if (ry.bankTransactionId && ry.bankTransactionId !== txId) return NextResponse.json({ error: "Esa raya ya está vinculada a otra transacción" }, { status: 409 });
+        // Conciliar no se salta la autorización: una raya en BORRADOR no se
+        // puede dar por pagada.
+        if (ry.estado === "BORRADOR") return NextResponse.json({ error: "La raya no está autorizada; autorízala antes de conciliarla" }, { status: 422 });
         await prisma.$transaction([
-          prisma.rayaSemanal.update({ where: { id: rayaId }, data: { bankTransactionId: txId, estado: "PAGADA", pagadaAt: new Date() } }),
+          prisma.rayaSemanal.update({ where: { id: rayaId }, data: { bankTransactionId: txId, estado: "PAGADA", pagadaAt: ry.pagadaAt ?? new Date() } }),
           prisma.bankTransaction.update({ where: { id: txId }, data: { status: "MATCHED", invoiceId: null, notes: notes ?? null } }),
         ]);
         break;
@@ -838,6 +855,7 @@ export async function PATCH(req: Request, { params }: Params) {
         select: {
           id: true,
           totalDestajo: true,
+          total: true,
           cuadrilla: { select: { nombre: true } },
           proyecto: { select: { codigo: true } },
         },

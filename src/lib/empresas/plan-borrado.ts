@@ -83,6 +83,16 @@ export const PLAN_BORRADO_EMPRESA: readonly PasoBorrado[] = [
     motivo: "RESTRICT hacia Proyecto y BankAccount",
   },
   {
+    modelo: "Asistencia",
+    accion: "deleteMany",
+    motivo: "mano de obra: cascada desde Trabajador/Proyecto, SetNull desde Cuadrilla",
+  },
+  {
+    modelo: "Trabajador",
+    accion: "deleteMany",
+    motivo: "mano de obra: SetNull desde CuadrillaMiembro, cascada a Asistencia",
+  },
+  {
     modelo: "RayaSemanal",
     accion: "deleteMany",
     motivo:
