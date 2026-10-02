@@ -27,6 +27,7 @@ import { managedContaBotEnabled, ContaBotError } from "@/lib/contabot/config";
 import { beginManagedTurn, syncManagedSession } from "@/lib/contabot/runtime";
 import { requireContaBotAccess } from "@/lib/contabot/access";
 import { MAX_BODY_BYTES, sanearHistorial } from "@/lib/ai/historial";
+import { marcarCacheDeConversacion } from "@/lib/ai/cache-conversacion";
 import { fuentesDesdeToolResult, verificarRespuesta, type FuenteVerificacion } from "@/lib/ai/verificacion";
 import {
   ejecutarPresentacion,
@@ -58,6 +59,22 @@ const CHAT_MODEL_FALLBACK = "claude-opus-4-8";
 // reaches its first token — otherwise mobile carriers/proxies drop the idle
 // stream and the client surfaces "Load failed".
 const HEARTBEAT_MS = 10_000;
+// Las que se usan en casi todos los turnos van cargadas siempre; el resto se
+// descubre con tool_search_tool_regex. Ajustar con la traza (meta.tools) real.
+const HERRAMIENTAS_CARGADAS = new Set([
+  "mostrar_tarjeta",
+  "ofrecer_acciones",
+  "query_dashboard_kpis",
+  "query_invoices",
+  "query_bank_transactions",
+  "query_tax_position",
+  "search_fiscal_knowledge",
+  "consultar_expediente",
+]);
+const AVISO_BUSQUEDA_HERRAMIENTAS = `
+
+## Herramientas
+Además de las que ves, tienes muchas más (facturas y CFDI, complementos, cancelaciones, bancos y conciliación, categorización, nómina, empleados, clientes, declaraciones, IVA, DIOT, cierre mensual, catálogo de cuentas, préstamos, expediente y solicitudes al cliente, artículos de ley, tesis y jurisprudencia, documentos, prefacturas). Búscalas con tool_search_tool_regex por nombre o palabra clave (p. ej. "conciliaci|cierre|nomina") antes de decir que no puedes hacer algo.`;
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -184,9 +201,17 @@ export async function POST(req: Request) {
   const canWrite = member.role !== "VIEWER";
   // Las de presentación (tarjetas y botones) sólo existen en el chat de la app:
   // WhatsApp, la pasada diaria y el eval usan `tools` tal cual.
-  const availableTools = [
-    ...tools.filter((t) => t.name !== "preview_factura" && (canWrite || (!t.name.startsWith("proponer_") && !DOCUMENT_PREPARE_NAMES.has(t.name)))),
-    ...toolsPresentacion,
+  //
+  // Búsqueda de herramientas: las ~70 definiciones pesaban ~17k tokens que se
+  // pagaban (y se reescribían en caché) en CADA mensaje. Sólo las de uso diario
+  // van cargadas; el resto se declara con defer_loading y el modelo las
+  // encuentra con la búsqueda cuando las necesita.
+  const availableTools: Anthropic.ToolUnion[] = [
+    { type: "tool_search_tool_regex_20251119", name: "tool_search_tool_regex" },
+    ...[
+      ...tools.filter((t) => t.name !== "preview_factura" && (canWrite || (!t.name.startsWith("proponer_") && !DOCUMENT_PREPARE_NAMES.has(t.name)))),
+      ...toolsPresentacion,
+    ].map((t) => (HERRAMIENTAS_CARGADAS.has(t.name) ? t : { ...t, defer_loading: true })),
   ];
 
   // El bloque del cierre para el prompt. El paso dice QUÉ REVISAR, no qué puede
@@ -252,6 +277,8 @@ export async function POST(req: Request) {
     bloqueCierre: bloqueDelCierre,
     bloqueExpediente: bloqueDelExpediente,
   });
+  // El aviso va dentro del bloque cacheado: es fijo, no rompe la caché.
+  systemBlocks[0] = { ...systemBlocks[0], text: systemBlocks[0].text + AVISO_BUSQUEDA_HERRAMIENTAS };
 
   if (managedContaBotEnabled(companyId)) {
     try {
@@ -354,7 +381,10 @@ export async function POST(req: Request) {
             max_tokens: 4096,
             system: systemBlocks,
             tools: availableTools,
-            messages: currentMessages,
+            // Sin esto cada ronda reenviaba sin caché el historial y los
+            // tool_result de las rondas anteriores: ~0.29 USD por ronda medido
+            // (1-oct-2026, 59 rondas = 17 USD en una sola empresa PRO).
+            messages: marcarCacheDeConversacion(currentMessages),
             stream: true,
           };
           let response;
@@ -372,6 +402,9 @@ export async function POST(req: Request) {
           let hasToolUse = false;
           const toolUseBlocks: Anthropic.ContentBlockParam[] = [];
           let currentToolUse: { id: string; name: string; input: string } | null = null;
+          // La búsqueda de herramientas corre en el servidor de Anthropic: su
+          // llamada y su resultado se devuelven tal cual en el siguiente turno.
+          let currentServerTool: { id: string; name: Anthropic.ServerToolUseBlockParam["name"]; input: string } | null = null;
           // Métrica de costo: tokens de esta ronda (streaming → vienen en eventos),
           // incluidos los de caché (message_start trae el usage de entrada).
           let roundInput = 0;
@@ -392,6 +425,11 @@ export async function POST(req: Request) {
               if (event.content_block.type === "text" && assistantText && !/\n\s*$/.test(assistantText)) {
                 assistantText += "\n\n";
                 safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: "text", text: "\n\n" })}\n\n`));
+              }
+              if (event.content_block.type === "server_tool_use") {
+                currentServerTool = { id: event.content_block.id, name: event.content_block.name, input: "" };
+              } else if (event.content_block.type === "tool_search_tool_result") {
+                toolUseBlocks.push(event.content_block as Anthropic.ToolSearchToolResultBlockParam);
               }
               if (event.content_block.type === "tool_use") {
                 hasToolUse = true;
@@ -418,8 +456,20 @@ export async function POST(req: Request) {
                 );
               } else if (event.delta.type === "input_json_delta" && currentToolUse) {
                 currentToolUse.input += event.delta.partial_json;
+              } else if (event.delta.type === "input_json_delta" && currentServerTool) {
+                currentServerTool.input += event.delta.partial_json;
               }
             } else if (event.type === "content_block_stop") {
+              if (currentServerTool) {
+                let parsedInput: unknown = {};
+                try {
+                  parsedInput = JSON.parse(currentServerTool.input || "{}");
+                } catch {
+                  parsedInput = {};
+                }
+                toolUseBlocks.push({ type: "server_tool_use", id: currentServerTool.id, name: currentServerTool.name, input: parsedInput as Record<string, unknown> });
+                currentServerTool = null;
+              }
               if (currentToolUse) {
                 let parsedInput: unknown = {};
                 try {

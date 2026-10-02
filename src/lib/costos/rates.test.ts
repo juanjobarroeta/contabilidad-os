@@ -57,6 +57,14 @@ describe("llmCostMicroUsd — prompt caching", () => {
     expect(llmCostMicroUsd("claude-fable-5", 0, 0, { cacheWriteTokens: 1_000_000 })).toBe(12_500_000);
     expect(llmCostMicroUsd("claude-fable-5", 0, 0, { cacheReadTokens: 1_000_000 })).toBe(1_000_000);
   });
+  it("usa la lectura de caché de lista cuando no es 0.1× (Opus 5.5, Fable 5.1)", () => {
+    expect(llmCostMicroUsd("claude-opus-5-5", 0, 0, { cacheReadTokens: 1_000_000 })).toBe(200_000);
+    expect(llmCostMicroUsd("claude-fable-5-1", 0, 0, { cacheReadTokens: 1_000_000 })).toBe(250_000);
+  });
+  it("Sonnet 5.5 y Opus 5.5 tienen tarifa propia (no caen al default)", () => {
+    expect(llmCostMicroUsd("claude-sonnet-5-5", 1_000_000, 1_000_000)).toBe(12_000_000);
+    expect(llmCostMicroUsd("claude-opus-5-5", 1_000_000, 1_000_000)).toBe(24_000_000);
+  });
   it("sin tokens de caché el resultado es el de antes", () => {
     expect(llmCostMicroUsd("claude-sonnet-4-5", 2000, 1000, {})).toBe(21_000);
   });

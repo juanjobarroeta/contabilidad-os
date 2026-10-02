@@ -19,11 +19,14 @@ export const MICRO_USD = 1_000_000;
  * costo del copiloto ~3×. Un modelo desconocido sigue cayendo al default — por
  * eso al cambiar AI_CHAT_MODEL hay que agregar su renglón aquí.
  */
-export const ANTHROPIC_PRICES_USD_PER_MTOK: Record<string, { in: number; out: number }> = {
-  "claude-fable-5-1": { in: 10, out: 50 },
+export const ANTHROPIC_PRICES_USD_PER_MTOK: Record<string, { in: number; out: number; cacheRead?: number }> = {
+  // `cacheRead` explícito cuando la lista no es 0.1× la entrada.
+  "claude-fable-5-1": { in: 10, out: 50, cacheRead: 0.25 },
   "claude-fable-5": { in: 10, out: 50 },
+  "claude-opus-5-5": { in: 4, out: 20, cacheRead: 0.2 },
   "claude-opus-5": { in: 5, out: 25 },
   "claude-opus-4-8": { in: 5, out: 25 },
+  "claude-sonnet-5-5": { in: 2, out: 10 },
   "claude-sonnet-5": { in: 2, out: 10 },
   "claude-sonnet-4-6": { in: 3, out: 15 },
   "claude-sonnet-4-5": { in: 3, out: 15 },
@@ -75,7 +78,7 @@ export function llmCostMicroUsd(
   const cw = cache.cacheWriteTokens ?? 0;
   const cr = cache.cacheReadTokens ?? 0;
   return Math.round(
-    inputTokens * p.in + outputTokens * p.out + cw * p.in * CACHE_WRITE_MULT + cr * p.in * CACHE_READ_MULT,
+    inputTokens * p.in + outputTokens * p.out + cw * p.in * CACHE_WRITE_MULT + cr * (p.cacheRead ?? p.in * CACHE_READ_MULT),
   );
 }
 
