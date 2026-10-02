@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { submitSatSync, verifyAndImportSatSync } from "@/lib/sat-sync";
+import { mesCerrado, pedirMesCerrado } from "@/lib/sat-sync-politica";
 import { notifyIvaChanges } from "@/lib/iva-change-notify";
 import { notifyNewInvoices } from "@/lib/notify-new-invoices";
 import { autoConciliarEmpresa } from "@/lib/bancos/auto-conciliar";
@@ -126,6 +127,28 @@ async function handle(req: Request) {
         if (company.fechaInicioOperaciones) {
           const monthEnd = new Date(year, month, 0, 23, 59, 59);
           if (monthEnd < company.fechaInicioOperaciones) continue;
+        }
+
+        // Mes cerrado: el rango completo es siempre el mismo y la cuota 5002 es
+        // vitalicia. Sólo dos pasadas (al cierre y la final); entre tanto se
+        // verifican las solicitudes en vuelo sin pedir nada nuevo.
+        if (mesCerrado(year, month, new Date())) {
+          const previas = await prisma.satSyncRequest.findMany({
+            where: { companyId: company.id, year, month, tipo: { in: ["EMITIDOS", "RECIBIDOS"] } },
+            select: { tipo: true, status: true, desde: true, hasta: true, createdAt: true, errorMessage: true, requestId: true },
+            orderBy: { createdAt: "desc" },
+          });
+          if (!pedirMesCerrado(year, month, previas, new Date()).pedir) {
+            const enVuelo = (tipo: string) =>
+              previas.find((r) => r.tipo === tipo && ["PENDING", "ACCEPTED", "IN_PROGRESS"].includes(r.status))?.requestId ?? null;
+            const e = enVuelo("EMITIDOS"), r = enVuelo("RECIBIDOS");
+            if (e || r) {
+              const verified = await verifyAndImportSatSync(company.id, e, r);
+              if (verified.ok && typeof verified.imported === "number") totalImported += verified.imported;
+              companyTouched = true;
+            }
+            continue;
+          }
         }
 
         const submitted = await submitSatSync(company.id, year, month);

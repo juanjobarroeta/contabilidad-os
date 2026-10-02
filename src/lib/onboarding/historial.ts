@@ -11,7 +11,7 @@
 // `narrar` convierte el cambio entre dos lecturas en las frases del registro.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { esCoberturaSospechosa, periodoCerrado } from "@/lib/sat-cobertura";
+import { esCoberturaSospechosa, periodoCerrado, satDijoSinSolapes } from "@/lib/sat-cobertura";
 
 export type EstadoMes =
   /** Antes del inicio de operaciones o fuera de los años pedidos. */
@@ -77,27 +77,12 @@ export function rangoMeses(hoy: Date, anios: number, inicio: Date | null): Array
 }
 
 /**
- * Lo que el SAT dijo tener por mes, sin contar dos veces: una fila por rango
- * pedido (la más reciente) y, si el mes se pidió en tramos, sólo los tramos.
- * Misma regla que `coberturaDe` en cron/sat-backfill.
+ * Lo que el SAT dijo tener por mes, sin contar dos veces: la unión de los
+ * rangos pedidos (sat-cobertura.satDijoSinSolapes). Misma regla que
+ * `coberturaDe` en cron/sat-backfill.
  */
 export function satDijoPorMes(solicitudes: SolicitudMes[]): Map<string, number> {
-  const ultima = new Map<string, SolicitudMes>();
-  for (const s of solicitudes) {
-    if (s.status !== "FINISHED" || !TIPOS_DESCARGA.has(s.tipo)) continue;
-    const k = `${s.year}|${s.month}|${s.tipo}|${s.desde ? String(new Date(s.desde).getTime()) : ""}|${s.hasta ? String(new Date(s.hasta).getTime()) : ""}`;
-    const prev = ultima.get(k);
-    if (!prev || new Date(s.createdAt) > new Date(prev.createdAt)) ultima.set(k, s);
-  }
-  const conTramos = new Set<string>();
-  for (const s of ultima.values()) if (s.desde) conTramos.add(`${s.year}|${s.month}|${s.tipo}`);
-  const out = new Map<string, number>();
-  for (const s of ultima.values()) {
-    const tramos = conTramos.has(`${s.year}|${s.month}|${s.tipo}`);
-    if (tramos !== !!s.desde) continue;
-    out.set(llave(s.year, s.month), (out.get(llave(s.year, s.month)) ?? 0) + s.cfdisFound);
-  }
-  return out;
+  return satDijoSinSolapes(solicitudes);
 }
 
 /** Estado de un mes cerrado a partir de sus solicitudes y de lo que ya tenemos. */

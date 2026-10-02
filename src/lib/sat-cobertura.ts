@@ -97,3 +97,70 @@ export function coberturaSospechosa(
     }))
     .sort((a, b) => b.faltanCuandoMenos - a.faltanCuandoMenos);
 }
+
+// ─── Lo que el SAT dijo tener, sin contar dos veces ──────────────────────────
+//
+// Cada solicitud guarda el rango EXACTO que se pidió. Durante el mes, sat-sync
+// pide «del 1 a ayer» cada día: 1→2, 1→3, … 1→30 — rangos distintos que se
+// enciman. Agrupar por rango distinto y sumar contaba septiembre ~10 veces
+// (medido 2026-10-02: AMA «el SAT dijo 55,984, tenemos 5,457»; CPM 10,078 vs
+// 959 — todas las empresas en ~10%). Lo correcto es la UNIÓN de los rangos:
+// por (mes, tipo) se toman rangos que no se enciman, empezando por el más
+// amplio, y sólo ésos suman. Los tramos de una repesca son disjuntos y suman;
+// el mes completo cubre a sus tramos y se cuenta una vez.
+
+export interface SolicitudConteo {
+  year: number;
+  month: number;
+  tipo: string;
+  status: string;
+  desde: Date | string | null;
+  hasta: Date | string | null;
+  cfdisFound: number;
+  createdAt: Date | string;
+}
+
+const ms = (d: Date | string) => new Date(d).getTime();
+
+/** Por mes («y-m», mes sin cero): CFDIs que el SAT reportó en la unión de los rangos pedidos (emitidos + recibidos). */
+export function satDijoSinSolapes(solicitudes: SolicitudConteo[]): Map<string, number> {
+  // La más reciente por (mes, tipo, rango).
+  const ultima = new Map<string, SolicitudConteo & { d: number; h: number }>();
+  for (const s of solicitudes) {
+    if (s.status !== "FINISHED" || (s.tipo !== "EMITIDOS" && s.tipo !== "RECIBIDOS")) continue;
+    // Filas viejas sin rango = el mes completo.
+    const d = s.desde ? ms(s.desde) : Date.UTC(s.year, s.month - 1, 1);
+    const h = s.hasta ? ms(s.hasta) : Date.UTC(s.year, s.month, 0, 23, 59, 59);
+    const k = `${s.year}|${s.month}|${s.tipo}|${d}|${h}`;
+    const prev = ultima.get(k);
+    if (!prev || ms(s.createdAt) > ms(prev.createdAt)) ultima.set(k, { ...s, d, h });
+  }
+  const porMesTipo = new Map<string, Array<SolicitudConteo & { d: number; h: number }>>();
+  for (const s of ultima.values()) {
+    const k = `${s.year}|${s.month}|${s.tipo}`;
+    porMesTipo.set(k, [...(porMesTipo.get(k) ?? []), s]);
+  }
+  const out = new Map<string, number>();
+  // Suma de una selección de rangos que no se enciman (codicioso en el orden dado).
+  const sinEncimar = (filas: Array<{ d: number; h: number; cfdisFound: number }>) => {
+    let hastaTomado = -Infinity;
+    let suma = 0;
+    for (const f of filas) {
+      if (f.d <= hastaTomado) continue;
+      suma += f.cfdisFound;
+      hastaTomado = f.h;
+    }
+    return suma;
+  };
+  for (const filas of porMesTipo.values()) {
+    // Dos selecciones válidas (ninguna cuenta un día dos veces); gana la mayor:
+    //  - los rangos más amplios primero: «del 1 a ayer» repetido → el último;
+    //  - los que terminan antes primero: los tramos de una repesca, que
+    //    re-pidieron el mes porque el conteo completo no cuadraba.
+    const amplios = sinEncimar([...filas].sort((a, b) => a.d - b.d || b.h - a.h));
+    const tramos = sinEncimar([...filas].sort((a, b) => a.h - b.h || b.d - a.d));
+    const k = `${filas[0].year}-${filas[0].month}`;
+    out.set(k, (out.get(k) ?? 0) + Math.max(amplios, tramos));
+  }
+  return out;
+}

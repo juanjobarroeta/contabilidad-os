@@ -295,6 +295,7 @@ export async function submitSatSync(
         const code = emitidosResult.getStatus().getCode();
         const msg = emitidosResult.getStatus().getMessage();
         warnings.push(formatSatError("emitidos", code, msg));
+        if (code === 5002) await registrarCuotaQuemada(companyId, year, month, "EMITIDOS", periodDesde, periodHasta, formatSatError("emitidos", code, msg));
       }
     } catch (e) {
       console.error("[sat/sync] emitidos error:", e);
@@ -329,6 +330,7 @@ export async function submitSatSync(
         const code = recibidosResult.getStatus().getCode();
         const msg = recibidosResult.getStatus().getMessage();
         warnings.push(formatSatError("recibidos", code, msg));
+        if (code === 5002) await registrarCuotaQuemada(companyId, year, month, "RECIBIDOS", periodDesde, periodHasta, formatSatError("recibidos", code, msg));
       }
     } catch (e) {
       console.error("[sat/sync] recibidos error:", e);
@@ -358,6 +360,34 @@ export async function submitSatSync(
     year,
     warnings: warnings.length > 0 ? warnings : undefined,
   };
+}
+
+/**
+ * Deja constancia de un rechazo 5002 (cuota vitalicia de ese rango agotada):
+ * sin la fila, cada corrida volvía a pedir el mismo rango y a recibir el mismo
+ * rechazo. La fila FAILED con «5002» es lo que el historial pinta como «quota»
+ * y lo que sat-sync-politica usa para no volver a pedirlo. requestId sintético:
+ * el SAT no asignó uno.
+ */
+async function registrarCuotaQuemada(
+  companyId: string, year: number, month: number, tipo: "EMITIDOS" | "RECIBIDOS",
+  desde: Date, hasta: Date, errorMessage: string,
+): Promise<void> {
+  try {
+    const ya = await prisma.satSyncRequest.findFirst({
+      where: { companyId, year, month, tipo, desde, hasta, status: "FAILED", errorMessage: { contains: "5002" } },
+      select: { id: true },
+    });
+    if (ya) return;
+    await prisma.satSyncRequest.create({
+      data: {
+        companyId, year, month, tipo, desde, hasta, status: "FAILED", errorMessage,
+        requestId: `rechazo-5002-${tipo.toLowerCase()}-${companyId}-${desde.getTime()}-${hasta.getTime()}`,
+      },
+    });
+  } catch (e) {
+    console.error("[sat/sync] no se pudo registrar el rechazo 5002:", e instanceof Error ? e.message : e);
+  }
 }
 
 // ── Verify + import ───────────────────────────────────────────────────────────
