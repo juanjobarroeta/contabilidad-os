@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, requireModule, requireWriter, withAuthz } from "@/lib/authz";
-import { buildPartidasAndOffers } from "@/lib/construccion/requisicion-offers";
+import { buildPartidasAndOffers, ivaTasaSchema } from "@/lib/construccion/requisicion-offers";
 import { moneyPush, notificarConstruccion } from "@/lib/construccion/push";
 
 const partidaSchema = z.object({
@@ -12,6 +12,7 @@ const partidaSchema = z.object({
   cantidad: z.number().positive(),
   precioUnitario: z.number().nonnegative().optional(),
   presupuestoPartidaId: z.string().optional(),
+  ivaTasa: ivaTasaSchema,
 });
 
 // Inline supplier offers (one cotización each). Lines reference partidas by
@@ -86,6 +87,9 @@ export const GET = withAuthz(async (req: Request) => {
                 descripcion: true,
                 unidad: true,
                 cantidad: true,
+                // Tasa por línea: Compras calcula el «con IVA» de cada oferta
+                // con ella (ya no ×1.16 parejo).
+                ivaTasa: true,
                 cotizacionGanadoraId: true,
               },
             },

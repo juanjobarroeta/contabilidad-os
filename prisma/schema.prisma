@@ -3539,6 +3539,13 @@ model SolicitudPartida {
   precioUnitario Decimal @db.Decimal(18, 6)
   importe        Decimal @db.Decimal(18, 6)
 
+  // Tasa de IVA de la línea (importe y precio van SIN IVA). Convención de la
+  // casa: null = exento, 0 = tasa 0 %, 0.16 = gravado. Es de la línea y no de
+  // la oferta porque la tasa la fija lo que se compra (materiales al 16 %,
+  // alimentos al 0 %, una nota sin IVA). Las requisiciones de construcción la
+  // usan para el desglose de la adjudicación; hospital no la lee.
+  ivaTasa        Decimal? @default(0.16) @db.Decimal(18, 6)
+
   // Link purchase to a specific ejecutado partida for cost tracking
   presupuestoPartidaId String?
   presupuestoPartida   PresupuestoPartida? @relation(fields: [presupuestoPartidaId], references: [id])
@@ -3624,7 +3631,11 @@ model SolicitudAdjudicacion {
   tieneCredito        Boolean   @default(false)
   diasCredito         Int? // días de crédito de la oferta ganadora → vencimiento
   diasEntrega         Int?
-  total               Decimal   @db.Decimal(18, 6) // Σ importe de las líneas adjudicadas a este proveedor
+  // Lo que se le PAGA al proveedor. En construcción = subtotal + iva; filas
+  // legadas y de hospital = Σ importe (subtotal/iva en null: sin desglose).
+  total               Decimal   @db.Decimal(18, 6)
+  subtotal            Decimal?  @db.Decimal(18, 6) // Σ importe sin IVA de las líneas adjudicadas
+  iva                 Decimal?  @db.Decimal(18, 6) // Σ importe × ivaTasa de cada línea
   // POR_PAGAR → PARCIAL (pagos aplicados < total) → PAGADA (saldada) →
   // CONCILIADA (empatada con un movimiento bancario importado = pago real).
   // El pago vive en PagoProveedor (cuenta corriente del proveedor) y se

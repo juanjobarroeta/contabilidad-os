@@ -9,8 +9,16 @@
  */
 
 import type { Prisma } from "@prisma/client";
+import { z } from "zod";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Tasas de IVA que acepta una línea: 0.16 (gravado), 0 (tasa 0 %) o null
+ * (exento); omitida = 0.16. Cerrado a propósito: un "16" por error no debe
+ * colarse como 1600 %.
+ */
+export const ivaTasaSchema = z.union([z.literal(0.16), z.literal(0)]).nullable().optional();
 
 export type DraftPartidaInput = {
   insumoId?: string;
@@ -19,6 +27,8 @@ export type DraftPartidaInput = {
   cantidad: number;
   precioUnitario?: number;
   presupuestoPartidaId?: string;
+  /** null = exento, 0 = tasa 0 %, 0.16 = gravado; omitido = 0.16 (default de la columna). */
+  ivaTasa?: number | null;
 };
 
 export type DraftOfferInput = {
@@ -57,6 +67,8 @@ export async function buildPartidasAndOffers(
         precioUnitario,
         importe,
         presupuestoPartidaId: p.presupuestoPartidaId ?? null,
+        // undefined deja el default (0.16); null es exento explícito.
+        ...(p.ivaTasa !== undefined ? { ivaTasa: p.ivaTasa } : {}),
       },
       select: { id: true },
     });
