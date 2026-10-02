@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { requireContaBotAccess } from "@/lib/contabot/access";
 import { ContaBotError } from "@/lib/contabot/config";
-import { getChatPendingAction } from "@/lib/ai/pending-action";
+import { getChatPendingActions } from "@/lib/ai/pending-action";
 import { sanearTarjetas } from "@/lib/copiloto/tarjetas";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +27,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     run.providerTurnId ? prisma.contaBotToolCall.findFirst({
       where: { sessionId: id, turnId: run.providerTurnId }, orderBy: { createdAt: "desc" }, select: { name: true, state: true },
     }) : null,
-    getChatPendingAction(run.conversationId),
+    getChatPendingActions(run.conversationId),
   ]);
   return NextResponse.json({
     done: ["idle", "usage_pending"].includes(run.state),
@@ -35,6 +35,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     activeTool: lastCall?.state === "running" ? lastCall.name : null,
     message: message ? { id: message.id, role: "assistant", content: message.content || run.error || "",
       cards: sanearTarjetas(message.cards) } : null,
-    pendingAction: pending ? { type: pending.type, summary: pending.summary, token: pending.token, expiresAt: pending.expiresAt } : null,
+    pendingActions: pending.map((pa) => ({ type: pa.type, summary: pa.summary, token: pa.token, expiresAt: pa.expiresAt })),
+    pendingAction: pending[0] ? { type: pending[0].type, summary: pending[0].summary, token: pending[0].token, expiresAt: pending[0].expiresAt } : null,
   }, { headers: { "Cache-Control": "private, no-store" } });
 }

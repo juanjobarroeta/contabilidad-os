@@ -140,7 +140,11 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [activeTool, setActiveTool] = useState<string | null>(null);
-  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  // Varias tarjetas pendientes a la vez; cada una se confirma por su token.
+  const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
+  const pendingAction = pendingActions[0] ?? null;
+  /** Compat: las pantallas que pintan una sola tarjeta (cierre). */
+  const setPendingAction = useCallback((pa: PendingAction | null) => setPendingActions(pa ? [pa] : []), []);
   const [confirming, setConfirming] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   // El id vive también en un ref: `enviar` no debe recrearse (ni perder el hilo)
@@ -165,7 +169,7 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
     // el chat con una pregunta lista) no debe mandar el hilo anterior.
     messagesRef.current = [];
     setMessages([]);
-    setPendingAction(null);
+    setPendingActions([]);
     setActiveTool(null);
     fijarConversacion(null);
   }, [fijarConversacion]);
@@ -173,7 +177,7 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
   const observarAgente = useCallback(async (id: string, requestId: string, signal: AbortSignal) => {
     await watchManagedRun(id, requestId, signal, (snapshot) => {
       setActiveTool(snapshot.activeTool);
-      setPendingAction(snapshot.pendingAction);
+      setPendingActions(snapshot.pendingActions ?? (snapshot.pendingAction ? [snapshot.pendingAction] : []));
       if (snapshot.message?.content || snapshot.message?.cards?.length) {
         const message = snapshot.message!;
         setMessages((prev) => {
@@ -306,6 +310,7 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
           id?: string;
           nueva?: boolean;
           action?: PendingAction;
+          actions?: PendingAction[];
           messageId?: string | null;
           card?: Card;
         }) => {
@@ -313,8 +318,10 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
           if (data.type === "conversation") {
             if (data.id) fijarConversacion(data.id);
             if (data.nueva) nuevaConv = true;
+          } else if (data.type === "pending_actions") {
+            setPendingActions(data.actions ?? []);
           } else if (data.type === "pending_action") {
-            if (data.action) setPendingAction(data.action);
+            if (data.action) setPendingActions([data.action]);
           } else if (data.type === "text") {
             assistantText += data.text ?? "";
             setMessages((prev) => {
@@ -426,18 +433,22 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
     [companyId, contexto, fijarConversacion, onTurnoTerminado, observarAgente, recuperarTurno]
   );
 
-  const confirmar = useCallback(async () => {
-    if (!pendingAction || !convRef.current || confirming) return;
+  const quitarTarjeta = useCallback((token: string) => setPendingActions((prev) => prev.filter((p) => p.token !== token)), []);
+
+  /** Confirma la tarjeta del token (default: la primera). */
+  const confirmar = useCallback(async (token?: string) => {
+    const pa = token ? pendingActions.find((p) => p.token === token) : pendingActions[0];
+    if (!pa || !convRef.current || confirming) return;
     setConfirming(true);
     try {
       const res = await fetch("/api/ai/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversationId: convRef.current, token: pendingAction.token }),
+        body: JSON.stringify({ conversationId: convRef.current, token: pa.token }),
       });
       const data = await res.json().catch(() => ({}));
       const ok = res.ok && data.ok;
-      if (ok || res.status === 409) setPendingAction(null);
+      if (ok || res.status === 409) quitarTarjeta(pa.token);
       setMessages((prev) => [
         ...prev,
         {
@@ -451,21 +462,22 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
     } finally {
       setConfirming(false);
     }
-  }, [pendingAction, confirming, onAccionConfirmada]);
+  }, [pendingActions, confirming, onAccionConfirmada, quitarTarjeta]);
 
   /** Cancel the durable proposal, not only its visible card. */
-  const cancelar = useCallback(async () => {
-    if (!pendingAction || !convRef.current || confirming) return;
+  const cancelar = useCallback(async (token?: string) => {
+    const pa = token ? pendingActions.find((p) => p.token === token) : pendingActions[0];
+    if (!pa || !convRef.current || confirming) return;
     setConfirming(true);
     try {
       const response = await fetch("/api/ai/confirm", { method: "DELETE", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversationId: convRef.current, token: pendingAction.token }) });
+        body: JSON.stringify({ conversationId: convRef.current, token: pa.token }) });
       const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error ?? "No se pudo cancelar la propuesta.");
-      setPendingAction(null);
+      if (!response.ok && response.status !== 409) throw new Error(result.error ?? "No se pudo cancelar la propuesta.");
+      quitarTarjeta(pa.token);
     } catch (error) { setMessages((prev) => [...prev, { role: "assistant", content: error instanceof Error ? error.message : "No se pudo cancelar la propuesta." }]); }
     finally { setConfirming(false); }
-  }, [pendingAction, confirming]);
+  }, [pendingActions, confirming, quitarTarjeta]);
 
   const enviarFeedback = useCallback(async (id: string, feedback: "up" | "down" | null, correccion?: string) => {
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, feedback } : m)));
@@ -486,6 +498,8 @@ export function useChat({ companyId, contexto, onTurnoTerminado, onAccionConfirm
     isLoading,
     activeTool,
     pendingAction,
+    pendingActions,
+    setPendingActions,
     confirming,
     conversationId,
     fijarConversacion,

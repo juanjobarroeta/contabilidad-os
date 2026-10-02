@@ -6,7 +6,7 @@ import { sanearRef, sanearTarjetas } from "@/lib/copiloto/tarjetas";
 import { deleteManagedSessions } from "@/lib/contabot/runtime";
 import { ContaBotError } from "@/lib/contabot/config";
 import { requireContaBotAccess } from "@/lib/contabot/access";
-import { getChatPendingAction } from "@/lib/ai/pending-action";
+import { getChatPendingActions } from "@/lib/ai/pending-action";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -36,7 +36,7 @@ export async function GET(_req: Request, { params }: Params) {
     where: { conversationId: id, userId: session.user.id, state: { notIn: ["idle", "usage_pending", "deleting"] } },
     select: { id: true, requestId: true },
   });
-  const pending = await getChatPendingAction(id);
+  const pending = await getChatPendingActions(id);
 
   return NextResponse.json({
     id: conv.id,
@@ -46,7 +46,8 @@ export async function GET(_req: Request, { params }: Params) {
     activeManagedRun: activeRun,
     // Completed background work still needs its confirmation card when the
     // conversation is reopened. The executor's payload stays on the server.
-    pendingAction: pending ? { type: pending.type, summary: pending.summary, token: pending.token, expiresAt: pending.expiresAt } : null,
+    pendingActions: pending.map((pa) => ({ type: pa.type, summary: pa.summary, token: pa.token, expiresAt: pa.expiresAt })),
+    pendingAction: pending[0] ? { type: pending[0].type, summary: pending[0].summary, token: pending[0].token, expiresAt: pending[0].expiresAt } : null,
     // La traza (meta) no sale: sólo la referencia que el usuario adjuntó.
     messages: messages.map(({ meta, cards, ...m }) => {
       const ref = m.role === "user" ? sanearRef((meta as { ref?: unknown } | null)?.ref) : null;

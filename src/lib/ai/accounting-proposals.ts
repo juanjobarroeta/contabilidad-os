@@ -114,7 +114,7 @@ export async function proposeAccounting(name: string, input: Record<string, unkn
       }
     }
     const proposed = await stageChatPendingAction(context.conversationId, companyId, summary, action);
-    return JSON.stringify({ pending: true, summary, token: proposed.token, instruction: "Pide confirmar esta tarjeta. No está ejecutado. Sólo una propuesta pendiente por conversación." });
+    return JSON.stringify({ pending: true, summary, token: proposed.token, instruction: "Pide confirmar esta tarjeta. No está ejecutado. Puede convivir con otras tarjetas pendientes." });
   } catch (error) { return JSON.stringify({ error: error instanceof Error && !error.name.startsWith("Prisma") ? error.message : "No se pudo preparar la propuesta." }); }
 }
 

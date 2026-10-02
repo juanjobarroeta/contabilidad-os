@@ -415,7 +415,7 @@ function CierrePageInner() {
                       >
                         {confirming ? "Haciéndolo…" : "Hacerlo"}
                       </button>
-                      <button type="button" onClick={cancelar} className="text-[12.5px] text-cos-ink-soft">
+                      <button type="button" onClick={() => void cancelar()} className="text-[12.5px] text-cos-ink-soft">
                         Ahora no
                       </button>
                     </div>

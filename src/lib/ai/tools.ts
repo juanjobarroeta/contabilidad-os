@@ -483,7 +483,7 @@ export const tools: Anthropic.Tool[] = [
   {
     name: "proponer_categorizacion",
     description:
-      "Propone categorizar un movimiento bancario SIN CFDI, incluyendo capital de préstamos otorgados/recibidos y su devolución, registrándolo en el libro mayor, PENDIENTE de confirmación. NO escribe nada: devuelve un resumen + token; el usuario debe tocar Confirmar. LOAN_GIVEN es dinero que la empresa presta O recupera; LOAN_RECEIVED es dinero que le prestan O devuelve. El signo no decide quién debe a quién: consulta saldos y evidencia. No mezcles capital con intereses ni categorices copias duplicadas. No prometas un auxiliar específico si la herramienta no lo confirma. Sólo una propuesta pendiente a la vez.",
+      "Propone categorizar un movimiento bancario SIN CFDI, incluyendo capital de préstamos otorgados/recibidos y su devolución, registrándolo en el libro mayor, PENDIENTE de confirmación. NO escribe nada: devuelve un resumen + token; el usuario debe tocar Confirmar. LOAN_GIVEN es dinero que la empresa presta O recupera; LOAN_RECEIVED es dinero que le prestan O devuelve. El signo no decide quién debe a quién: consulta saldos y evidencia. No mezcles capital con intereses ni categorices copias duplicadas. No prometas un auxiliar específico si la herramienta no lo confirma. Puede haber varias propuestas pendientes; cada una es su propia tarjeta.",
     input_schema: {
       type: "object" as const,
       properties: {

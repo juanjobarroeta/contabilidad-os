@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   decideConfirm,
+  leerPendientes,
   isReversibleType,
   calcPosponerHasta,
   IRREVERSIBLE_TYPES,
@@ -104,5 +105,19 @@ describe("calcPosponerHasta — espeja /api/hallazgos/[id]", () => {
     const r = calcPosponerHasta("fin_de_mes", base);
     expect(r.getMonth()).toBe(5); // sigue en junio
     expect(r.getDate()).toBe(30); // junio tiene 30 días
+  });
+});
+
+describe("leerPendientes (varias tarjetas por conversación)", () => {
+  it("lee la lista y descarta las vencidas", () => {
+    const vieja = staged({ token: "pa_old", expiresAt: 1 });
+    const a = staged({ token: "pa_a" });
+    const b = staged({ token: "pa_b", payload: { txId: "tx_2", invoiceId: "inv_2" } } as Partial<ChatPendingAction>);
+    expect(leerPendientes([vieja, a, b]).map((p) => p.token)).toEqual(["pa_a", "pa_b"]);
+  });
+
+  it("acepta el formato viejo (un solo objeto) y la columna vacía", () => {
+    expect(leerPendientes(staged()).map((p) => p.token)).toEqual(["pa_abc"]);
+    expect(leerPendientes(null)).toEqual([]);
   });
 });

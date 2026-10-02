@@ -10,10 +10,10 @@ vi.mock("@/lib/ai/conversation-access", () => ({ loadAccessibleConversation: asy
 }) }));
 vi.mock("@/lib/contabot/access", () => ({ requireContaBotAccess: async () => ({ canWrite: true }) }));
 vi.mock("@/lib/contabot/runtime", () => ({ deleteManagedSessions: vi.fn() }));
-vi.mock("@/lib/ai/pending-action", () => ({ getChatPendingAction: async () => ({
+vi.mock("@/lib/ai/pending-action", () => ({ getChatPendingActions: async () => [{
   type: "conciliar", summary: "Match invoice and bank movement", token: "confirmation-token", expiresAt: 2000000000000,
   companyId: "pilot", payload: { txId: "movement", invoiceId: "invoice" },
-}) }));
+}] }));
 import { GET } from "./route";
 
 describe("reopening completed background work", () => {

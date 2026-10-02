@@ -5,6 +5,7 @@ export interface ManagedSnapshot {
   activeTool: string | null;
   message: Message | null;
   pendingAction: PendingAction | null;
+  pendingActions?: PendingAction[];
 }
 
 export async function watchManagedRun(id: string, requestId: string, signal: AbortSignal,
