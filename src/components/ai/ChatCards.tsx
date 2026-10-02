@@ -8,6 +8,7 @@
 // «navegar» es un router.push.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import dynamic from "next/dynamic";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -16,6 +17,8 @@ import {
 import type { Accion, Card, Fila, IconoAccion, RefCopiloto, Tono } from "@/lib/copiloto/tarjetas";
 import { pasosHechos } from "./useChat";
 import { cn } from "@/lib/utils";
+
+const DocumentCards = dynamic(() => import("./DocumentCards").then((m) => m.DocumentCards));
 
 const CHIP: Record<Tono, string> = {
   jade: "bg-cos-jade-tint text-cos-jade-ink",
@@ -130,8 +133,9 @@ function Borrador({ card }: { card: Extract<Card, { type: "borrador" }> }) {
 }
 
 /** Una tarjeta. `inicios` sólo importa para «pasos» (avance en vivo). */
-export function ChatCard({ card, inicios }: { card: Card; inicios?: number | null }) {
+export function ChatCard({ card, inicios, conversationId }: { card: Card; inicios?: number | null; conversationId?: string | null }) {
   switch (card.type) {
+    case "documentos": return <DocumentCards documents={card.documents} conversationId={conversationId} />;
     case "obligacion":
       return (
         <div className={BASE}>

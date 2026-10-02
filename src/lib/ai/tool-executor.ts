@@ -1,3 +1,4 @@
+import { DOCUMENT_TOOL_NAMES } from "./documents/contract";
 import { BANK_STATEMENT_TOOL_NAMES } from "./bank-statement-tools";
 import { PUE_IVA_TOOL_NAMES } from "./pue-iva-tools";
 import { prisma } from "@/lib/prisma";
@@ -83,6 +84,10 @@ export async function executeToolCall(
   companyId: string,
   context: ToolContext = {}
 ): Promise<string> {
+  if (DOCUMENT_TOOL_NAMES.has(toolName)) {
+    const { executeDocumentTool } = await import("./documents/executor");
+    return executeDocumentTool(toolName, input, companyId, context);
+  }
   if (toolName === "query_saldos_cuentas" || toolName === "query_auxiliar_cuenta") {
     const { executeAccountingRead } = await import("./accounting-executor");
     return executeAccountingRead(toolName, input, companyId);

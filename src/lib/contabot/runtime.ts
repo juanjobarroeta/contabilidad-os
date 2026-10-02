@@ -1,3 +1,4 @@
+import { documentCardFromResult, DOCUMENT_PREPARE_NAMES } from "@/lib/ai/documents/contract";
 import { randomUUID } from "node:crypto";
 import OpenAI from "openai";
 import { Prisma, type ContaBotSession } from "@prisma/client";
@@ -127,6 +128,7 @@ export async function executeManagedCall(session: ContaBotSession, action: Funct
       throw new Error("TOOL_NOT_AUTHORIZED");
     }
     const args = await validateToolInput(action.name, action.arguments);
+    if (session.objectiveRunId && DOCUMENT_PREPARE_NAMES.has(action.name)) throw new Error("TOOL_NOT_AUTHORIZED: document preparation requires an interactive user request");
     if (session.objectiveRunId && action.name === "asignar_objetivo_cierre") throw new Error("TOOL_NOT_AUTHORIZED: objectives cannot delegate new work");
     if (session.objectiveRunId && capabilityKind(action.name) === "proposal" && await getChatPendingAction(session.conversationId)) {
       throw new Error("TOOL_NOT_AUTHORIZED: a proposal already awaits human confirmation");
@@ -142,12 +144,13 @@ export async function executeManagedCall(session: ContaBotSession, action: Funct
       result = rendered.resultado;
       card = rendered.card ?? undefined;
     } else {
-      effectStarted = ["memory", "proposal"].includes(capabilityKind(action.name) ?? "");
+      effectStarted = ["memory", "proposal", "preparation"].includes(capabilityKind(action.name) ?? "");
       const context = (session.context ?? {}) as ToolContext;
       result = await executeToolCall(action.name, args, session.companyId, {
         cierre: context.cierre, conversationId: session.conversationId,
         userId: session.userId, inApp: canWrite, origen: "copiloto",
       });
+      card = documentCardFromResult(action.name, result) ?? undefined;
       if (action.name === "anotar_expediente" && JSON.parse(result).nota_id && typeof args.titulo === "string") {
         card = { type: "memoria", texto: args.titulo.slice(0, 200) };
       }

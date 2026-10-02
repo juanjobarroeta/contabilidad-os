@@ -20,6 +20,7 @@ export function motivoTimbradoNoDisponible(run: {
     return `Estado inválido: ${run.status}. Debe estar CALCULATED.`;
   }
   const extra = (run.extraData ?? {}) as Record<string, unknown>;
+  if (extra.stampingUncertain === true) return "Hay un timbrado con resultado no verificado. Revisa los CFDI del PAC/SAT y recupera sus UUID antes de reintentar; no se emitirá otro lote automáticamente.";
   if (extra.stampingInProgress === true) {
     return "Timbrado en curso: otra operación ya está emitiendo los CFDIs de esta corrida. Espere a que termine antes de reintentar — timbrar dos veces duplicaría los CFDIs ante el SAT.";
   }

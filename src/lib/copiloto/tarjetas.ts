@@ -1,3 +1,4 @@
+import { documentRefSchema, type DocumentCard } from "@/lib/ai/documents/contract";
 import type Anthropic from "@anthropic-ai/sdk";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -37,6 +38,7 @@ export interface ItemLista {
 }
 
 export type Card =
+  | DocumentCard
   | { type: "obligacion"; titulo: string; tono: Tono; estatus: string; filas: Fila[] }
   | { type: "cifra"; etiqueta: string; valor: string; filas?: Fila[]; nota?: string }
   | { type: "lista"; items: ItemLista[] }
@@ -146,6 +148,12 @@ export function sanearTarjeta(v: unknown): Card | null {
   const o = v as Record<string, unknown>;
   const tipo = o.type ?? o.tipo;
   switch (tipo) {
+    case "documentos": {
+      if (!Array.isArray(o.documents) || !o.documents.length || o.documents.length > 10) return null;
+      const parsed = o.documents.map((r) => documentRefSchema.safeParse(r));
+      if (parsed.some((r) => !r.success)) return null;
+      return { type: "documentos", documents: parsed.flatMap((r) => r.success ? [r.data] : []) };
+    }
     case "obligacion": {
       const titulo = txt(o.titulo, 80);
       if (!titulo) return null;
@@ -327,7 +335,7 @@ export function ejecutarPresentacion(
     nombre === TOOL_ACCIONES
       ? sanearTarjeta({ type: "acciones", acciones: input.acciones })
       : sanearTarjeta({ ...input, type: input.tipo });
-  if (!card) {
+  if (!card || card.type === "documentos") {
     return {
       card: null,
       resultado: JSON.stringify({ error: "La tarjeta no se mostró: faltan campos o son inválidos. Sigue con texto." }),

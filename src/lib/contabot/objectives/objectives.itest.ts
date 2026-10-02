@@ -88,6 +88,17 @@ describe.skipIf(process.env.DB_TESTS_SKIP === "1")("ContaBot delegated objective
     expect(await prisma.chatMessage.count({ where: { conversationId: one.conversationId!, role: "user" } })).toBe(1);
   });
 
+  it("does not prepare fiscal documents from a background objective", async () => {
+    const objective = await assign(); const run = await queued(objective.id); await startObjectiveRun(run.id);
+    const session = await prisma.contaBotSession.findFirstOrThrow({ where: { objectiveRunId: run.id } });
+    const result = await executeManagedCall(session, { type: "function_call", name: "preparar_nomina", turn_id: turn.id, call_id: "forbidden-payroll-prep", arguments: {
+      employee_ids: ["synthetic-employee"], periodo_inicio: "2026-08-01", periodo_fin: "2026-08-15", fecha_pago: "2026-08-15", dias_pagados: 15,
+    } });
+    expect(result.success).toBe(false);
+    expect(result.result).toMatch(/TOOL_NOT_AUTHORIZED.*interactive/);
+    expect(await prisma.payrollRun.count({ where: { companyId: A } })).toBe(0);
+  });
+
   it("waits for documents, resumes once they arrive, and never treats a finished model turn as completion", async () => {
     const objective = await assign(); const run = await queued(objective.id); await startObjectiveRun(run.id);
     const session = await prisma.contaBotSession.findFirstOrThrow({ where: { objectiveRunId: run.id } });

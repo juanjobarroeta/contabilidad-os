@@ -91,6 +91,13 @@ describe.skipIf(skip)("managed ContaBot with real Postgres and synthetic provide
     expect(await prisma.chatMessage.count({ where: { role: "user", conversation: { companyId: A } } })).toBe(1);
   });
 
+  it("persists a server-issued document reference on a managed callback", async () => {
+    const session = await newRun();
+    const result = await executeManagedCall(session, action("mostrar_documento", { kind: "balanza", year: 2026, month: 9 }));
+    expect(result.card).toEqual({ type: "documentos", documents: [{ kind: "balanza", companyId: A, year: 2026, month: 9 }] });
+    expect(JSON.parse(result.result!).company.id).toBe(A);
+  });
+
   it("persists one memory note and reuses the saved result after a repeated callback", async () => {
     const session = await newRun();
     const call = action("anotar_expediente", { tipo: "pendiente", tema: "conciliacion", titulo: "Missing statement",

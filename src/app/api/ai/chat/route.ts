@@ -1,3 +1,4 @@
+import { documentCardFromResult, DOCUMENT_PREPARE_NAMES } from "@/lib/ai/documents/contract";
 import { after, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
@@ -470,6 +471,8 @@ export async function POST(req: Request) {
               // las empresas accesibles del propio usuario.
               { conversationId: convId!, inApp: canWrite, userId, cierre: cierreCtx, origen: "copiloto" }
             );
+            const documentCard = documentCardFromResult(block.name, result);
+            if (documentCard) emitirCard(documentCard);
             // «Guardado en memoria: …» bajo la respuesta: la nota ya quedó en
             // el expediente y aparece en «Lo que recuerdo».
             if (block.name === "anotar_expediente") {
@@ -484,11 +487,11 @@ export async function POST(req: Request) {
             return { block, result, ms: Date.now() - t0 };
           };
           const salidas = new Map<string, { result: string; ms: number }>();
-          const lecturas = llamadas.filter((b) => !b.name.startsWith("proponer_") && !NOMBRES_PRESENTACION.has(b.name));
+          const lecturas = llamadas.filter((b) => !b.name.startsWith("proponer_") && !DOCUMENT_PREPARE_NAMES.has(b.name) && !NOMBRES_PRESENTACION.has(b.name));
           for (const r of await Promise.all(lecturas.map(correr))) {
             salidas.set(r.block.id, { result: r.result, ms: r.ms });
           }
-          for (const block of llamadas.filter((b) => b.name.startsWith("proponer_"))) {
+          for (const block of llamadas.filter((b) => b.name.startsWith("proponer_") || DOCUMENT_PREPARE_NAMES.has(b.name))) {
             const r = await correr(block);
             salidas.set(block.id, { result: r.result, ms: r.ms });
           }

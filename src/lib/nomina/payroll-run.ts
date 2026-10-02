@@ -85,14 +85,27 @@ export type PayrollRunResult = {
   error?: string;
 };
 
-export async function createPayrollRun(input: CreatePayrollRunInput): Promise<PayrollRunResult> {
+export async function createPayrollRun(input: CreatePayrollRunInput, options: { preventEmployeeOverlap?: boolean } = {}): Promise<PayrollRunResult> {
+  if (!options.preventEmployeeOverlap) return createPayrollRunInternal(input, prisma);
+  const periodo = `${input.periodoInicio.toISOString().slice(0, 10)}/${input.periodoFin.toISOString().slice(0, 10)}`;
+  return prisma.$transaction(async (tx) => {
+    // Serialize chat preparations for overlapping employees in this company
+    // and period. No provider/network calls occur inside this transaction.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`mochi-payroll:${input.companyId}:${periodo}`}, 0))`;
+    const prior = await tx.payrollRun.findFirst({ where: { companyId: input.companyId, tipo: input.tipo, periodo, items: { some: { employeeId: { in: input.employeeIds } } } }, select: { id: true } });
+    if (prior) return { ok: false, error: `Ya existe una nómina de ese periodo para empleados seleccionados (${prior.id}). Recupera el documento existente.` };
+    return createPayrollRunInternal(input, tx);
+  }, { timeout: 60_000 });
+}
+
+async function createPayrollRunInternal(input: CreatePayrollRunInput, db: import("@prisma/client").Prisma.TransactionClient | typeof prisma): Promise<PayrollRunResult> {
   // Fetch employees
   const where = {
     companyId: input.companyId,
     isActive: true,
     ...(input.employeeIds ? { id: { in: input.employeeIds } } : {}),
   };
-  const employees = (await prisma.employee.findMany({ where })).map(employeeCalcRow);
+  const employees = (await db.employee.findMany({ where })).map(employeeCalcRow);
 
   if (employees.length === 0) {
     return { ok: false, error: "No hay empleados activos para esta corrida" };
@@ -131,7 +144,7 @@ export async function createPayrollRun(input: CreatePayrollRunInput): Promise<Pa
   }
 
   // Create the run
-  const run = await prisma.payrollRun.create({
+  const run = await db.payrollRun.create({
     data: {
       companyId: input.companyId,
       periodo,
@@ -203,10 +216,10 @@ export async function createPayrollRun(input: CreatePayrollRunInput): Promise<Pa
   }
 
   // Batch insert all items in one query
-  await prisma.payrollItem.createMany({ data: itemsData });
+  await db.payrollItem.createMany({ data: itemsData });
 
   // Update run totals
-  await prisma.payrollRun.update({
+  await db.payrollRun.update({
     where: { id: run.id },
     data: {
       status: "CALCULATED",
@@ -440,6 +453,8 @@ async function liberarCandadoTimbrado(payrollRunId: string): Promise<void> {
 export type StampOpciones = {
   /** Fecha de emisión del CFDI (≤72 h atrás, validada con resolverFechaCfdi). */
   fechaCfdi?: Date;
+  /** Human-reviewed final PAC payload hashes, keyed by the exact unstamped item IDs. */
+  reviewedPayloads?: Record<string, string>;
 };
 
 export async function stampPayrollRun(
@@ -464,6 +479,7 @@ export async function stampPayrollRun(
     WHERE "id" = ${payrollRunId}
       AND "status" = 'CALCULATED'::"PayrollStatus"
       AND COALESCE("extraData"->>'stampingInProgress', 'false') <> 'true'
+      AND COALESCE("extraData"->>'stampingUncertain', 'false') <> 'true'
   `;
 
   if (claimed === 0) {
@@ -513,6 +529,10 @@ async function stampPayrollRunClaimed(
   const [periodoInicio, periodoFin] = run.periodo.split("/");
   const unstamped = run.items.filter((item) => !item.cfdiUuid);
   const alreadyStamped = run.items.length - unstamped.length;
+  if (opciones.reviewedPayloads && (Object.keys(opciones.reviewedPayloads).length !== unstamped.length || unstamped.some((i) => !opciones.reviewedPayloads![i.id]))) {
+    await liberarCandadoTimbrado(payrollRunId);
+    return { ok: false, stamped: alreadyStamped, total: run.items.length, errors: ["El lote cambió después de revisarlo. Revisa de nuevo todos los recibos pendientes."] };
+  }
 
   // Incidencias del periodo (sólo ORDINARIA): los empleados que tienen
   // incidencias con efecto monetario se timbran con el desglose exacto del
@@ -532,9 +552,11 @@ async function stampPayrollRunClaimed(
 
   const errors: string[] = [];
   let newlyStamped = 0;
+  let stampingUncertain = false;
 
   // Build tasks for parallel execution
   const tasks = unstamped.map((item) => async () => {
+    let providerStarted = false;
     try {
       const resumen: IncidenciasResumen = resumirIncidencias(
         incidenciasPorEmpleado.get(item.employeeId) ?? []
@@ -599,7 +621,7 @@ async function stampPayrollRunClaimed(
         diasPagadosCfdi = 1;
         periodoInicioCfdi = run.fechaPago;
         periodoFinCfdi = run.fechaPago;
-      } else if (resumenTieneEfecto(resumen)) {
+      } else if (run.tipo === "ORDINARIA" || resumenTieneEfecto(resumen)) {
         // Recalcular con el MISMO motor e insumos que produjo el item revisado
         // y verificar que coincide antes de timbrar: si alguien capturó una
         // incidencia (o cambió el salario) sin recalcular, se bloquea el
@@ -631,6 +653,7 @@ async function stampPayrollRunClaimed(
         diasPagadosCfdi = calc.diasEfectivos;
       }
 
+      providerStarted = true;
       const result = await emitNominaCfdi({
         companyId: run.companyId,
         employeeId: item.employeeId,
@@ -642,7 +665,11 @@ async function stampPayrollRunClaimed(
         desglose,
         tipoNomina: tipoNominaCfdi,
         fechaCfdi: opciones.fechaCfdi,
-      });
+      }, opciones.reviewedPayloads ? { expectedPayloadHash: opciones.reviewedPayloads[item.id] } : undefined);
+      if (result.uncertain) stampingUncertain = true;
+      // A returned, known validation failure did not emit a CFDI. Persistence
+      // exceptions after success remain uncertain and block blind retries.
+      if (!result.ok && !result.uncertain) providerStarted = false;
 
       if (result.ok && result.uuid) {
         await prisma.payrollItem.update({
@@ -668,6 +695,7 @@ async function stampPayrollRunClaimed(
         errors.push(`${item.employee.nombre} ${item.employee.apellidoPaterno}: ${result.error}`);
       }
     } catch (e) {
+      if (providerStarted) stampingUncertain = true;
       errors.push(`${item.employee.nombre}: ${e instanceof Error ? e.message : "Error desconocido"}`);
     }
   });
@@ -683,14 +711,14 @@ async function stampPayrollRunClaimed(
       where: { id: payrollRunId },
       data: {
         status: "STAMPED",
-        extraData: { ...(run.extraData as Record<string, unknown> ?? {}), stampingInProgress: false, stampedCount: totalStamped },
+        extraData: { ...(run.extraData as Record<string, unknown> ?? {}), stampingInProgress: false, stampingUncertain, stampedCount: totalStamped },
       },
     });
   } else {
     await prisma.payrollRun.update({
       where: { id: payrollRunId },
       data: {
-        extraData: { ...(run.extraData as Record<string, unknown> ?? {}), stampingInProgress: false, stampedCount: totalStamped },
+        extraData: { ...(run.extraData as Record<string, unknown> ?? {}), stampingInProgress: false, stampingUncertain, stampedCount: totalStamped },
       },
     });
   }

@@ -5,6 +5,7 @@ const m = vi.hoisted(() => ({
   customer: vi.fn(),
   borradorCreate: vi.fn(),
   borradorUpdate: vi.fn(),
+  borradorClaim: vi.fn(),
   ensure: vi.fn(),
   createDraft: vi.fn(),
   discard: vi.fn(),
@@ -18,14 +19,15 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     company: { findUnique: m.company },
     customer: { findUnique: m.customer },
-    facturaBorrador: { create: m.borradorCreate, update: m.borradorUpdate },
+    facturaBorrador: { create: m.borradorCreate, update: m.borradorUpdate, updateMany: m.borradorClaim },
     invoice: { findFirst: m.invoiceFirst },
     hospCargo: { count: m.cargosCount, updateMany: m.cargosUpdate },
   },
 }));
 vi.mock("@/lib/facturapi", () => ({ ensureFacturapiCustomer: m.ensure, getFacturapiClient: vi.fn() }));
+vi.mock("./draft-identity", () => ({ draftIdentity: async () => ({ emisor: { rfc: "AAA010101AAA" }, receptor: { rfc: "BBB010101BBB" } }) }));
 vi.mock("@/lib/audit", () => ({ registrarBitacora: vi.fn() }));
-vi.mock("@/lib/facturas/stamp", () => ({ createDraftInvoice: m.createDraft, discardDraft: m.discard, stampDraftFromPending: m.stamp }));
+vi.mock("@/lib/facturas/stamp", () => ({ createDraftInvoice: m.createDraft, discardDraft: m.discard, stampDraftFromPending: m.stamp, resolveGlobalInfo: (_rfc: string, global: unknown) => global }));
 vi.mock("@/lib/facturas/prefactura", () => ({ pdfUrlCliente: () => "https://pdf", totalEstimadoPrefactura: () => "116.00" }));
 
 import { crearPrefactura, editarPrefactura, timbrarPrefactura } from "./prefacturas";
@@ -51,9 +53,24 @@ beforeEach(() => {
   m.createDraft.mockResolvedValue({ ok: true, draftId: "d-new" });
   m.borradorCreate.mockResolvedValue({ id: "b1" });
   m.cargosCount.mockResolvedValue(0);
+  m.borradorClaim.mockResolvedValue({ count: 1 });
 });
 
 describe("prefacturas", () => {
+  it("never calls the provider after losing the atomic claim, even with a stale PENDIENTE object", async () => {
+    m.borradorClaim.mockResolvedValue({ count: 0 });
+    expect((await timbrarPrefactura(borrador(), actor, req)).status).toBe(409);
+    expect(m.stamp).not.toHaveBeenCalled();
+    expect((await editarPrefactura(borrador(), input, actor, req)).status).toBe(409);
+    expect(m.createDraft).not.toHaveBeenCalled();
+  });
+
+  it("keeps ambiguous issuance unavailable for blind retry", async () => {
+    m.stamp.mockRejectedValue(new Error("Provider timeout"));
+    await expect(timbrarPrefactura(borrador(), actor, req)).rejects.toThrow("Provider timeout");
+    expect(m.borradorClaim).toHaveBeenCalledWith({ where: { id: "b1", status: "TIMBRANDO" }, data: { status: "REVISAR_TIMBRADO" } });
+  });
+
   it("syncs a new customer with Facturapi before drafting", async () => {
     const r = await crearPrefactura(input, actor, req);
     expect(m.ensure).toHaveBeenCalledOnce();
