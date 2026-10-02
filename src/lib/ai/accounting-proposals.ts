@@ -90,8 +90,14 @@ export async function proposeAccounting(name: string, input: Record<string, unkn
       assertUnassigned(row.movement);
       await assertPeriodoAbierto(prisma, companyId, row.movement.fecha.getUTCFullYear(), row.movement.fecha.getUTCMonth() + 1);
       const entries = loanLines(row.bank.id, row.account.id, Number(row.movement.monto));
-      summary = `Registrar capital de préstamo del ${row.movement.fecha.toISOString().slice(0, 10)} (${row.movement.descripcion}): ` +
-        entries.map((line) => `${line.tipo === "CARGO" ? "Cargo" : "Abono"} $${line.monto.toFixed(2)} a ${line.chartAccountId === row.bank.id ? codeOf(row.bank) + " " + row.bank.nombre : codeOf(row.account) + " " + row.account.nombre}`).join("; ") + ". Sin calcular impuestos sobre este capital.";
+      const operacion = input.operacion === "deposito_a_devolver" || input.operacion === "pago_a_recuperar" ? input.operacion : "prestamo";
+      const queEs = operacion === "deposito_a_devolver"
+        ? "Registrar como depósito recibido por error, a devolver (pasivo, no ingreso),"
+        : operacion === "pago_a_recuperar"
+          ? "Registrar como pago hecho por error, a recuperar (activo, no gasto),"
+          : "Registrar como capital de préstamo";
+      summary = `${queEs} el movimiento del ${row.movement.fecha.toISOString().slice(0, 10)} (${row.movement.descripcion}): ` +
+        entries.map((line) => `${line.tipo === "CARGO" ? "Cargo" : "Abono"} $${line.monto.toFixed(2)} a ${line.chartAccountId === row.bank.id ? codeOf(row.bank) + " " + row.bank.nombre : codeOf(row.account) + " " + row.account.nombre}`).join("; ") + (operacion === "prestamo" ? ". Sin calcular impuestos sobre este capital." : ". No causa IVA ni ISR.");
       const gate = await statementPostingGate(companyId, row.movement.fecha.getUTCFullYear(), row.movement.fecha.getUTCMonth() + 1, prisma, row.movement.bankAccountId);
       if (!gate.ok) summary += " Se guardará como borrador con este auxiliar, sin asientos hasta verificar el estado completo.";
       action = { type: "registrar_prestamo", payload: { txId: row.movement.id, accountId: row.account.id, family, expected: row.expected } };
