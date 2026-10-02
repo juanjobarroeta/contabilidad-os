@@ -9,9 +9,11 @@ import { toolsExpediente } from "@/lib/expediente/tools";
 import { toolsSolicitudes } from "@/lib/solicitudes/tools";
 import { bankStatementTools } from "./bank-statement-tools";
 import { accountingTools } from "./accounting-tools";
+import { documentTools } from "./documents/tools";
 import { pueIvaTools } from "./pue-iva-tools";
 
 export const tools: Anthropic.Tool[] = [
+  ...documentTools,
   ...accountingTools,
   ...pueIvaTools,
   ...bankStatementTools,

@@ -11,6 +11,7 @@
 // tfd = null ⇒ la UI muestra la marca de agua BORRADOR y omite sellos/QR.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import type { EmitNominaInput } from "./emit-nomina";
 import { prisma } from "../prisma";
 import type { Representacion, RepNominaConcepto } from "../facturas/representacion";
 import { calcularNomina } from "./calc-nomina";
@@ -26,7 +27,7 @@ import { PTU_EXENTO_UMA, UMA_DIARIO, umaDiariaDelEjercicio } from "./constants";
 import { registroPatronalEfectivo } from "./registro-patronal";
 
 export type PreviewReciboResult =
-  | { ok: true; rep: Representacion }
+  | { ok: true; rep: Representacion; stampInput: EmitNominaInput }
   | { ok: false; status: number; error: string };
 
 const d = (x: Date) => x.toISOString().slice(0, 10);
@@ -36,7 +37,7 @@ export async function previewRecibo(companyId: string, payrollItemId: string): P
     where: { id: payrollItemId },
     include: { employee: true, payrollRun: true },
   });
-  if (!item || item.payrollRun.companyId !== companyId) {
+  if (!item || item.payrollRun.companyId !== companyId || item.employee.companyId !== companyId) {
     return { ok: false, status: 404, error: "Recibo no encontrado" };
   }
   const run = item.payrollRun;
@@ -237,5 +238,8 @@ export async function previewRecibo(companyId: string, payrollItemId: string): P
     pagos: null,
   };
 
-  return { ok: true, rep };
+  return { ok: true, rep, stampInput: {
+    companyId, employeeId: employee.id, periodoInicio: iniCfdi, periodoFin: finCfdi, diasPagados: diasCfdi, fechaPago: run.fechaPago, tipoNomina,
+    sueldoBruto: calc.totalPercepciones, desglose: { percepciones: calc.percepciones, deducciones: calc.deducciones, totalPercepciones: calc.totalPercepciones, totalDeducciones: calc.totalDeducciones, netoAPagar: calc.netoAPagar },
+  } };
 }

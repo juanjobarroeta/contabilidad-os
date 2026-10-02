@@ -76,7 +76,7 @@ export async function checkStampReadiness(companyId: string, customerId: string)
  * CFDI 4.0 requires Información Global for Público General (RFC genérico).
  * Auto-fills the current month when the caller didn't pass one.
  */
-function resolveGlobalInfo(rfc: string, globalInfo: StampInput["global"]): StampInput["global"] {
+export function resolveGlobalInfo(rfc: string, globalInfo: StampInput["global"]): StampInput["global"] {
   if (rfc === "XAXX010101000" && !globalInfo) {
     const now = new Date();
     return { periodicity: "month", months: String(now.getMonth() + 1).padStart(2, "0"), year: now.getFullYear() };
@@ -251,6 +251,7 @@ export async function stampDraftFromPending(input: StampInput, draftId: string):
     return { ok: false, status: out.status, error: out.message, needsReconfigure: out.needsReconfigure };
   }
 
+  if (!out.data.uuid) return { ok: false, status: 502, error: "El PAC no devolvió un UUID verificable. Revisa el timbrado antes de reintentar." };
   return persistStampedInvoice(input, out.data);
 }
 

@@ -305,7 +305,9 @@ export function ChatPanel() {
   // Esc cierra el panel.
   useEffect(() => {
     if (!isOpen) return;
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && setIsOpen(false);
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !document.querySelector("[data-mochi-document-dialog]")) setIsOpen(false);
+    };
     document.addEventListener("keydown", esc);
     return () => document.removeEventListener("keydown", esc);
   }, [isOpen]);
@@ -481,7 +483,7 @@ export function ChatPanel() {
           </div>
         )}
         {tarjetas.map((c, k) => (
-          <ChatCard key={k} card={c} inicios={c.type === "pasos" ? msg.pasosInicios : undefined} />
+          <ChatCard key={k} card={c} conversationId={conversationId} inicios={c.type === "pasos" ? msg.pasosInicios : undefined} />
         ))}
         {memorias.map((c, k) => (
           <ChatCard key={`m${k}`} card={c} />

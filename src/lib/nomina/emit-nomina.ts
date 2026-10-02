@@ -1,3 +1,4 @@
+import { documentFingerprint } from "@/lib/fiscal/document-fingerprint";
 // ─────────────────────────────────────────────────────────────────────────────
 // Emite un CFDI nómina vía Facturapi y persiste el resultado como Invoice
 // con tipo NOMINA. Reutiliza la misma estructura que /api/facturas pero con
@@ -66,13 +67,15 @@ export type EmitNominaResult = {
   totalDeducciones?: number;
   netoAPagar?: number;
   error?: string;
+  uncertain?: boolean;
+  preview?: { payload: Record<string, unknown>; hash: string };
 };
 
 // Placeholder CURP for personas morales — used when emisor is a PM and we
 // don't have the curp del representante legal stored.
 const CURP_PM_PLACEHOLDER = "XEXX010101HNEXXXA4";
 
-export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNominaResult> {
+export async function emitNominaCfdi(input: EmitNominaInput, options: { preview?: boolean; expectedPayloadHash?: string } = {}): Promise<EmitNominaResult> {
   const company = await prisma.company.findUnique({ where: { id: input.companyId } });
   if (!company) return { ok: false, error: "Empresa no encontrada" };
   if (!company.facturapiApiKey) {
@@ -90,7 +93,7 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
       select: { rawXml: true },
     });
     registroPatronal = previo?.rawXml ? registroPatronalDesdeXmlNomina(previo.rawXml) : null;
-    if (registroPatronal) {
+    if (registroPatronal && !options.preview) {
       await prisma.company.update({ where: { id: company.id }, data: { registroPatronal } });
     }
   }
@@ -151,7 +154,6 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
       concepto: d.concepto,
       importe: d.importe,
     }));
-    console.log(`[nomina] ${employee.nombre}: desglose precalculado percepciones=${totalPercepciones} deducciones=${totalDeducciones} neto=${netoAPagar}`);
   } else {
     const sueldoBruto = input.sueldoBruto ?? +(Number(employee.salarioDiario) * input.diasPagados).toFixed(2);
 
@@ -172,7 +174,6 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
       salarioDiario: Number(employee.salarioDiario),
     });
     const imssObrero = imssCalc.obrero.total;
-    const imssPatronal = imssCalc.patronal.total;
     const infonavitDeduccion = calcularInfonavit({
       tipoDescuento: (employee as Employee & { tipoDescuentoInfonavit?: string | null }).tipoDescuentoInfonavit ?? null,
       descuentoInfonavit: employee.descuentoInfonavit === null ? null : Number(employee.descuentoInfonavit),
@@ -226,8 +227,6 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
         : []),
     ];
 
-    // Log for debugging
-    console.log(`[nomina] ${employee.nombre}: bruto=${sueldoBruto} ISR=${isrCalc.isrRetenido} IMSS_obrero=${imssObrero} IMSS_patronal=${imssPatronal} INFONAVIT=${infonavitDeduccion} neto=${netoAPagar}`);
   }
 
   // ── Identidad fiscal del receptor (CP y nombre EXACTOS del SAT) ────────
@@ -258,7 +257,7 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
     if (receptor?.codigoPostal) {
       if (!cpReceptor) {
         cpReceptor = receptor.codigoPostal;
-        await prisma.employee.update({
+        if (!options.preview) await prisma.employee.update({
           where: { id: employee.id },
           data: { codigoPostal: receptor.codigoPostal },
         });
@@ -291,7 +290,6 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
         }).subsidio;
 
   // ── Construir el payload Facturapi ─────────────────────────────────────
-  const facturapi = getFacturapiClient(company.facturapiApiKey);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const payload: any = {
@@ -376,6 +374,13 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
     ],
   };
 
+  const payloadHash = documentFingerprint({ companyId: company.id, emisor: { rfc: company.rfc, razonSocial: company.razonSocial, regimenFiscal: company.regimenFiscal, codigoPostal: company.codigoPostal }, payload });
+  if (options.preview) return { ok: true, preview: { payload, hash: payloadHash }, totalPercepciones, totalDeducciones, netoAPagar };
+  if (options.expectedPayloadHash && options.expectedPayloadHash !== payloadHash) {
+    return { ok: false, error: "El recibo cambió después de revisarlo. Abre la nómina y revisa el documento actualizado antes de timbrar." };
+  }
+  const facturapi = getFacturapiClient(company.facturapiApiKey);
+
   // ── Llamar a Facturapi ─────────────────────────────────────────────────
   let facturapiResp;
   try {
@@ -384,8 +389,10 @@ export async function emitNominaCfdi(input: EmitNominaInput): Promise<EmitNomina
     return {
       ok: false,
       error: e instanceof Error ? e.message : "Error de Facturapi al timbrar nómina",
+      uncertain: true,
     };
   }
+  if (!facturapiResp.uuid) return { ok: false, uncertain: true, error: "El PAC no devolvió un UUID verificable. Revisa el timbrado antes de reintentar." };
   // Costo del timbre de nómina (fire-and-forget; no rompe la emisión).
   void recordTimbrado("nomina", 1, { companyId: company.id, subtipo: "nomina.emit" });
 

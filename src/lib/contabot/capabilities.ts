@@ -8,6 +8,11 @@ import { objectiveTools } from "./objectives/tools";
 // background agents. Financial writes still use the existing confirmation UI.
 export const CAPABILITIES = {
   query_bank_accounts: "read",
+  query_employees: "read",
+  buscar_documentos: "read",
+  mostrar_documento: "read",
+  preparar_prefactura: "preparation",
+  preparar_nomina: "preparation",
   query_statement_review: "read",
   proponer_revision_bancaria: "proposal",
   consultar_cep_movimiento: "memory",
@@ -96,8 +101,9 @@ export function capabilityCatalogue(canWrite: boolean) {
     capabilities: Object.entries(CAPABILITIES).map(([name, effect]) => ({
       name, effect, availability: allowedCapability(name, canWrite) ? "available" : "unauthorized",
       ...(effect === "proposal" ? { execution: "requires_user_confirmation" } : {}),
+      ...(effect === "preparation" ? { execution: "interactive_draft_only; stamping requires a separate reviewed human confirmation" } : {}),
     })),
-    not_exposed: ["SAT submissions", "e.firma/CSD secrets", "payments", "payroll writes", "code changes", "operator MCP", "cross-company queries"],
+    not_exposed: ["SAT submissions", "e.firma/CSD secrets", "payments", "automatic stamping", "payroll disbursement", "code changes", "operator MCP", "cross-company queries"],
     note: "Available means callable. Fiscal support, source coverage and missing data are checked by each service; it does not certify a close.",
   };
 }

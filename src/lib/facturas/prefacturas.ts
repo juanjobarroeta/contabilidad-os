@@ -1,7 +1,8 @@
+import { draftIdentity } from "./draft-identity";
 import { prisma } from "@/lib/prisma";
 import { ensureFacturapiCustomer, getFacturapiClient } from "@/lib/facturapi";
 import { registrarBitacora } from "@/lib/audit";
-import { createDraftInvoice, discardDraft, stampDraftFromPending, type StampInput } from "@/lib/facturas/stamp";
+import { createDraftInvoice, discardDraft, stampDraftFromPending, resolveGlobalInfo, type StampInput } from "@/lib/facturas/stamp";
 import { pdfUrlCliente, totalEstimadoPrefactura } from "@/lib/facturas/prefactura";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -56,6 +57,8 @@ export async function crearPrefactura(input: StampInput, actor: Actor, req: Requ
   const errorSync = await sincronizarReceptor(input.companyId, input.customerId);
   if (errorSync) return { status: 422, body: { error: errorSync } };
 
+  const reviewIdentity = await draftIdentity(input.companyId, input.customerId);
+  input = { ...input, global: resolveGlobalInfo(reviewIdentity.receptor.rfc, input.global) };
   const draft = await createDraftInvoice(input);
   if (!draft.ok) return { status: draft.status, body: { error: draft.error, needsReconfigure: draft.needsReconfigure } };
 
@@ -66,7 +69,7 @@ export async function crearPrefactura(input: StampInput, actor: Actor, req: Requ
       companyId: input.companyId,
       customerId: input.customerId,
       draftId: draft.draftId,
-      payload: JSON.parse(JSON.stringify(input)),
+      payload: JSON.parse(JSON.stringify({ ...input, reviewIdentity })),
       total,
     },
   });
@@ -130,6 +133,16 @@ export function detallePrefactura(id: string) {
 const noPendiente = (b: Borrador): Resultado | null =>
   b.status === "PENDIENTE" ? null : { status: 409, body: { error: `La prefactura ya está ${b.status.toLowerCase()}` } };
 
+/** Every entry point (chat, billing and hospital) shares this atomic claim. */
+async function reclamarPrefactura(b: Borrador, status: string): Promise<boolean> {
+  const result = await prisma.facturaBorrador.updateMany({
+    where: { id: b.id, companyId: b.companyId, status: "PENDIENTE", draftId: b.draftId, updatedAt: b.updatedAt },
+    data: { status },
+  });
+  return result.count === 1;
+}
+const prefacturaCambio = (): Resultado => ({ status: 409, body: { error: "La prefactura cambió o hay otra operación en curso. Vuelve a abrirla antes de continuar." } });
+
 /**
  * Editar = volver a crear con otro payload. El draft de Facturapi es
  * INMUTABLE, así que se crea uno nuevo (sin consumir timbre), se descarta el
@@ -150,11 +163,15 @@ export async function editarPrefactura(borrador: Borrador, input: StampInput, ac
   if (input.companyId !== borrador.companyId) {
     return { status: 422, body: { error: "La empresa de la prefactura no coincide" } };
   }
+  if (!await reclamarPrefactura(borrador, "EDITANDO")) return prefacturaCambio();
+  try {
   const errorSync = await sincronizarReceptor(input.companyId, input.customerId);
   if (errorSync) return { status: 422, body: { error: errorSync } };
 
   // Primero el draft nuevo; sólo si Facturapi lo aceptó se descarta el viejo.
   // Al revés, un fallo a media edición dejaría la prefactura sin draft detrás.
+  const reviewIdentity = await draftIdentity(input.companyId, input.customerId);
+  input = { ...input, global: resolveGlobalInfo(reviewIdentity.receptor.rfc, input.global) };
   const draft = await createDraftInvoice(input);
   if (!draft.ok) return { status: draft.status, body: { error: draft.error, needsReconfigure: draft.needsReconfigure } };
   await discardDraft(borrador.companyId, borrador.draftId); // best-effort
@@ -165,7 +182,7 @@ export async function editarPrefactura(borrador: Borrador, input: StampInput, ac
     data: {
       customerId: input.customerId,
       draftId: draft.draftId,
-      payload: JSON.parse(JSON.stringify(input)),
+      payload: JSON.parse(JSON.stringify({ ...input, reviewIdentity })),
       total,
       // El PDF que el cliente pudo haber visto ya no existe: si se había
       // enviado, hay que reenviar el nuevo. Limpiar la marca lo hace visible.
@@ -186,15 +203,30 @@ export async function editarPrefactura(borrador: Borrador, input: StampInput, ac
     status: 200,
     body: { ok: true, id: borrador.id, draftId: draft.draftId, total, pdfUrl: pdfUrlCliente(borrador.companyId, draft.draftId) },
   };
+  } finally {
+    await prisma.facturaBorrador.updateMany({ where: { id: borrador.id, status: "EDITANDO" }, data: { status: "PENDIENTE" } });
+  }
 }
 
 /** Promueve EXACTAMENTE el draft de Facturapi a CFDI y persiste el Invoice local. */
 export async function timbrarPrefactura(borrador: Borrador, actor: Actor, req: Request): Promise<Resultado> {
   const bloqueo = noPendiente(borrador);
   if (bloqueo) return bloqueo;
+  if (!await reclamarPrefactura(borrador, "TIMBRANDO")) return prefacturaCambio();
   const input = borrador.payload as unknown as StampInput;
-  const result = await stampDraftFromPending(input, borrador.draftId);
-  if (!result.ok) return { status: result.status, body: { error: result.error, needsReconfigure: result.needsReconfigure } };
+  let result;
+  try {
+    result = await stampDraftFromPending(input, borrador.draftId);
+  } catch (e) {
+    await prisma.facturaBorrador.updateMany({ where: { id: borrador.id, status: "TIMBRANDO" }, data: { status: "REVISAR_TIMBRADO" } });
+    throw e;
+  }
+  if (!result.ok) {
+    // Even an HTTP error can follow successful issuance. Preserve the draft
+    // reference for recovery; never promote the same uncertain draft again.
+    await prisma.facturaBorrador.update({ where: { id: borrador.id }, data: { status: "REVISAR_TIMBRADO" } });
+    return { status: result.status, body: { error: `${result.error} Revisa el resultado del PAC antes de reintentar.`, needsReconfigure: result.needsReconfigure } };
+  }
   await prisma.facturaBorrador.update({
     where: { id: borrador.id },
     data: { status: "TIMBRADA", invoiceId: result.invoiceId },
@@ -260,8 +292,8 @@ export async function enviarPrefactura(borrador: Borrador, emailPedido: string |
 export async function descartarPrefactura(borrador: Borrador, actor: Actor, req: Request): Promise<Resultado> {
   const bloqueo = noPendiente(borrador);
   if (bloqueo) return bloqueo;
+  if (!await reclamarPrefactura(borrador, "DESCARTADA")) return prefacturaCambio();
   await discardDraft(borrador.companyId, borrador.draftId);
-  await prisma.facturaBorrador.update({ where: { id: borrador.id }, data: { status: "DESCARTADA" } });
   // Los cargos del hospital que tomó quedan como estaban: libres o, si era una
   // sustitución, amparados todavía por el CFDI que iba a reemplazar.
   await prisma.hospCargo.updateMany({ where: { prefacturaId: borrador.id }, data: { prefacturaId: null } });

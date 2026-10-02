@@ -1,3 +1,5 @@
+import { persistChatUserTurn } from "@/lib/ai/user-turn";
+import { documentCardFromResult, DOCUMENT_PREPARE_NAMES } from "@/lib/ai/documents/contract";
 import { after, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
@@ -183,7 +185,7 @@ export async function POST(req: Request) {
   // Las de presentación (tarjetas y botones) sólo existen en el chat de la app:
   // WhatsApp, la pasada diaria y el eval usan `tools` tal cual.
   const availableTools = [
-    ...(canWrite ? tools : tools.filter((t) => !t.name.startsWith("proponer_"))),
+    ...tools.filter((t) => t.name !== "preview_factura" && (canWrite || (!t.name.startsWith("proponer_") && !DOCUMENT_PREPARE_NAMES.has(t.name)))),
     ...toolsPresentacion,
   ];
 
@@ -273,6 +275,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No se pudo registrar la tarea de ContaBot." }, { status: 503 });
     }
   }
+
+  let userMessageId: string;
+  try {
+    userMessageId = await persistChatUserTurn({ conversationId: convId!, userId,
+      requestId: typeof body.requestId === "string" && /^[a-zA-Z0-9-]{16,64}$/.test(body.requestId) ? body.requestId : randomUUID(),
+      content: nuevoMensajeUsuario, meta: { ...(refActual ? { ref: { ...refActual } } : {}), ...(seguimiento ? { seguimiento: true } : {}) },
+    });
+  } catch { return NextResponse.json({ error: "No se pudo registrar la solicitud. Intenta de nuevo." }, { status: 409 }); }
 
   // Stream response with tool-use loop
   const encoder = new TextEncoder();
@@ -468,8 +478,10 @@ export async function POST(req: Request) {
               // el confirm endpoint re-valida igualmente. userId habilita las
               // herramientas de cartera (query_despacho_panorama), acotadas a
               // las empresas accesibles del propio usuario.
-              { conversationId: convId!, inApp: canWrite, userId, cierre: cierreCtx, origen: "copiloto" }
+              { conversationId: convId!, inApp: canWrite, userId, userMessageId, cierre: cierreCtx, origen: "copiloto" }
             );
+            const documentCard = documentCardFromResult(block.name, result);
+            if (documentCard) emitirCard(documentCard);
             // «Guardado en memoria: …» bajo la respuesta: la nota ya quedó en
             // el expediente y aparece en «Lo que recuerdo».
             if (block.name === "anotar_expediente") {
@@ -484,11 +496,11 @@ export async function POST(req: Request) {
             return { block, result, ms: Date.now() - t0 };
           };
           const salidas = new Map<string, { result: string; ms: number }>();
-          const lecturas = llamadas.filter((b) => !b.name.startsWith("proponer_") && !NOMBRES_PRESENTACION.has(b.name));
+          const lecturas = llamadas.filter((b) => !b.name.startsWith("proponer_") && !DOCUMENT_PREPARE_NAMES.has(b.name) && !NOMBRES_PRESENTACION.has(b.name));
           for (const r of await Promise.all(lecturas.map(correr))) {
             salidas.set(r.block.id, { result: r.result, ms: r.ms });
           }
-          for (const block of llamadas.filter((b) => b.name.startsWith("proponer_"))) {
+          for (const block of llamadas.filter((b) => b.name.startsWith("proponer_") || DOCUMENT_PREPARE_NAMES.has(b.name))) {
             const r = await correr(block);
             salidas.set(block.id, { result: r.result, ms: r.ms });
           }
@@ -573,24 +585,13 @@ export async function POST(req: Request) {
           /* no rompemos el turno por no poder pintar la tarjeta */
         }
 
-        // Persistir el turno (mensaje del usuario + respuesta del asistente) y
+        // Persistir la respuesta (el usuario se guardó ANTES de ejecutar tools) y
         // subir la conversación al tope del historial. Best-effort: si falla, no
         // rompemos la respuesta que el usuario ya recibió.
         // El id del mensaje del asistente viaja en `done` para que el cliente
         // pueda colgarle el feedback (pulgar / corrección).
         let assistantMessageId: string | null = null;
         try {
-          await prisma.chatMessage.create({
-            data: {
-              conversationId: convId!,
-              role: "user",
-              content: nuevoMensajeUsuario,
-              authorId: userId,
-              // La referencia de «Explícame esto» se guarda para volver a
-              // pintar la píldora al reabrir la conversación.
-              ...(refActual || seguimiento ? { meta: { ...(refActual ? { ref: { ...refActual } } : {}), ...(seguimiento ? { seguimiento: true } : {}) } } : {}),
-            },
-          });
           if (assistantText.trim() || cardsTurno.length) {
             const creado = await prisma.chatMessage.create({
               data: {

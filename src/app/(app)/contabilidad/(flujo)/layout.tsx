@@ -24,9 +24,14 @@ import { PasosDelFlujo } from "@/components/contabilidad/PasosDelFlujo";
 import { useCompany } from "@/components/layout/CompanyProvider";
 import { cn } from "@/lib/utils";
 
-const REPORTES = [
-  { href: "/contabilidad/libro", label: "Libro diario" },
+const PRINCIPALES = [
+  { href: "/contabilidad/libro", label: "Pólizas" },
   { href: "/contabilidad/balanza", label: "Balanza" },
+  { href: "/contabilidad/catalogo", label: "Catálogo" },
+  { href: "/contabilidad/estado", label: "Estados financieros" },
+  { href: "/contabilidad/cierre", label: "Cierre" },
+] as const;
+const REPORTES = [
   { href: "/contabilidad/estado", label: "Estado de resultados" },
   { href: "/contabilidad/balance", label: "Balance general" },
   { href: "/contabilidad/saldos", label: "Saldos interempresa" },
@@ -36,7 +41,6 @@ const REPORTES = [
 
 // Tareas que viven fuera del flujo pero pertenecen a la sección.
 const TAREAS = [
-  { href: "/contabilidad/catalogo", label: "Catálogo y mapeo" },
   { href: "/contabilidad/apertura", label: "Saldos iniciales" },
   { href: "/contabilidad/polizas", label: "Pólizas y auxiliares (XML)" },
 ] as const;
@@ -57,19 +61,17 @@ export default function FlujoLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  const enReporte = REPORTES.some((r) => pathname.startsWith(r.href));
+  const enReporte = [...REPORTES, ...TAREAS].some((r) => pathname.startsWith(r.href));
+  const enCierre = ["cierre", "conciliacion", "divergencia", "ajustes", "entregables"].some((r) => pathname.startsWith(`/contabilidad/${r}`));
 
   return (
     <div className="print-report mx-auto max-w-[1100px] px-6 py-7 print:max-w-none print:p-0">
-      {/* Los PASOS mandan y van en su propia fila: cada uno carga el número
-          que importa (ce-readiness), no sólo su ordinal. Reportes y tareas
-          —que no son parte del flujo— bajan a una fila secundaria junto al
-          selector de período. */}
-      <div className="mb-3 print:hidden">
-        <PasosDelFlujo />
-      </div>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3 print:hidden">
-        <nav aria-label="Reportes y tareas" className="flex flex-wrap items-center gap-1">
+        <nav aria-label="Contabilidad" className="flex flex-wrap items-center gap-1">
+          {PRINCIPALES.map(({ href, label }) => {
+            const active = pathname.startsWith(href) || (label === "Cierre" && enCierre) || (label === "Estados financieros" && pathname.startsWith("/contabilidad/balance"));
+            return <Link key={href} href={href} aria-current={active ? "page" : undefined} className={cn("rounded-full px-3 py-2 text-[13px] font-medium", active ? "bg-cos-brand-tint text-cos-brand-ink" : "text-cos-ink-soft hover:bg-cos-paper")}>{label}</Link>;
+          })}
           {/* `enReporte` sólo PINTA el summary; forzar `open` desplegaba el
               panel sobre el contenido en cada página de reporte (revisión de
               pantallas). El menú se cierra al elegir: el layout persiste
@@ -83,7 +85,7 @@ export default function FlujoLayout({ children }: { children: ReactNode }) {
                   : "text-cos-ink-soft hover:bg-cos-paper hover:text-cos-ink"
               )}
             >
-              Reportes ▾
+              Más ▾
             </summary>
             <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-card border border-cos-line bg-cos-card p-1 shadow-card">
               {REPORTES.map(({ href, label }) => (
@@ -117,6 +119,7 @@ export default function FlujoLayout({ children }: { children: ReactNode }) {
         </nav>
         <PeriodSelector />
       </div>
+      {enCierre && <div className="mb-5 print:hidden"><PasosDelFlujo /></div>}
       {children}
     </div>
   );
