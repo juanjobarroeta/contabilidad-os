@@ -48,6 +48,14 @@ controles impresos y cobertura la confirma el humano en /bancos?tab=estados.
 Clasificaciones y préstamos permanecen en borrador hasta verificar el estado.
 consultar_cep_movimiento usa Tlaloc para un SPEI conocido: guarda su comprobante,
 pero no descubre movimientos faltantes ni acredita cobertura mensual.
+Para IVA de ingresos PUE usa query_tax_position y query_iva_cobro. El motor asigna
+el IVA al cobro efectivo automáticamente aunque el CFDI sea de otro mes. No pidas
+una revisión extra cuando la evidencia ya alcanza. Si falta un match, usa las
+herramientas de conciliación. Si falta documentar el cobro o el tratamiento, busca
+la evidencia y ley vigente, pregunta lo mínimo en esta conversación y prepara
+proponer_revision_iva_cobro con la tarjeta existente de Confirmar; no envíes al
+usuario a otro formulario. No inventes pagos, fechas, tasas ni una exención de
+intereses: revisa LIVA 15-X/18-A. Después verifica query_tax_position.
 Si falta evidencia, solicita el documento concreto y explica qué trabajo bloquea.
 Informa qué comprobaste, qué falta y cuál es el siguiente paso. Una tarea del agente
 terminada no significa cierre fiscal validado ni declaración presentada.

@@ -7,12 +7,17 @@ const A = "itest-pue-collection-a",
 let actor = U;
 vi.mock("@/lib/auth", () => ({ auth: async () => ({ user: { id: actor } }) }));
 vi.mock("@/lib/cron-scheduler", () => ({ kickCron: vi.fn() }));
+vi.mock("@/lib/subscription", () => ({ gateEscritura: async () => null }));
 import { prisma } from "@/lib/prisma";
 import { computeTaxPosition } from "@/lib/impuestos";
 import { GET as paper } from "@/app/api/papeles/iva/route";
 import { POST as review } from "@/app/api/facturas/[id]/iva-cobro/route";
 import { GET as taxes, POST as saveTax } from "@/app/api/impuestos/route";
 import { POST as fileFederal } from "@/app/api/impuestos/cierre/route";
+import {
+  POST as confirmChat,
+  DELETE as cancelChat,
+} from "@/app/api/ai/confirm/route";
 import { executeToolCall } from "@/lib/ai/tool-executor";
 import {
   loadPueIncomeCollections,
@@ -28,6 +33,41 @@ import {
 } from "@/lib/bancos/statements/review";
 const sep = new Date("2026-09-01Z"),
   oct = new Date("2026-10-01Z");
+const conversationId = "itest-pue-chat";
+async function chatTool(name: string, input: Record<string, unknown>) {
+  return JSON.parse(
+    await executeToolCall(name, input, A, {
+      userId: actor,
+      conversationId,
+      inApp: true,
+    }),
+  );
+}
+async function chatConfirm(token: string, cancel = false) {
+  return (cancel ? cancelChat : confirmChat)(
+    new Request("http://test.local/api/ai/confirm", {
+      method: cancel ? "DELETE" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ conversationId, token }),
+    }),
+  );
+}
+async function proposeIva(
+  invoice_id: string,
+  extra: Record<string, unknown> = {},
+) {
+  const current = await chatTool("query_iva_cobro", { invoice_id });
+  return chatTool("proponer_revision_iva_cobro", {
+    invoice_id,
+    expected: current.expected,
+    tratamiento: "FLUJO_GENERAL",
+    fecha_cobro: "2026-09-30",
+    evidencia: "Synthetic receipt supplied in chat, folio 42",
+    motivo:
+      "Verified ordinary cash IVA under LIVA 1-B and reviewed the interest contract",
+    ...extra,
+  });
+}
 
 async function cleanup() {
   await prisma.auditLog.deleteMany({ where: { companyId: { in: [A, B] } } });
@@ -245,6 +285,14 @@ describe.skipIf(process.env.DB_TESTS_SKIP === "1")(
           { companyId: A, userId: V, role: "VIEWER" },
         ],
       });
+      await prisma.chatConversation.create({
+        data: {
+          id: conversationId,
+          companyId: A,
+          userId: U,
+          visibility: "COMPANY",
+        },
+      });
       await prisma.bankAccount.createMany({
         data: [A, B].map((id) => ({
           id: id + "-bank",
@@ -256,6 +304,84 @@ describe.skipIf(process.env.DB_TESTS_SKIP === "1")(
       });
     });
     afterAll(cleanup);
+    it("Mochi inspects and stages the review, then the existing Confirm card applies it once", async () => {
+      const inv = await invoice({ interest: true });
+      const proposal = await proposeIva(inv.id);
+      expect(proposal).toMatchObject({ pending: true });
+      expect(proposal.summary).toContain("2026-09-30");
+      expect(
+        (await prisma.invoice.findUniqueOrThrow({ where: { id: inv.id } }))
+          .ivaCausacionRevision,
+      ).toBeNull();
+      const results = await Promise.all([
+        chatConfirm(proposal.token),
+        chatConfirm(proposal.token),
+      ]);
+      expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+      expect((await computeTaxPosition(A, 2026, 9)).iva).toMatchObject({
+        trasladado: 2000,
+        cobrosPue: { determinado: true },
+      });
+      expect((await computeTaxPosition(A, 2026, 10)).iva.trasladado).toBe(0);
+      const audit = await prisma.auditLog.findFirstOrThrow({
+        where: { companyId: A, accion: "factura.iva-cobro-revisado" },
+      });
+      expect(audit.detalle).toMatchObject({ origen: "MOCHI", conversationId });
+      expect(
+        await prisma.accountingEntry.count({ where: { companyId: A } }),
+      ).toBe(0);
+      expect(
+        await prisma.taxDeclaration.count({ where: { companyId: A } }),
+      ).toBe(0);
+    });
+    it("Mochi refuses changed bank evidence and stale invoice evidence at confirmation", async () => {
+      const inv = await invoice(),
+        tx = await movement(inv.id);
+      const proposal = await proposeIva(inv.id);
+      expect(proposal.pending).toBe(true);
+      await prisma.bankTransaction.update({
+        where: { id: tx.id },
+        data: { monto: 14000 },
+      });
+      expect((await chatConfirm(proposal.token)).status).toBe(409);
+      expect(
+        (await prisma.invoice.findUniqueOrThrow({ where: { id: inv.id } }))
+          .ivaCausacionRevision,
+      ).toBeNull();
+      const next = await proposeIva(inv.id);
+      await prisma.invoice.update({
+        where: { id: inv.id },
+        data: { total: 15000 },
+      });
+      expect((await chatConfirm(next.token)).status).toBe(409);
+    });
+    it("Mochi keeps one durable proposal and preserves tenant, viewer, cancellation and date guards", async () => {
+      const inv = await invoice(),
+        foreign = await invoice({ companyId: B });
+      expect(
+        (await chatTool("query_iva_cobro", { invoice_id: foreign.id })).error,
+      ).toBeTruthy();
+      actor = V;
+      expect(
+        (await chatTool("query_iva_cobro", { invoice_id: inv.id })).invoice_id,
+      ).toBe(inv.id);
+      expect((await proposeIva(inv.id)).error).toBeTruthy();
+      actor = U;
+      expect(
+        (await proposeIva(inv.id, { fecha_cobro: "2026-02-30" })).error,
+      ).toContain("real");
+      const first = await proposeIva(inv.id);
+      expect((await proposeIva(inv.id)).error).toContain("pendiente");
+      actor = V;
+      expect((await chatConfirm(first.token)).status).toBe(403);
+      actor = U;
+      expect((await chatConfirm(first.token, true)).status).toBe(200);
+      expect(
+        (await prisma.invoice.findUniqueOrThrow({ where: { id: inv.id } }))
+          .ivaCausacionRevision,
+      ).toBeNull();
+      expect((await proposeIva(inv.id)).pending).toBe(true);
+    });
     it("calculator, workpaper, CSV and ContaBot put a verified September receipt in September, once", async () => {
       const inv = await invoice();
       const tx = await movement(inv.id);

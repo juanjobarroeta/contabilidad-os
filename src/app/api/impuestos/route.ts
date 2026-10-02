@@ -288,7 +288,7 @@ export async function POST(req: Request) {
     const calculation=await calculationForApi(computeTaxPosition(companyId,fy,fm));
     if(calculation instanceof NextResponse) return calculation;
     if(!calculation.iva.cobrosPue.determinado) return NextResponse.json({
-      code:"IVA_COBRO_REVIEW_REQUIRED",error:"El IVA PUE requiere confirmar el cobro o su tratamiento. Revisa el papel de IVA antes de guardar el cálculo.",
+      code:"IVA_COBRO_REVIEW_REQUIRED",error:"El IVA PUE requiere confirmar el cobro o su tratamiento. Resuelve la evidencia con Mochi antes de guardar el cálculo.",
       pendientes:calculation.iva.cobrosPue.pendientes.slice(0,25),
     },{status:422});
     const [filed,closed]=await Promise.all([

@@ -1,4 +1,5 @@
 import { BANK_STATEMENT_TOOL_NAMES } from "./bank-statement-tools";
+import { PUE_IVA_TOOL_NAMES } from "./pue-iva-tools";
 import { prisma } from "@/lib/prisma";
 import { esEntidad } from "@/lib/fiscal/rules";
 import { entidadesDeEmpresa } from "@/lib/fiscal-kb/entidades-empresa";
@@ -97,6 +98,10 @@ export async function executeToolCall(
   if (BANK_STATEMENT_TOOL_NAMES.has(toolName)) {
     const { executeBankStatementTool } = await import("./bank-statement-executor");
     return executeBankStatementTool(toolName, input, companyId, context);
+  }
+  if (PUE_IVA_TOOL_NAMES.has(toolName)) {
+    const { executePueIvaTool } = await import("./pue-iva-executor");
+    return executePueIvaTool(toolName, input, companyId, context);
   }
   // El expediente se despacha antes del switch: sus herramientas viven en su
   // propio módulo (con sus reglas de versionado y de lo verificado a mano) y
@@ -309,7 +314,7 @@ export async function executeToolCall(
       // sobrestimadas por tomar en cero el saldo a favor / pagos provisionales.
       const instrucciones = [
         ...(pos.iva.cobrosPue?.determinado===false
-          ? ["El IVA PUE NO está determinado. Presenta cualquier cifra como estimación, explica pendientes y pide conciliar o documentar el cobro en el papel de IVA. No afirmes que se puede declarar ni inventes un REP o una fecha de CFDI."] : []),
+          ? ["El IVA PUE NO está determinado. Presenta cualquier cifra como estimación, consulta query_iva_cobro y resuelve con las herramientas de conciliación o proponer_revision_iva_cobro en esta conversación. Pide sólo la evidencia faltante; no envíes a llenar otro formulario. No afirmes que se puede declarar ni inventes un REP o una fecha de CFDI."] : []),
         ...(pos.advertencias.length > 0
           ? ["Comunica al usuario TODAS las 'advertencias' tal cual, antes de las cifras: los montos pueden estar sobrestimados por falta de declaraciones guardadas."]
           : []),

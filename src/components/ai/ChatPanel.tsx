@@ -153,6 +153,7 @@ export function ChatPanel() {
     companyId,
     contexto: leerContexto,
     onTurnoTerminado: () => loadConversationsRef.current?.(),
+    onAccionConfirmada: () => window.dispatchEvent(new CustomEvent("cos:data-changed", { detail: { companyId } })),
   });
 
   const loadConversations = useCallback(async () => {
