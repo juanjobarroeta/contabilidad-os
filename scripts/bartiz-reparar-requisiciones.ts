@@ -167,6 +167,17 @@ function unicaCotizacion(r: Req) {
   return cot;
 }
 
+// Pagable de la única cotización: Σ importe + IVA de cada línea (ivaTasa de la partida).
+function pagableDe(r: Req, cot: Req["cotizaciones"][number]) {
+  let t = 0;
+  for (const cp of cot.partidas) {
+    const p = r.partidas.find((x) => x.id === cp.solicitudPartidaId);
+    const tasa = p?.ivaTasa == null ? 0 : Number(p.ivaTasa);
+    t += Number(cp.importe) + round2(Number(cp.importe) * tasa);
+  }
+  return round2(t);
+}
+
 // «8 PZA» → { cantidad: 8, unidad: "PZA" }. Sólo si el número coincide con
 // la cantidad real; «544.12KG» (peso por pieza) se deja tal cual.
 function separarUnidad(unidad: string | null, cantidad: number) {
@@ -215,7 +226,9 @@ async function emparejarCfdis(cid: string, hasta: Date): Promise<{ empates: Empa
   for (const r of reqs) {
     const cot = unicaCotizacion(r);
     if (!cot) continue;
-    const total = Number(cot.total);
+    // El CFDI trae el total con IVA; tras el swap la cotización guarda el
+    // subtotal, así que se compara contra el pagable (importe + IVA por línea).
+    const total = pagableDe(r, cot);
     const rfcCot = cot.supplier?.rfc ?? null;
     const pool = libres.filter((i) => !usados.has(i.id) && (!rfcCot || i.rfc === rfcCot));
 
