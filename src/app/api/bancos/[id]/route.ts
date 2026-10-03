@@ -171,6 +171,7 @@ export async function GET(req: Request, { params }: Params) {
           select: {
             id: true,
             totalDestajo: true,
+            total: true,
             cuadrilla: { select: { nombre: true } },
             proyecto: { select: { codigo: true } },
           },

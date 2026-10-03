@@ -108,13 +108,16 @@ export async function GET(_req: Request, { params }: Params) {
           where: {
             companyId: tx.companyId,
             bankTransactionId: null,
-            estado: { in: ["BORRADOR", "APROBADA"] },
-            totalDestajo: { gte: minAmt, lte: maxAmt },
+            // Sólo rayas autorizadas (o ya pagadas por tesorería y sin
+            // conciliar): una BORRADOR no se paga, ni por conciliación.
+            estado: { in: ["APROBADA", "PAGADA"] },
+            total: { gte: minAmt, lte: maxAmt },
             semanaInicio: { gte: dateLow, lte: dateHigh },
           },
           select: {
             id: true,
             totalDestajo: true,
+            total: true,
             semanaInicio: true,
             semanaFin: true,
             cuadrilla: { select: { nombre: true } },

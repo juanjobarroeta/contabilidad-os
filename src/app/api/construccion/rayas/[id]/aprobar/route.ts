@@ -19,7 +19,7 @@ export const POST = withAuthz(
     const { id } = await ctx.params;
     const raya = await prisma.rayaSemanal.findUnique({
       where: { id },
-      select: { id: true, companyId: true, estado: true, totalDestajo: true },
+      select: { id: true, companyId: true, estado: true, total: true },
     });
     if (!raya) throw new AuthzError(404, "Raya no encontrada");
     await requireWriter(raya.companyId, req);
@@ -30,9 +30,10 @@ export const POST = withAuthz(
         { status: 422 }
       );
     }
-    if (Number(raya.totalDestajo) <= 0) {
+    // `total` = jornales + destajo: lo que se va a pagar.
+    if (Number(raya.total) <= 0) {
       return NextResponse.json(
-        { error: "La raya no tiene trabajos con importe" },
+        { error: "La raya no tiene importe (ni jornales ni destajo)" },
         { status: 422 }
       );
     }

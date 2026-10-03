@@ -46,6 +46,12 @@ export const GET = withAuthz(async (req: Request) => {
       miembros: {
         where: { isActive: true },
         orderBy: { createdAt: "asc" },
+        // El trabajador (con su tarifa) para la asistencia y el cálculo.
+        include: {
+          trabajador: {
+            select: { id: true, nombre: true, tipoPago: true, tarifa: true, horasJornada: true, especialidad: true },
+          },
+        },
       },
       _count: { select: { rayas: true } },
     },

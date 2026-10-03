@@ -90,9 +90,10 @@ export const GET = withAuthz(async (req: Request) => {
         estado: "PAGADA",
         pagadaAt: { gte: yearStart, lt: yearEnd },
       },
-      select: { totalDestajo: true, pagadaAt: true },
-    }).then((rows) => rows.map((r) => ({ ...r, totalDestajo: Number(r.totalDestajo) })))
-      .catch(() => [] as { totalDestajo: number; pagadaAt: Date | null }[]),
+      // `total` = jornales + destajo (lo que se pagó de la raya).
+      select: { total: true, pagadaAt: true },
+    }).then((rows) => rows.map((r) => ({ ...r, total: Number(r.total) })))
+      .catch(() => [] as { total: number; pagadaAt: Date | null }[]),
     prisma.solicitudCompra.findMany({
       where: {
         companyId,
@@ -155,7 +156,7 @@ export const GET = withAuthz(async (req: Request) => {
 
   for (const r of rayas) {
     if (!r.pagadaAt) continue;
-    meses[r.pagadaAt.getMonth()].destajoRayas += r.totalDestajo;
+    meses[r.pagadaAt.getMonth()].destajoRayas += r.total;
   }
   for (const s of solicitudes) {
     if (!s.pagadaAt) continue;

@@ -320,9 +320,11 @@ model Company {
   imssMovimientos     ImssMovimiento[]
   incidencias         Incidencia[]
 
-  // CONSTRUCCION_CUADRILLAS add-on (only populated when that module is enabled)
-  cuadrillas Cuadrilla[]
-  rayas      RayaSemanal[]
+  // Destajo / mano de obra de construcción (parte del módulo CONSTRUCCION)
+  cuadrillas   Cuadrilla[]
+  rayas        RayaSemanal[]
+  trabajadores Trabajador[]
+  asistencias  Asistencia[]
 
   // Gastos (Katia's validation + pay workflow for Bartiz field expenses)
   gastos     Gasto[]
@@ -2129,6 +2131,8 @@ model Employee {
   imssMovimientos   ImssMovimiento[]
   incidencias       Incidencia[]
   cuadrillaMiembros CuadrillaMiembro[]
+  // Construcción: trabajador de obra que además es empleado formal (IMSS)
+  trabajadoresObra  Trabajador[]
   // Automotriz: unidades vendidas por este empleado (comisiones)
   vehiculosVendidos Vehiculo[]
   pedidosVehiculo   PedidoVehiculo[]    @relation("PedidoVehiculoVendedor")
@@ -2984,6 +2988,7 @@ model Proyecto {
   unidades           UnidadProyecto[]
   cuadrillas         Cuadrilla[]
   rayas              RayaSemanal[]
+  asistencias        Asistencia[]
   gastos             Gasto[]
   reembolsos         ReembolsoSemanal[]
 
@@ -3832,10 +3837,11 @@ model Cuadrilla {
   notas        String?
   isActive     Boolean @default(true)
 
-  company  Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  proyecto Proyecto           @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
-  miembros CuadrillaMiembro[]
-  rayas    RayaSemanal[]
+  company     Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  proyecto    Proyecto           @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  miembros    CuadrillaMiembro[]
+  rayas       RayaSemanal[]
+  asistencias Asistencia[]
 
   @@unique([proyectoId, nombre])
   @@index([companyId, isActive])
@@ -3848,14 +3854,20 @@ model CuadrillaMiembro {
 
   nombre         String // free-text (works for both formal & cash workers)
   employeeId     String? // optional FK when this miembro is also an IMSS-registered Employee
+  // El trabajador (registro único de la empresa, con su tarifa) que esta
+  // fila representa en ESTA cuadrilla. null = miembro anterior capturado
+  // sólo con nombre: no se le puede calcular jornal desde la asistencia.
+  trabajadorId   String?
   rolEnCuadrilla String? // "Oficial" | "Ayudante" | "Maestro" — free text
   isActive       Boolean @default(true)
 
-  cuadrilla Cuadrilla            @relation(fields: [cuadrillaId], references: [id], onDelete: Cascade)
-  employee  Employee?            @relation(fields: [employeeId], references: [id])
-  detalles  RayaDetalleMiembro[]
+  cuadrilla  Cuadrilla            @relation(fields: [cuadrillaId], references: [id], onDelete: Cascade)
+  employee   Employee?            @relation(fields: [employeeId], references: [id])
+  trabajador Trabajador?          @relation(fields: [trabajadorId], references: [id], onDelete: SetNull)
+  detalles   RayaDetalleMiembro[]
 
   @@index([cuadrillaId, isActive])
+  @@index([trabajadorId])
 }
 
 // A weekly raya for one cuadrilla. Always a cash-flow event — on pagar
@@ -3869,15 +3881,27 @@ model RayaSemanal {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  semanaInicio DateTime // Monday 00:00 local
-  semanaFin    DateTime // Sunday 23:59 local
-  estado       RayaEstado @default(BORRADOR)
-  totalDestajo Decimal    @default(0) @db.Decimal(18, 6) // sum of RayaTrabajo.importeDestajo
-  notas        String?
+  semanaInicio  DateTime // Monday 00:00 local
+  semanaFin     DateTime // Sunday 23:59 local
+  estado        RayaEstado @default(BORRADOR)
+  totalDestajo  Decimal    @default(0) @db.Decimal(18, 6) // sum of RayaTrabajo.importeDestajo
+  // Σ RayaDetalleMiembro.importe cuando la raya se generó de la asistencia
+  // (jornales netos). 0 en rayas anteriores: ahí los detalles eran el
+  // reparto del destajo, no un pago adicional.
+  totalJornales Decimal    @default(0) @db.Decimal(18, 6)
+  // Lo que se PAGA = totalJornales + totalDestajo. Es el monto de la raya en
+  // todos lados (autorizar, pagar, conciliar, costo de la obra).
+  total         Decimal    @default(0) @db.Decimal(18, 6)
+  notas         String?
 
   // Filled when marked PAGADA. Unique so we can't double-book a raya.
   bankTransactionId String?   @unique
   pagadaAt          DateTime?
+  // Pago registrado por tesorería (fecha/referencia) SIN crear movimiento
+  // bancario; el real llega con el estado de cuenta y se concilia después.
+  // null con estado PAGADA = la marcó pagada la conciliación misma.
+  pagoRegistradoAt  DateTime?
+  referenciaPago    String?
 
   company         Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   proyecto        Proyecto             @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
@@ -3923,12 +3947,83 @@ model RayaDetalleMiembro {
   rayaId         String
   miembroId      String
   diasTrabajados Decimal @default(6) @db.Decimal(18, 6)
-  importe        Decimal @db.Decimal(18, 6)
+  // De la asistencia de la semana (rayas generadas): horas normales y extra.
+  horas          Decimal @default(0) @db.Decimal(18, 6)
+  horasExtra     Decimal @default(0) @db.Decimal(18, 6)
+  // Anticipos / préstamos que se descuentan de esta semana. Se conserva al
+  // regenerar la raya desde la asistencia.
+  descuento      Decimal @default(0) @db.Decimal(18, 6)
+  importe        Decimal @db.Decimal(18, 6) // neto a pagar a este miembro
 
   raya    RayaSemanal      @relation(fields: [rayaId], references: [id], onDelete: Cascade)
   miembro CuadrillaMiembro @relation(fields: [miembroId], references: [id])
 
   @@unique([rayaId, miembroId])
+}
+
+// ─── Mano de obra: trabajadores y asistencia ────────────────────────────────
+//
+// Trabajador = el registro ÚNICO de una persona en la empresa, con cómo y
+// cuánto se le paga. La mayoría cobra fuera de la nómina fiscal (efectivo);
+// employeeId lo liga si además es empleado formal. Entra a las cuadrillas
+// de cada obra vía CuadrillaMiembro.trabajadorId, así una persona que se
+// mueve entre obras sigue siendo una sola.
+//
+// Asistencia = horas de un trabajador un día en una obra. Un mismo día puede
+// tener renglones en dos obras: así se reparte su costo por proyecto. La
+// raya semanal de una cuadrilla se GENERA de aquí (lib/construccion/raya-calculo).
+
+enum TrabajadorTipoPago {
+  DIA // tarifa = jornal por día completo (horasJornada horas)
+  HORA // tarifa = pago por hora
+}
+
+model Trabajador {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  nombre       String
+  telefono     String?
+  especialidad String? // "Albañil", "Ayudante", "Fierrero"…
+  tipoPago     TrabajadorTipoPago @default(DIA)
+  tarifa       Decimal            @db.Decimal(18, 6) // por día o por hora, según tipoPago
+  horasJornada Decimal            @default(8) @db.Decimal(18, 6) // horas de un día completo
+  employeeId   String? // si además es empleado formal (IMSS)
+  isActive     Boolean            @default(true)
+
+  company     Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee    Employee?          @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  miembros    CuadrillaMiembro[]
+  asistencias Asistencia[]
+
+  @@index([companyId, isActive])
+}
+
+model Asistencia {
+  id             String   @id @default(cuid())
+  companyId      String
+  trabajadorId   String
+  proyectoId     String
+  cuadrillaId    String?
+  fecha          DateTime @db.Date
+  horas          Decimal  @db.Decimal(18, 6) // horas normales trabajadas ese día
+  horasExtra     Decimal  @default(0) @db.Decimal(18, 6)
+  notas          String?
+  capturadaPorId String? // User id, sin FK (patrón creadaPorId)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  company    Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  trabajador Trabajador @relation(fields: [trabajadorId], references: [id], onDelete: Cascade)
+  proyecto   Proyecto   @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  cuadrilla  Cuadrilla? @relation(fields: [cuadrillaId], references: [id], onDelete: SetNull)
+
+  @@unique([trabajadorId, proyectoId, fecha])
+  @@index([proyectoId, fecha])
+  @@index([cuadrillaId, fecha])
+  @@index([companyId, fecha])
 }
 
 // ─── Gasto (Katia's pay-and-register workflow) ──────────────────────────────

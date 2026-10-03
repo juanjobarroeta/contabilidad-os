@@ -1,15 +1,16 @@
 /**
  * POST /api/construccion/rayas/[id]/pagar
  *
- * APROBADA → PAGADA. Creates a BankTransaction debitada from the given
- * bankAccountId (typically one of the tarjetas departamentales) for
- * the raya's totalDestajo. Atomic — if the bank tx fails, raya stays
- * APROBADA.
+ * APROBADA → PAGADA. Registra el pago (fecha y referencia del SPEI/efectivo)
+ * SIN crear movimiento bancario — igual que gastos y requisiciones: el
+ * movimiento real llega con el estado de cuenta importado y se concilia
+ * después contra esta raya. (Antes se inventaba un BankTransaction que se
+ * duplicaba al importar el estado de cuenta.)
  *
  * Body: {
- *   bankAccountId: string   // which account paid
- *   fecha: ISO date          // when the cash left the account
- *   referencia?: string       // cheque #, transfer id, etc.
+ *   fecha: ISO date          // cuándo salió el dinero
+ *   referencia?: string      // folio SPEI, cheque, "efectivo"…
+ *   bankAccountId?: string   // aceptado por compatibilidad; se ignora
  * }
  */
 
@@ -24,7 +25,7 @@ import {
 } from "@/lib/authz";
 
 const schema = z.object({
-  bankAccountId: z.string().min(1),
+  bankAccountId: z.string().min(1).optional(),
   fecha: z.string(),
   referencia: z.string().max(80).nullable().optional(),
 });
@@ -37,13 +38,14 @@ export const POST = withAuthz(
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
+    const fecha = new Date(parsed.data.fecha);
+    if (Number.isNaN(fecha.getTime())) {
+      return NextResponse.json({ error: "Fecha inválida" }, { status: 400 });
+    }
 
     const raya = await prisma.rayaSemanal.findUnique({
       where: { id },
-      include: {
-        cuadrilla: { select: { nombre: true, especialidad: true } },
-        proyecto: { select: { codigo: true, nombre: true } },
-      },
+      select: { id: true, companyId: true, estado: true },
     });
     if (!raya) throw new AuthzError(404, "Raya no encontrada");
     await requireWriter(raya.companyId, req);
@@ -51,60 +53,27 @@ export const POST = withAuthz(
 
     if (raya.estado !== "APROBADA") {
       return NextResponse.json(
-        { error: `Transición inválida: ${raya.estado} → PAGADA (aprueba primero)` },
+        { error: `Transición inválida: ${raya.estado} → PAGADA (autorízala primero)` },
         { status: 422 }
       );
     }
 
-    // Validate the bank account belongs to the same company
-    const account = await prisma.bankAccount.findUnique({
-      where: { id: parsed.data.bankAccountId },
-      select: { id: true, companyId: true, nombre: true },
+    // Guarda contra doble pago (dos pestañas): sólo pasa si sigue APROBADA.
+    const { count } = await prisma.rayaSemanal.updateMany({
+      where: { id, estado: "APROBADA" },
+      data: {
+        estado: "PAGADA",
+        pagadaAt: fecha,
+        pagoRegistradoAt: new Date(),
+        referenciaPago: parsed.data.referencia ?? null,
+      },
     });
-    if (!account || account.companyId !== raya.companyId) {
-      return NextResponse.json({ error: "BankAccount inválido" }, { status: 400 });
-    }
+    if (count === 0) throw new AuthzError(409, "La raya ya fue pagada");
 
-    const desc = `Raya semanal ${raya.cuadrilla.nombre} — ${raya.proyecto.codigo}`;
-
-    const result = await prisma.$transaction(async (tx) => {
-      // Idempotent guard — if another tab already paid this raya, bail.
-      const fresh = await tx.rayaSemanal.findUnique({
-        where: { id },
-        select: { estado: true, bankTransactionId: true },
-      });
-      if (fresh?.estado === "PAGADA" || fresh?.bankTransactionId) {
-        throw new AuthzError(409, "La raya ya fue pagada");
-      }
-
-      const bankTx = await tx.bankTransaction.create({
-        data: {
-          companyId: raya.companyId,
-          bankAccountId: account.id,
-          fecha: new Date(parsed.data.fecha),
-          descripcion: desc,
-          referencia: parsed.data.referencia ?? null,
-          monto: -Math.abs(Number(raya.totalDestajo)),
-          tipo: "DEBITO",
-          status: "MATCHED",
-          // Manual fallback when no existing CSV-imported tx is picked.
-          source: "MANUAL",
-        },
-      });
-
-      const updated = await tx.rayaSemanal.update({
-        where: { id },
-        data: {
-          estado: "PAGADA",
-          bankTransactionId: bankTx.id,
-          pagadaAt: new Date(),
-        },
-        include: { cuadrilla: true, bankTransaction: true },
-      });
-
-      return updated;
+    const updated = await prisma.rayaSemanal.findUnique({
+      where: { id },
+      include: { cuadrilla: true, bankTransaction: true },
     });
-
-    return NextResponse.json(result);
+    return NextResponse.json(updated);
   }
 );

@@ -146,6 +146,23 @@ describe("destajo: cada rol con su tramo (como requisiciones)", () => {
     expect(allowed("CONTABILIDAD", "POST", "/api/construccion/rayas/abc/pagar")).toBe(false);
   });
 
+  it("residente y contabilidad capturan trabajadores, asistencia y generan la raya", () => {
+    for (const rol of ["RESIDENTE", "CONTABILIDAD"] as const) {
+      expect(allowed(rol, "POST", "/api/construccion/trabajadores")).toBe(true);
+      expect(allowed(rol, "PUT", "/api/construccion/trabajadores/abc")).toBe(true);
+      expect(allowed(rol, "PUT", "/api/construccion/asistencias")).toBe(true);
+      expect(allowed(rol, "POST", "/api/construccion/cuadrillas/abc/raya")).toBe(true);
+    }
+  });
+
+  it("tesorería ve trabajadores y asistencia, pero no los captura", () => {
+    expect(allowed("TESORERIA", "GET", "/api/construccion/trabajadores")).toBe(true);
+    expect(allowed("TESORERIA", "GET", "/api/construccion/asistencias")).toBe(true);
+    expect(allowed("TESORERIA", "POST", "/api/construccion/trabajadores")).toBe(false);
+    expect(allowed("TESORERIA", "PUT", "/api/construccion/asistencias")).toBe(false);
+    expect(allowed("TESORERIA", "POST", "/api/construccion/cuadrillas/abc/raya")).toBe(false);
+  });
+
   it("tesorería ve y paga, pero no captura ni autoriza", () => {
     expect(allowed("TESORERIA", "GET", "/api/construccion/rayas")).toBe(true);
     expect(allowed("TESORERIA", "GET", "/api/construccion/cuadrillas")).toBe(true);

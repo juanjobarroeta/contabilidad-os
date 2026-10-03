@@ -36,14 +36,24 @@ const DESTAJO_LECTURA: Rule[] = [
   { methods: "read", pattern: "cuadrillas/*/miembros" },
   { methods: "read", pattern: "rayas" },
   { methods: "read", pattern: "rayas/*" },
+  { methods: "read", pattern: "trabajadores" },
+  { methods: "read", pattern: "trabajadores/*" },
+  { methods: "read", pattern: "asistencias" },
 ];
+// Capturar: trabajadores (con su tarifa), cuadrillas y sus miembros, la
+// asistencia diaria y generar/editar la raya en BORRADOR. Autorizarla y
+// pagarla se listan aparte por rol.
 const DESTAJO_CAPTURA: Rule[] = [
   { methods: "all", pattern: "cuadrillas" },
   { methods: "all", pattern: "cuadrillas/*" },
   { methods: "all", pattern: "cuadrillas/*/miembros" },
   { methods: "all", pattern: "cuadrillas/*/miembros/*" },
+  { methods: "all", pattern: "cuadrillas/*/raya" },
   { methods: "all", pattern: "rayas" },
   { methods: "all", pattern: "rayas/*" },
+  { methods: "all", pattern: "trabajadores" },
+  { methods: "all", pattern: "trabajadores/*" },
+  { methods: "all", pattern: "asistencias" },
 ];
 
 /**
@@ -375,14 +385,9 @@ const PAGINA_RULES: Record<string, Rule[]> = {
     { methods: "read", pattern: "suppliers/*" },
   ],
   destajo: [
-    { methods: "all", pattern: "rayas" },
-    { methods: "all", pattern: "rayas/*" },
+    ...DESTAJO_CAPTURA,
     { methods: "all", pattern: "rayas/*/aprobar" },
     { methods: "all", pattern: "rayas/*/pagar" },
-    { methods: "all", pattern: "cuadrillas" },
-    { methods: "all", pattern: "cuadrillas/*" },
-    { methods: "all", pattern: "cuadrillas/*/miembros" },
-    { methods: "all", pattern: "cuadrillas/*/miembros/*" },
     { methods: "read", pattern: "proyectos" },
     { methods: "read", pattern: "proyectos/*" },
     { methods: "read", pattern: "bank-accounts" },
