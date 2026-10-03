@@ -53,6 +53,9 @@ const BARTIZ_RFC = "CBA170606FQ8";
 const LEDGER = path.join(__dirname, ".bartiz-reparacion.json");
 const REFERENCIA_PAGO = "Carga histórica Bartiz (requisición ya pagada al capturarse)";
 const CFDI_DESDE = new Date("2026-07-01T00:00:00Z");
+// Muchas idas y vueltas por requisición sobre el proxy público de Railway:
+// el timeout default de 5 s de la transacción interactiva no alcanza (P2028).
+const TX_OPTS = { timeout: 120_000, maxWait: 20_000 };
 const EPS = 0.05; // un CFDI contra una requisición
 const EPS_GRUPO = 0.5; // varios CFDIs del mismo RFC y día: redondeos de centavos por línea
 
@@ -498,7 +501,7 @@ async function faseCerrar(cid: string, a: Args) {
         });
         await aplicarPago(tx, { ...pago, monto }, [{ adjudicacionId: adj.id, monto }], fecha);
       }
-    });
+    }, TX_OPTS);
   }
   console.log(`\n${cerradas} requisiciones ${a.aplicar ? "cerradas" : "por cerrar"}; total pagado (con IVA) $${money(round2(totalPagado))}`);
   for (const o of omitidas) console.log("   - " + o);
