@@ -100,7 +100,11 @@ async function handle(req: Request) {
 
   // Mensaje lanzado por getFielForCompany cuando Fiel.isValid() es false. Sólo
   // ese caso amerita aviso al usuario — los errores transitorios del SAT no.
-  const FIEL_INVALIDA_RE = /FIEL inválida o expirada/;
+  // También el rechazo del SAT por certificado (304 «Revocado o Caduco»): el
+  // .cer puede seguir vigente en fecha y aun así estar revocado (se tramitó
+  // una e.firma nueva). Sin esto, TEGJ llevaba desde el 14-ago sin aviso.
+  const FIEL_INVALIDA_RE = /FIEL inválida o expirada|Certificado Revocado o Caduco|c[oó]digo 304/;
+  const motivoFiel = (msg: string): "revocada" | "vencida" => (/Caduco|304/.test(msg) ? "revocada" : "vencida");
 
   for (const company of companies) {
     let companyTouched = false;
@@ -164,7 +168,7 @@ async function handle(req: Request) {
             if (!fielInvalidaAvisada && FIEL_INVALIDA_RE.test(submitted.error)) {
               fielInvalidaAvisada = true;
               try {
-                const r = await notificarFielInvalida(company.id);
+                const r = await notificarFielInvalida(company.id, { motivo: motivoFiel(submitted.error) });
                 fielAvisos += r.notificados;
               } catch (e) {
                 console.error(`[cron/sat-sync] aviso fiel-invalida ${company.id} falló:`, e);
@@ -233,7 +237,7 @@ async function handle(req: Request) {
       if (!fielInvalidaAvisada && FIEL_INVALIDA_RE.test(message)) {
         fielInvalidaAvisada = true;
         try {
-          const r = await notificarFielInvalida(company.id);
+          const r = await notificarFielInvalida(company.id, { motivo: motivoFiel(message) });
           fielAvisos += r.notificados;
         } catch (err) {
           console.error(`[cron/sat-sync] aviso fiel-invalida ${company.id} falló:`, err);

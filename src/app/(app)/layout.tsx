@@ -7,6 +7,7 @@ import { ChatPanel } from "@/components/ai/ChatPanel";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { AbrirChatDesdeNotif } from "@/components/ai/AbrirChatDesdeNotif";
 import { TrialBanner } from "@/components/layout/TrialBanner";
+import { SyncDetenidoBanner } from "@/components/layout/SyncDetenidoBanner";
 import { enforcementHabilitado, getUserSubscriptionState } from "@/lib/subscription";
 import { accesoSuspendido } from "@/lib/billing/suspension";
 import { CuentaSuspendida } from "@/components/layout/CuentaSuspendida";
@@ -125,6 +126,7 @@ export default async function AppLayout({
         {/* pt-14 on mobile clears the fixed top bar; none on md+ */}
         <main className="flex-1 overflow-auto flex flex-col pt-14 md:pt-0">
           <TrialBanner state={subscription} enforcement={enforcementHabilitado()} />
+          <SyncDetenidoBanner />
           <div className="flex-1 overflow-auto">{children}</div>
         </main>
         <CommandPalette esOperador={esOperador} />

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Card } from "@/components/ui";
 import { PlanesPanel } from "@/components/operador/PlanesPanel";
 import { CeSatPanel } from "@/components/operador/CeSatPanel";
+import { SyncDetenidoPanel } from "@/components/operador/SyncDetenidoPanel";
 import { Loader2, Wrench, Lock, AlertTriangle, Search, DownloadCloud, Upload } from "lucide-react";
 
 // Operador-only tools: reconcile the system's figures against the SAT filed
@@ -220,6 +221,8 @@ export default function OperadorPage() {
           Probar el copiloto jurídico (perfil abogado, conversaciones guardadas) →
         </Link>
       </p>
+
+      <SyncDetenidoPanel />
 
       <Card className="mt-5 rounded-card border-cos-line p-5 shadow-card">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_160px]">
