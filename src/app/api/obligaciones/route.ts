@@ -220,8 +220,12 @@ async function ensureRetencionesObligation(companyId: string): Promise<void> {
   if (!hasPayroll) return;
 
   const cfg = defaultConfigForTipo("RETENCIONES_ISR");
-  await prisma.companyObligation.create({
-    data: {
+  // upsert with an empty update: two concurrent GETs can both pass the check above,
+  // and a plain create would fail the loser on @@unique([companyId, tipo]).
+  await prisma.companyObligation.upsert({
+    where: { companyId_tipo: { companyId, tipo: cfg.tipo } },
+    update: {},
+    create: {
       companyId,
       tipo: cfg.tipo,
       descripcion: "ISR retenciones por sueldos y salarios",
