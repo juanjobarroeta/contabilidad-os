@@ -57,24 +57,39 @@ describe("formatCarteraDigestSummaryLine (variable de plantilla)", () => {
     expect(formatCarteraDigestSummaryLine([])).toBeNull();
   });
 
-  it("NUNCA contiene saltos de línea ni tabs (requisito de variable de plantilla)", () => {
+  const HOY = new Date("2026-10-04T15:00:00Z"); // domingo 4-oct-2026, CDMX
+
+  it("NUNCA contiene saltos de línea ni tabs ni punto final (requisito de variable de plantilla)", () => {
     const linea = formatCarteraDigestSummaryLine([
       { razonSocial: "A", hallazgos: 3, criticos: 1 },
       { razonSocial: "B", hallazgos: 0, criticos: 0 },
       { razonSocial: "C", hallazgos: 2, criticos: 0 },
-    ])!;
+    ], [{ empresa: "A", linea: "Falta el estado de cuenta de septiembre.\nSúbelo" }], HOY)!;
     expect(linea).not.toMatch(/[\n\t]/);
-    expect(linea).toContain("2 empresas con pendientes");
-    expect(linea).toContain("1 con críticos");
+    expect(linea).not.toMatch(/\.$/);
+    expect(linea).toContain("A: 1 crítico, 2 pendientes, Falta el estado de cuenta de septiembre");
+    expect(linea).toContain("C: 2 pendientes");
     expect(linea).toContain("1 al corriente");
   });
 
-  it("caso todo al corriente en una sola línea", () => {
+  it("la descarga del SAT detenida va primero, con su motivo", () => {
     const linea = formatCarteraDigestSummaryLine([
-      { razonSocial: "A", hallazgos: 0, criticos: 0 },
-      { razonSocial: "B", hallazgos: 0, criticos: 0 },
-    ])!;
-    expect(linea).not.toMatch(/[\n\t]/);
-    expect(linea).toBe("2 empresas al corriente, sin hallazgos abiertos");
+      { razonSocial: "AMA", hallazgos: 9, criticos: 4 },
+      { razonSocial: "THE TRANDING MARGIN", hallazgos: 0, criticos: 0, syncDetenida: "fiel_vencida" },
+    ], [], HOY)!;
+    expect(linea.startsWith("THE TRANDING MARGIN: e.firma vencida, sin descarga del SAT · AMA: 4 críticos, 5 pendientes")).toBe(true);
   });
+
+  it("trae la próxima declaración (17 de octubre cae en sábado → lunes 19)", () => {
+    const linea = formatCarteraDigestSummaryLine([{ razonSocial: "A", hallazgos: 0, criticos: 0 }], [], HOY)!;
+    expect(linea).toBe("1 al corriente · declaraciones de septiembre vencen el 19 de octubre (en 15 días)");
+  });
+
+  it("no rebasa el tope de la plantilla", () => {
+    const muchas = Array.from({ length: 30 }, (_, k) => ({ razonSocial: `EMPRESA CON NOMBRE MUY LARGO NÚMERO ${k}`, hallazgos: 5, criticos: 2 }));
+    const linea = formatCarteraDigestSummaryLine(muchas, [], HOY)!;
+    expect(linea.length).toBeLessThanOrEqual(850);
+    expect(linea).toContain("y 25 empresas más con pendientes");
+  });
+
 });

@@ -54,7 +54,9 @@ async function datosEmpresa(companyId: string) {
 async function whatsappA(userIds: string[], linea: string, companyId: string): Promise<number> {
   if (userIds.length === 0 || !process.env.TWILIO_WHATSAPP_FROM) return 0;
   const links = await prisma.whatsappLink.findMany({
-    where: { userId: { in: userIds }, verifiedAt: { not: null } },
+    // Quien recibe el resumen matutino lo ve ahí (una sola línea por empresa,
+    // en un solo mensaje); el aviso suelto sólo va a quien lo apagó.
+    where: { userId: { in: userIds }, verifiedAt: { not: null }, digestOptOut: true },
     select: { phoneE164: true },
   });
   const sid = process.env.TWILIO_DIGEST_TEMPLATE_SID;
@@ -99,7 +101,9 @@ export async function notificarFielInvalida(
       : `la e.firma (FIEL) ${fielVigencia ? `venció el ${fmtFecha(fielVigencia)}` : "es inválida o está vencida"}. Renueva tu e.firma en el SAT y vuelve a subir los archivos .cer y .key en la sección Mi Empresa.`;
   const titulo = `e.firma ${motivo === "revocada" ? "revocada por el SAT" : "vencida"} — ${razonSocial}`;
   const cuerpo = `La sincronización automática de CFDIs con el SAT para ${empresa} está detenida porque ${causa}`;
-  const linea = `ContabilidadOS: la sincronización con el SAT de ${razonSocial} está detenida (e.firma ${motivo}). Sube la e.firma vigente en Mi Empresa.`;
+  // Va en {{1}} de la plantilla del resumen («…de Contabilidad OS: {{1}}. Responde…»):
+  // sin prefijo de marca ni punto final, que la plantilla ya los pone.
+  const linea = `la sincronización con el SAT de ${razonSocial} está detenida (e.firma ${motivo}); sube la e.firma vigente en Mi Empresa`;
 
   let notificados = 0;
   const nuevos: string[] = [];

@@ -5,7 +5,7 @@ import { runWhatsappCarteraDigest } from "@/lib/whatsapp/digest";
 // POST (o GET) /api/cron/whatsapp-digest
 //
 // Resumen diario de la cartera por WhatsApp: para cada link VERIFICADO con la
-// preferencia `digestOptIn` activa, envía un mensaje matutino con el estado de
+// resumen activo (opt-out `digestOptOut`), envía un mensaje matutino con el estado de
 // sus empresas (hallazgos abiertos). No usa LLM (costo ~0). Pensado para correr
 // entre semana por la mañana, después del fiscal-audit diario.
 //
