@@ -30,7 +30,12 @@ import {
 const TZ = "America/Mexico_City";
 
 export const MENSAJE_TOPE_EMPRESA =
-  "Esta empresa alcanzó su límite mensual de uso de inteligencia artificial. Puedes ampliar el límite en Configuración → Facturación o esperar al siguiente mes.";
+  "Esta empresa alcanzó su límite mensual de inteligencia artificial. Compra una recarga o sube de plan en Configuración → Facturación (/configuracion/facturacion); tus facturas, declaraciones y cumplimiento siguen disponibles.";
+// La prueba no se corta por días sino por IA: cuando se agota, es el momento
+// de vender, no un muro. Los datos siguen; el contador, el chat y el cierre
+// guiado esperan a la suscripción.
+export const MENSAJE_TOPE_PRUEBA =
+  "Tu prueba de inteligencia artificial se agotó: ya leí tus facturas y declaraciones y el contador diario tiene trabajo pendiente. Suscríbete para que siga (Configuración → Facturación, /configuracion/facturacion); tus datos siguen aquí.";
 export const MENSAJE_TOPE_USUARIO_DIA =
   "Alcanzaste tu límite diario de operaciones con inteligencia artificial. Inténtalo de nuevo mañana.";
 export const MENSAJE_TOPE_SIN_EMPRESA =
@@ -50,13 +55,15 @@ export function decidirUsoIA(input: {
   gastoUsuarioSinEmpresaMesUsd?: number;
   /** Operaciones de IA del usuario hoy (todas las funciones). */
   operacionesUsuarioHoy: number;
+  /** El dueño está en periodo de prueba: el tope agotado se explica como fin de la prueba. */
+  enPrueba?: boolean;
 }): DecisionIA {
   if (input.operacionesUsuarioHoy >= IA_OPERACIONES_DIARIAS_USUARIO) {
     return { ok: false, status: 429, motivo: "usuario_dia", mensaje: MENSAJE_TOPE_USUARIO_DIA };
   }
   if (input.gastoEmpresaMesUsd !== undefined && input.topeEmpresaMesUsd !== undefined) {
     if (input.gastoEmpresaMesUsd >= input.topeEmpresaMesUsd) {
-      return { ok: false, status: 429, motivo: "empresa", mensaje: MENSAJE_TOPE_EMPRESA };
+      return { ok: false, status: 429, motivo: "empresa", mensaje: input.enPrueba ? MENSAJE_TOPE_PRUEBA : MENSAJE_TOPE_EMPRESA };
     }
   }
   if (input.gastoUsuarioSinEmpresaMesUsd !== undefined) {
@@ -181,6 +188,7 @@ export async function asegurarUsoIA(opts: { userId: string; companyId: string | 
         gastoEmpresaMesUsd: estado?.gastoMesUsd,
         topeEmpresaMesUsd: estado?.topeMesUsd,
         operacionesUsuarioHoy: hoy,
+        enPrueba: estado?.duenoEnPrueba,
       });
     }
     const [sinEmpresa, hoy] = await Promise.all([gastoUsuarioSinEmpresaMesUsd(opts.userId), operacionesUsuarioHoy(opts.userId)]);

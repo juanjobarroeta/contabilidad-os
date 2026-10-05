@@ -137,8 +137,9 @@ const IA_USD_MENSUAL_EMPRESA: Record<CompanyPlan, number> = {
   // recurrente por empresa es $16 USD mediana y $40 p90 (contador diario);
   // $10 cortaba el contador a media quincena.
   AUTOMATIZADO: 20,
-  PRO: 20,
-  DESPACHO: 40,
+  // Profesional = «uso intensivo de IA»: cubre el p90 ($40) con margen.
+  PRO: 50,
+  DESPACHO: 60,
 };
 
 /** Techo mensual de gasto en IA (USD) de una empresa, por su propio tier. */
