@@ -137,7 +137,7 @@ export function registrarToolsOperador(server: McpServerLike): void {
       const [total, conXml, conImpuestos, conContraparte, conVigencia, backfill] = await Promise.all([
         prisma.invoice.count({ where: { companyId: e.id } }),
         prisma.invoice.count({ where: { companyId: e.id, rawXml: { not: null } } }),
-        prisma.invoice.count({ where: { companyId: e.id, taxes: { some: {} } } }),
+        prisma.invoice.count({ where: { companyId: e.id, OR: [{ impuestosParsedAt: { not: null } }, { taxes: { some: {} } }] } }),
         prisma.invoice.count({ where: { companyId: e.id, contraparteNombre: { not: null } } }),
         prisma.invoice.count({ where: { companyId: e.id, vigenciaCheckedAt: { not: null } } }),
         prisma.company.findUnique({ where: { id: e.id }, select: { satBackfillCompletedAt: true } }),

@@ -46,9 +46,14 @@ async function handle(req: Request) {
   const onlyCompanyId = url.searchParams.get("companyId"); // optional scope
   const startedAt = Date.now();
 
+  // Pendiente = XML guardado y nodo Impuestos aún no leído. Antes el filtro
+  // era «sin filas de impuesto», y una factura sin impuestos (nómina, pago,
+  // traslado, no objeto) volvía a entrar en CADA corrida para siempre: el
+  // alta nunca cerraba la etapa y el orquestador gastaba sus corridas en
+  // releer lo mismo. Ahora se marca `impuestosParsedAt` traiga o no desglose.
   const where = {
     rawXml: { not: null },
-    taxes: { none: {} },
+    impuestosParsedAt: null,
     ...(onlyCompanyId ? { companyId: onlyCompanyId } : {}),
   } as const;
 
@@ -62,24 +67,29 @@ async function handle(req: Request) {
     // drop out of the filter mid-sweep, so the cursor row may stop matching.
     const page = await prisma.invoice.findMany({
       where: { ...where, ...(lastId ? { id: { gt: lastId } } : {}) },
-      select: { id: true, rawXml: true },
+            select: { id: true, rawXml: true, _count: { select: { taxes: true } } },
       orderBy: { id: "asc" },
       take: PAGE,
     });
     if (page.length === 0) break;
-
     for (const inv of page) {
       scanned++;
       try {
-        const parsed = parseCfdiXml(inv.rawXml!);
-        if (parsed.taxes.length === 0) {
-          sinDesglose++;
-          continue;
+        if (inv._count.taxes === 0) {
+          const parsed = parseCfdiXml(inv.rawXml!);
+          if (parsed.taxes.length === 0) {
+            sinDesglose++;
+          } else {
+            await prisma.invoiceTax.createMany({
+              data: parsed.taxes.map((t) => ({ invoiceId: inv.id, ...t })),
+            });
+            repaired++;
+          }
         }
-        await prisma.invoiceTax.createMany({
-          data: parsed.taxes.map((t) => ({ invoiceId: inv.id, ...t })),
-        });
-        repaired++;
+        // Marcado SIEMPRE: con desglose nuevo, con desglose previo o sin nada
+        // que desglosar. Es lo que saca la fila de este barrido y lo que la
+        // etapa del alta cuenta como procesada.
+        await prisma.invoice.update({ where: { id: inv.id }, data: { impuestosParsedAt: new Date() } });
       } catch (e) {
         console.error(`[cron/invoice-taxes-backfill] invoice ${inv.id} failed:`, e);
       }
@@ -98,7 +108,7 @@ async function handle(req: Request) {
     sinDesglose,
     remaining,
     elapsedMs: Date.now() - startedAt,
-    note: "Re-run until 'remaining' stabilizes — a stable remaining equals CFDIs whose XML has no invoice-level Impuestos node (P/T/N, no objeto), which is correct.",
+    note: "Re-run until 'remaining' reaches 0: every CFDI with XML gets marked impuestosParsedAt, with or without an Impuestos node (sinDesglose counts P/T/N/no objeto).",
   };
   console.log("[cron/invoice-taxes-backfill] done:", JSON.stringify(summary));
   return NextResponse.json(summary);

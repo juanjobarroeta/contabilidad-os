@@ -130,6 +130,8 @@ export async function importarCfdiXml(args: ImportarCfdiArgs): Promise<Resultado
           data: parsed.taxes.map((t) => ({ invoiceId: existing.id, ...t })),
         });
       }
+      // Leído, traiga o no impuestos: es lo que cuenta la etapa del alta.
+      await prisma.invoice.update({ where: { id: existing.id }, data: { impuestosParsedAt: new Date() } });
     }
     // Backfill de los links del complemento de pago (DoctoRelacionado) de un
     // REP importado antes de que parseáramos el complemento (o si su creación
@@ -294,6 +296,7 @@ export async function importarCfdiXml(args: ImportarCfdiArgs): Promise<Resultado
       // Tasa/Exento + retenciones IVA/ISR) — alimenta retenciones
       // acreditadas y la proporción de acreditamiento (Art. 5 LIVA).
       taxes: cfdi.taxes.length > 0 ? { create: cfdi.taxes } : undefined,
+      impuestosParsedAt: new Date(),
     },
   });
 

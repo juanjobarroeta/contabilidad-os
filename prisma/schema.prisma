@@ -1082,6 +1082,14 @@ model Invoice {
   customer              Customer?                 @relation(fields: [customerId], references: [id])
   items                 InvoiceItem[]
   taxes                 InvoiceTax[]
+  // Cuándo se leyó el nodo <cfdi:Impuestos> del XML y se materializó (o se
+  // comprobó que no trae nada). La etapa «Desglose de impuestos» del alta
+  // contaba sólo facturas CON filas de impuesto: nómina (N), pagos (P),
+  // traslados (T) y «no objeto» jamás las tienen, y una empresa con 20 % de
+  // nómina no llegaba al 98 % nunca — el alta quedaba «cargando» para siempre
+  // y el orquestador re-escaneaba esas filas cada corrida. Procesado ≠ con
+  // impuestos: esto es lo que se cuenta.
+  impuestosParsedAt     DateTime?
   regimenAssignment     InvoiceRegimenAssignment?
   hospDepositosAnticipo HospDeposito[]            @relation("HospDepositoAnticipo")
   bankTransactions      BankTransaction[]
@@ -1138,6 +1146,7 @@ model Invoice {
   // Barrido de vigencia: elegir las pendientes de UNA empresa sin recorrer su
   // archivo completo (ver src/lib/fiscal/vigencia-plan.ts).
   @@index([companyId, vigenciaCheckedAt])
+  @@index([companyId, impuestosParsedAt])
   // Filtros por cliente (estado de cuenta, "¿tiene facturas?", saldos):
   // sin este índice cada subconsulta correlacionada por Customer barre la
   // tabla entera — con 13k CFDIs, GET /api/clientes tardaba 7–25 s.
