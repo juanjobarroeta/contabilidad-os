@@ -1,7 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { tools } from "@/lib/ai/tools";
 import { executeToolCall } from "@/lib/ai/tool-executor";
-import { buildWhatsappSystemPrompt } from "./system-prompt";
+import { buildWhatsappSystemPrompt, type IdentidadCopiloto } from "./system-prompt";
+import { prisma } from "@/lib/prisma";
+import { bloqueExpediente } from "@/lib/expediente/cargar";
+import { entidadesDeEmpresa } from "@/lib/fiscal-kb/entidades-empresa";
+import { nombreDe, sanearPiel } from "@/lib/copiloto/personajes";
+import { sanearProgreso } from "@/lib/onboarding/progreso";
 import { meteredCreate } from "@/lib/costos/anthropic";
 
 const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY from env
@@ -51,13 +56,22 @@ export async function runWhatsappAgent(opts: {
 }): Promise<string> {
   const { companyId, company, history, userText, conversationId, userId, cartera } = opts;
 
+  // El mismo copiloto que en la app: su nombre y tono, los estados de la
+  // empresa y el expediente (memoria compartida). Si algo falla, el turno sigue.
+  const [identidad, expediente] = await Promise.all([
+    identidadCopiloto(userId, companyId).catch(() => undefined),
+    bloqueExpediente(companyId).catch(() => ""),
+  ]);
+
   // Cache the system prompt + tool definitions across turns to cut cost/latency.
+  // El expediente va DESPUÉS del breakpoint: cambia cuando se anota algo.
   const system: Anthropic.TextBlockParam[] = [
     {
       type: "text",
-      text: buildWhatsappSystemPrompt(company, cartera),
+      text: buildWhatsappSystemPrompt(company, cartera, identidad),
       cache_control: { type: "ephemeral" },
     },
+    ...(expediente.trim() ? [{ type: "text" as const, text: expediente }] : []),
   ];
 
   let messages: Anthropic.MessageParam[] = [
@@ -148,4 +162,14 @@ function toWhatsappText(s: string): string {
     .replace(/^#{1,6}\s+/gm, "") // ## headings → plain
     .replace(/^\s*[-*]\s+/gm, "- ") // normalize bullets
     .trim();
+}
+
+/** Nombre y tono del copiloto de esta persona (User.onboarding) y los estados de la empresa. */
+async function identidadCopiloto(userId: string | undefined, companyId: string): Promise<IdentidadCopiloto> {
+  const [u, entidades] = await Promise.all([
+    userId ? prisma.user.findUnique({ where: { id: userId }, select: { onboarding: true } }) : null,
+    entidadesDeEmpresa(companyId).then((e) => e.todas).catch(() => [] as string[]),
+  ]);
+  const raw = (u?.onboarding ?? {}) as Record<string, unknown>;
+  return { nombre: nombreDe(sanearPiel(raw.piel)), tono: sanearProgreso(raw).tono, entidades };
 }

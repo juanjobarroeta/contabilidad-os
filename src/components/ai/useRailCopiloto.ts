@@ -131,12 +131,32 @@ export function fijarPiel(p: Piel) {
     /* modo privado: vale para esta pestaña */
   }
   window.dispatchEvent(new CustomEvent(EVENTO_PIEL, { detail: p }));
+  guardarPielEnCuenta(p);
 }
+
+/** También en la cuenta (User.onboarding.piel): WhatsApp usa el nombre del copiloto. */
+function guardarPielEnCuenta(p: Piel) {
+  void fetch("/api/onboarding/progreso", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ piel: p }),
+  }).catch(() => {});
+}
+
+let pielSincronizada = false;
 
 export function usePielMascota(): [Piel, (p: Piel) => void] {
   const [piel, setPiel] = useState<Piel>(PIEL_DEFAULT);
   useEffect(() => {
-    setPiel(leerPiel());
+    const local = leerPiel();
+    setPiel(local);
+    // Quien la eligió antes de que se guardara en la cuenta: subirla una vez.
+    let elegida = false;
+    try { elegida = !!localStorage.getItem(LLAVE_PIEL); } catch { /* modo privado */ }
+    if (!pielSincronizada && elegida) {
+      pielSincronizada = true;
+      guardarPielEnCuenta(local);
+    }
     const on = (e: Event) => setPiel(sanearPiel((e as CustomEvent<Piel>).detail));
     window.addEventListener(EVENTO_PIEL, on);
     return () => window.removeEventListener(EVENTO_PIEL, on);

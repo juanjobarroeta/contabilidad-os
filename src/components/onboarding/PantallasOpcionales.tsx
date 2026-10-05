@@ -8,7 +8,7 @@
 //     contraseña temporal de quien no tenía cuenta (no se manda correo).
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Copy, Plus, X } from "lucide-react";
+import { Check, Copy, MessageCircle, Plus, X } from "lucide-react";
 import { LINEAS } from "@/lib/onboarding/lineas";
 import { Burbuja, Slot, useEscena } from "./escena";
 import { CuentasDelCatalogo } from "@/components/bancos/CuentasDelCatalogo";
@@ -320,6 +320,124 @@ export function PantallaEquipo({
           </button>
           <button type="button" className="ob-btn g" onClick={onSeguir}>
             {enviados.some((e) => !e.error) ? "Continuar" : "Después"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 08 · WhatsApp (opcional). Un botón abre WhatsApp con el código ya escrito
+ * (flujo deep-link de /api/whatsapp/link); aquí se sondea hasta que el número
+ * queda verificado. Con eso llegan el resumen matutino y los avisos, y se
+ * puede hablar con el mismo copiloto desde el teléfono.
+ */
+export function PantallaWhatsapp({ onSeguir }: { onSeguir: () => void }) {
+  const { decir, festejar, nombre } = useEscena();
+  const [disponible, setDisponible] = useState<boolean | null>(null);
+  const [vinculado, setVinculado] = useState<string | null>(null);
+  const [enlace, setEnlace] = useState<{ code: string; waMeUrl: string; businessNumber: string } | null>(null);
+  const [abriendo, setAbriendo] = useState(false);
+  const [error, setError] = useState("");
+
+  async function leer(): Promise<boolean> {
+    try {
+      const r = await fetch("/api/whatsapp/link", { cache: "no-store" });
+      if (!r.ok) return false;
+      const j = (await r.json()) as { available?: boolean; links?: { phoneE164: string; verifiedAt: string | null }[] };
+      setDisponible(j.available !== false);
+      const v = j.links?.find((l) => l.verifiedAt);
+      if (v) setVinculado(v.phoneE164);
+      return !!v;
+    } catch {
+      return false;
+    }
+  }
+
+  useEffect(() => {
+    void leer().then((ya) => void decir(ya ? LINEAS.whatsappListo : LINEAS.whatsapp(nombre)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (disponible === false) void decir(LINEAS.whatsappNoDisponible);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [disponible]);
+
+  // Con el código generado, sondear hasta que el número quede verificado.
+  useEffect(() => {
+    if (!enlace || vinculado) return;
+    const t = setInterval(() => {
+      void leer().then((ya) => {
+        if (ya) {
+          festejar();
+          void decir(LINEAS.whatsappListo);
+        }
+      });
+    }, 4000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enlace, vinculado]);
+
+  async function abrir() {
+    setError("");
+    if (enlace) {
+      window.open(enlace.waMeUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    setAbriendo(true);
+    try {
+      const r = await solicitar("/api/whatsapp/link", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+      const j = (await r.json().catch(() => null)) as { code?: string; waMeUrl?: string; businessNumber?: string; error?: string } | null;
+      if (!r.ok || !j?.code || !j.waMeUrl) throw new Error(j?.error ?? "No pude generar el código.");
+      const e = { code: j.code, waMeUrl: j.waMeUrl, businessNumber: j.businessNumber ?? "" };
+      setEnlace(e);
+      window.open(e.waMeUrl, "_blank", "noopener,noreferrer");
+      void decir(LINEAS.whatsappAbierto);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No pude generar el código.");
+    } finally {
+      setAbriendo(false);
+    }
+  }
+
+  return (
+    <div className="ob-cols">
+      <div className="ob-lcol">
+        <Slot />
+        <Burbuja />
+      </div>
+      <div className="ob-rcol">
+        <p className="ob-kick">Paso 7 · WhatsApp · opcional</p>
+        <h1>Tu contabilidad, también en WhatsApp</h1>
+        <p className="ob-sub">Resumen de tus empresas entre semana a las 8, avisos urgentes, y preguntas o facturas desde el teléfono.</p>
+        <div className="ob-panel" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {vinculado ? (
+            <div className="ob-sent">
+              <div>
+                <Check size={15} strokeWidth={2.5} /> Conectado: {vinculado.replace(/^(\+\d{2})(\d+)(\d{4})$/, (_m, a, b, c) => `${a} ${"•".repeat(b.length)} ${c}`)}
+              </div>
+            </div>
+          ) : enlace ? (
+            <>
+              <p className="ob-fine">Si WhatsApp no se abrió, envía este código a {enlace.businessNumber || "nuestro número"}:</p>
+              <p style={{ fontFamily: "monospace", fontSize: 28, fontWeight: 700, letterSpacing: "0.3em" }}>{enlace.code}</p>
+              <p className="ob-fine">Esperando tu mensaje…</p>
+            </>
+          ) : (
+            <p className="ob-fine">Se abre WhatsApp con un mensaje listo; sólo toca enviar. Nunca te pido contraseñas por ahí.</p>
+          )}
+          {error && <p className="ob-fine" style={{ color: "var(--red-ink)" }}>{error}</p>}
+        </div>
+        <div className="ob-acts">
+          {!vinculado && disponible !== false && (
+            <button type="button" className="ob-btn p" disabled={abriendo} onClick={() => void abrir()}>
+              <MessageCircle size={16} /> {abriendo ? "Abriendo…" : enlace ? "Abrir WhatsApp otra vez" : "Conectar WhatsApp"}
+            </button>
+          )}
+          <button type="button" className="ob-btn g" onClick={onSeguir}>
+            {vinculado ? "Continuar" : "Después"}
           </button>
         </div>
       </div>

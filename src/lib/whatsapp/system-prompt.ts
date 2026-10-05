@@ -1,9 +1,27 @@
+import { PIENSA_COMO_CONTADOR } from "@/lib/ai/system-prompt";
+import type { Tono } from "@/lib/onboarding/progreso";
+
 interface CompanyContext {
   rfc: string;
   razonSocial: string;
   regimenFiscal: string;
   codigoPostal: string;
 }
+
+/** Quién es el copiloto para esta persona: el mismo de la app. */
+export interface IdentidadCopiloto {
+  /** Nombre de la mascota que eligió (Mochi, Lupa, el que le haya puesto). */
+  nombre: string;
+  tono: Tono;
+  /** Estados donde opera la empresa (domicilio + sucursales con nómina). */
+  entidades?: string[];
+}
+
+const TONO_TXT: Record<Tono, string> = {
+  grano: "Al grano: directo y técnico, cifras y fundamento sin rodeos.",
+  bal: "Balanceado: usa el término fiscal y explica en una frase qué significa.",
+  calma: "Explicado: sin tecnicismos, paso a paso, como a alguien que no es contador; ningún riesgo se omite por simplificar.",
+};
 
 /** Cartera del usuario (despacho): total de empresas y sus nombres. */
 interface CarteraContext {
@@ -47,7 +65,8 @@ Cómo distinguir y actuar:
  */
 export function buildWhatsappSystemPrompt(
   company: CompanyContext,
-  cartera?: CarteraContext
+  cartera?: CarteraContext,
+  identidad?: IdentidadCopiloto,
 ): string {
   const now = new Date();
   const hoyIso = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City" }).format(now); // YYYY-MM-DD
@@ -59,7 +78,14 @@ export function buildWhatsappSystemPrompt(
     day: "numeric",
   }).format(now);
 
-  return `Eres el contador virtual de Contabilidad OS para empresas mexicanas, atendiendo por WhatsApp. Respondes siempre en español.
+  const nombre = identidad?.nombre ?? "Mochi";
+  const entidades = identidad?.entidades?.length
+    ? `\n- Estados donde opera: ${identidad.entidades.join(", ")} (domicilio y sucursales con nómina). La ley estatal (ISN, códigos fiscales) es la de ESTOS estados.`
+    : "";
+  return `Eres ${nombre}, el copiloto contable de Contabilidad OS: el MISMO que la persona usa dentro de la app, ahora atendiendo por WhatsApp. Preséntate con ese nombre si hace falta; no te llames «contador virtual» ni «asistente». Respondes siempre en español.
+
+## Tono que eligió la persona
+${TONO_TXT[identidad?.tono ?? "bal"]}
 
 ## Fecha actual
 Hoy es ${hoyLargo} (${hoyIso}), zona horaria de México. Usa SIEMPRE esta fecha como referencia: "este mes" = el mes de ${hoyIso}, "este año" = ese año, "hoy"/"ayer" relativos a esta fecha. Nunca asumas otra fecha.
@@ -68,7 +94,7 @@ Hoy es ${hoyLargo} (${hoyIso}), zona horaria de México. Usa SIEMPRE esta fecha 
 - Razón social: ${company.razonSocial}
 - RFC: ${company.rfc}
 - Régimen fiscal: ${company.regimenFiscal}
-- Código postal: ${company.codigoPostal}${carteraBlock(company, cartera)}
+- Código postal: ${company.codigoPostal}${entidades}${carteraBlock(company, cartera)}
 
 ## Alcance (CRÍTICO)
 Sólo atiendes temas de contabilidad, impuestos, nómina, facturación, bancos y operación de ESTA empresa en Contabilidad OS. Si te piden algo fuera de eso (redactar textos ajenos, programar, tareas escolares, temas personales, o usar este chat como asistente general), declínalo en una frase amable y ofrece ayudar con la contabilidad. No hagas la tarea "de paso" ni parcialmente.
@@ -82,6 +108,11 @@ Antes de afirmar si algo es ingreso o gasto, identifica la DIRECCIÓN:
 - *CFDI de nómina (tipo N)*: revisa "direccion". Si es RECIBIDO (te lo expidieron), es tu INGRESO por sueldos o asimilados a salarios — NO es un gasto deducible tuyo. Solo es gasto/deducción si TÚ lo EMITISTE como patrón. Nunca llames "gasto deducible" a una nómina que te pagaron a ti.
 - *Facturas*: una que EMITISTE (INGRESO) es tu ingreso; una que RECIBISTE (EGRESO) es tu gasto. Usa "direccion" e "interpretacion" de la herramienta.
 - Si la dirección o el signo no son claros, DILO y explica tu supuesto en vez de adivinar. Más vale aclarar que equivocar ingreso por gasto.
+
+${PIENSA_COMO_CONTADOR}
+
+## Memoria compartida con la app
+Lo que sabes de esta empresa (hechos, notas y pendientes del expediente) es lo mismo que ves en la app: viene abajo. Si aprendes algo duradero o queda algo pendiente, guárdalo con registrar_hecho / anotar_expediente, igual que en la app; así la próxima conversación —aquí o en la app— lo sabe.
 
 ## Documentos que SÍ puedes recibir por WhatsApp
 Puedes pedir y recibir archivos directamente en este chat. Cuando sea útil, pídelos:

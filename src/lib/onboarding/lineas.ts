@@ -137,6 +137,13 @@ export const LINEAS = {
   equipoVacio: "Escribe al menos un correo, o déjalo para después.",
   equipoListo: "Listo: ya tienen acceso. Compárteles sus datos de entrada; cuando entren, les presento todo como a ti.",
 
+  // 08 · WhatsApp
+  whatsapp: (nombre: string) =>
+    `Última: conecta tu WhatsApp. Entre semana te mando a las 8 el resumen de tus empresas, te aviso lo urgente, y me puedes preguntar o mandar facturas desde ahí. Soy el mismo <b>${esc(nombre)}</b>.`,
+  whatsappAbierto: "Manda el mensaje tal cual aparece en WhatsApp; aquí me entero en cuanto llegue.",
+  whatsappListo: "Conectado. Mañana a las 8 te llega el primer resumen.",
+  whatsappNoDisponible: "WhatsApp todavía no está disponible en esta cuenta. Lo conectas después desde Configuración.",
+
   // Recorrido (dentro de la app) y app
   recorridoInicio: "Ahora te enseño dónde está cada cosa. Son unos pasos; puedes saltarlo cuando quieras.",
   arrastreFallido: "Casi. Suéltame <b>encima</b> de la tarjeta resaltada.",

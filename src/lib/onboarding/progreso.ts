@@ -9,11 +9,11 @@
 import { rutaRetornoSegura } from "@/lib/ruta-retorno";
 
 /** Pantallas del alta, en orden. `recorrido` y `app` viven ya dentro de la app. */
-export const PASOS = ["hola", "personaje", "confianza", "fiel", "historial", "bancos", "equipo", "recorrido", "app", "listo"] as const;
+export const PASOS = ["hola", "personaje", "confianza", "fiel", "historial", "bancos", "equipo", "whatsapp", "recorrido", "app", "listo"] as const;
 export type Paso = (typeof PASOS)[number];
 
 /** Las que pinta /onboarding (las demás corren dentro de la app). */
-export const PASOS_ALTA = ["hola", "personaje", "confianza", "fiel", "historial", "bancos", "equipo"] as const;
+export const PASOS_ALTA = ["hola", "personaje", "confianza", "fiel", "historial", "bancos", "equipo", "whatsapp"] as const;
 export type PasoAlta = (typeof PASOS_ALTA)[number];
 
 export type Perfil = "despacho" | "empresa";
