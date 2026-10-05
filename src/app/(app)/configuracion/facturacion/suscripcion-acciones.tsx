@@ -10,7 +10,7 @@ import { ExternalLink, Loader2 } from "lucide-react";
 // en la pantalla de pago (el checkout envía allow_promotion_codes).
 const PLANES = [
   { id: "BASICO", nombre: "Básico", blurb: "Sincronización SAT, consultas y declaraciones." },
-  { id: "PROFESIONAL", nombre: "Profesional", blurb: "Todo lo de Básico + banco y WhatsApp.", destacado: true },
+  { id: "PROFESIONAL", nombre: "Profesional", blurb: "Todo lo de Básico, con 500 timbres al mes.", destacado: true },
 ] as const;
 
 type PlanId = (typeof PLANES)[number]["id"];
