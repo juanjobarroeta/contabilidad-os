@@ -47,6 +47,8 @@ interface Contexto {
   despachoNombre: string | null;
   despachoRol: string | null;
   empresas: number;
+  /** Empresa creada hace minutos que el avance aún no liga (alta cortada por una recarga). */
+  empresaReciente: { id: string; razonSocial: string } | null;
 }
 
 type Modo = "alta" | "agregar";
@@ -91,11 +93,32 @@ export function OnboardingMascota() {
         despachoNombre: rc?.despachoNombre ?? null,
         despachoRol: rc?.despachoRol ?? null,
         empresas: Number(rc?.empresas ?? 0),
+        empresaReciente: rc?.empresaReciente?.id ? { id: String(rc.empresaReciente.id), razonSocial: String(rc.empresaReciente.razonSocial ?? "") } : null,
       };
       const guardado = rp?.progreso ? sanearProgreso(rp.progreso) : null;
       const agregado = sanearAgregar(rp?.agregar);
       setCtx(c);
       const enCurso = guardado && guardado.companyId && (PASOS_ALTA as readonly string[]).includes(guardado.paso);
+      // Alta cortada en plena creación: la única empresa del usuario nació hace
+      // minutos y el avance no la tiene. Antes esto caía en «agregar otra
+      // empresa» y le pedía la e.firma otra vez (medido 2026-10-05 con una
+      // recarga justo tras «Crear»). Se liga y se retoma en «historial».
+      const reciente = c.empresaReciente?.id ?? null;
+      const reanudable = !enCurso && !fromEmpresas && !explicitReturn && !(agregado && agregado.paso !== "listo") && reciente && c.empresas === 1;
+      if (reanudable) {
+        const r = await solicitar("/api/onboarding/progreso", {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId: reciente, paso: "historial" }),
+        });
+        if (!vivo) return;
+        if (r.ok) {
+          const p: Progreso = { ...(guardado ?? PROGRESO_INICIAL), companyId: reciente, paso: "historial" };
+          setProgreso(p);
+          setModo("alta");
+          setPaso("historial");
+          return;
+        }
+      }
       const agregar = fromEmpresas || !!explicitReturn || (agregado && agregado.paso !== "listo") || (c.empresas > 0 && !enCurso);
       if (agregar) {
         const reanudar = agregado && agregado.paso !== "listo";

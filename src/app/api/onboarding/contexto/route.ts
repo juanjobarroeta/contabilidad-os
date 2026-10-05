@@ -19,7 +19,17 @@ export async function GET() {
   });
   // Empresas a las que ya entra: con alguna, /onboarding es «agregar otra»
   // (sin bienvenida ni recorrido).
-  const empresas = await prisma.company.count({ where: await accessibleCompaniesWhere(session.user.id) });
+  const accesibles = await accessibleCompaniesWhere(session.user.id);
+  const empresas = await prisma.company.count({ where: accesibles });
+  // Alta cortada a medias: la empresa se creó hace minutos pero el avance no
+  // alcanzó a ligarla (recarga en plena creación). El wizard la retoma en
+  // «historial» en vez de mandar al usuario a «agregar otra» y pedirle la
+  // e.firma de nuevo.
+  const empresaReciente = await prisma.company.findFirst({
+    where: { AND: [accesibles, { createdAt: { gte: new Date(Date.now() - 30 * 60_000) } }] },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, razonSocial: true },
+  });
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { subscriptionStatus: true },
@@ -35,5 +45,6 @@ export async function GET() {
     maxEmpresas: dm?.despacho?.maxEmpresas ?? null,
     despachoRol: dm?.role ?? null,
     empresas,
+    empresaReciente,
   });
 }
