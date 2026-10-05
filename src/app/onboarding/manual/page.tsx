@@ -139,7 +139,7 @@ const PLANS = [
     name: "Profesional",
     price: "$1,299",
     blurb: "Para tu negocio",
-    features: ["Todo lo de Básico", "Asistente IA + WhatsApp", "Conciliación bancaria", "Complementos de pago"],
+    features: ["Todo lo de Básico", "500 timbres al mes", "Más capacidad de IA para tu equipo"],
     highlight: true,
   },
 ];

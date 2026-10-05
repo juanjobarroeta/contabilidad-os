@@ -17,8 +17,8 @@ import type { CompanyPlan } from "@prisma/client";
 //     campos cuenten la misma historia.
 //
 // Mapeo plan comprado → CompanyPlan (tier de capacidades):
-//   BASICO      → AUTOMATIZADO (sincronización SAT/Syntage; sin banco/WhatsApp)
-//   PROFESIONAL → PRO          (+ conciliación bancaria + WhatsApp)
+//   BASICO      → AUTOMATIZADO (todo: SAT, contador diario, banco, WhatsApp; 200 timbres)
+//   PROFESIONAL → PRO          (lo mismo con 500 timbres)
 // Los tiers ASISTENTE y DESPACHO no se venden por Stripe.
 //
 // DESPACHO ya NO es un plan facturable: el modelo per-unit ($299 MXN por

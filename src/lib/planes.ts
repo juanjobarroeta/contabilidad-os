@@ -5,21 +5,25 @@ import type { CompanyPlan } from "@prisma/client";
 // sólo incurre costo de Syntage / banco (Belvo) / WhatsApp (Twilio) si su plan
 // lo incluye. Centralizado para que UI, crons e integraciones coincidan.
 //   ASISTENTE     → CFDIs + IA (COGS ~0)
-//   AUTOMATIZADO  → + Syntage (opinión/CSF/declaraciones)
-//   PRO           → + banco (Belvo) + WhatsApp (Twilio)
-//   DESPACHO      → + revisión humana / SLA
+//   AUTOMATIZADO  → Básico: SAT (SatGo), contador diario, banco, WhatsApp, cierre; 200 timbres
+//   PRO           → Profesional: lo mismo con 500 timbres
+//   DESPACHO      → lo mismo con 1000 timbres + revisión humana / SLA
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function planIncluyeSyntage(plan: CompanyPlan): boolean {
   return plan !== "ASISTENTE";
 }
 
+// Decisión de producto (5-oct-2026): TODOS los planes de pago traen contador
+// diario, conciliación bancaria, WhatsApp y cierre guiado; los tiers sólo se
+// distinguen por los timbres incluidos (y el precio). ASISTENTE sigue siendo
+// el nivel sin automatización ni COGS.
 export function planIncluyeBanco(plan: CompanyPlan): boolean {
-  return plan === "PRO" || plan === "DESPACHO";
+  return plan !== "ASISTENTE";
 }
 
 export function planIncluyeWhatsapp(plan: CompanyPlan): boolean {
-  return plan === "PRO" || plan === "DESPACHO";
+  return plan !== "ASISTENTE";
 }
 
 export const PLAN_LABEL: Record<CompanyPlan, string> = {
@@ -69,7 +73,7 @@ export interface WhatsappLimites {
 
 const WHATSAPP_LIMITES: Record<CompanyPlan, WhatsappLimites> = {
   ASISTENTE: { dailyMsgsPerUser: 0, monthlyLlmUsd: 0 },
-  AUTOMATIZADO: { dailyMsgsPerUser: 0, monthlyLlmUsd: 0 },
+  AUTOMATIZADO: { dailyMsgsPerUser: 80, monthlyLlmUsd: 10 },
   PRO: { dailyMsgsPerUser: 80, monthlyLlmUsd: 10 },
   DESPACHO: { dailyMsgsPerUser: 250, monthlyLlmUsd: 40 },
 };
@@ -129,7 +133,10 @@ export function dailyChatMsgsPerUser(plan: CompanyPlan): number {
 // decisión de producto: ajústalos a tu oferta y a tu margen.
 const IA_USD_MENSUAL_EMPRESA: Record<CompanyPlan, number> = {
   ASISTENTE: 5,
-  AUTOMATIZADO: 10,
+  // Mismas funciones que PRO → mismo presupuesto. Medido sep-2026: el uso
+  // recurrente por empresa es $16 USD mediana y $40 p90 (contador diario);
+  // $10 cortaba el contador a media quincena.
+  AUTOMATIZADO: 20,
   PRO: 20,
   DESPACHO: 40,
 };
@@ -140,7 +147,10 @@ export function iaUsdMensualEmpresa(plan: CompanyPlan): number {
 }
 
 /** Techo mensual de IA (USD) para una empresa cuyo dueño está en PRUEBA. */
-export const IA_USD_MENSUAL_PRUEBA = 3;
+// $3 apagaba el contador diario al quinto día de una prueba de 15: justo
+// cuando el cliente decide. Lo que cuesta una prueba que no paga son ~$10–20
+// USD en total (acuses históricos + contador), así que $10 es el tope correcto.
+export const IA_USD_MENSUAL_PRUEBA = 10;
 
 /**
  * Techo mensual de IA (USD) del gasto SIN empresa (documentos leídos en el
@@ -162,7 +172,7 @@ export const IA_PAQUETE_EXTRA_USD = 10;
 // El workspace de cierre conducido por el copiloto (src/lib/cierre) necesita
 // banco conciliado y avisos diarios: vive en los tiers que ya incluyen banco.
 export function planIncluyeCierreGuiado(plan: CompanyPlan): boolean {
-  return plan === "PRO" || plan === "DESPACHO";
+  return plan !== "ASISTENTE";
 }
 
 /**
