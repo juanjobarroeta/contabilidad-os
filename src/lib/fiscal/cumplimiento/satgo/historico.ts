@@ -8,14 +8,15 @@
 // en vez de doce — y `importarDeclaracionesSatGo` sólo parsea (Claude) los
 // meses a los que les falta fila, así que repetirlo no cuesta.
 //
-// Lo que NO cubre: la declaración ANUAL. SatGo expone «Declaraciones de
-// pagos» (provisionales/definitivas); la anual no viene en el ZIP de mes=0.
-// Sigue entrando a mano (FaltantesUploader / operador ingest-acuse).
+// La declaración ANUAL va aparte (`decanualfiel`, ver anual.ts): probada en
+// vivo para físicas y morales; se pide por ejercicio cerrado que no tenga
+// fila con PDF, en la misma corrida.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { prisma } from "@/lib/prisma";
 import { SatGoClient, SatGoError } from "./client";
 import { importarDeclaracionesSatGo, type ImportacionDeclaracionesSatGo } from "./declaraciones";
+import { anualesPendientes, importarAnualSatGo, type AnualResultado } from "./anual";
 
 const TIPOS = ["IVA_MENSUAL", "ISR_PROVISIONAL", "IEPS_MENSUAL"] as const;
 
@@ -81,6 +82,7 @@ export interface HistoricoResultado {
   companyId: string;
   pendientesAntes: number;
   ejercicios: Array<{ ejercicio: number } & Pick<ImportacionDeclaracionesSatGo, "estado" | "archivos" | "acusesParseados" | "creadas" | "pdfAdjuntados" | "error">>;
+  anuales: AnualResultado[];
   /** SatGo rechazó por suscripción (403): no tiene caso seguir con nadie. */
   sinSuscripcion?: boolean;
 }
@@ -97,7 +99,7 @@ export async function importarHistoricoDeclaraciones(
 ): Promise<HistoricoResultado> {
   const hoy = opts.hoy ?? new Date();
   const pendientes = await ejerciciosPendientes(companyId, hoy);
-  const out: HistoricoResultado = { companyId, pendientesAntes: pendientes.length, ejercicios: [] };
+  const out: HistoricoResultado = { companyId, pendientesAntes: pendientes.length, ejercicios: [], anuales: [] };
   const client = opts.client ?? new SatGoClient();
   for (const p of pendientes.slice(0, opts.maxEjercicios ?? 2)) {
     const r = await importarDeclaracionesSatGo(companyId, { ejercicio: p.ejercicio, mes: 0 }, { client });
@@ -106,6 +108,13 @@ export async function importarHistoricoDeclaraciones(
       out.sinSuscripcion = true;
       break;
     }
+  }
+  if (out.sinSuscripcion) return out;
+  // Anuales: los ejercicios cerrados sin fila con PDF, mismos topes por corrida.
+  for (const ejercicio of (await anualesPendientes(companyId, hoy)).slice(0, opts.maxEjercicios ?? 2)) {
+    const a = await importarAnualSatGo(companyId, ejercicio, { client });
+    out.anuales.push(a);
+    if (a.estado === "error" && esErrorDeSuscripcion(a.error ?? "")) { out.sinSuscripcion = true; break; }
   }
   return out;
 }

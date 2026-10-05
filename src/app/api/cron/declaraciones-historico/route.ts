@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { empresasElegibles } from "@/lib/agenda-sat/ejecutar";
 import { SatGoClient, satGoConfigurado } from "@/lib/fiscal/cumplimiento/satgo/client";
 import { ejerciciosPendientes, importarHistoricoDeclaraciones } from "@/lib/fiscal/cumplimiento/satgo/historico";
+import { anualesPendientes } from "@/lib/fiscal/cumplimiento/satgo/anual";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST (o GET) /api/cron/declaraciones-historico   [?companyId=&ejercicios=N]
@@ -14,10 +15,12 @@ import { ejerciciosPendientes, importarHistoricoDeclaraciones } from "@/lib/fisc
 // Sustituye al declaraciones-backfill de Syntage. La agenda del SAT cubre los
 // tres meses recientes; esto cubre lo anterior, hasta satBackfillYears.
 //
+// También trae la ANUAL de cada ejercicio cerrado (decanualfiel; físicas y
+// morales, probado en vivo el 5-oct-2026) sin fila con PDF.
 // Acotado por corrida (empresas × ejercicios) porque cada acuse que falta es
 // un parseo con Claude. Si SatGo contesta 403 «la suscripción requiere
 // actualización», se corta la corrida: es el proveedor, no la empresa, y
-// seguir sólo repetiría el rechazo. La anual NO viene por esta vía.
+// seguir sólo repetiría el rechazo.
 // Auth: CRON_SECRET.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -51,7 +54,8 @@ async function handle(req: Request) {
   const conPendientes: Array<{ id: string; rfc: string; pendientes: number }> = [];
   for (const c of candidatas) {
     const p = await ejerciciosPendientes(c.id);
-    if (p.length > 0) conPendientes.push({ id: c.id, rfc: c.rfc, pendientes: p.length });
+    const a = await anualesPendientes(c.id);
+    if (p.length + a.length > 0) conPendientes.push({ id: c.id, rfc: c.rfc, pendientes: p.length + a.length });
   }
   conPendientes.sort((a, b) => b.pendientes - a.pendientes);
 
@@ -62,7 +66,7 @@ async function handle(req: Request) {
     if (Date.now() - startedAt > TIME_BUDGET_MS) break;
     try {
       const r = await importarHistoricoDeclaraciones(c.id, { maxEjercicios, client });
-      resultados.push({ rfc: c.rfc, pendientesAntes: r.pendientesAntes, ejercicios: r.ejercicios });
+      resultados.push({ rfc: c.rfc, pendientesAntes: r.pendientesAntes, ejercicios: r.ejercicios, anuales: r.anuales });
       if (r.sinSuscripcion) { sinSuscripcion = true; break; }
     } catch (e) {
       resultados.push({ rfc: c.rfc, error: e instanceof Error ? e.message.slice(0, 200) : String(e) });
@@ -77,7 +81,7 @@ async function handle(req: Request) {
     sinSuscripcion,
     nota: sinSuscripcion
       ? "SatGo rechazó con 403 «la suscripción requiere actualización de estado»: hay que renovar/activar el plan de SatGo. Hasta entonces no entra ninguna declaración."
-      : "Gap-driven: cada corrida atiende a las empresas más atrasadas; vuelve a correr hasta que empresasConHuecos llegue a 0. La anual no viene por SatGo.",
+      : "Gap-driven: cada corrida atiende a las empresas más atrasadas; vuelve a correr hasta que empresasConHuecos llegue a 0. La anual entra por decanualfiel en la misma corrida.",
     elapsedMs: Date.now() - startedAt,
   };
   console.log("[cron/declaraciones-historico] done:", JSON.stringify(summary).slice(0, 1500));
