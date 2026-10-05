@@ -94,7 +94,7 @@ async function handle(req: Request) {
     SELECT c.id AS "companyId",
            count(i.id) AS total,
            count(i.id) FILTER (WHERE i."rawXml" IS NOT NULL) AS con_xml,
-           count(i.id) FILTER (WHERE EXISTS (SELECT 1 FROM "InvoiceTax" t WHERE t."invoiceId" = i.id)) AS con_impuestos,
+           count(i.id) FILTER (WHERE i."impuestosParsedAt" IS NOT NULL OR EXISTS (SELECT 1 FROM "InvoiceTax" t WHERE t."invoiceId" = i.id)) AS con_impuestos,
            count(i.id) FILTER (WHERE i."contraparteNombre" IS NOT NULL) AS con_contraparte,
            count(i.id) FILTER (WHERE i."vigenciaCheckedAt" IS NOT NULL) AS con_vigencia,
            (c."satBackfillCompletedAt" IS NOT NULL) AS backfill_completo

@@ -5,3 +5,4 @@ export { interpretarOpinionSat, sentidoSat, folioSat, VIGENCIA_DIAS_SAT } from "
 export { csfDesdePdf, perfilDesdeCsfData, estatusPadronDeTexto, CsfNoReconocidaError } from "./csf";
 export { SatGoComplianceProvider, type RfcResolver } from "./provider";
 export { importarDeclaracionesSatGo, periodoDeArchivo, type ImportacionDeclaracionesSatGo } from "./declaraciones";
+export { importarHistoricoDeclaraciones, ejerciciosPendientes, ejerciciosConHuecos, esErrorDeSuscripcion } from "./historico";

@@ -63,6 +63,8 @@ export async function POST(req: Request) {
       data: { satBackfillYears: body!.anios, satBackfillCompletedAt: null },
     });
     kickCron("sat-backfill");
+    // Los años también mandan sobre las declaraciones: el historial sale por ejercicio.
+    kickCron("declaraciones-historico", 10_000, `companyId=${encodeURIComponent(companyId)}`);
     return NextResponse.json({ ok: true, anios: body!.anios });
   } catch (e) {
     return error(e);

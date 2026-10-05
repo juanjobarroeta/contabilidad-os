@@ -192,6 +192,11 @@ const JOBS: Job[] = [
   // además se encadena tras sat-rawxml-backfill. Sin empresas hospital, no-op.
   { name: "hospital-cfdi-vincular", everyMs: 6 * HOUR, firstDelayMs: 52 * MIN, minMs: MIN_LOCAL },
   { name: "agenda-sat", everyMs: 15 * MIN, firstDelayMs: 18 * MIN, minMs: MIN_CARO },
+  // Historial de declaraciones mensuales (SatGo, un ZIP por ejercicio): lo
+  // anterior a los tres meses de la agenda, hasta satBackfillYears. Gap-driven
+  // y acotado (3 empresas × 2 ejercicios por corrida); sin huecos es un no-op.
+  // Sustituye al declaraciones-backfill de Syntage.
+  { name: "declaraciones-historico", everyMs: HOUR, firstDelayMs: 24 * MIN, minMs: MIN_CARO },
   // Inventario automotriz: deriva unidades de los CFDIs recién bajados (parse
   // local del rawXml, sin cuota SAT). Desfasado del rawxml-backfill para
   // procesar lo que ese ciclo acaba de traer; sin empresas AUTOMOTRIZ es no-op.

@@ -23,7 +23,7 @@ export interface ConteosEmpresa {
   total: number;
   /** Con el XML original guardado — sin él no se deriva nada. */
   conXml: number;
-  /** Con desglose de impuestos parseado. */
+  /** Con el nodo Impuestos del XML ya leído (traiga o no desglose: nómina, pagos y traslados no lo traen). */
   conImpuestos: number;
   /** Con nombre/RFC de contraparte resuelto. */
   conContraparte: number;

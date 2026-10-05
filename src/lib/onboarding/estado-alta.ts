@@ -79,7 +79,7 @@ export async function cargarEstadoAlta(companyId: string) {
       prisma.ceBalanzaMes.groupBy({ by: ["anio", "mes"], where: { companyId } }),
       prisma.invoice.count({ where: { companyId } }),
       prisma.invoice.count({ where: { companyId, rawXml: { not: null } } }),
-      prisma.invoice.count({ where: { companyId, taxes: { some: {} } } }),
+      prisma.invoice.count({ where: { companyId, OR: [{ impuestosParsedAt: { not: null } }, { taxes: { some: {} } }] } }),
       prisma.invoice.count({ where: { companyId, contraparteNombre: { not: null } } }),
       prisma.invoice.count({ where: { companyId, vigenciaCheckedAt: { not: null } } }),
       prisma.complianceSnapshot.findFirst({
