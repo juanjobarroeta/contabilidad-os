@@ -31,7 +31,7 @@ export const GET = withAuthz(async (req: Request) => {
         phoneE164: true,
         verifiedAt: true,
         createdAt: true,
-        digestOptIn: true,
+        digestOptOut: true,
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -46,7 +46,8 @@ export const GET = withAuthz(async (req: Request) => {
     // (el usuario envía el código). La UI se adapta según esta bandera.
     templateFlow: otpTemplateConfigured(),
     companyCount: companies.length,
-    digestOptIn: verified?.digestOptIn ?? false,
+    // Opt-out: encendido salvo que la persona lo haya apagado.
+    digestOptIn: verified ? !verified.digestOptOut : false,
   });
 });
 
@@ -106,8 +107,7 @@ export const POST = withAuthz(async (req: Request) => {
 
 /**
  * PATCH { digestOptIn } — persists the daily-digest preference on the user's
- * verified links. Only meaningful for despacho operators (multiple companies);
- * the digest cron itself is a separate future build.
+ * verified links (stored as an explicit opt-out: the digest is on by default).
  */
 export const PATCH = withAuthz(async (req: Request) => {
   const user = await requireUser(req);
@@ -121,7 +121,7 @@ export const PATCH = withAuthz(async (req: Request) => {
 
   await prisma.whatsappLink.updateMany({
     where: { userId: user.id, verifiedAt: { not: null } },
-    data: { digestOptIn },
+    data: { digestOptOut: !digestOptIn, digestOptIn },
   });
   return NextResponse.json({ ok: true, digestOptIn });
 });
