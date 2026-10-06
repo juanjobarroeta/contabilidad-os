@@ -1,9 +1,15 @@
 /**
- * GET  /api/hospital/cobros?companyId=…[&desde&hasta&estado&afiliacionId&episodioId]
- *      → { cobros: [...], corte: { enCaja, enTransito, total, contracargos, … } }
- * POST /api/hospital/cobros { companyId, fecha, monto, formaPago, episodioId?|invoiceId?|depositoId?,
+ * GET  /api/hospital/cobros?companyId=…[&fecha=YYYY-MM-DD | &desde&hasta][&estado&afiliacionId&episodioId&cfdi]
+ *      → { cobros: [... con cfdi, pendienteDeFacturar, episodioFolio, pacienteNombre, invoiceFolio],
+ *          corte: { total, enCaja, enTransito, contracargos, porFormaPago, porCfdi,
+ *                   pendientesDeFacturar, pendientesDeFacturarCobros, … } }
+ * POST /api/hospital/cobros { companyId, fecha, monto, formaPago, cfdi?, episodioId?|invoiceId?|depositoId?,
  *      afiliacionId?, autorizacion?, marca?, tipoTarjeta?, ultimos4?, referencia?, notas?, permitirDuplicado? }
  *      → 201 cobro
+ *
+ * `cfdi` (default CON_CFDI): SIN_CFDI manda los cargos libres del episodio a la
+ * factura global y el motor fiscal los suma como ingresos adicionales e IVA del
+ * mes mientras no se timbren. No existe un «no declarado».
  *
  * El cobro con tarjeta NO se guarda sin los datos del voucher: sin ellos nadie
  * lo va a poder casar contra el estado de cuenta del adquirente, y para cuando
@@ -18,7 +24,7 @@ import { prisma } from "@/lib/prisma";
 import { requireMembership, requireModule, requireWriter } from "@/lib/authz";
 import { withHospital } from "@/lib/hospital/with-hospital";
 import { aFecha, bitacora, dinero, error, errorZod, fechaSchema, rangoDeQuery } from "@/lib/hospital/http";
-import { FORMAS_PAGO_COBRO, MARCAS, TIPOS_TARJETA, cobroResumen, corteDeCaja, crearCobro } from "@/lib/hospital/cobros";
+import { CFDI_COBRO, FORMAS_PAGO_COBRO, MARCAS, TIPOS_TARJETA, cobroResumen, corteDeCaja, crearCobro } from "@/lib/hospital/cobros";
 
 const ESTADOS = ["COBRADO", "DEPOSITADO", "CONTRACARGADO", "RECUPERADO", "CANCELADO"] as const;
 
@@ -30,10 +36,13 @@ export const GET = withHospital(async (req: Request) => {
   await requireMembership(companyId, undefined, req);
   await requireModule(companyId, "HOSPITAL", req);
 
-  const rango = rangoDeQuery(searchParams.get("desde"), searchParams.get("hasta"));
+  // `fecha` = el día del corte (día local del hospital); si no, desde/hasta.
+  const fecha = searchParams.get("fecha");
+  const rango = fecha ? rangoDeQuery(fecha, null) : rangoDeQuery(searchParams.get("desde"), searchParams.get("hasta"));
   const estado = searchParams.get("estado");
   const afiliacionId = searchParams.get("afiliacionId");
   const episodioId = searchParams.get("episodioId");
+  const cfdi = searchParams.get("cfdi");
 
   const cobros = await prisma.hospCobro.findMany({
     where: {
@@ -42,12 +51,27 @@ export const GET = withHospital(async (req: Request) => {
       ...(estado && (ESTADOS as readonly string[]).includes(estado) ? { estado: estado as (typeof ESTADOS)[number] } : {}),
       ...(afiliacionId ? { afiliacionId } : {}),
       ...(episodioId ? { episodioId } : {}),
+      ...(cfdi && (CFDI_COBRO as readonly string[]).includes(cfdi) ? { cfdi: cfdi as (typeof CFDI_COBRO)[number] } : {}),
+    },
+    include: {
+      episodio: { select: { folio: true, paciente: { select: { nombre: true, apellidoPaterno: true, apellidoMaterno: true } } } },
+      invoice: { select: { serie: true, folio: true, uuid: true } },
     },
     orderBy: [{ fecha: "desc" }, { createdAt: "desc" }],
     take: 500,
   });
 
-  return NextResponse.json({ cobros: cobros.map(cobroResumen), corte: corteDeCaja(cobros) });
+  return NextResponse.json({
+    cobros: cobros.map((c) => ({
+      ...cobroResumen(c),
+      episodioFolio: c.episodio?.folio ?? null,
+      pacienteNombre: c.episodio?.paciente
+        ? [c.episodio.paciente.nombre, c.episodio.paciente.apellidoPaterno, c.episodio.paciente.apellidoMaterno].filter(Boolean).join(" ")
+        : null,
+      invoiceFolio: c.invoice ? [c.invoice.serie, c.invoice.folio].filter(Boolean).join("-") || (c.invoice.uuid ?? "").slice(0, 8) || null : null,
+    })),
+    corte: corteDeCaja(cobros),
+  });
 });
 
 const postSchema = z
@@ -56,6 +80,7 @@ const postSchema = z
     fecha: fechaSchema.nullable().optional(),
     monto: dinero.positive(),
     formaPago: z.enum(FORMAS_PAGO_COBRO),
+    cfdi: z.enum(CFDI_COBRO).optional(),
     episodioId: z.string().nullable().optional(),
     invoiceId: z.string().nullable().optional(),
     depositoId: z.string().nullable().optional(),
@@ -87,6 +112,7 @@ export const POST = withHospital(async (req: Request) => {
     fecha: aFecha(d.fecha) ?? new Date(),
     monto: d.monto,
     formaPago: d.formaPago,
+    cfdi: d.cfdi ?? "CON_CFDI",
     episodioId: d.episodioId ?? null,
     invoiceId: d.invoiceId ?? null,
     depositoId: d.depositoId ?? null,
@@ -109,6 +135,7 @@ export const POST = withHospital(async (req: Request) => {
     detalle: {
       monto: Number(cobro.monto),
       formaPago: cobro.formaPago,
+      cfdi: cobro.cfdi,
       afiliacionId: cobro.afiliacionId,
       autorizacion: cobro.autorizacion,
       asentado: !!cobro.asientoAt,

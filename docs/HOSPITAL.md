@@ -645,9 +645,19 @@ GET  /api/hospital/episodios/[id]/depositos → [...] · la cuenta muestra depó
 POST /api/hospital/mantenimiento { …, recursoId? } · GET/POST /api/hospital/mantenimiento/[id]/fotos { base64, mime, nota? } → 201
 GET  /api/hospital/mantenimiento/[id]/fotos/[fotoId] → la imagen con su content-type (Cache-Control private) · DELETE la borra
 GET  /api/hospital/afiliaciones?companyId=[&todas=1] · POST { companyId, numero, descripcion?, adquirente?, tasa? } · PATCH /afiliaciones/[id] (el `numero` no se edita)
-GET  /api/hospital/cobros?companyId=[&desde&hasta&estado&afiliacionId&episodioId] → { cobros, corte: { enCaja, enTransito, total, contracargos } }
-POST /api/hospital/cobros { companyId, fecha, monto, formaPago, episodioId?|invoiceId?|depositoId?, afiliacionId?, autorizacion?, marca?, tipoTarjeta?, ultimos4?,
-       referencia?, notas?, permitirDuplicado? } → 201 · 409 si ya hay uno con la misma (afiliación, día, monto, autorización) salvo que el cajero lo confirme
+GET  /api/hospital/cobros?companyId=[&fecha=YYYY-MM-DD | &desde&hasta][&estado&afiliacionId&episodioId&cfdi] → { cobros: [... cfdi, pendienteDeFacturar,
+       episodioFolio, pacienteNombre, invoiceFolio], corte: { total, enCaja, enTransito, contracargos, efectivo…cheque, porFormaPago, porCfdi: { CON_CFDI, SIN_CFDI },
+       pendientesDeFacturar (monto), pendientesDeFacturarCobros } } · sin fecha ni rango = hoy (día local)
+POST /api/hospital/cobros { companyId, fecha, monto, formaPago, cfdi? (CON_CFDI|SIN_CFDI, default CON_CFDI), episodioId?|invoiceId?|depositoId?, afiliacionId?,
+       autorizacion?, marca?, tipoTarjeta?, ultimos4?, referencia?, notas?, permitirDuplicado? } → 201 · 409 si ya hay uno con la misma (afiliación, día, monto,
+       autorización) salvo que el cajero lo confirme. TARJETA exige afiliación + autorización (la llave); marca, tipo y últimos cuatro van si los hay (el
+       lector del voucher los trae; la captura a mano no se atora). La factura (`invoiceId`) tiene que ser de la empresa, de ingreso y no cancelada.
+       **Con o sin CFDI (oct-2026).** CON_CFDI sin factura = «pendiente de facturar» (sale en el corte). SIN_CFDI exige episodio y no admite factura: sus
+       cargos LIBRES pasan a la factura global (`publicoGeneral`, con `publicoGeneralCobroId` = el cobro; cancelar el cobro los regresa si siguen libres).
+       SIN_CFDI NO es «no declarado»: mientras la global no esté timbrada, `computeTaxPosition` suma su base a `isr.ingresosAdicionales` (dentro de los
+       ingresos nominales de la PM, Art. 17 LISR) y su IVA a `iva.trasladadoSinCfdi` (dentro de `iva.trasladado`, Art. 1-B LIVA), y el papel de IVA
+       lo enseña como renglón «Cobro de caja sin CFDI». Tasa: ponderada de los cargos del episodio; si no, `HospConfig.ivaAnticiposTasa`; si no, 0.
+       Ver `lib/hospital/ingresos-sin-cfdi.ts` y `global-por-cobro.ts`.
 PATCH /api/hospital/cobros/[id] { estado: CONTRACARGADO|RECUPERADO|CANCELADO, fecha?, motivo? } · DEPOSITADO no se pone aquí: se marca al armar la liquidación
 GET  /api/hospital/liquidaciones?companyId=[&desde&hasta&afiliacionId] · POST { companyId, afiliacionId, fecha, cobroIds[], bruto, contracargos, comision,
        ivaComision, neto, bankTransactionId?, notas? } → 201; rechaza el lote que no cierra o cuyos cobros no suman el bruto, y marca sus cobros DEPOSITADOS

@@ -227,7 +227,10 @@ Reglas del servidor:
 - **Accesos**: quién ha leído el expediente (bitácora).
 
 ## caja — Caja (/caja)
-- **Para qué**: registrar cobros con tarjeta tomando foto del voucher para amarrarlos a su factura.
+- **Para qué**: registrar los cobros del día —efectivo, transferencia, tarjeta o cheque— a un episodio o a una factura, y ver el corte de caja.
+- **Con o sin CFDI**: cada cobro dice si lleva factura propia. **Con CFDI** sin factura ligada queda «pendiente de facturar» en el corte. **Sin CFDI** va a un episodio y sus cargos pasan a la **factura global** a público en general. Sin CFDI NO es «no declarado»: el sistema lo suma solo a los ingresos e IVA del mes hasta que la global se timbre.
+- **Tarjeta a mano**: basta la afiliación de la terminal y la autorización del voucher; marca, tipo y últimos cuatro son opcionales.
+- **Corte**: total del día por forma de pago (efectivo en caja, lo demás en tránsito al banco), con CFDI / sin CFDI y lo pendiente de facturar.
 - **Pasos**: **Escanear voucher** (cámara) → la app lee Importe, Fecha, Afiliación, Autorización, Tarjeta, Titular («Corregir lo leído» para ajustar) → «¿De quién es este cobro?»: elegir una factura propuesta o buscar «Buscar factura por folio o nombre» → **Registrar cobro**. Confirmación «Cobro registrado por $…» con «Escanear otro». **Cancelar** reinicia.
 - Aviso: «Elige la factura y confirma el importe para poder guardar.»
 - **Permisos**: página Caja + Operaciones financieras (FINANZAS_ESCRIBIR).

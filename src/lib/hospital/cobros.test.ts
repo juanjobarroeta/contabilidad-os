@@ -39,15 +39,31 @@ describe("validarCobro() — el candado de la terminal", () => {
     expect(v.ultimos4).toBe("4242");
   });
 
+  // La LLAVE de conciliación (afiliación + autorización) es lo indispensable;
+  // marca, tipo y últimos cuatro se guardan si vienen pero no atoran la
+  // captura a mano en caja.
   it.each([
     ["afiliacionId", "afiliación"],
     ["autorizacion", "autorización"],
-    ["marca", "marca"],
-    ["tipoTarjeta", "crédito o débito"],
-    ["ultimos4", "cuatro"],
   ])("no guarda un cobro con tarjeta sin %s", (campo, mensaje) => {
     expect(() => validarCobro(tarjeta({ [campo]: null }))).toThrow(HospitalError);
     expect(() => validarCobro(tarjeta({ [campo]: null }))).toThrow(new RegExp(mensaje, "i"));
+  });
+
+  it("captura a mano: tarjeta con sólo afiliación y autorización", () => {
+    const v = validarCobro(tarjeta({ marca: null, tipoTarjeta: null, ultimos4: null }));
+    expect(v).toMatchObject({ afiliacionId: "af1", autorizacion: "123456", marca: null, tipoTarjeta: null, ultimos4: null });
+  });
+
+  it("si vienen los últimos cuatro, se validan", () => {
+    expect(() => validarCobro(tarjeta({ ultimos4: "42" }))).toThrow(/cuatro/i);
+  });
+
+  it("CON_CFDI por default; SIN_CFDI exige episodio y no admite factura", () => {
+    expect(validarCobro(tarjeta()).cfdi).toBe("CON_CFDI");
+    expect(validarCobro(tarjeta({ cfdi: "SIN_CFDI" })).cfdi).toBe("SIN_CFDI");
+    expect(() => validarCobro(tarjeta({ cfdi: "SIN_CFDI", invoiceId: "inv1" }))).toThrow(/sin CFDI no va contra una factura/i);
+    expect(() => validarCobro(tarjeta({ cfdi: "SIN_CFDI", episodioId: null, depositoId: "dep1" }))).toThrow(/tiene que ir a un episodio/i);
   });
 
   it("limpia los campos de terminal cuando no es tarjeta: la llave no lleva basura", () => {
@@ -232,6 +248,20 @@ describe("corteDeCaja()", () => {
     expect(c.tarjeta).toBe(1000);
     expect(c.total).toBe(1000);
     expect(c.contracargos).toBe(400);
+  });
+
+  it("parte por forma de pago y por CFDI, y dice cuánto falta facturar", () => {
+    const c = corteDeCaja([
+      { monto: 500, formaPago: "EFECTIVO", estado: "COBRADO", cfdi: "SIN_CFDI" },
+      { monto: 1200, formaPago: "TARJETA", estado: "COBRADO", cfdi: "CON_CFDI", invoiceId: "inv1" },
+      { monto: 300, formaPago: "TRANSFERENCIA", estado: "COBRADO", cfdi: "CON_CFDI" }, // sin factura todavía
+      { monto: 700, formaPago: "TRANSFERENCIA", estado: "COBRADO", cfdi: "CON_CFDI", depositoId: "dep1" }, // anticipo: su CFDI va aparte
+      { monto: 99, formaPago: "EFECTIVO", estado: "CANCELADO", cfdi: "CON_CFDI" },
+    ]);
+    expect(c.porFormaPago).toEqual({ EFECTIVO: 500, TRANSFERENCIA: 1000, TARJETA: 1200, CHEQUE: 0 });
+    expect(c.porCfdi).toEqual({ CON_CFDI: 2200, SIN_CFDI: 500 });
+    expect(c.pendientesDeFacturar).toBe(300);
+    expect(c.pendientesDeFacturarCobros).toBe(1);
   });
 });
 

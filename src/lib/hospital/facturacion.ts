@@ -27,6 +27,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { HospitalError } from "./errores";
 import { rangoMesLocal } from "./tz";
+import { SIN_CFDI_VIGENTE, SIN_PREFACTURA_PENDIENTE } from "./global-por-cobro";
 import { crearPrefactura, type Actor } from "@/lib/facturas/prefacturas";
 import type { StampInput, StampItem } from "@/lib/facturas/stamp";
 
@@ -85,9 +86,8 @@ export function estadoFacturacion(c: CargoFacturable): EstadoFacturacion {
   return "PENDIENTE";
 }
 
-/** Condición de BD equivalente a «libre»: sin CFDI vigente ni prefactura pendiente. */
-const SIN_CFDI_VIGENTE = { OR: [{ invoiceId: null }, { invoice: { is: { status: "CANCELLED" as const } } }] };
-const SIN_PREFACTURA_PENDIENTE = { OR: [{ prefacturaId: null }, { prefactura: { is: { status: { not: "PENDIENTE" } } } }] };
+// Condición de BD equivalente a «libre»: sin CFDI vigente ni prefactura
+// pendiente. Vive en global-por-cobro.ts, que la comparte con la caja.
 
 /** Puede entrar a una prefactura (o marcarse para la global). */
 export const esLibre = (c: CargoFacturable) => estadoFacturacion(c) === "PENDIENTE";
@@ -328,7 +328,8 @@ export async function marcarPublicoGeneral(db: Db, companyId: string, episodioId
   }
   const r = await db.hospCargo.updateMany({
     where: { id: { in: cargos.map((c) => c.id) }, cancelado: false, AND: [SIN_CFDI_VIGENTE, SIN_PREFACTURA_PENDIENTE] },
-    data: { publicoGeneral: valor },
+    // Regresarlo a mano también suelta la liga con el cobro SIN CFDI que lo marcó.
+    data: valor ? { publicoGeneral: true } : { publicoGeneral: false, publicoGeneralCobroId: null },
   });
   return { actualizados: r.count };
 }
