@@ -57,7 +57,7 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
   const e = await prisma.hospEpisodio.findUniqueOrThrow({
     where: { id },
     include: {
-      paciente: { include: { pagador: { select: { id: true, nombre: true, tipo: true } }, customer: { select: { id: true, razonSocial: true, rfc: true } } } },
+      paciente: { include: { pagador: { select: { id: true, nombre: true, tipo: true } }, customer: { select: { id: true, razonSocial: true, rfc: true } }, responsable: true } },
       recurso: true,
       medico: true,
       pagador: true,
