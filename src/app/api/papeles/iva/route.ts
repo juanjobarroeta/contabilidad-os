@@ -16,6 +16,8 @@ import { efosRfcsBloqueados } from "@/lib/fiscal/efos/service";
 import { REP_VIGENTE } from "@/lib/fiscal/rep-vigente";
 import { montosRepDelPadre } from "@/lib/fiscal/rep-tope";
 import { linksVigentesAntesDe } from "@/lib/fiscal/rep-tope-db";
+import { ingresosSinCfdiEnRango } from "@/lib/hospital/ingresos-sin-cfdi";
+import { rangoMesLocal } from "@/lib/hospital/tz";
 
 // GET /api/papeles/iva?companyId=xxx&year=2026&month=3[&format=csv]
 //
@@ -246,6 +248,12 @@ export async function GET(req: Request) {
     /** Renglón de ingreso PPD armado desde el complemento de pago (REP) cobrado. */
     esComplemento?: boolean;
     /**
+     * Cobro de caja SIN CFDI todavía no timbrado en la factura global: su IVA se
+     * causó al cobrarse (Art. 1-B LIVA). Mismo cálculo que el motor
+     * (lib/hospital/ingresos-sin-cfdi → iva.trasladadoSinCfdi).
+     */
+    sinCfdi?: boolean;
+    /**
      * IVA retenido a este proveedor en el CFDI: NO acreditable este mes
      * (Art. 5-IV LIVA), se acredita el mes siguiente al de su entero. `importe`
      * del renglón acreditable ya viene neto de esto.
@@ -386,6 +394,26 @@ export async function GET(req: Request) {
       importe: t,
       metodoPago: "PPD",
       sinComplementoPago: true,
+    });
+  }
+  // Cobros de caja SIN CFDI aún sin global timbrada: el mismo renglón que el
+  // motor suma como `iva.trasladadoSinCfdi`, en meses locales del hospital.
+  const mesLocal = rangoMesLocal(year, month);
+  const sinCfdi = await ingresosSinCfdiEnRango(prisma, companyId, mesLocal.desde, mesLocal.hasta);
+  for (const d of sinCfdi.detalle) {
+    trasladado.push({
+      id: `cobro-${d.cobroId}`,
+      fecha: (d.fecha ?? mesLocal.desde).toISOString().slice(0, 10),
+      uuid: null,
+      serie: null,
+      folio: null,
+      contraparte: `Cobro de caja sin CFDI${d.etiqueta ? ` · ${d.etiqueta}` : ""} (va a la factura global)`,
+      rfc: "XAXX010101000",
+      subtotal: d.base,
+      tasa: +d.tasa.toFixed(4),
+      importe: d.iva,
+      metodoPago: "SIN_CFDI",
+      sinCfdi: true,
     });
   }
   trasladado.sort((a, b) => a.fecha.localeCompare(b.fecha));

@@ -21,6 +21,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type {
+  HospCobroCfdi,
   HospCobroEstado,
   HospFormaPago,
   HospTarjetaMarca,
@@ -29,6 +30,7 @@ import type {
   PrismaClient,
 } from "@prisma/client";
 import { asentarCobro } from "./asientos";
+import { liberarGlobalPorCobro, marcarGlobalPorCobro } from "./global-por-cobro";
 import { HospitalError } from "./errores";
 import { claveDia, finDiaLocal, inicioDiaLocal } from "./tz";
 import { r2 } from "./util";
@@ -38,6 +40,13 @@ type Db = PrismaClient | Prisma.TransactionClient;
 export const FORMAS_PAGO_COBRO = ["EFECTIVO", "TRANSFERENCIA", "TARJETA", "CHEQUE"] as const;
 export const MARCAS = ["VISA", "MASTERCARD", "AMEX", "CARNET", "OTRA"] as const;
 export const TIPOS_TARJETA = ["CREDITO", "DEBITO"] as const;
+/**
+ * ¿El cobro va amparado por un CFDI propio? SIN_CFDI NO es «no declarado»: sus
+ * cargos van a la factura global a público en general, y mientras ésta no se
+ * timbre el motor fiscal los suma como ingresos nominales adicionales y como
+ * IVA trasladado del mes (Art. 17 LISR, Art. 1-B LIVA). Ver ingresos-sin-cfdi.ts.
+ */
+export const CFDI_COBRO = ["CON_CFDI", "SIN_CFDI"] as const;
 
 /**
  * Un cobro nace COBRADO. De ahí sale por una de tres puertas: lo deposita el
@@ -70,6 +79,8 @@ export interface CobroInput {
   fecha: Date;
   monto: number;
   formaPago: HospFormaPago;
+  /** Default CON_CFDI. */
+  cfdi?: HospCobroCfdi;
   episodioId?: string | null;
   invoiceId?: string | null;
   depositoId?: string | null;
@@ -84,6 +95,7 @@ export interface CobroInput {
 
 export interface CobroValidado extends CobroInput {
   monto: number;
+  cfdi: HospCobroCfdi;
   autorizacion: string | null;
   ultimos4: string | null;
   referencia: string | null;
@@ -124,16 +136,28 @@ export function validarCobro(input: CobroInput): CobroValidado {
   if (!input.episodioId && !input.invoiceId && !input.depositoId) {
     throw new HospitalError(400, "El cobro tiene que ir a un episodio, a una factura o a un anticipo.");
   }
+  const cfdi: HospCobroCfdi = input.cfdi ?? "CON_CFDI";
+  if (cfdi === "SIN_CFDI" && input.invoiceId) {
+    throw new HospitalError(400, "Un cobro sin CFDI no va contra una factura: si ya tiene factura, márcalo con CFDI.");
+  }
+  if (cfdi === "SIN_CFDI" && !input.episodioId) {
+    throw new HospitalError(400, "Un cobro sin CFDI tiene que ir a un episodio: sus cargos son los que entran a la factura global.");
+  }
 
   if (input.formaPago === "TARJETA") {
+    // Lo indispensable para casarlo contra el estado de cuenta del adquirente es
+    // la LLAVE (afiliación + autorización; día y monto ya vienen). Marca, tipo
+    // y últimos cuatro ayudan y se guardan si vienen —el lector del voucher los
+    // trae—, pero la captura a mano no puede quedarse atorada por ellos.
     if (!input.afiliacionId) throw new HospitalError(400, "Un cobro con tarjeta necesita la afiliación de la terminal.");
-    if (!input.marca) throw new HospitalError(400, "Un cobro con tarjeta necesita la marca (VISA, MASTERCARD, AMEX…).");
-    if (!input.tipoTarjeta) throw new HospitalError(400, "Un cobro con tarjeta necesita decir si es crédito o débito: el adquirente los liquida con tasas distintas.");
     return {
       ...input,
       monto,
+      cfdi,
       autorizacion: normalizarAutorizacion(input.autorizacion),
-      ultimos4: normalizarUltimos4(input.ultimos4),
+      marca: input.marca ?? null,
+      tipoTarjeta: input.tipoTarjeta ?? null,
+      ultimos4: input.ultimos4 ? normalizarUltimos4(input.ultimos4) : null,
       referencia: input.referencia?.trim() || null,
     };
   }
@@ -143,6 +167,7 @@ export function validarCobro(input: CobroInput): CobroValidado {
   return {
     ...input,
     monto,
+    cfdi,
     afiliacionId: null,
     autorizacion: null,
     marca: null,
@@ -213,13 +238,27 @@ export interface CorteCaja {
   enCaja: number;
   /** Tarjeta + transferencia + cheque: en tránsito hasta que el banco lo deposite. */
   enTransito: number;
+  porFormaPago: Record<HospFormaPago, number>;
+  /** Vigente, por si va amparado por CFDI propio o a la factura global. */
+  porCfdi: Record<HospCobroCfdi, number>;
+  /** Monto CON_CFDI vigente sin factura ligada: falta emitirle su CFDI. */
+  pendientesDeFacturar: number;
+  pendientesDeFacturarCobros: number;
 }
 
 type CobroParaCorte = {
   monto: number | { toString(): string };
   formaPago: HospFormaPago;
   estado: HospCobroEstado;
+  cfdi?: HospCobroCfdi;
+  invoiceId?: string | null;
+  depositoId?: string | null;
 };
+
+/** CON_CFDI vigente sin factura (ni anticipo, que lleva su propio CFDI): falta facturarlo. */
+export function pendienteDeFacturar(c: { cfdi?: HospCobroCfdi; estado: HospCobroEstado; invoiceId?: string | null; depositoId?: string | null }): boolean {
+  return (c.cfdi ?? "CON_CFDI") === "CON_CFDI" && esVigente(c.estado) && !c.invoiceId && !c.depositoId;
+}
 
 export function corteDeCaja(cobros: CobroParaCorte[]): CorteCaja {
   const suma = (fp: HospFormaPago) =>
@@ -233,6 +272,10 @@ export function corteDeCaja(cobros: CobroParaCorte[]): CorteCaja {
     cobros.filter((c) => c.estado === "CONTRACARGADO").reduce((s, c) => s + Number(c.monto), 0)
   );
 
+  const vigentes = cobros.filter((c) => esVigente(c.estado));
+  const porCfdi = (k: HospCobroCfdi) => r2(vigentes.filter((c) => (c.cfdi ?? "CON_CFDI") === k).reduce((s, c) => s + Number(c.monto), 0));
+  const pendientes = cobros.filter(pendienteDeFacturar);
+
   return {
     efectivo,
     transferencia,
@@ -242,6 +285,10 @@ export function corteDeCaja(cobros: CobroParaCorte[]): CorteCaja {
     contracargos,
     enCaja: efectivo,
     enTransito: r2(transferencia + tarjeta + cheque),
+    porFormaPago: { EFECTIVO: efectivo, TRANSFERENCIA: transferencia, TARJETA: tarjeta, CHEQUE: cheque },
+    porCfdi: { CON_CFDI: porCfdi("CON_CFDI"), SIN_CFDI: porCfdi("SIN_CFDI") },
+    pendientesDeFacturar: r2(pendientes.reduce((s, c) => s + Number(c.monto), 0)),
+    pendientesDeFacturarCobros: pendientes.length,
   };
 }
 
@@ -253,6 +300,7 @@ export function cobroResumen(c: {
   monto: number | { toString(): string };
   formaPago: HospFormaPago;
   estado: HospCobroEstado;
+  cfdi: HospCobroCfdi;
   episodioId: string | null;
   invoiceId: string | null;
   depositoId: string | null;
@@ -277,6 +325,8 @@ export function cobroResumen(c: {
     monto: r2(Number(c.monto)),
     formaPago: c.formaPago,
     estado: c.estado,
+    cfdi: c.cfdi,
+    pendienteDeFacturar: pendienteDeFacturar(c),
     episodioId: c.episodioId,
     invoiceId: c.invoiceId,
     depositoId: c.depositoId,
@@ -326,6 +376,14 @@ export async function crearCobro(db: PrismaClient, args: CrearCobroArgs) {
       const dep = await tx.hospDeposito.findUnique({ where: { id: v.depositoId }, select: { companyId: true, monto: true } });
       if (!dep || dep.companyId !== args.companyId) throw new HospitalError(404, "Anticipo no encontrado");
     }
+    // La factura tiene que ser de ESTA empresa: sin el candado, un id ajeno
+    // ligaba el cobro (y su asiento) a la factura de otro contribuyente.
+    if (v.invoiceId) {
+      const inv = await tx.invoice.findUnique({ where: { id: v.invoiceId }, select: { companyId: true, status: true, tipo: true } });
+      if (!inv || inv.companyId !== args.companyId) throw new HospitalError(404, "Factura no encontrada");
+      if (inv.status === "CANCELLED") throw new HospitalError(409, "La factura está cancelada: el cobro va contra la que la sustituye.");
+      if (inv.tipo !== "INGRESO") throw new HospitalError(400, "Un cobro va contra una factura emitida (de ingreso).");
+    }
 
     if (!args.permitirDuplicado) {
       const dup = await buscarDuplicado(tx, args.companyId, { afiliacionId: v.afiliacionId, fecha: v.fecha, monto: v.monto, autorizacion: v.autorizacion });
@@ -343,6 +401,7 @@ export async function crearCobro(db: PrismaClient, args: CrearCobroArgs) {
         fecha: v.fecha,
         monto: v.monto,
         formaPago: v.formaPago,
+        cfdi: v.cfdi,
         episodioId: v.episodioId ?? null,
         invoiceId: v.invoiceId ?? null,
         depositoId: v.depositoId ?? null,
@@ -359,6 +418,10 @@ export async function crearCobro(db: PrismaClient, args: CrearCobroArgs) {
     // ── Contabilidad (P3c): CAJA/FONDOS_EN_TRANSITO contra CLIENTES, si está activa.
     //    El cobro ligado a un anticipo no asienta: ya lo asentó el depósito.
     await asentarCobro(tx, { ...cobro, folio });
+    // SIN CFDI: sus cargos libres van a la factura global del mes.
+    if (cobro.cfdi === "SIN_CFDI" && cobro.episodioId) {
+      await marcarGlobalPorCobro(tx, args.companyId, cobro.episodioId, cobro.id);
+    }
     return tx.hospCobro.findUniqueOrThrow({ where: { id: cobro.id } });
   });
 }
@@ -398,6 +461,9 @@ export async function cambiarEstadoCobro(db: PrismaClient, args: CambiarEstadoCo
       },
     });
     await asentarCobro(tx, { ...actualizado, folio: cobro.episodio?.folio ?? null }, { ahora: fecha });
+    // Un cobro SIN CFDI cancelado regresa sus cargos de la global (sólo los
+    // que él marcó y siguen libres).
+    if (args.estado === "CANCELADO" && cobro.cfdi === "SIN_CFDI") await liberarGlobalPorCobro(tx, cobro.id);
     return tx.hospCobro.findUniqueOrThrow({ where: { id: cobro.id } });
   });
 }
