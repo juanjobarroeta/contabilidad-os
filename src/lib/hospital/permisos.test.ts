@@ -6,6 +6,14 @@ import { assertPaginaHospitalEnApi, combinarPermisos, enforceHospitalAccess, PER
 beforeEach(() => { member.role = 'ACCOUNTANT'; member.hospitalPaginas = []; member.hospitalPermisos = []; find.mockResolvedValue(member); membership.mockResolvedValue({ membership: member }); });
 const request = (path: string, method = 'GET') => new Request(`https://local.test/api/hospital/${path}`, { method });
 describe('hospital server permission matrix', () => {
+  it('help mascot answers any member; the question board is admin-only', async () => {
+    member.hospitalPaginas = ['mantenimiento'];
+    await expect(enforceHospitalAccess('company', 'user', request('ayuda', 'POST'))).resolves.toBeUndefined();
+    await expect(enforceHospitalAccess('company', 'user', request('ayuda/abc/valoracion', 'POST'))).resolves.toBeUndefined();
+    await expect(enforceHospitalAccess('company', 'user', request('ayuda/preguntas'))).rejects.toMatchObject({ status: 403 });
+    member.role = 'ADMIN';
+    await expect(enforceHospitalAccess('company', 'user', request('ayuda/preguntas'))).resolves.toBeUndefined();
+  });
   it('enforces page scope even if the user has a clinical grant', async () => {
     member.hospitalPaginas = ['mantenimiento']; member.hospitalPermisos = ['CLINICA_LEER'];
     await expect(enforceHospitalAccess('company', 'user', request('episodios/one'))).rejects.toMatchObject({ status: 403 });

@@ -75,6 +75,13 @@ export async function enforceHospitalAccess(companyId: string, userId: string, r
   if (root === "cotizaciones" && path.includes("convertir")) root = "episodios";
   const admin = ["OWNER", "ADMIN"].includes(membership.role);
   const writing = !["GET", "HEAD", "OPTIONS"].includes(req.method);
+  // La mascota de ayuda contesta a cualquier miembro, vea las páginas que vea
+  // (sabe cuáles son y por eso explica lo que le falta). El tablero de lo que
+  // se pregunta es de los administradores.
+  if (root === "ayuda") {
+    if (path[1] === "preguntas" && !admin) throw new AuthzError(403, "Sólo un administrador del hospital puede ver las preguntas a la mascota de ayuda.");
+    return;
+  }
   if (!(root === "config" && !writing) && member?.hospitalPaginas.length && !(paginas[root] ?? [root]).some(p => member.hospitalPaginas.includes(p))) {
     throw new AuthzError(403, "Tu usuario no tiene acceso a esta sección del hospital. Pide a un administrador que habilite esta sección en Usuarios.");
   }
