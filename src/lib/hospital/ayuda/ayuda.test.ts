@@ -44,6 +44,17 @@ describe("prompt", () => {
     expect(t).toContain("Usuario: hola\nTú: ¡Hola!");
     expect(t.endsWith("¿Dónde veo la nómina?")).toBe(true);
   });
+  it("el elemento señalado va con su tipo, título y rótulos", () => {
+    const t = armarTurno({
+      pregunta: "¿Qué es «Ocupación»?",
+      pagina: "censo",
+      historial: [],
+      perfil: enfermeria,
+      elemento: { tipo: "indicador", titulo: "Ocupación", etiquetas: ["11 % ocupado"] },
+    });
+    expect(t).toContain("ELEMENTO SEÑALADO\nTipo: indicador\nTítulo: Ocupación\nRótulos dentro: 11 % ocupado");
+    expect(armarTurno({ pregunta: "x", pagina: null, historial: [], perfil: enfermeria })).not.toContain("ELEMENTO");
+  });
   it("sin restricción dice que ve todas", () => {
     expect(armarTurno({ pregunta: "x", pagina: null, historial: [], perfil: direccion })).toContain("Páginas que ve: todas");
   });

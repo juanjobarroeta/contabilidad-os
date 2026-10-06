@@ -949,6 +949,8 @@ página). No tiene herramientas ni lee datos del hospital: sólo la guía
 hay que actualizar su sección de la guía.**
 
 - `POST /api/hospital/ayuda { companyId, pregunta, pagina?, mascota?, historial? }` → `{ id, respuesta, paginas, sinRespuesta, modelo }`.
+  `elemento` = lo que el usuario señaló arrastrando la mascota encima (tipo, título y rótulos; nunca el
+  texto libre del elemento, que puede traer nombres de pacientes).
   Cualquier miembro (la rejilla de páginas no aplica). Pasa por `llamarModelo`
   (topes de IA, CostEvent `hospital.ayuda`); modelo `AI_HOSPITAL_AYUDA_MODEL`
   (default `claude-haiku-4-5`). Guarda cada pregunta en `HospAyudaPregunta`.
