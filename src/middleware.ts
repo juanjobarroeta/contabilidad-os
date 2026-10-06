@@ -102,6 +102,9 @@ export const config = {
     // status, el mismo modo de falla que AUTOMOTRIZ-2 más abajo.
     "/api/auth/token",
     "/api/auth/token/:path*",
+    // El satélite refresca su lista de empresas (rol y páginas) sin volver a
+    // iniciar sesión: GET con bearer, cross-origin, igual que la renovación.
+    "/api/auth/sesion",
     // El abogado cambia su contraseña desde el satélite jurídico (la primera se
     // la damos nosotros al darlo de alta). Sin este renglón el preflight no
     // lleva Access-Control-Allow-Origin y Safari tira el fetch sin status.
