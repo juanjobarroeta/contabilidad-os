@@ -422,6 +422,7 @@ model Company {
   // Hospital
   hospConfig        HospConfig?
   hospPuestos       HospPuesto[]
+  hospAyudaPreguntas HospAyudaPregunta[]
   hospRecursos      HospRecurso[]
   hospPacientes     HospPaciente[]
   hospPagadores     HospPagador[]
@@ -7798,6 +7799,34 @@ model HospPuesto {
   miembros CompanyMember[]
 
   @@unique([companyId, nombre])
+}
+
+/// Lo que los usuarios le preguntan a la mascota de ayuda del satélite
+/// (Cubo/Mochi/Lupa) y si la respuesta les sirvió. Es la fuente de las FAQ y
+/// de lo que hay que mejorar: GET /api/hospital/ayuda/preguntas (admins).
+model HospAyudaPregunta {
+  id               String    @id @default(cuid())
+  companyId        String
+  company          Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  /// Quien preguntó (sin FK: la pregunta sobrevive a la baja del usuario).
+  userId           String?
+  userNombre       String?
+  /// Llave de página del satélite donde estaba (paginas.js), p. ej. "caja".
+  pagina           String?
+  pregunta         String    @db.Text
+  respuesta        String    @db.Text
+  /// Llaves de página que la respuesta sugiere abrir.
+  paginasSugeridas String[]  @default([])
+  /// true = la respuesta admite que no está en la guía (hueco de documentación o de producto).
+  sinRespuesta     Boolean   @default(false)
+  modelo           String?
+  /// Valoración del usuario: null = no valoró.
+  util             Boolean?
+  comentario       String?   @db.Text
+  valoradaAt       DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([companyId, createdAt])
 }
 
 /// Configuración del vertical por empresa (1:1). Series de folio y umbrales

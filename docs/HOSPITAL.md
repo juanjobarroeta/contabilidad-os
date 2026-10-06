@@ -939,6 +939,23 @@ Editar un puesto recalcula a todos sus miembros en la misma transacción; si lo 
 el propio actor), sólo el dueño lo edita. Un acceso sin páginas se rechaza ([] significaría «todas»).
 Sólo lectura no recibe escritura (al recalcular se le filtra). Borrar un puesto con miembros: 409.
 
+### Mascota de ayuda (Cubo/Mochi/Lupa)
+
+El satélite enseña en cada pantalla la mascota de ContabilidadOS; tocarla abre
+una ayuda de USO del software (dónde está algo, cómo se hace, por qué no ve una
+página). No tiene herramientas ni lee datos del hospital: sólo la guía
+`src/lib/hospital/ayuda/conocimiento.ts` y el perfil del usuario (rol, puesto,
+`hospitalPaginas`, `hospitalPermisos`). **Al cambiar una pantalla del satélite
+hay que actualizar su sección de la guía.**
+
+- `POST /api/hospital/ayuda { companyId, pregunta, pagina?, mascota?, historial? }` → `{ id, respuesta, paginas, sinRespuesta, modelo }`.
+  Cualquier miembro (la rejilla de páginas no aplica). Pasa por `llamarModelo`
+  (topes de IA, CostEvent `hospital.ayuda`); modelo `AI_HOSPITAL_AYUDA_MODEL`
+  (default `claude-haiku-4-5`). Guarda cada pregunta en `HospAyudaPregunta`.
+- `POST /api/hospital/ayuda/[id]/valoracion { util, comentario? }` — sólo quien preguntó.
+- `GET /api/hospital/ayuda/preguntas?companyId=&dias=&filtro=todas|sin-respuesta|no-utiles` — dueño/admin:
+  resumen, por página, repetidas (candidatas a FAQ) y las preguntas.
+
 ## Lo que NO hace (por diseño, v1)
 
 - No postea al mayor: la cuenta es WIP; el asiento nace con el CFDI.

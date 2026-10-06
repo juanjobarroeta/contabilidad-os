@@ -1,3 +1,4 @@
+import { MENSAJE_TOPE_PRUEBA } from "./guardia";
 import { describe, expect, it } from "vitest";
 import { decidirUsoIA, periodoActualMx, startOfDayMx, startOfMonthMx, topeMensualEmpresaUsd } from "./guardia";
 import {
@@ -40,7 +41,8 @@ describe("topeMensualEmpresaUsd", () => {
 
   it("en prueba aplica el techo de prueba, no el del tier", () => {
     expect(topeMensualEmpresaUsd({ tier: "DESPACHO", duenoEnPrueba: true, extraUsd: 0 })).toBe(IA_USD_MENSUAL_PRUEBA);
-    expect(IA_USD_MENSUAL_PRUEBA).toBeLessThan(iaUsdMensualEmpresa("ASISTENTE") + 1);
+    // La prueba corre el producto completo (como AUTOMATIZADO), con menos presupuesto que ese tier.
+    expect(IA_USD_MENSUAL_PRUEBA).toBeLessThanOrEqual(iaUsdMensualEmpresa("AUTOMATIZADO"));
   });
 
   it("un extra negativo no reduce el techo", () => {
@@ -65,5 +67,17 @@ describe("fechas en hora de México", () => {
     // 03:00Z del día 16 aún es día 15 en México.
     expect(startOfDayMx(new Date("2026-09-16T03:00:00.000Z")).toISOString()).toBe("2026-09-15T06:00:00.000Z");
     expect(startOfDayMx(new Date("2026-09-16T07:00:00.000Z")).toISOString()).toBe("2026-09-16T06:00:00.000Z");
+  });
+});
+
+describe("tope en prueba", () => {
+  it("agotada la IA de prueba, el mensaje vende la suscripción y lleva a facturación", () => {
+    const d = decidirUsoIA({ gastoEmpresaMesUsd: 10, topeEmpresaMesUsd: 10, operacionesUsuarioHoy: 0, enPrueba: true });
+    expect(d.ok).toBe(false);
+    if (!d.ok) {
+      expect(d.motivo).toBe("empresa");
+      expect(d.mensaje).toBe(MENSAJE_TOPE_PRUEBA);
+      expect(d.mensaje).toContain("/configuracion/facturacion");
+    }
   });
 });

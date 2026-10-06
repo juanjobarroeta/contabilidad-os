@@ -180,6 +180,18 @@ export class SatGoClient {
   }
 
   /**
+   * Declaración ANUAL del ejercicio con la e.firma (endpoint `decanualfiel`).
+   * SatGo lo documenta para personas físicas; para morales se prueba en vivo.
+   */
+  async consultarDecAnualFiel(fiel: FielSatGo, p: { ejercicio: number; tipoDocumento?: "acuse" | "declaracion" | "pago" }): Promise<DocumentoSatGo> {
+    return this.documento("/api/v2/consultar/decanualfiel", fiel.rfc, {
+      fiel,
+      etiqueta: `decanualfiel ${p.ejercicio}`,
+      query: { ejercicio: String(p.ejercicio), ...(p.tipoDocumento ? { tipoDocumento: p.tipoDocumento } : {}) },
+    });
+  }
+
+  /**
    * Acuses de declaraciones presentadas (Declaraciones y Pagos) con la e.firma.
    * Un mes → normalmente un PDF (o ZIP si hay normal + complementarias);
    * mes = 0 → ZIP con «Normal_2025_Enero.pdf» … por cada mes presentado.

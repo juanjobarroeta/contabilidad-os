@@ -47,6 +47,8 @@ export interface LlamadaModelo {
   system: string;
   user: string;
   maxTokens?: number;
+  /** Modelo principal para esta llamada (default: AI_HOSPITAL_MODEL); el respaldo no cambia. */
+  modelo?: string;
   /** Para pruebas y scripts: cliente ya construido. */
   cliente?: Anthropic;
 }
@@ -98,9 +100,9 @@ function statusDe(e: unknown): number | undefined {
 async function crear(
   cliente: Anthropic,
   ctx: { companyId: string; userId: string | null; subtipo: string },
-  params: Omit<Anthropic.MessageCreateParamsNonStreaming, "model">
+  params: Omit<Anthropic.MessageCreateParamsNonStreaming, "model">,
+  principal: string = modeloAsistente()
 ): Promise<Anthropic.Message> {
-  const principal = modeloAsistente();
   try {
     return await meteredCreate(cliente, ctx, { ...params, model: principal });
   } catch (e) {
@@ -144,7 +146,7 @@ export async function llamarModelo<T extends Record<string, unknown> = Record<st
         max_tokens: intento === 1 ? maxTokens : maxTokens * 2,
         system: args.system,
         messages: mensajes,
-      });
+      }, args.modelo);
     } catch (e) {
       throw errorProveedor(e);
     }

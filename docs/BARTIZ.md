@@ -61,23 +61,44 @@ El libro local `scripts/.bartiz-reparacion.json` (ignorado por git) evita
 repetir el swap. Tras cerrar, las requisiciones ya no son PENDIENTE, así que
 una segunda corrida sólo toca lo nuevo.
 
-## Pendiente para el estado de resultados por obra
+## Ingresos por obra: `scripts/bartiz-ingresos.ts`
 
-- **Datos maestros** (el usuario los provee): cliente de cada proyecto,
-  fechas, contrato/licitación/dependencia/anticipo/retención de MITLA001,
-  `aplicaIva` de las obras UDLAP, aprobar los presupuestos BORRADOR.
-- **Proyectos faltantes** para clientes ya facturados: Conjunto Residencial
-  del Altiplano (658k + 187k), Municipio de Cuautlancingo (859k, ¿Hacienda
-  Ovinos?), Inmobiliaria Parque del Rey (500k), Bienes Inmuebles Andaluces
-  (500k + 1M), UDLAP de marzo (426k + 75k). IOCIFED y INIFED tienen un CFDI
-  de 2,636,761.91 cada uno: confirmar cuál es el anticipo de MITLA001.
-- **Ingresos por obra:** el vínculo de CFDI sólo apunta a SOLICITUD / GASTO
-  / ESTIMACION / BANK_TX, así que cada CFDI de ingreso se ata al proyecto
-  creando su `Estimacion` (numero, periodo, subtotal/iva/total, `invoiceId`).
-- **Endpoint** `GET /api/construccion/proyectos/:id/estado-resultados`:
-  ingresos (estimaciones con CFDI, sin IVA) − costos (`comprometido` sin
-  IVA + rayas + gastos) = utilidad bruta por obra; la página de Reportes la
-  hace el equipo de UI de bartiz.
+Dry-run por defecto; `--aplicar` escribe.
+
+1. **cancelados** — consulta el SAT (ConsultaCFDI) por cada CFDI de ingreso
+   STAMPED de 2026 y marca CANCELLED los cancelados (IOCIFED 8A97CBC4,
+   cancelado el 17-sep; el sync del SAT no lo había reflejado).
+2. **proyectos** — crea BOMBEROS-2025 (Municipio de Cuautlancingo, el
+   depósito de abril es el finiquito) y UDLAP-CMAT-2025 (el pago de marzo
+   es de CMAT), TERMINADOS, con presupuesto de contrato = lo cobrado; liga
+   el cliente de UDLAP001/2/3 (UDLAP) y MITLA001 (INIFED).
+3. **estimaciones** — una Estimación TIMBRADA por CFDI del mapa
+   `ESTIMACION_POR_CFDI` (subtotal/IVA/total del CFDI, periodo = mes,
+   `invoiceId`). MITLA no tiene anticipo: el CFDI vigente a INIFED es la
+   estimación 1. No asienta en el libro: el CFDI ya es ingreso fiscal; la
+   estimación es la atribución a la obra.
+
+Sin proyecto todavía (agregar al mapa cuando el usuario diga la obra):
+Altiplano (658k abr + 187k jul), Parque del Rey (500k may), Andaluces
+(500k ago + 1M sep), UDLAP 75,218.59 (mar), Público en general 3,500.
+
+## Estado de resultados por obra
+
+`GET /api/construccion/reportes/estado-resultados?companyId=…[&proyectoId=…]`
+— acumulado a la fecha, sin IVA: ingresos facturados (estimaciones con
+CFDI) y cobrados, contrato y presupuesto, costos (compras adjudicadas,
+gastos directos/indirectos, destajo), utilidad bruta y margen; totales de la
+empresa. Las adjudicaciones legadas sin desglose de IVA entran por su total
+y se cuentan en `comprasSinDesglose`. La página de Reportes vive en bartiz.
+
+## Pendiente
+
+- Datos maestros (usuario): fechas, contrato/licitación/modalidad/retención
+  de MITLA001, `aplicaIva` de UDLAP, aprobar los presupuestos BORRADOR.
+- Obras de Altiplano, Parque del Rey y Andaluces: crear el proyecto y
+  mapear sus CFDIs.
+- Rayas (destajo) y gastos de obra siguen sin capturarse en Bartiz: el
+  costo de mano de obra no está en el P&L.
 - Nombres sin RFC que conviene dar de alta cuando llegue su CFDI: TEPSA,
   Materiales para Construcción San Francisco, LIAGTSA, SOFIMEX, Lámina
   Corte Doblez.

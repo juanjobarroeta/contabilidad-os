@@ -88,7 +88,7 @@ export function PlanesPanel() {
         <ShieldCheck className="h-4 w-4 text-cos-brand" /> Planes por despacho
       </p>
       <p className="mt-1 text-[12.5px] text-cos-ink-soft">
-        Cambia el tier de todas las empresas de un despacho, o sólo de las que marques. AUTOMATIZADO+ enciende Syntage; PRO/DESPACHO además banco, WhatsApp y el cierre guiado.
+        Cambia el tier de todas las empresas de un despacho, o sólo de las que marques. Todo tier de pago (AUTOMATIZADO+) trae SAT, contador diario, banco, WhatsApp y cierre guiado; los tiers sólo cambian los timbres incluidos.
       </p>
 
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_180px_auto]">
