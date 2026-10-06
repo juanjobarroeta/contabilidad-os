@@ -30,6 +30,7 @@ import { ESTADOS_ACTIVOS } from "@/lib/hospital/util";
 import {
   CAMPOS_IDENTIDAD_P1,
   CAMPOS_IDENTIDAD_P2,
+  CAMPOS_RESPONSABLE,
   CAMPOS_SAEH,
   avisoPrivacidadDe,
   fechaNacimientoDe,
@@ -45,6 +46,7 @@ import {
   validarClavesSaeh,
   validarVinculosPaciente,
 } from "@/lib/hospital/paciente-schema";
+import { resolverResponsable } from "@/lib/hospital/responsable";
 
 export const GET = withHospital(async (req: Request) => {
   const { searchParams } = new URL(req.url);
@@ -136,7 +138,8 @@ export const POST = withHospital(async (req: Request) => {
   const { companyId, ...entrada } = parsed.data;
   const [p1, resto1] = partir(entrada, CAMPOS_IDENTIDAD_P1);
   const [p2, resto2] = partir(resto1, CAMPOS_IDENTIDAD_P2);
-  const [saeh, data] = partir(resto2, CAMPOS_SAEH);
+  const [resp, resto3] = partir(resto2, CAMPOS_RESPONSABLE);
+  const [saeh, data] = partir(resto3, CAMPOS_SAEH);
 
   const { user } = await requireWriter(companyId, req);
   await requireModule(companyId, "HOSPITAL", req);
@@ -172,6 +175,14 @@ export const POST = withHospital(async (req: Request) => {
   const claves = await validarClavesSaeh(saehEntrada, null, identidad.datos.curp);
   if (!claves.ok) return error(claves.error, claves.status);
 
+  const responsable = resolverResponsable({
+    modo: resp.responsableModo,
+    responsable: resp.responsable,
+    fechaNacimientoPaciente: identidad.datos.fechaNacimiento,
+    fechaNacimientoResponsable: fechaNacimientoDe(resp.responsable?.fechaNacimiento),
+  });
+  if (!responsable.ok) return error(responsable.error, responsable.status);
+
   const hoy = new Date();
   const aviso = await avisoPrivacidadDe(companyId, { avisoPrivacidadAceptado: p1.avisoPrivacidadAceptado, avisoPrivacidadAceptadoAt: p1.avisoPrivacidadAceptadoAt, avisoPrivacidadVersion: p1.avisoPrivacidadVersion }, hoy);
 
@@ -179,8 +190,13 @@ export const POST = withHospital(async (req: Request) => {
     prisma.$transaction(async (tx) => {
       const expedienteNumero = await siguienteFolio(tx, companyId, "expediente", hoy);
       return tx.hospPaciente.create({
-        data: { companyId, ...data, ...identidad.datos, ...aviso, ...identidadP2.datos, ...origen, ...saehEntrada, ...claves.datos, expedienteNumero },
+        data: {
+          companyId, ...data, ...identidad.datos, ...aviso, ...identidadP2.datos, ...origen, ...saehEntrada, ...claves.datos, expedienteNumero,
+          responsableModo: responsable.modo,
+          ...(responsable.responsable ? { responsable: { create: { companyId, ...responsable.responsable } } } : {}),
+        },
         include: {
+          responsable: true,
           pagador: { select: { id: true, nombre: true, tipo: true, tabulador: true, deducible: true, coaseguroPct: true, plazoDias: true, topeAutorizacion: true } },
           customer: { select: { id: true, razonSocial: true, rfc: true } },
         },
@@ -193,7 +209,7 @@ export const POST = withHospital(async (req: Request) => {
     accion: "hospital.paciente.crear",
     entidad: "HospPaciente",
     entidadId: paciente.id,
-    detalle: { nombre: `${paciente.nombre} ${paciente.apellidoPaterno}`, curp: paciente.curp, curpOrigen: paciente.curpOrigen, sinCurp: paciente.sinCurp, rfc: paciente.rfc, expedienteNumero: paciente.expedienteNumero },
+    detalle: { nombre: `${paciente.nombre} ${paciente.apellidoPaterno}`, responsableModo: paciente.responsableModo, curp: paciente.curp, curpOrigen: paciente.curpOrigen, sinCurp: paciente.sinCurp, rfc: paciente.rfc, expedienteNumero: paciente.expedienteNumero },
   });
 
   return NextResponse.json(

@@ -10,7 +10,8 @@
  * filtrar por él: la lista separa lo derivado de lo capturado.
  *
  * P1: diagnóstico de ingreso (CIE-10) y procedimiento (CIE-9-MC) por
- * catálogo; triage obligatorio en URGENCIAS; ASA; AMBULATORIO nace con
+ * catálogo; triage de URGENCIAS opcional al registrar (el médico lo captura
+ * después; el panel lo marca pendiente); ASA; AMBULATORIO nace con
  * limiteAmbulatorioAt = ingreso + 12 h. Paciente sin CURP ni motivo → 409.
  */
 

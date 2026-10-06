@@ -7948,6 +7948,38 @@ model HospRecurso {
   @@index([companyId, area])
 }
 
+enum HospResponsableModo {
+  TERCERO
+  PROPIO
+  PENDIENTE
+}
+
+/// El adulto responsable del paciente (familiar, tutor, representante legal):
+/// los mismos datos de identificación que el paciente. Firma como REPRESENTANTE.
+model HospResponsable {
+  id                   String                  @id @default(cuid())
+  companyId            String
+  pacienteId           String                  @unique
+  nombre               String
+  apellidoPaterno      String
+  apellidoMaterno      String?
+  parentesco           String
+  fechaNacimiento      DateTime?
+  sexo                 HospSexo?
+  curp                 String?
+  telefono             String
+  email                String?
+  domicilio            String?
+  identificacionTipo   HospIdentificacionTipo?
+  identificacionNumero String?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+
+  paciente HospPaciente @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+}
+
 enum HospSexo {
   FEMENINO
   MASCULINO
@@ -8000,6 +8032,12 @@ model HospPaciente {
   contactoEmergenciaNombre     String?
   contactoEmergenciaTelefono   String?
   contactoEmergenciaParentesco String?
+
+  /// Quién responde por el paciente (firma consentimientos y documentos como
+  /// REPRESENTANTE): otra persona (`responsable`), el propio paciente mayor de
+  /// edad, o pendiente (urgencia: se captura después). null = ficha anterior.
+  responsableModo HospResponsableModo?
+  responsable     HospResponsable?
 
   /// Receptor fiscal por default (Customer canónico del hub).
   customerId String?

@@ -16,8 +16,9 @@
 //
 // P1 normativa: el paciente debe traer CURP (o motivo para no tenerla,
 // NOM-024); diagnóstico de ingreso y procedimiento van por catálogo CIE-10 /
-// CIE-9-MC y se cruzan con sexo y edad; URGENCIAS exige triage con hora
-// (NOM-027); AMBULATORIO fija el límite de 12 h desde el ingreso (NOM-026);
+// CIE-9-MC y se cruzan con sexo y edad; URGENCIAS lleva triage con hora
+// (NOM-027), pero NO al registrar: admisión abre el episodio antes de que el
+// médico valore, y el panel avisa (TRIAGE_PENDIENTE) hasta que se capture; AMBULATORIO fija el límite de 12 h desde el ingreso (NOM-026);
 // ASA queda en el episodio para la selección del paciente ambulatorio.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -43,8 +44,12 @@ export function identidadCompleta(p: { curp: string | null; sinCurp: boolean; si
 
 export const MENSAJE_SIN_CURP = "El paciente no tiene CURP ni motivo registrado para no tenerla: completa la ficha antes de abrir el episodio (NOM-024)";
 
-export function validarTriage(tipo: HospEpisodioTipo, triageNivel: number | null | undefined): void {
-  if (tipo === "URGENCIAS" && triageNivel == null) throw new HospitalError(400, "Urgencias exige el nivel de triage (1-5) al ingreso (NOM-027)");
+/**
+ * El nivel, si viene, es un entero 1-5. Urgencias puede registrarse sin
+ * triage (el paciente llega antes que la valoración); la Hoja de urgencias sí
+ * lo exige y el panel lo marca pendiente.
+ */
+export function validarTriage(_tipo: HospEpisodioTipo, triageNivel: number | null | undefined): void {
   if (triageNivel != null && (!Number.isInteger(triageNivel) || triageNivel < 1 || triageNivel > 5)) {
     throw new HospitalError(400, "triageNivel debe ser un entero de 1 a 5");
   }

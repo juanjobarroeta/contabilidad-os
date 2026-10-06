@@ -949,6 +949,20 @@ Editar un puesto recalcula a todos sus miembros en la misma transacción; si lo 
 el propio actor), sólo el dueño lo edita. Un acceso sin páginas se rechaza ([] significaría «todas»).
 Sólo lectura no recibe escritura (al recalcular se le filtra). Borrar un puesto con miembros: 409.
 
+### Urgencias y adulto responsable
+
+- **Urgencias sin triage al registrar.** `POST /episodios` con `tipo: URGENCIAS` ya no exige
+  `triageNivel`: admisión abre el expediente al llegar el paciente y el médico captura el triage
+  al valorar (`PATCH /episodios/[id]` o la Hoja de urgencias, que sí lo exige). El panel avisa
+  `TRIAGE_PENDIENTE` mientras falte.
+- **Adulto responsable** (`HospResponsable`, 1:1 con el paciente; `HospPaciente.responsableModo`):
+  `TERCERO` (otra persona, con los mismos datos de identificación que el paciente; nombre,
+  apellido, parentesco y teléfono obligatorios, mayor de edad), `PROPIO` (paciente mayor de
+  edad) o `PENDIENTE` (urgencia). POST/PATCH `/pacientes` aceptan `responsableModo` y
+  `responsable`; GET `/pacientes/[id]` y `/episodios/[id]` lo devuelven. Firma como
+  `REPRESENTANTE`. El panel avisa `RESPONSABLE_PENDIENTE` (pendiente, o menor sin responsable)
+  con ingreso abierto. Reglas en `src/lib/hospital/responsable.ts`.
+
 ### Mascota de ayuda (Cubo/Mochi/Lupa)
 
 El satélite enseña en cada pantalla la mascota de ContabilidadOS; tocarla abre
