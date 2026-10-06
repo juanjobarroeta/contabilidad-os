@@ -1,5 +1,6 @@
 /**
- * POST /api/hospital/ayuda { companyId, pregunta, pagina?, mascota?, historial?: [{ rol: "usuario"|"mascota", texto }] }
+ * POST /api/hospital/ayuda { companyId, pregunta, pagina?, mascota?, historial?: [{ rol: "usuario"|"mascota", texto }],
+ *                            elemento?: { tipo, titulo, etiquetas[] } }
  *   → { id, respuesta, paginas: [llave], sinRespuesta, modelo }
  *
  * La mascota de ayuda del satélite (lib/hospital/ayuda): contesta cómo usar
@@ -28,6 +29,15 @@ const schema = z.object({
     .array(z.object({ rol: z.enum(["usuario", "mascota"]), texto: z.string().max(4000) }))
     .max(MAX_HISTORIAL * 2)
     .optional(),
+  /** Arrastrar la mascota sobre una tarjeta/indicador/sección: sólo sus rótulos. */
+  elemento: z
+    .object({
+      tipo: z.string().trim().min(1).max(40),
+      titulo: z.string().trim().max(120).nullable(),
+      etiquetas: z.array(z.string().trim().min(1).max(80)).max(20),
+    })
+    .nullable()
+    .optional(),
 });
 
 export const POST = withHospital(async (req: Request) => {
@@ -50,6 +60,7 @@ export const POST = withHospital(async (req: Request) => {
     pregunta: d.pregunta,
     pagina: d.pagina || null,
     historial: d.historial ?? [],
+    elemento: d.elemento ?? null,
     perfil: {
       rol: membership.role,
       paginas: member?.hospitalPaginas ?? [],
@@ -63,7 +74,7 @@ export const POST = withHospital(async (req: Request) => {
     accion: "hospital.ayuda.preguntar",
     entidad: "HospAyudaPregunta",
     entidadId: r.id,
-    detalle: { pagina: d.pagina ?? null, modelo: r.modelo, sinRespuesta: r.sinRespuesta, caracteres: d.pregunta.length },
+    detalle: { pagina: d.pagina ?? null, elemento: d.elemento?.tipo ?? null, modelo: r.modelo, sinRespuesta: r.sinRespuesta, caracteres: d.pregunta.length },
   });
 
   return NextResponse.json(r);

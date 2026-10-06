@@ -340,6 +340,7 @@ Reglas del servidor:
 
 ## La mascota de ayuda (Cubo, Mochi o Lupa)
 - Es el botón con el personaje en la esquina inferior derecha de cualquier pantalla (en el teléfono, arriba de la barra inferior). Al tocarlo se abre la ayuda: preguntas sugeridas para la pantalla actual y un campo para escribir cualquier pregunta sobre cómo usar HospitalOS.
+- La mascota se puede arrastrar a cualquier lugar de la pantalla. Si se suelta encima de una tarjeta, un indicador (KPI), una tabla o una sección, la resalta y explica en una burbuja qué es y para qué sirve; «Preguntar más» abre el chat con esa explicación. Un toque sin arrastrar abre o cierra la ayuda. «Regresar a la esquina» (en el engrane) la devuelve a su lugar.
 - Las respuestas pueden traer botones para abrir la página indicada. Debajo de cada respuesta están 👍 («Me sirvió») y 👎 («No me sirvió»); con 👎 se puede escribir qué esperaba. Esas valoraciones las ve el administrador para mejorar la ayuda y el software.
 - En el engrane del panel de ayuda se elige el personaje (Cubo, Mochi o Lupa), su color y un nombre propio, y se puede ocultar la mascota. Para volver a mostrarla: Configuración → «Mostrar la mascota de ayuda».
 - No hace falta escribir datos de pacientes para pedir ayuda. La mascota no consulta ni modifica información del hospital: sólo explica cómo usar el sistema.
