@@ -36,7 +36,7 @@ import { EscenaProvider, useEscena } from "./escena";
 import { PantallaConfianza, PantallaHola, PantallaPersonaje } from "./PantallasIntro";
 import { PantallaFiel } from "./PantallaFiel";
 import { PantallaHistorial } from "./PantallaHistorial";
-import { PantallaBancos, PantallaEquipo } from "./PantallasOpcionales";
+import { PantallaBancos, PantallaEquipo, PantallaWhatsapp } from "./PantallasOpcionales";
 import { avanceHistorial, type EstadoAlta } from "./tipos";
 import { cn } from "@/lib/utils";
 import { solicitar } from "@/lib/onboarding/solicitar";
@@ -327,6 +327,7 @@ export function OnboardingMascota() {
           )}
           {paso === "bancos" && companyId && <PantallaBancos companyId={companyId} onSeguir={avanzar} />}
           {paso === "equipo" && companyId && <PantallaEquipo companyId={companyId} despachoAdmin={despachoAdmin} onSeguir={avanzar} />}
+          {paso === "whatsapp" && <PantallaWhatsapp onSeguir={avanzar} />}
         </Pantalla>
       </EscenaProvider>
     </div>
@@ -347,6 +348,7 @@ function Pantalla({ paso, children }: { paso: PasoAlta; children: React.ReactNod
         historial: "05 Historial",
         bancos: "06 Bancos",
         equipo: "07 Equipo",
+        whatsapp: "08 WhatsApp",
       })[paso],
     [paso],
   );

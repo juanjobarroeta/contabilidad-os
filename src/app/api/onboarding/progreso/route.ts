@@ -3,6 +3,7 @@ import { AuthzError, requireUser } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 import { mezclarProgreso, PASOS_AGREGAR, sanearAgregar, sanearProgreso } from "@/lib/onboarding/progreso";
 import { accessibleCompaniesWhere } from "@/lib/companies/accessible";
+import { sanearPiel } from "@/lib/copiloto/personajes";
 
 function registro(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : {};
@@ -18,6 +19,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       progreso: u?.onboarding ? sanearProgreso(u.onboarding) : null,
       agregar: sanearAgregar(registro(u?.onboarding).agregar),
+      piel: registro(u?.onboarding).piel ? sanearPiel(registro(u?.onboarding).piel) : null,
     });
   } catch (e) {
     if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
@@ -51,7 +53,10 @@ export async function PATCH(req: Request) {
         const where = await accessibleCompaniesWhere(user.id, tx);
         if (!await tx.company.count({ where: { AND: [where, { id: companyId }] } })) throw new AuthzError(404, "Empresa no encontrada");
       }
-      await tx.user.update({ where: { id: user.id }, data: { onboarding: { ...siguiente, ...(agregar ? { agregar: { ...agregar } } : {}) } } });
+      // La mascota (nombre y personaje) vive aquí también, no sólo en el
+      // navegador: WhatsApp necesita saber cómo se llama el copiloto.
+      const piel = body.piel !== undefined ? sanearPiel(body.piel) : raw.piel ? sanearPiel(raw.piel) : null;
+      await tx.user.update({ where: { id: user.id }, data: { onboarding: { ...siguiente, ...(agregar ? { agregar: { ...agregar } } : {}), ...(piel ? { piel: { ...piel } } : {}) } } });
       return { progreso: siguiente, agregar };
     });
     return NextResponse.json(result);

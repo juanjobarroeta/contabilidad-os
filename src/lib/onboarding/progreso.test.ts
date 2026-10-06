@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mezclarProgreso, PROGRESO_INICIAL, rutaManual, sanearAgregar } from "./progreso";
+import { mezclarProgreso, PASOS, PASOS_ALTA, PROGRESO_INICIAL, rutaManual, sanearAgregar, sanearProgreso } from "./progreso";
 
 describe("onboarding flow recovery", () => {
   it("preserves later steps when a delayed preference save arrives", () => {
@@ -18,5 +18,13 @@ describe("onboarding flow recovery", () => {
     expect(url.searchParams.get("from")).toBe("empresas");
     expect(url.searchParams.get("returnTo")).toBe("/configuracion/empresas?tab=activas");
     expect(rutaManual(false, "//external.test")).toBe("/onboarding/manual");
+  });
+});
+
+describe("paso WhatsApp del alta", () => {
+  it("va después de equipo y antes del recorrido, y se conserva al recargar", () => {
+    expect(PASOS_ALTA.at(-1)).toBe("whatsapp");
+    expect(PASOS.indexOf("whatsapp")).toBe(PASOS.indexOf("equipo") + 1);
+    expect(sanearProgreso({ paso: "whatsapp" }).paso).toBe("whatsapp");
   });
 });
