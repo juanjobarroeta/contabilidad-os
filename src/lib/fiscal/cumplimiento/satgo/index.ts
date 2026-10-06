@@ -7,3 +7,4 @@ export { SatGoComplianceProvider, type RfcResolver } from "./provider";
 export { importarDeclaracionesSatGo, periodoDeArchivo, type ImportacionDeclaracionesSatGo } from "./declaraciones";
 export { importarHistoricoDeclaraciones, ejerciciosPendientes, ejerciciosConHuecos, esErrorDeSuscripcion } from "./historico";
 export { importarAnualSatGo, anualesPendientes, ejerciciosAnualesPendientes } from "./anual";
+export { importarCanceladosSatGo, listarCanceladosSatGo, ventanasCancelados } from "./cancelados";
