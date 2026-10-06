@@ -197,6 +197,10 @@ const JOBS: Job[] = [
   // y acotado (3 empresas × 2 ejercicios por corrida); sin huecos es un no-op.
   // Sustituye al declaraciones-backfill de Syntage.
   { name: "declaraciones-historico", everyMs: HOUR, firstDelayMs: 24 * MIN, minMs: MIN_CARO },
+  // CFDIs cancelados que la descarga masiva nunca trae (pide sólo «active»):
+  // listado de SatGo por semestre; las dos ventanas recientes siempre, las
+  // históricas una vez. Sin huecos es barato (2 ventanas × 2 lados por empresa).
+  { name: "cancelados-backfill", everyMs: HOUR, firstDelayMs: 32 * MIN, minMs: MIN_CARO },
   // Inventario automotriz: deriva unidades de los CFDIs recién bajados (parse
   // local del rawXml, sin cuota SAT). Desfasado del rawxml-backfill para
   // procesar lo que ese ciclo acaba de traer; sin empresas AUTOMOTRIZ es no-op.
