@@ -47,9 +47,10 @@ ligado. Ese es el trabajo de un onboarding.
 
 ## Los pasos, en orden
 
-Cada script `*-margom.ts` es la plantilla; para otra empresa se copia cambiando
-el `COMPANY`/RFC (pendiente: parametrizarlos por `--company`). Todos son
-**dry-run por default; APPLY=1 escribe**. Las escrituras las corre el usuario.
+Todos los scripts están parametrizados por empresa: `RFC=<rfc>` o
+`COMPANY_ID=<id>` por env (`scripts/lib/empresa.ts` — error si falta, sin
+default silencioso). Todos son **dry-run por default; APPLY=1 escribe**. Las
+escrituras las corre el usuario.
 
 ### Fase A — Datos: la verdad y la materia prima
 
@@ -74,7 +75,10 @@ el `COMPANY`/RFC (pendiente: parametrizarlos por `--company`). Todos son
 6. **Reconstruir el piso**: `reconstruir-ciclos-margom.ts` (unidad que reentra) +
    `ligar-ventas-huerfanas-margom.ts` (liga unidad→venta cuando el VIN no está
    en el XML: por número de motor, texto, o refactura). Cada unidad ligada es un
-   costo que sale de 1301 y un ingreso que resuelve familia.
+   costo que sale de 1301 y un ingreso que resuelve familia. Lo que ninguna
+   señal INTERNA resuelve (historia de servicio, recompra y linker se agotan)
+   va al resolvedor EXTERNO: **REPUVE** — placa + emplacado = se vendió y
+   circula (`docs/HANDOFF-repuve-vin.md`).
 
 ### Fase C — Decisiones de la empresa (con evidencia, no a ciegas)
 
@@ -100,6 +104,51 @@ el `COMPANY`/RFC (pendiente: parametrizarlos por `--company`). Todos son
 11. **Verificar** (`verificar-divergencia-margom.ts`): el checksum. Tres cortes —
     grupos 4/5/6 derivado vs CE, cuentas de taller/fallback, e ingreso posteado
     de CFDIs CANCELADOS (debe ser $0). Repetir hasta que el resultado cuadre.
+
+### Fase E — Módulos operativos: taller y nómina
+
+Con el cuadre hecho, estos pasos hacen que las PANTALLAS hablen (órdenes,
+plantilla, IMSS). Son derivación + cálculo, no juicio.
+
+12. **Taller histórico**: `backfill-ordenes-servicio.ts` deriva `OrdenServicio`
+    + líneas desde ServicioVenta + RefaccionMovimiento (`RESET=1` re-deriva;
+    inserción masiva por lotes). Verificar con
+    `reconciliar-ordenes-servicio.ts` — meta **100%** (la línea residual
+    «Refacciones sin desglose en kardex» absorbe los huecos del kardex).
+13. **Nómina — costo patronal**: `backfill-imss-patronal.ts`. El CFDI sólo trae
+    la cuota OBRERA (deducción 001); la PATRONAL (~20%+ del SBC) no viaja en
+    ningún recibo — se CALCULA (`calcularImss`, UMA del ejercicio, riesgo por
+    empleado) y se puebla en `PayrollItem.imssPatronal`. **El Art. 36 lo decide
+    el CFDI** (si retuvo, no hay absorción): el `salarioDiario` guardado es
+    captura/default, no evidencia.
+14. **Nómina — padrón**: `sincronizar-empleados-activos.ts`. historia-import
+    clasifica ACTIVO/BAJA sólo al CREAR al empleado y nunca lo revisita — el
+    flag se congela (MARGOM: 36 «activos» con 281 cobrando). Este script lo
+    re-deriva de la evidencia de pago (ventana 45 días desde el último pago
+    REAL ≤ hoy). No es cosmético: `run/prefill` filtra por `isActive` — sin
+    esto el asistente de nómina prellena fantasmas. Re-corrible como
+    mantenimiento.
+15. **Verificar nómina**: el obrero del XML es LA AUTORIDAD (el calculado corre
+    ~15% arriba — drift motor vs proveedor, sirve de diagnóstico, no de dato);
+    el patronal calculado se cuadra contra el **lado IMSS combinado**
+    (6X00-0014 CUOTAS + 6X00-0012 SAR juntos — el contador reparte el CEAV
+    entre ambas; MARGOM 2025: **1.14×**). NUNCA contra 2407: «RETENCION IMSS»
+    es cuenta CLEARING de la liquidación SUA (aquí mordió como falsa «20× de
+    subextracción»).
+
+## Trampas de datos aprendidas (además de las de balanza)
+
+- **fechaPago futura en CFDIs reales**: el pre-timbrado de la quincena en curso
+  y finiquitos fechados a fin de año. Toda ventana de evidencia («último
+  pago», «en nómina») se recorta a `fechaPago <= hoy`.
+- **Los campos de captura del empleado mienten**: `salarioDiario`/SDI son
+  default al mínimo integrado o captura vieja ($59/día); `isActive` congelado
+  del primer import. La autoridad siempre es el CFDI.
+- **Riesgo de negocio ≠ bug de dato**: SBC al mínimo integrado (~94% del
+  padrón en 4 valores), cero claves de percepción variable (comisiones
+  dobladas en 001 o fuera de nómina), brecha registrado-vs-pagado (pasivo
+  IMSS/ISR contingente). Se REPORTAN al contador como riesgo — no se
+  «corrigen» en la base, porque el origen (los CFDIs timbrados) dice eso.
 
 ## La meta, y cómo se ve «cuadrado»
 
