@@ -44,6 +44,11 @@ on:
         required: false
         default: false
         type: boolean
+      cursor:
+        description: "Retomar desde este cursor (lo imprime la corrida anterior). Vacío = desde el principio"
+        required: false
+        default: ""
+        type: string
       baseUrl:
         description: "URL del despliegue a golpear"
         required: false
@@ -64,6 +69,7 @@ jobs:
           HASTA: ${{ inputs.hasta }}
           EXTRAER: ${{ inputs.extraer }}
           IMPORTAR: ${{ inputs.importar }}
+          CURSOR_INICIAL: ${{ inputs.cursor }}
         run: |
           set -euo pipefail
           URL="$(printf '%s' "${BASE_URL}" | tr -d '[:space:]')"
@@ -75,7 +81,10 @@ jobs:
           if [ "${IMPORTAR}" = "true" ]; then Q="${Q}&importar=1"; fi
 
           ACUM="$(mktemp)"
-          CURSOR=""
+          # Retomar donde se quedó la corrida anterior. Sin esto hay que
+          # reempezar: no re-descarga nada (lo ya importado se salta con una
+          # consulta por lote) pero sí re-recorre miles de páginas.
+          CURSOR="$(printf '%s' "${CURSOR_INICIAL:-}" | tr -d '[:space:]')"
           # Tope de vueltas: ~1,100 páginas / ~113 por corrida ≈ 10, con margen
           # de sobra. Es un seguro contra un cursor que no avance, no una meta.
           for i in $(seq 1 40); do
@@ -85,8 +94,36 @@ jobs:
             if [ "${EXTRAER}" = "true" ] && [ "$i" = "1" ]; then Q2="${Q2}&extraer=1"; fi
             if [ -n "${CURSOR}" ]; then Q2="${Q2}&cursor=${CURSOR}"; fi
 
-            RESP="$(curl -fsS --max-time 330 -X POST "${URL}/api/cron/syntage-cfdis?${Q2}" \
-              -H "x-cron-secret: ${CRON_SECRET}")"
+            # Reintento ante fallo TRANSITORIO. Una corrida de importación dura
+            # ~55 min y la anterior murió en la vuelta 16 por un 502 de nuestra
+            # propia app —no de Syntage—: `curl -fsS` con `set -e` mata el job
+            # al primer parpadeo y se pierde el resto del trabajo.
+            #
+            # El reintento es SEGURO porque la ruta es idempotente: lo ya
+            # importado vuelve como «existente» con una consulta por uuid, sin
+            # re-descargar un solo XML.
+            #
+            # 409 NO se reintenta aquí a propósito: es el candado de cron, o sea
+            # que hay OTRA corrida trabajando, y insistir sólo la estorbaría.
+            RESP=""
+            for intento in 1 2 3; do
+              if RESP="$(curl -fsS --max-time 330 -X POST "${URL}/api/cron/syntage-cfdis?${Q2}" \
+                -H "x-cron-secret: ${CRON_SECRET}")"; then
+                break
+              fi
+              CODIGO="$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 -X POST \
+                "${URL}/api/cron/syntage-cfdis?${Q2}" -H "x-cron-secret: ${CRON_SECRET}" || true)"
+              if [ "${CODIGO}" = "409" ]; then
+                echo "::error::409: hay otra corrida con el candado tomado. No se insiste."
+                exit 1
+              fi
+              if [ "${intento}" = "3" ]; then
+                echo "::error::Tres intentos fallidos en la vuelta ${i}. Retoma con cursor=${CURSOR}"
+                exit 1
+              fi
+              echo "::warning::Falló la vuelta ${i} (intento ${intento}). Reintentando en 30s…"
+              sleep 30
+            done
 
             echo "── vuelta ${i}"
             echo "$RESP" | jq -c '{paginas, truncado, totales, importacion, siguienteCursor}'
@@ -98,6 +135,9 @@ jobs:
 
             CURSOR="$(echo "$RESP" | jq -r '.siguienteCursor // empty')"
             if [ -z "${CURSOR}" ]; then echo "── colección completa"; break; fi
+            # Impreso en CADA vuelta: si el job se cae o se acaba el tiempo, este
+            # es el valor con el que se retoma sin repetir trabajo.
+            echo "   retomar con cursor=${CURSOR}"
           done
 
           if [ -n "${CURSOR}" ]; then
