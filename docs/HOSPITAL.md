@@ -963,6 +963,23 @@ Sólo lectura no recibe escritura (al recalcular se le filtra). Borrar un puesto
   `REPRESENTANTE`. El panel avisa `RESPONSABLE_PENDIENTE` (pendiente, o menor sin responsable)
   con ingreso abierto. Reglas en `src/lib/hospital/responsable.ts`.
 
+### Expediente impreso y firma de notas
+
+- **Firma del autor sobre la nota** (`HospNota.firmaImagen/firmaHash/firmadaAt/firmaIp/firmaUserAgent`,
+  migración `20261019_hosp_nota_firma`): `POST /episodios/[id]/notas/[notaId]/firma { imagen }`
+  (data URL PNG ≤ 300 KB). Firma electrónica simple encima del sello del sistema:
+  `firmaHash = sha256(trazo|hash de la nota|AUTOR|autorNombre|firmadaAt)`. Sólo el autor
+  (`autorUserId`), una vez, sobre una nota vigente con sello íntegro (403/409 si no). `GET …/firma`
+  devuelve el trazo y `hashVerificado` para imprimir. `GET /episodios/[id]` omite el trazo y
+  manda `firmada` y `puedoFirmar` por nota, y la cédula del médico tratante. Reglas en
+  `src/lib/hospital/nota-firma.ts`.
+- **Hojas impresas en el satélite** (sin endpoints nuevos): nota clínica, hoja frontal, hoja de
+  internamiento y verificación RENAPO, con encabezado del hospital y ficha con alergias.
+- **Identificación del adulto responsable**: `IDENTIFICACION` con `contenido.titular =
+  "RESPONSABLE"`; el paquete de admisión no la cuenta como la del paciente
+  (`esIdentificacionDeResponsable`). Las imágenes viven en `HospDocumento.archivo` (≤ 10 MB) y su
+  descarga se registra como acceso.
+
 ### Mascota de ayuda (Cubo/Mochi/Lupa)
 
 El satélite enseña en cada pantalla la mascota de ContabilidadOS; tocarla abre

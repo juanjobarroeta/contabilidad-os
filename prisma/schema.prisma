@@ -8443,6 +8443,14 @@ model HospNota {
   /// autor, fecha) y sello de tiempo; la e.firma llega en v2.
   hash        String?
   selloAt     DateTime?
+  /// Firma autógrafa digital del autor sobre la nota sellada (firma
+  /// electrónica simple): trazo PNG, hash = sha256(trazo|hash de la nota|
+  /// AUTOR|autor|fecha), IP y user agent. Una sola vez; no se edita.
+  firmaImagen    String?   @db.Text
+  firmaHash      String?
+  firmadaAt      DateTime?
+  firmaIp        String?
+  firmaUserAgent String?
 
   episodio HospEpisodio @relation(fields: [episodioId], references: [id], onDelete: Cascade)
   medico   HospMedico?  @relation(fields: [medicoId], references: [id])
