@@ -98,7 +98,7 @@ Un **puesto** junta páginas + acciones. En Usuarios → pestaña **Puestos** se
 - **Dirección**: ve todas las páginas; Leer expediente, Operaciones financieras, Autorizar compras, Autorizar pagos.
 - **Médico**: Requiere atención, Censo, Agenda, Pacientes, Expedientes, Protocolos; Leer expediente, Documentar atención, Registrar indicaciones médicas, Dar de alta.
 - **Enfermería**: Censo, Agenda, Pacientes, Expedientes, Farmacia; Leer expediente, Documentar atención, Registrar aplicaciones.
-- **Admisión**: Requiere atención, Censo, Agenda, Pacientes, Expedientes, Cotizaciones, Convenios; Leer y Documentar.
+- **Admisión**: Requiere atención, Censo, Agenda, Pacientes, Expedientes, Cotizaciones, Convenios; Leer, Documentar y Programar agenda.
 - **Caja**: Caja, Facturación, Pacientes, Expedientes, Cuentas, Cotizaciones, Convenios, Protocolos, Clientes, Bancos; Leer expediente y Operaciones financieras.
 - **Farmacia**: Expedientes, Farmacia, Compras, Requisiciones, Proveedores; Leer expediente.
 - **Compras**: Requisiciones, Compras, Proveedores, Farmacia; sin acciones especiales.
@@ -115,6 +115,7 @@ Sobre el puesto se pueden hacer ajustes por persona (páginas o acciones «extra
 | ADMINISTRAR | Registrar aplicaciones | Aplicar medicamento o insumo al paciente: descuenta inventario y genera el cargo. |
 | PRESCRIBIR | Registrar indicaciones médicas | Capturar indicaciones (nota tipo Indicación). Para firmar necesita identidad médica verificada. |
 | ALTA | Dar de alta | Registrar la salida del paciente con el alta firmada por el médico. |
+| AGENDA_PROGRAMAR | Programar agenda | Agendar, editar, mover, confirmar o cancelar citas de quirófano, endoscopia y consultorio. Sin él la agenda es de sólo consulta. |
 | FINANZAS_ESCRIBIR | Operaciones financieras | Cobrar, facturar, depósitos, cargos a la cuenta, bancos, nómina, tesorería, contabilidad y datos de pago de proveedores. |
 | COMPRAS_AUTORIZAR | Autorizar compras | Autorizar o rechazar requisiciones de otros (nunca la propia). |
 | PAGOS_AUTORIZAR | Autorizar pagos | Mandar a tesorería el pago de una orden que no pidió. |
@@ -122,7 +123,7 @@ Sobre el puesto se pueden hacer ajustes por persona (páginas o acciones «extra
 
 Reglas del servidor:
 - Leer páginas clínicas (pacientes, expedientes, censo, agenda, SINBA, panel, registros) exige **CLINICA_LEER**; dueño y administrador pueden leer sin él, pero para escribir todos necesitan el permiso.
-- Escribir en lo clínico exige **CLINICA_ESCRIBIR**; registrar una aplicación exige **ADMINISTRAR**; una indicación exige **PRESCRIBIR**.
+- Escribir en lo clínico exige **CLINICA_ESCRIBIR**; agendar o mover citas (y programar un plan) exige **AGENDA_PROGRAMAR**; registrar una aplicación exige **ADMINISTRAR**; una indicación exige **PRESCRIBIR**.
 - Escribir en cuentas, caja, depósitos, cobros, bancos, contabilidad, liquidaciones, facturación, nómina o tesorería exige **FINANZAS_ESCRIBIR** (y no ser Sólo lectura).
 - **Autorizar alta** requiere ALTA + Documentar atención + identidad médica verificada; **Registrar salida** requiere ALTA + Documentar atención.
 - Segregación del ciclo de compras: nadie autoriza su propia requisición, quien pidió no autoriza el pago, y quien autorizó el pago no lo registra.
@@ -183,10 +184,12 @@ Reglas del servidor:
 - **Permisos**: página Censo + Leer expediente; escribir requiere Documentar atención.
 
 ## agenda — Agenda (/agenda)
-- **Para qué**: reservar quirófanos, consultorios y salas por día, sin empalmes.
-- **Qué se ve**: columnas por recurso, navegación ◀ **Hoy** ▶. Si no hay recursos: «No hay quirófanos, consultorios ni salas» → darlos de alta en Censo (Agregar recurso).
-- **Agendar**: botón **Agendar** → Recurso, Tipo, Qué se hace, Paciente (con ficha o sólo el nombre), Médico, Fecha, Inicio, Fin, Notas → **Agendar**. El hub rechaza empalmes en el mismo recurso. Avisos: «Elige el quirófano, consultorio o sala.», «La hora de fin debe ser después de la de inicio.»
-- **Cambiar estado de una cita**: clic en el bloque → Programada: **Confirmar**, **Iniciar**, **Cancelar cita**; Confirmada: **Iniciar**, **No asistió**, **Cancelar cita**; En curso: **Terminar**. Desde el detalle se abre la ficha del paciente o el expediente.
+- **Para qué**: reservar quirófanos, endoscopia, consultorios y salas sin empalmes, y llevar la hoja semanal de quirófano (reemplaza el Excel/PDF que se mandaba).
+- **Quién la ve y quién la mueve**: la ve quien tiene la página Agenda y «Leer expediente». Sólo quien además tiene **Programar agenda** (AGENDA_PROGRAMAR) ve **Agendar**, **Editar** y los botones de estado; los demás ven «sólo consulta».
+- **Qué se ve**: selector **Día** / **Semana** y navegación ◀ **Hoy** ▶. **Día**: columnas por recurso, bloques por hora (07:00–22:00); un «!» en el bloque marca algo pendiente. **Semana**: siete días (Lun–Dom) con cada caso como en la hoja: hora, procedimiento, médico, Px con edad, Dx, anestesiólogo (por confirmar / confirmado) y tipo de anestesia, enfermera, instrumentista, estancia y habitación, insumos y lo que trae proveedor o paciente. Filtro **Todos los recursos** / uno (p. ej. Endoscopia). **PDF de la semana** descarga la hoja para mandarla. Si no hay recursos: «No hay quirófanos, consultorios ni salas» → darlos de alta en Censo (Agregar recurso).
+- **Agendar**: botón **Agendar** → Recurso, Tipo, Qué se hace, Paciente (con ficha o sólo el nombre), Médico, Fecha, Inicio, Fin, Diagnóstico; **Equipo**: Anestesiólogo, Tipo de anestesia, «El anestesiólogo ya confirmó», Enfermera, Instrumentista, «Se solicita instrumentista»; **Estancia e insumos**: Ambulatoria/Hospitalización, Habitación, **+ Insumo** (descripción, cantidad, Hospital / Trae proveedor / Trae paciente); Notas → **Agendar**. El hub rechaza empalmes en el mismo recurso. Avisos: «Elige el quirófano, consultorio o sala.», «La hora de fin debe ser después de la de inicio.» Al programar un plan de tratamiento la hoja se llena sola con su anestesiólogo, anestesia, diagnóstico, estancia e insumos.
+- **Editar o confirmar**: clic en la cita → **Editar** (mismo formulario) o **Anestesiólogo confirmado**. Cambiar de anestesiólogo lo regresa a «por confirmar».
+- **Cambiar estado de una cita**: clic en la cita → Programada: **Confirmar**, **Iniciar**, **Cancelar cita**; Confirmada: **Iniciar**, **No asistió**, **Cancelar cita**; En curso: **Terminar**. Desde el detalle se abre la ficha del paciente o el expediente.
 
 ## pacientes — Pacientes (/pacientes)
 - **Para qué**: padrón de pacientes (personas atendidas).

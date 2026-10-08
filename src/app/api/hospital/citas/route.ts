@@ -13,14 +13,14 @@ import { prisma } from "@/lib/prisma";
 import { requireMembership, requireModule, requireWriter } from "@/lib/authz";
 import { withHospital } from "@/lib/hospital/with-hospital";
 import { bitacora, error, errorZod, rangoDeQuery } from "@/lib/hospital/http";
-import { citaCamposSchema, citaEmpalmada, describirEmpalme, incluyeCita, serializarCita, validarVinculosCita } from "@/lib/hospital/citas";
+import { citaCamposSchema, citaEmpalmada, datosHojaCita, describirEmpalme, incluyeCita, puedeProgramarAgenda, serializarCita, validarVinculosCita } from "@/lib/hospital/citas";
 
 export const GET = withHospital(async (req: Request) => {
   const { searchParams } = new URL(req.url);
   const companyId = searchParams.get("companyId");
   if (!companyId) return error("companyId requerido");
 
-  await requireMembership(companyId, undefined, req);
+  const { user, membership } = await requireMembership(companyId, undefined, req);
   await requireModule(companyId, "HOSPITAL", req);
 
   const rango = rangoDeQuery(searchParams.get("desde"), searchParams.get("hasta"));
@@ -28,7 +28,7 @@ export const GET = withHospital(async (req: Request) => {
   const recursoId = searchParams.get("recursoId");
   const medicoId = searchParams.get("medicoId");
 
-  const [recursos, citas] = await Promise.all([
+  const [recursos, citas, miembro] = await Promise.all([
     prisma.hospRecurso.findMany({
       where: { companyId, activo: true, tipo: { in: ["QUIROFANO", "CONSULTORIO", "SALA"] } },
       select: { id: true, tipo: true, area: true, nombre: true, estado: true, orden: true },
@@ -46,9 +46,17 @@ export const GET = withHospital(async (req: Request) => {
       orderBy: { inicio: "asc" },
       take: 1000,
     }),
+    prisma.companyMember.findUnique({ where: { userId_companyId: { userId: user.id, companyId } }, select: { hospitalPermisos: true } }),
   ]);
 
-  return NextResponse.json({ desde: rango.desde, hasta: rango.hasta, recursos, citas: citas.map(serializarCita) });
+  return NextResponse.json({
+    desde: rango.desde,
+    hasta: rango.hasta,
+    recursos,
+    citas: citas.map(serializarCita),
+    // La pantalla esconde «Agendar» y los botones de estado a quien sólo consulta.
+    acciones: { puedeProgramar: puedeProgramarAgenda(membership.role, miembro?.hospitalPermisos) },
+  });
 });
 
 const createSchema = citaCamposSchema.extend({ companyId: z.string().min(1) });
@@ -92,6 +100,7 @@ export const POST = withHospital(async (req: Request) => {
       episodioId: d.episodioId ?? null,
       cotizacionId: d.cotizacionId ?? null,
       notas: d.notas?.trim() || null,
+      ...datosHojaCita(d),
     },
     include: incluyeCita,
   });
