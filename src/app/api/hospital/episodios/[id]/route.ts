@@ -32,6 +32,7 @@ import { describirRecursoNoLibre, validarTriage } from "@/lib/hospital/episodio"
 import { requirePractitioner, requireClinicalPermission } from "@/lib/hospital/permisos";
 import { exigirPreparacionQuirurgica } from "@/lib/hospital/preparacion";
 import { crearNota, normalizarAsa, verificarHashNota } from "@/lib/hospital/notas";
+import { motivoNoFirmable } from "@/lib/hospital/nota-firma";
 import { cancelarPlanDeEpisodio, cerrarPlanDeEpisodio } from "@/lib/hospital/plan";
 import { asentarHonorarios } from "@/lib/hospital/asientos";
 import { customerResumen, medicoResumen, pacienteResumen, pagadorResumen, recursoResumen, totalesCargos } from "@/lib/hospital/serializar";
@@ -66,6 +67,8 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
       signos: { orderBy: { fecha: "desc" }, take: 50 },
       notas: {
         orderBy: { fecha: "desc" },
+        // El trazo de la firma se pide por nota (…/notas/[notaId]/firma) al imprimir.
+        omit: { firmaImagen: true },
         include: {
           medico: { select: { id: true, nombre: true, especialidad: true } },
           reemplazadaPor: { select: { id: true } },
@@ -126,7 +129,8 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
       customer: customerResumen(paciente.customer),
     },
     recurso: recursoResumen(recurso),
-    medico: medicoResumen(medico),
+    // La cédula va en el pie de las hojas impresas (hoja frontal, internamiento).
+    medico: medico ? { ...medicoResumen(medico), cedula: medico.cedula ?? null } : null,
     pagador: pagadorResumen(pagador),
     customer: customerResumen(customer),
     cotizacion: cotizacion ? { ...cotizacion, total: Number(cotizacion.total) } : null,
@@ -135,7 +139,10 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
     diaEstancia: diaDeEstancia(e.fechaIngreso, e.fechaAlta ?? hoy),
     ultimosSignos: signos[0] ?? null,
     signos,
-    notas: notas.map(({ reemplazadaPor, ...n }) => ({ ...n, reemplazadaPor: reemplazadaPor?.id ?? null, hashVerificado: verificarHashNota(n) })),
+    notas: notas.map(({ reemplazadaPor, ...n }) => {
+      const hashVerificado = verificarHashNota(n);
+      return { ...n, reemplazadaPor: reemplazadaPor?.id ?? null, hashVerificado, firmada: !!n.firmadaAt, puedoFirmar: motivoNoFirmable({ ...n, reemplazadaPor, hashVerificado }, user.id) === null };
+    }),
     documentos,
     pendientes: documentos.filter((d) => d.requerido && d.estado === "PENDIENTE"),
     cargos: { ...totales, porCategoria, conteo: cargos.filter((c) => !c.cancelado).length },

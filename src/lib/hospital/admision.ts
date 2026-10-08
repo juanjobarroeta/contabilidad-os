@@ -27,6 +27,11 @@ type Db = PrismaClient | Prisma.TransactionClient;
 /** Tipos que viven en el paciente (episodioId null) aunque los pida un episodio. */
 export const TIPOS_NIVEL_PACIENTE: readonly HospDocumentoTipo[] = ["AVISO_PRIVACIDAD", "IDENTIFICACION", "CONSTANCIA_CURP"];
 
+/** La identificación del adulto responsable (contenido.titular = RESPONSABLE), no la del paciente. */
+export function esIdentificacionDeResponsable(contenido: unknown): boolean {
+  return !!contenido && typeof contenido === "object" && (contenido as Record<string, unknown>).titular === "RESPONSABLE";
+}
+
 /**
  * El paquete estándar: aviso de privacidad siempre; consentimiento de datos
  * cuando hay un tercero pagador (transferencia LFPDPPP art. 36); contrato y
@@ -261,8 +266,10 @@ export async function paqueteAdmision(db: PrismaClient, a: PaqueteAdmisionArgs) 
         continue;
       }
     } else if (tipo === "IDENTIFICACION") {
-      const recibida = [...delEpisodio, ...delPaciente].find((d) => d.estado !== "PENDIENTE");
-      const pendiente = [...delEpisodio, ...delPaciente][0];
+      // La del adulto responsable también es IDENTIFICACION, pero no es la del paciente.
+      const propias = [...delEpisodio, ...delPaciente].filter((d) => !esIdentificacionDeResponsable(d.contenido));
+      const recibida = propias.find((d) => d.estado !== "PENDIENTE");
+      const pendiente = propias[0];
       if (recibida || pendiente) {
         omitidos.push({ tipo, motivo: recibida ? "Identificación ya recibida" : "Identificación ya registrada, pendiente de archivo" });
         continue;
