@@ -645,9 +645,19 @@ GET  /api/hospital/episodios/[id]/depositos → [...] · la cuenta muestra depó
 POST /api/hospital/mantenimiento { …, recursoId? } · GET/POST /api/hospital/mantenimiento/[id]/fotos { base64, mime, nota? } → 201
 GET  /api/hospital/mantenimiento/[id]/fotos/[fotoId] → la imagen con su content-type (Cache-Control private) · DELETE la borra
 GET  /api/hospital/afiliaciones?companyId=[&todas=1] · POST { companyId, numero, descripcion?, adquirente?, tasa? } · PATCH /afiliaciones/[id] (el `numero` no se edita)
-GET  /api/hospital/cobros?companyId=[&desde&hasta&estado&afiliacionId&episodioId] → { cobros, corte: { enCaja, enTransito, total, contracargos } }
-POST /api/hospital/cobros { companyId, fecha, monto, formaPago, episodioId?|invoiceId?|depositoId?, afiliacionId?, autorizacion?, marca?, tipoTarjeta?, ultimos4?,
-       referencia?, notas?, permitirDuplicado? } → 201 · 409 si ya hay uno con la misma (afiliación, día, monto, autorización) salvo que el cajero lo confirme
+GET  /api/hospital/cobros?companyId=[&fecha=YYYY-MM-DD | &desde&hasta][&estado&afiliacionId&episodioId&cfdi] → { cobros: [... cfdi, pendienteDeFacturar,
+       episodioFolio, pacienteNombre, invoiceFolio], corte: { total, enCaja, enTransito, contracargos, efectivo…cheque, porFormaPago, porCfdi: { CON_CFDI, SIN_CFDI },
+       pendientesDeFacturar (monto), pendientesDeFacturarCobros } } · sin fecha ni rango = hoy (día local)
+POST /api/hospital/cobros { companyId, fecha, monto, formaPago, cfdi? (CON_CFDI|SIN_CFDI, default CON_CFDI), episodioId?|invoiceId?|depositoId?, afiliacionId?,
+       autorizacion?, marca?, tipoTarjeta?, ultimos4?, referencia?, notas?, permitirDuplicado? } → 201 · 409 si ya hay uno con la misma (afiliación, día, monto,
+       autorización) salvo que el cajero lo confirme. TARJETA exige afiliación + autorización (la llave); marca, tipo y últimos cuatro van si los hay (el
+       lector del voucher los trae; la captura a mano no se atora). La factura (`invoiceId`) tiene que ser de la empresa, de ingreso y no cancelada.
+       **Con o sin CFDI (oct-2026).** CON_CFDI sin factura = «pendiente de facturar» (sale en el corte). SIN_CFDI exige episodio y no admite factura: sus
+       cargos LIBRES pasan a la factura global (`publicoGeneral`, con `publicoGeneralCobroId` = el cobro; cancelar el cobro los regresa si siguen libres).
+       SIN_CFDI NO es «no declarado»: mientras la global no esté timbrada, `computeTaxPosition` suma su base a `isr.ingresosAdicionales` (dentro de los
+       ingresos nominales de la PM, Art. 17 LISR) y su IVA a `iva.trasladadoSinCfdi` (dentro de `iva.trasladado`, Art. 1-B LIVA), y el papel de IVA
+       lo enseña como renglón «Cobro de caja sin CFDI». Tasa: ponderada de los cargos del episodio; si no, `HospConfig.ivaAnticiposTasa`; si no, 0.
+       Ver `lib/hospital/ingresos-sin-cfdi.ts` y `global-por-cobro.ts`.
 PATCH /api/hospital/cobros/[id] { estado: CONTRACARGADO|RECUPERADO|CANCELADO, fecha?, motivo? } · DEPOSITADO no se pone aquí: se marca al armar la liquidación
 GET  /api/hospital/liquidaciones?companyId=[&desde&hasta&afiliacionId] · POST { companyId, afiliacionId, fecha, cobroIds[], bruto, contracargos, comision,
        ivaComision, neto, bankTransactionId?, notas? } → 201; rechaza el lote que no cierra o cuyos cobros no suman el bruto, y marca sus cobros DEPOSITADOS
@@ -939,6 +949,20 @@ Editar un puesto recalcula a todos sus miembros en la misma transacción; si lo 
 el propio actor), sólo el dueño lo edita. Un acceso sin páginas se rechaza ([] significaría «todas»).
 Sólo lectura no recibe escritura (al recalcular se le filtra). Borrar un puesto con miembros: 409.
 
+### Urgencias y adulto responsable
+
+- **Urgencias sin triage al registrar.** `POST /episodios` con `tipo: URGENCIAS` ya no exige
+  `triageNivel`: admisión abre el expediente al llegar el paciente y el médico captura el triage
+  al valorar (`PATCH /episodios/[id]` o la Hoja de urgencias, que sí lo exige). El panel avisa
+  `TRIAGE_PENDIENTE` mientras falte.
+- **Adulto responsable** (`HospResponsable`, 1:1 con el paciente; `HospPaciente.responsableModo`):
+  `TERCERO` (otra persona, con los mismos datos de identificación que el paciente; nombre,
+  apellido, parentesco y teléfono obligatorios, mayor de edad), `PROPIO` (paciente mayor de
+  edad) o `PENDIENTE` (urgencia). POST/PATCH `/pacientes` aceptan `responsableModo` y
+  `responsable`; GET `/pacientes/[id]` y `/episodios/[id]` lo devuelven. Firma como
+  `REPRESENTANTE`. El panel avisa `RESPONSABLE_PENDIENTE` (pendiente, o menor sin responsable)
+  con ingreso abierto. Reglas en `src/lib/hospital/responsable.ts`.
+
 ### Mascota de ayuda (Cubo/Mochi/Lupa)
 
 El satélite enseña en cada pantalla la mascota de ContabilidadOS; tocarla abre
@@ -949,6 +973,8 @@ página). No tiene herramientas ni lee datos del hospital: sólo la guía
 hay que actualizar su sección de la guía.**
 
 - `POST /api/hospital/ayuda { companyId, pregunta, pagina?, mascota?, historial? }` → `{ id, respuesta, paginas, sinRespuesta, modelo }`.
+  `elemento` = lo que el usuario señaló arrastrando la mascota encima (tipo, título y rótulos; nunca el
+  texto libre del elemento, que puede traer nombres de pacientes).
   Cualquier miembro (la rejilla de páginas no aplica). Pasa por `llamarModelo`
   (topes de IA, CostEvent `hospital.ayuda`); modelo `AI_HOSPITAL_AYUDA_MODEL`
   (default `claude-haiku-4-5`). Guarda cada pregunta en `HospAyudaPregunta`.

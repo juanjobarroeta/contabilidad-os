@@ -146,3 +146,22 @@ por empresa para no repetir consultas ni pagar parseos de más.
 - `decfiel` con normal + complementaria del mismo mes: la Normal crea las filas y
   la Complementaria sólo adjunta PDF si faltaba. Sustituir importes por la
   complementaria queda para después (hoy tampoco lo hace Syntage).
+
+## CFDIs cancelados (`facfiel`, estatusFactura=0)
+
+La descarga masiva del SAT pide los recibidos con estatus «active», así que un
+CFDI cancelado antes de bajarlo nunca entra y el barrido de metadata ignora
+UUIDs desconocidos (CENTRO, 6-oct-2026: 179 cancelados en el SAT, 26 en BD).
+`src/lib/fiscal/cumplimiento/satgo/cancelados.ts` lista por semestre y lado
+(`facfiel?tipo=emitidos|recibidos&tipoBusqueda=1&estatusFactura=0&fecha_inicial=…&fecha_final=…`,
+multipart con e.firma, header `Rfc`) y:
+
+- si la factura existe STAMPED → la cancela por el mismo camino del barrido
+  (status, sustituidos, derivados);
+- si no existe → crea un `Invoice` CANCELLED «de listado» (sin XML ni conceptos;
+  `notas` lo dice). El motor ignora CANCELLED, sólo se ve en Facturas → Canceladas.
+
+Cron `cancelados-backfill` (hora, 3 empresas × 2 ventanas históricas; las 2 más
+recientes siempre). Progreso en `BackfillProgreso` job `cancelados-satgo`
+(`cursor` = semestre más viejo ya hecho). Onboarding lo dispara con `historicas=4`.
+Manual: `POST /api/cron/cancelados-backfill?companyId=…&historicas=10`.

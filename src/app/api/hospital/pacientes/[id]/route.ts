@@ -14,6 +14,7 @@
  */
 
 import { NextResponse } from "next/server";
+import type { HospResponsableModo } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, requireMembership, requireModule, requireWriter } from "@/lib/authz";
 import { withHospital } from "@/lib/hospital/with-hospital";
@@ -24,6 +25,7 @@ import { nombreCompleto, r2 } from "@/lib/hospital/util";
 import {
   CAMPOS_IDENTIDAD_P1,
   CAMPOS_IDENTIDAD_P2,
+  CAMPOS_RESPONSABLE,
   CAMPOS_SAEH,
   REINICIO_VERIFICACION,
   avisoPrivacidadDe,
@@ -41,6 +43,7 @@ import {
   validarVinculosPaciente,
   type IdentidadPaciente,
 } from "@/lib/hospital/paciente-schema";
+import { resolverResponsable, type ResponsableDatos } from "@/lib/hospital/responsable";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -51,6 +54,7 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
     include: {
       pagador: true,
       customer: { select: { id: true, razonSocial: true, rfc: true } },
+      responsable: true,
       episodios: {
         orderBy: { fechaIngreso: "desc" },
         include: {
@@ -179,7 +183,8 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
 
   const [p1, resto1] = partir(parsed.data, CAMPOS_IDENTIDAD_P1);
   const [p2, resto2] = partir(resto1, CAMPOS_IDENTIDAD_P2);
-  const [saeh, data] = partir(resto2, CAMPOS_SAEH);
+  const [resp, resto3] = partir(resto2, CAMPOS_RESPONSABLE);
+  const [saeh, data] = partir(resto3, CAMPOS_SAEH);
 
   const invalido = await validarVinculosPaciente(paciente.companyId, data);
   if (invalido) return error(invalido);
@@ -240,10 +245,38 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
 
   const aviso = await avisoPrivacidadDe(paciente.companyId, { avisoPrivacidadAceptado: p1.avisoPrivacidadAceptado, avisoPrivacidadAceptadoAt: p1.avisoPrivacidadAceptadoAt, avisoPrivacidadVersion: p1.avisoPrivacidadVersion });
 
-  const actualizado = await prisma.hospPaciente.update({
-    where: { id },
-    data: { ...data, ...identidad, ...aviso, ...identidadP2.datos, ...origen, ...saehEntrada, ...claves.datos },
-    include: { pagador: true, customer: { select: { id: true, razonSocial: true, rfc: true } } },
+  // Responsable: sólo si el body lo trae. Mandar sólo `responsable` (sin modo)
+  // implica TERCERO; la regla de mayoría de edad usa la fecha resultante.
+  const tocaResponsable = resp.responsableModo !== undefined || resp.responsable !== undefined;
+  let cambioResponsable: { modo: HospResponsableModo | null; datos: ResponsableDatos | null } | null = null;
+  if (tocaResponsable) {
+    const r = resolverResponsable({
+      modo: resp.responsableModo !== undefined ? resp.responsableModo : resp.responsable ? "TERCERO" : paciente.responsableModo,
+      responsable: resp.responsable,
+      fechaNacimientoPaciente: identidad.fechaNacimiento !== undefined ? identidad.fechaNacimiento : paciente.fechaNacimiento,
+      fechaNacimientoResponsable: fechaNacimientoDe(resp.responsable?.fechaNacimiento),
+    });
+    if (!r.ok) return error(r.error, r.status);
+    cambioResponsable = { modo: r.modo, datos: r.responsable };
+  }
+
+  const actualizado = await prisma.$transaction(async (tx) => {
+    if (cambioResponsable) {
+      if (cambioResponsable.datos) {
+        await tx.hospResponsable.upsert({
+          where: { pacienteId: id },
+          create: { companyId: paciente.companyId, pacienteId: id, ...cambioResponsable.datos },
+          update: cambioResponsable.datos,
+        });
+      } else {
+        await tx.hospResponsable.deleteMany({ where: { pacienteId: id } });
+      }
+    }
+    return tx.hospPaciente.update({
+      where: { id },
+      data: { ...data, ...identidad, ...aviso, ...identidadP2.datos, ...origen, ...saehEntrada, ...claves.datos, ...(cambioResponsable ? { responsableModo: cambioResponsable.modo } : {}) },
+      include: { pagador: true, customer: { select: { id: true, razonSocial: true, rfc: true } }, responsable: true },
+    });
   });
 
   bitacora(user, req, {
@@ -256,6 +289,7 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
       curp: actualizado.curp !== paciente.curp ? actualizado.curp : undefined,
       curpAnterior: actualizado.curp !== paciente.curp ? paciente.curp : undefined,
       motivoCambio: curpCambia ? (p2.motivoCambio ?? null) : undefined,
+      responsableModo: cambioResponsable ? cambioResponsable.modo : undefined,
     },
   });
 

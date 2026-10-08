@@ -7948,6 +7948,38 @@ model HospRecurso {
   @@index([companyId, area])
 }
 
+enum HospResponsableModo {
+  TERCERO
+  PROPIO
+  PENDIENTE
+}
+
+/// El adulto responsable del paciente (familiar, tutor, representante legal):
+/// los mismos datos de identificación que el paciente. Firma como REPRESENTANTE.
+model HospResponsable {
+  id                   String                  @id @default(cuid())
+  companyId            String
+  pacienteId           String                  @unique
+  nombre               String
+  apellidoPaterno      String
+  apellidoMaterno      String?
+  parentesco           String
+  fechaNacimiento      DateTime?
+  sexo                 HospSexo?
+  curp                 String?
+  telefono             String
+  email                String?
+  domicilio            String?
+  identificacionTipo   HospIdentificacionTipo?
+  identificacionNumero String?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+
+  paciente HospPaciente @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+}
+
 enum HospSexo {
   FEMENINO
   MASCULINO
@@ -8000,6 +8032,12 @@ model HospPaciente {
   contactoEmergenciaNombre     String?
   contactoEmergenciaTelefono   String?
   contactoEmergenciaParentesco String?
+
+  /// Quién responde por el paciente (firma consentimientos y documentos como
+  /// REPRESENTANTE): otra persona (`responsable`), el propio paciente mayor de
+  /// edad, o pendiente (urgencia: se captura después). null = ficha anterior.
+  responsableModo HospResponsableModo?
+  responsable     HospResponsable?
 
   /// Receptor fiscal por default (Customer canónico del hub).
   customerId String?
@@ -8573,6 +8611,9 @@ model HospCargo {
   prefacturaId   String?
   /// Sin factura individual: va a la factura global del mes a público en general.
   publicoGeneral Boolean   @default(false)
+  /// El cobro SIN_CFDI que mandó este cargo a la global. Sólo esos se
+  /// regresan si el cobro se cancela: lo que una persona marcó a mano, no.
+  publicoGeneralCobroId String?
   /// Fecha en que el módulo asentó este cargo en el libro (honorarios por pagar). Null = sin asentar.
   asientoAt      DateTime?
 
@@ -8595,6 +8636,7 @@ model HospCargo {
   @@index([episodioId, fecha])
   @@index([companyId, categoria, fecha])
   @@index([invoiceId])
+  @@index([publicoGeneralCobroId])
   @@index([prefacturaId])
 }
 
@@ -9410,6 +9452,15 @@ enum HospEpisodioOrigen {
 // conoce convierte una liquidación que cuadra en una diferencia sin nombre, que
 // es exactamente el trabajo manual que este módulo viene a quitar.
 
+/// ¿El cobro va amparado por un CFDI propio? SIN_CFDI no es «no declarado»:
+/// sus cargos van a la factura global a público en general, y mientras no
+/// estén timbrados el motor fiscal los suma como ingresos nominales
+/// adicionales y como IVA trasladado del mes (Art. 17 LISR, Art. 1-B LIVA).
+enum HospCobroCfdi {
+  CON_CFDI
+  SIN_CFDI
+}
+
 enum HospCobroEstado {
   /// Cobrado en caja; el dinero todavía no llega al banco.
   COBRADO
@@ -9491,6 +9542,8 @@ model HospCobro {
   monto     Decimal         @db.Decimal(18, 2)
   formaPago HospFormaPago
   estado    HospCobroEstado @default(COBRADO)
+  /// Ver HospCobroCfdi. CON_CFDI sin invoiceId = pendiente de facturar.
+  cfdi      HospCobroCfdi   @default(CON_CFDI)
 
   episodioId String?
   invoiceId  String?

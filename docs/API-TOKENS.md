@@ -97,3 +97,14 @@ de emergencia global sigue siendo rotar `AUTH_SECRET`.
 Eventos registrados en la bitácora de seguridad (AuditLog): `token.emitir`
 (login, incluye etiqueta/scope), `token.revocar` (revocación desde
 UI/API) y `token.refresh-reuso` (detección de reutilización/robo).
+
+## Refrescar las empresas sin volver a iniciar sesión
+
+`GET /api/auth/sesion` (bearer de acceso) devuelve `{ user, companies }` con la
+**misma forma** que `POST /api/auth/token`, leído en el momento
+(`lib/empresas-sesion`). Un satélite que guarda `companies` para pintar su menú
+debe consultarlo al arrancar y al volver a la pestaña: si un administrador le
+cambia a alguien el rol o las páginas, el menú se actualiza sin cerrar sesión.
+Los permisos los sigue imponiendo cada ruta contra la base; esto sólo corrige lo
+que se pinta. 401 = token vencido (renovar con el refresh); 403 = suscripción
+inactiva.

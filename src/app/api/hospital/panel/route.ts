@@ -38,6 +38,7 @@ import {
   nombrePaciente,
   totalCargo,
 } from "@/lib/hospital/formato";
+import { responsablePendiente } from "@/lib/hospital/responsable";
 import { identidadCompleta } from "@/lib/hospital/episodio";
 import { DESVIACION_ALERTA_PCT, desviacionPct } from "@/lib/hospital/plan";
 import { horaLocal, partesLocales } from "@/lib/hospital/tz";
@@ -71,6 +72,7 @@ type Atencion = {
     | "SEGUIMIENTO_PENDIENTE"
     | "IDENTIDAD_PENDIENTE"
     | "AVISO_PRIVACIDAD_PENDIENTE"
+    | "RESPONSABLE_PENDIENTE"
     | "PLAN_SIN_AUTORIZACION"
     | "CUENTA_FUERA_DE_PLAN"
     | "SAEH_INCOMPLETO";
@@ -159,7 +161,7 @@ export const GET = withAuthz(async (req: Request) => {
       select: {
         id: true, folio: true, estado: true, tipo: true, fechaIngreso: true, fechaAlta: true,
         autorizacionPagador: true, limiteAmbulatorioAt: true, triageNivel: true, pacienteId: true,
-        paciente: { select: { nombre: true, apellidoPaterno: true, apellidoMaterno: true, curp: true, sinCurp: true, sinCurpMotivo: true, avisoPrivacidadAceptadoAt: true } },
+        paciente: { select: { nombre: true, apellidoPaterno: true, apellidoMaterno: true, curp: true, sinCurp: true, sinCurpMotivo: true, avisoPrivacidadAceptadoAt: true, responsableModo: true, fechaNacimiento: true } },
         recurso: { select: { id: true, nombre: true, tipo: true, area: true } },
         medico: { select: { id: true, nombre: true } },
         pagador: { select: { id: true, nombre: true, topeAutorizacion: true } },
@@ -442,6 +444,7 @@ export const GET = withAuthz(async (req: Request) => {
   // (una alerta por paciente aunque tenga dos episodios).
   const sinIdentidad = new Set<string>();
   const sinAviso = new Set<string>();
+  const sinResponsable = new Set<string>();
   for (const e of activos) {
     if (e.estado === "ALTA") continue;
     if (!identidadCompleta(e.paciente) && !sinIdentidad.has(e.pacienteId)) {
@@ -451,6 +454,19 @@ export const GET = withAuthz(async (req: Request) => {
           tipo: "IDENTIDAD_PENDIENTE",
           titulo: `${nombrePaciente(e.paciente)} sin CURP en la ficha`,
           detalle: `${e.folio} · captura la CURP o el motivo para no tenerla · NOM-024`,
+          href: `/pacientes/${e.pacienteId}`,
+          refId: e.pacienteId,
+        });
+      }
+    }
+    // Adulto responsable pendiente (urgencia registrada antes) o menor sin responsable.
+    if (responsablePendiente(e.paciente, hoy) && !sinResponsable.has(e.pacienteId)) {
+      sinResponsable.add(e.pacienteId);
+      if (sinResponsable.size <= MAX_POR_ALERTA) {
+        atencion.push({
+          tipo: "RESPONSABLE_PENDIENTE",
+          titulo: `${nombrePaciente(e.paciente)} sin adulto responsable`,
+          detalle: `${e.folio} · registra quién responde por el paciente y firma sus documentos`,
           href: `/pacientes/${e.pacienteId}`,
           refId: e.pacienteId,
         });

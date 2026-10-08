@@ -16,6 +16,8 @@ import { aplicarFlujoPue, pagosPueDelPeriodo, puesAnterioresPagadosEnPeriodo, ty
 import { notasRecibidasPorPadre, padresDeNotasRecibidas, reduccionPorNotaRecibida, totalNetoDeNotas } from "./fiscal/iva-notas-credito";
 import { reconciliacionActiva } from "./fiscal/conciliacion-pue";
 import { normalizarUuid, variantesUuid } from "./fiscal/uuid";
+import { ingresosSinCfdiEnRango } from "./hospital/ingresos-sin-cfdi";
+import { rangoMesLocal } from "./hospital/tz";
 import { REP_VIGENTE } from "./fiscal/rep-vigente";
 import { montosRepDelPadre, type LinkRep } from "./fiscal/rep-tope";
 import { linksVigentesAntesDe } from "./fiscal/rep-tope-db";
@@ -198,6 +200,12 @@ export interface TaxPosition {
   year: number;
   iva: {
     trasladado: number;
+    /**
+     * Parte de `trasladado` que viene de cobros de caja SIN CFDI todavía no
+     * timbrados en la factura global (hospital; Art. 1-B LIVA: el IVA se causa
+     * al cobro). 0 para empresas sin caja. Ver lib/hospital/ingresos-sin-cfdi.
+     */
+    trasladadoSinCfdi: number;
     retenidoPorClientes: number;
     /**
      * IVA que retuvimos a proveedores en el mes (flujo: PUE al emitirse, PPD con
@@ -260,6 +268,12 @@ export interface TaxPosition {
     /** Which régimen's method produced these figures. */
     metodo: IsrMetodo;
     ingresosDelMes: number;
+    /**
+     * PM: la parte de `ingresosDelMes` que son INGRESOS NOMINALES ADICIONALES —
+     * cobros de caja SIN CFDI aún no timbrados en la factura global (base sin
+     * IVA). Ya incluida en `ingresosDelMes` y en `ingresosAcumulados`.
+     */
+    ingresosAdicionales?: number;
     gastosDelMes: number;
     /** Acumulado ene→mes. Nominal/devengado for PM; cobrado for PF act. empresarial. */
     ingresosAcumulados: number;
@@ -850,7 +864,20 @@ export async function computeTaxPosition(
   const ivaTrasladadoPUE = cobrosPue.summary.trasladado + facturasEmitidas
     .filter((inv) => inv.metodoPago === "PUE" && inv.tipoSat === "E" && !inv.ivaNoCausado)
     .reduce((s, inv) => s - ivaTrasladado(inv), 0);
-  const ivaTrasladadoTotal = ivaTrasladadoPUE + ivaTrasladadoPPD;
+  // Cobros de caja SIN CFDI (hospital) que la factura global aún no timbra: su
+  // IVA se causó al cobrarse (Art. 1-B LIVA) y su base es ingreso nominal
+  // adicional del ISR (Art. 17 LISR) — lo que el contador captura a mano como
+  // «INGRESOS NOMINALES ADICIONALES». Meses LOCALES del hospital (el cobro
+  // trae la fecha de operación del voucher). Sin caja, ambas consultas vuelven
+  // vacías.
+  const mesLocal = rangoMesLocal(year, month);
+  const hastaSinCfdi = cutoff && cutoff < mesLocal.hasta ? cutoff : mesLocal.hasta;
+  const [sinCfdiMes, sinCfdiAcum] = await Promise.all([
+    ingresosSinCfdiEnRango(prisma, companyId, mesLocal.desde, hastaSinCfdi),
+    ingresosSinCfdiEnRango(prisma, companyId, rangoMesLocal(year, 1).desde, hastaSinCfdi),
+  ]);
+  const ivaTrasladadoSinCfdi = sinCfdiMes.iva;
+  const ivaTrasladadoTotal = ivaTrasladadoPUE + ivaTrasladadoPPD + ivaTrasladadoSinCfdi;
 
   const ivaTrasladadoDevengado = facturasEmitidas.reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * ivaTrasladado(inv), 0);
   const ivaRetenidoPorClientes = cobrosPue.summary.retenido + facturasEmitidas.filter((i)=>i.metodoPago!=="PUE" || i.tipoSat==="E").reduce(
@@ -981,8 +1008,10 @@ export async function computeTaxPosition(
   // el precio efectivamente cobrado— usa «SubTotal − Descuento». Netearlo aquí
   // (#1177) bajaba la base del pago provisional por debajo de la del SAT.
   const bruto = (x: { subtotal: unknown }) => Number(x.subtotal ?? 0);
-  const ingresosDelMesBruto = round2(facturasEmitidas.reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * inv.subtotal, 0));
-  const ingresosAcumuladosBrutos = bruto(ingresosAcumuladosAgg._sum) - 2 * bruto(acumuladosE._sum);
+  // + los INGRESOS NOMINALES ADICIONALES: cobros de caja sin CFDI aún no
+  // timbrados en la global (base sin IVA). Ver ivaTrasladadoSinCfdi arriba.
+  const ingresosDelMesBruto = round2(facturasEmitidas.reduce((s, inv) => s + signoTipoSat(inv.tipoSat) * inv.subtotal, 0) + sinCfdiMes.base);
+  const ingresosAcumuladosBrutos = bruto(ingresosAcumuladosAgg._sum) - 2 * bruto(acumuladosE._sum) + sinCfdiAcum.base;
   const isrPagadoAnterior = sumIsrPagar(declaracionesPrevias);
 
   // Avisos que nacen dentro del cálculo de ISR (origen del remanente de
@@ -1322,6 +1351,7 @@ export async function computeTaxPosition(
     isr = {
       metodo: "PM_ART14",
       ingresosDelMes: ingresosDelMesBruto,
+      ingresosAdicionales: round2(sinCfdiMes.base),
       gastosDelMes,
       ingresosAcumulados: round2(ingresosAcumuladosBrutos),
       isrPagadoAnterior: round2(isrPagadoAnterior),
@@ -1422,6 +1452,7 @@ export async function computeTaxPosition(
     advertencias,
     iva: {
       trasladado: round2(ivaTrasladadoTotal),
+      trasladadoSinCfdi: round2(ivaTrasladadoSinCfdi),
       retenidoPorClientes: round2(ivaRetenidoPorClientes),
       retenidoAProveedores: round2(ivaRetenidoAProveedores),
       retenidoMesAnteriorAcreditable: round2(ivaRetenidoMesAnteriorAcreditable),

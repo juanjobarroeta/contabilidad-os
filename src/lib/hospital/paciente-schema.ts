@@ -26,6 +26,7 @@ import { validarCurp } from "./curp";
 import { ENTIDAD_DGIS_POR_CURP, RFC_GENERICOS, identidadDePaciente, type PacienteIdentidadEntrada } from "./identidad";
 import { fechaLocal, partesLocales } from "./tz";
 import { nombreCompleto } from "./util";
+import { RESPONSABLE_MODOS, responsableSchema } from "./responsable";
 
 const claveCatalogo = (max: number) => z.string().trim().regex(/^\d+$/, "Clave numérica del catálogo DGIS").max(max).nullable().optional();
 const bandera = z.boolean().nullable().optional();
@@ -102,6 +103,10 @@ export const pacienteSchema = z.object({
   localidadResidenciaClave: claveCatalogo(9),
   otraLocalidad: z.string().trim().max(120).nullable().optional(),
   derechohabienciaClave: claveCatalogo(3),
+
+  // ── Adulto responsable (lib/hospital/responsable.ts) ──
+  responsableModo: z.enum(RESPONSABLE_MODOS).nullable().optional(),
+  responsable: responsableSchema.nullable().optional(),
 });
 
 export type PacienteEntrada = z.infer<typeof pacienteSchema>;
@@ -109,6 +114,7 @@ export type PacienteEntrada = z.infer<typeof pacienteSchema>;
 /** Campos del body que NO se guardan tal cual (los resuelven las reglas de identidad). */
 export const CAMPOS_IDENTIDAD_P1 = ["fechaNacimiento", "curp", "sinCurp", "sinCurpMotivo", "sexo", "entidadNacimiento", "avisoPrivacidadAceptado", "avisoPrivacidadAceptadoAt", "avisoPrivacidadVersion"] as const;
 export const CAMPOS_IDENTIDAD_P2 = ["curpOrigen", "curpProbable", "motivoCambio", "rfc", "rfcFuente", "identificacionTipo", "identificacionNumero", "identificacionVigencia"] as const;
+export const CAMPOS_RESPONSABLE = ["responsableModo", "responsable"] as const;
 export const CAMPOS_SAEH = [
   "paisNacimientoClave", "entidadNacimientoClave", "estadoConyugal", "seConsideraIndigena", "hablaLenguaIndigena", "lenguaIndigenaClave", "seConsideraAfromexicano",
   "esMigranteRetornado", "seIdentificaLgbti", "genero", "paisResidenciaClave", "entidadResidenciaClave", "municipioResidenciaClave", "localidadResidenciaClave", "otraLocalidad", "derechohabienciaClave",
