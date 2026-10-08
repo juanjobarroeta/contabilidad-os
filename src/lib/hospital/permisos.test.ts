@@ -65,6 +65,27 @@ describe('hospital server permission matrix', () => {
     member.hospitalPaginas = ['caja'];
     await expect(enforceHospitalAccess('company', 'user', request('nomina/aguinaldo'))).rejects.toMatchObject({ status: 403 });
   });
+  it('agenda is visible with CLINICA_LEER but only AGENDA_PROGRAMAR moves it', async () => {
+    member.hospitalPaginas = ['agenda'];
+    await expect(enforceHospitalAccess('company', 'user', request('citas'))).rejects.toMatchObject({ status: 403 });
+    member.hospitalPermisos = ['CLINICA_LEER', 'CLINICA_ESCRIBIR'];
+    await expect(enforceHospitalAccess('company', 'user', request('citas'))).resolves.toBeUndefined();
+    await expect(enforceHospitalAccess('company', 'user', request('citas', 'POST'))).rejects.toMatchObject({ status: 403 });
+    await expect(enforceHospitalAccess('company', 'user', request('citas/one', 'PATCH'))).rejects.toMatchObject({ status: 403 });
+    member.hospitalPermisos = ['CLINICA_LEER', 'AGENDA_PROGRAMAR'];
+    await expect(enforceHospitalAccess('company', 'user', request('citas', 'POST'))).resolves.toBeUndefined();
+    await expect(enforceHospitalAccess('company', 'user', request('citas/one', 'PATCH'))).resolves.toBeUndefined();
+    member.role = 'VIEWER';
+    await expect(enforceHospitalAccess('company', 'user', request('citas', 'POST'))).rejects.toMatchObject({ status: 403 });
+  });
+  it('scheduling a plan needs AGENDA_PROGRAMAR; editing it still needs CLINICA_ESCRIBIR', async () => {
+    member.hospitalPaginas = ['protocolos']; member.hospitalPermisos = ['CLINICA_LEER', 'CLINICA_ESCRIBIR'];
+    await expect(enforceHospitalAccess('company', 'user', request('planes/one/programar', 'POST'))).rejects.toMatchObject({ status: 403 });
+    await expect(enforceHospitalAccess('company', 'user', request('planes/one', 'PATCH'))).resolves.toBeUndefined();
+    member.hospitalPermisos = ['CLINICA_LEER', 'AGENDA_PROGRAMAR'];
+    await expect(enforceHospitalAccess('company', 'user', request('planes/one/programar', 'POST'))).resolves.toBeUndefined();
+    await expect(enforceHospitalAccess('company', 'user', request('planes/one', 'PATCH'))).rejects.toMatchObject({ status: 403 });
+  });
   it('requisiciones, órdenes and treasury are gated by their pages', async () => {
     member.hospitalPaginas = ['requisiciones'];
     await expect(enforceHospitalAccess('company', 'user', request('requisiciones', 'POST'))).resolves.toBeUndefined();

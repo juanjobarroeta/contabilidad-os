@@ -7940,7 +7940,8 @@ model HospRecurso {
   servicio HospServicio? @relation(fields: [servicioId], references: [id])
 
   episodios HospEpisodio[]
-  citas     HospCita[]
+  citas     HospCita[]            @relation("CitaRecurso")
+  citasCama HospCita[]            @relation("CitaCama")
   planes    HospPlanTratamiento[]
   tickets   HospTicket[]
 
@@ -8249,7 +8250,8 @@ model HospMedico {
   employee Employee? @relation(fields: [employeeId], references: [id])
 
   episodios           HospEpisodio[]
-  citas               HospCita[]
+  citas               HospCita[] @relation("CitaMedico")
+  citasAnestesiologo  HospCita[] @relation("CitaAnestesiologo")
   cargos              HospCargo[]
   notas               HospNota[]
   egresosSaeh         HospEgresoSaeh[]
@@ -8648,6 +8650,11 @@ enum HospCitaTipo {
   OTRO
 }
 
+enum HospCitaEstancia {
+  AMBULATORIA
+  HOSPITALIZACION
+}
+
 enum HospCitaEstado {
   PROGRAMADA
   CONFIRMADA
@@ -8679,10 +8686,27 @@ model HospCita {
   estado HospCitaEstado @default(PROGRAMADA)
   notas  String?
 
-  company    Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  recurso    HospRecurso     @relation(fields: [recursoId], references: [id])
-  paciente   HospPaciente?   @relation(fields: [pacienteId], references: [id])
-  medico     HospMedico?     @relation(fields: [medicoId], references: [id])
+  /// Equipo y logística de la hoja de quirófano/endoscopia.
+  anestesiologoId         String?
+  anestesiologoConfirmado Boolean           @default(false)
+  /// Tipo de anestesia SAEH (1 general … 6 no usó).
+  tipoAnestesia           Int?
+  enfermera               String?
+  solicitaInstrumentista  Boolean           @default(false)
+  instrumentista          String?
+  diagnostico             String?
+  estancia                HospCitaEstancia?
+  /// Cama/habitación a la que va el paciente (recurso CAMA).
+  camaId                  String?
+  /// [{ descripcion, cantidad, origen: HOSPITAL|PROVEEDOR|PACIENTE }]
+  insumos                 Json?
+
+  company       Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  recurso       HospRecurso     @relation("CitaRecurso", fields: [recursoId], references: [id])
+  cama          HospRecurso?    @relation("CitaCama", fields: [camaId], references: [id])
+  paciente      HospPaciente?   @relation(fields: [pacienteId], references: [id])
+  medico        HospMedico?     @relation("CitaMedico", fields: [medicoId], references: [id])
+  anestesiologo HospMedico?     @relation("CitaAnestesiologo", fields: [anestesiologoId], references: [id])
   episodio   HospEpisodio?   @relation(fields: [episodioId], references: [id])
   cotizacion HospCotizacion? @relation(fields: [cotizacionId], references: [id])
 

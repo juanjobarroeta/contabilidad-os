@@ -3,7 +3,7 @@ import { AuthzError, requireMembership } from "@/lib/authz";
 import { extractBearer } from "@/lib/api-token";
 import { DEMO_CEDULA, demoMedicalGrant, isDemoPatient } from "./demo";
 
-export const PERMISOS_CLINICOS = ["CLINICA_LEER", "CLINICA_ESCRIBIR", "ADMINISTRAR", "ALTA", "PRESCRIBIR", "FINANZAS_ESCRIBIR", "COMPRAS_AUTORIZAR", "PAGOS_AUTORIZAR", "TESORERIA_PAGAR"] as const;
+export const PERMISOS_CLINICOS = ["CLINICA_LEER", "CLINICA_ESCRIBIR", "ADMINISTRAR", "ALTA", "PRESCRIBIR", "AGENDA_PROGRAMAR", "FINANZAS_ESCRIBIR", "COMPRAS_AUTORIZAR", "PAGOS_AUTORIZAR", "TESORERIA_PAGAR"] as const;
 export type PermisoClinico = typeof PERMISOS_CLINICOS[number];
 
 // Dos grupos que se administran por separado en Usuarios: lo clínico (va con
@@ -38,6 +38,7 @@ const ACCION_POR_PERMISO: Record<PermisoClinico, string> = {
   ADMINISTRAR: "registrar la aplicación de medicamentos o insumos",
   ALTA: "dar de alta a pacientes",
   PRESCRIBIR: "registrar indicaciones médicas",
+  AGENDA_PROGRAMAR: "programar o mover citas en la agenda",
   FINANZAS_ESCRIBIR: "registrar o modificar operaciones financieras",
   COMPRAS_AUTORIZAR: "autorizar requisiciones de compra",
   PAGOS_AUTORIZAR: "autorizar pagos a proveedores",
@@ -93,7 +94,10 @@ export async function enforceHospitalAccess(companyId: string, userId: string, r
   }
   const clinical = ["pacientes", "episodios", "documentos", "saeh", "buscar", "censo", "citas", "planes", "panel", "registros"].includes(root) || (root === "farmacia" && ["kardex", "libro-control"].includes(path[1]));
   if (clinical) {
-    const permission = writing ? (path.includes("aplicar-insumo") ? "ADMINISTRAR" : "CLINICA_ESCRIBIR") : "CLINICA_LEER";
+    // La agenda la ven muchos y la mueven pocos: programar (citas, o el plan
+    // que se manda al quirófano) es su propio permiso, no «documentar atención».
+    const agenda = root === "citas" || (root === "planes" && path[2] === "programar");
+    const permission = writing ? (path.includes("aplicar-insumo") ? "ADMINISTRAR" : agenda ? "AGENDA_PROGRAMAR" : "CLINICA_ESCRIBIR") : "CLINICA_LEER";
     if (!(admin && !writing) && !member?.hospitalPermisos.includes(permission)) {
       throw new AuthzError(403, mensajeSinPermiso(permission));
     }

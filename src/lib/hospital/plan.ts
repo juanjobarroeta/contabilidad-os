@@ -28,7 +28,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { z } from "zod";
-import type { HospCargoCategoria, HospCatalogoTipo, HospPagadorTipo, HospPlanEstado, Prisma, PrismaClient } from "@prisma/client";
+import { Prisma, type HospCargoCategoria, type HospCatalogoTipo, type HospPagadorTipo, type HospPlanEstado, type PrismaClient } from "@prisma/client";
 import { HospitalError } from "./errores";
 import { dinero, fechaSchema } from "./http";
 import { nombreCompleto, r2 } from "./util";
@@ -948,6 +948,34 @@ export function referenciaCitaPlan(planId: string): string {
   return `plan:${planId}`;
 }
 
+/**
+ * La hoja de quirófano sale del plan (anestesiólogo, anestesia, diagnóstico,
+ * estancia, insumos planeados). Al reprogramar se conserva lo que ya se había
+ * capturado en la cita anterior (enfermera, cama, confirmaciones, insumos).
+ */
+function hojaDesdePlan(
+  plan: { anestesiologoId: string | null; tipoAnestesia: number | null; diagnosticoCie10: string | null; tipoEpisodio: string; estanciaNoches: number; insumos: unknown },
+  previa: { anestesiologoId: string | null; anestesiologoConfirmado: boolean; enfermera: string | null; solicitaInstrumentista: boolean; instrumentista: string | null; camaId: string | null; insumos: unknown } | null
+) {
+  const insumos = insumosDePlan(plan.insumos)
+    .filter((i) => !i.opcional && i.nombre)
+    .slice(0, 40)
+    .map((i) => ({ descripcion: i.nombre, cantidad: i.cantidad || null, origen: "HOSPITAL" as const }));
+  const mismoAnestesiologo = previa != null && previa.anestesiologoId === plan.anestesiologoId;
+  return {
+    anestesiologoId: plan.anestesiologoId,
+    anestesiologoConfirmado: mismoAnestesiologo ? previa.anestesiologoConfirmado : false,
+    tipoAnestesia: plan.tipoAnestesia,
+    diagnostico: plan.diagnosticoCie10,
+    estancia: plan.tipoEpisodio === "HOSPITALIZACION" || plan.estanciaNoches > 0 ? ("HOSPITALIZACION" as const) : ("AMBULATORIA" as const),
+    enfermera: previa?.enfermera ?? null,
+    solicitaInstrumentista: previa?.solicitaInstrumentista ?? false,
+    instrumentista: previa?.instrumentista ?? null,
+    camaId: previa?.camaId ?? null,
+    insumos: Array.isArray(previa?.insumos) && previa.insumos.length ? (previa.insumos as Prisma.InputJsonValue) : insumos.length ? insumos : Prisma.DbNull,
+  };
+}
+
 export async function programarPlan(
   db: PrismaClient,
   args: { planId: string; fechaProgramada: Date; recursoId: string; medicoId?: string | null; duracionMinutos?: number | null; usuario?: Usuario }
@@ -974,7 +1002,7 @@ export async function programarPlan(
   // Reprogramación: la cita viva anterior del plan se cancela (y no cuenta como empalme).
   const previa = await db.hospCita.findFirst({
     where: { companyId: plan.companyId, pacienteId: plan.pacienteId, notas: { contains: referencia }, estado: { in: ["PROGRAMADA", "CONFIRMADA"] } },
-    select: { id: true },
+    select: { id: true, anestesiologoId: true, anestesiologoConfirmado: true, enfermera: true, solicitaInstrumentista: true, instrumentista: true, camaId: true, insumos: true },
   });
   const choque = await citaEmpalmada(db, { recursoId: args.recursoId, inicio, fin, excluirId: previa?.id ?? null });
   if (choque) throw new HospitalError(409, describirEmpalme(choque));
@@ -997,6 +1025,7 @@ export async function programarPlan(
         episodioId: plan.episodioId,
         cotizacionId: plan.cotizacionId,
         notas: `Plan de tratamiento (${referencia})`,
+        ...hojaDesdePlan(plan, previa),
       },
       include: incluyeCita,
     });

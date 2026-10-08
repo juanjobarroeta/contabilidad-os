@@ -1,6 +1,7 @@
 /**
  * PATCH /api/hospital/citas/[id] — estado, horario (con la misma regla de
- * empalmes), recurso, médico, episodio, notas.
+ * empalmes), recurso, médico, episodio, notas y la hoja (anestesiólogo,
+ * enfermera, instrumentista, diagnóstico, estancia, cama, insumos).
  */
 
 import { NextResponse } from "next/server";
@@ -8,7 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { AuthzError, requireModule, requireWriter } from "@/lib/authz";
 import { withHospital } from "@/lib/hospital/with-hospital";
 import { bitacora, error, errorZod } from "@/lib/hospital/http";
-import { citaCamposSchema, citaEmpalmada, describirEmpalme, incluyeCita, serializarCita, validarVinculosCita } from "@/lib/hospital/citas";
+import { citaCamposSchema, citaEmpalmada, datosHojaCita, describirEmpalme, incluyeCita, serializarCita, validarVinculosCita } from "@/lib/hospital/citas";
 
 export const PATCH = withHospital(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
   const { id } = await ctx.params;
@@ -55,6 +56,7 @@ export const PATCH = withHospital(async (req: Request, ctx: { params: Promise<{ 
       ...(d.episodioId !== undefined ? { episodioId: d.episodioId } : {}),
       ...(d.cotizacionId !== undefined ? { cotizacionId: d.cotizacionId } : {}),
       ...(d.notas !== undefined ? { notas: d.notas?.trim() || null } : {}),
+      ...datosHojaCita(d, citaActual),
     },
     include: incluyeCita,
   });
