@@ -357,3 +357,18 @@ coeficiente de utilidad y pagos provisionales — sin teclear línea de captura 
     ventana de 24h Meta exige plantilla. Es template-aware: si `TWILIO_DIGEST_TEMPLATE_SID` (categoría
     *Utility*, cuerpo en `{{1}}`) está configurado, lo usa; si no, cae al freeform (sólo llega a quien
     escribió en las últimas 24h). **Para entrega confiable, registrar esa plantilla y fijar la env.**
+  - **Formato:** si la persona escribió en las últimas ~23.5h (`WhatsappMessage` USER) va el freeform
+    completo por secciones (🔴 SAT / ⚠️ críticos / 🟡 pendientes / 📋 cierre / ✅ / 📅). Fuera de ventana
+    usa `TWILIO_DIGEST_TEMPLATE_V2_SID` si existe (multilínea), si no la v1 de una línea agrupada por
+    tipo. Texto a registrar para la v2 (Utility, es_MX; las variables no admiten saltos de línea):
+    ```
+    ☀️ *Buenos días*, este es el resumen de tu cartera en Contabilidad OS:
+
+    🔴 *Sin descarga del SAT:* {{1}}
+    ⚠️ *Críticos:* {{2}}
+    🟡 *Pendientes:* {{3}}
+    ✅ *Al corriente:* {{4}} empresas
+    📅 {{5}}
+
+    Responde con el nombre de una empresa para ver el detalle.
+    ```

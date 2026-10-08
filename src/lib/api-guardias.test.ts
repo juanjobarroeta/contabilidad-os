@@ -81,6 +81,7 @@ const AUTENTICADORES: RegExp[] = [
  */
 const ESCOPADORES: RegExp[] = [
   /\brequireContaBotAccess\b/,
+  /\brequireBancosAccess\b/, // getEffectiveCompanyMembership (src/lib/bancos/statements/access.ts)
   /\brequireMembership\b/,
   /\brequireCierreGuiado\b/,
   /\brequireWriter\b/,

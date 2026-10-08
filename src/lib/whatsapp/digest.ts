@@ -8,9 +8,10 @@
 //
 // Entrega: el digest es un mensaje INICIADO POR EL NEGOCIO. Fuera de la ventana
 // de servicio de 24h, WhatsApp/Meta exige una PLANTILLA aprobada (error 63016).
-// Por eso es "template-aware": si `TWILIO_DIGEST_TEMPLATE_SID` está configurado
-// usa la plantilla (el cuerpo va en la variable "1"); si no, cae al envío
-// freeform, que sólo se entrega si el usuario escribió en las últimas 24h.
+// Por eso elige formato (ver `sendCarteraDigest`): si la persona escribió en
+// las últimas 24h va el freeform completo con secciones; si no, la plantilla
+// v2 multilínea (`TWILIO_DIGEST_TEMPLATE_V2_SID`) o la v1 de una línea
+// (`TWILIO_DIGEST_TEMPLATE_SID`, agrupada por tipo de pendiente).
 //
 // El formateo es PURO (sin DB) para poder probarlo; la orquestación sólo lo
 // alimenta. No usa LLM, así que su costo es ~0.
@@ -31,11 +32,6 @@ export interface EmpresaResumen {
   syncDetenida?: MotivoDetenida | null;
 }
 
-const MOTIVO_TXT: Record<MotivoDetenida, string> = {
-  fiel_vencida: "e.firma vencida, sin descarga del SAT",
-  fiel_revocada: "e.firma revocada por el SAT, sin descarga",
-  sin_sync: "sin descarga del SAT hace más de una semana",
-};
 
 /** Próxima fecha de las mensuales (día 17; sábado/domingo → lunes). */
 export function proximaDeclaracionMensual(hoy: Date): { periodo: string; vence: Date; dias: number } {
@@ -52,78 +48,135 @@ export function proximaDeclaracionMensual(hoy: Date): { periodo: string; vence: 
   return { periodo, vence, dias: Math.round((vence.getTime() - hoy0.getTime()) / 86_400_000) };
 }
 
-/** Cuántas empresas con pendientes listar por nombre antes de resumir el resto. */
-const MAX_LISTADAS = 8;
-
-/**
- * Arma el texto del resumen de cartera (PURO). Devuelve null si el usuario no
- * tiene empresas (nada que reportar). Si hay empresas pero ninguna con
- * pendientes, devuelve un mensaje de "todo al corriente" (es un resumen DIARIO
- * que el usuario pidió; el verde también es señal).
- */
 /** Aviso del cierre guiado de hoy (una línea por aviso, ya redactada). */
 export interface LineaCierre {
   empresa: string;
   linea: string;
 }
 
+const SUFIJOS_SOCIETARIOS =
+  /[,\s]+(S\.?\s?A\.?\s?P\.?\s?I\.?|S\.?\s?A\.?\s?B\.?|S\.?\s?A\.?|S\.?\s?C\.?|S\.?\s?A\.?\s?S\.?|A\.?\s?C\.?|S\.?\s?DE\s?R\.?\s?L\.?|S\.?\s?EN\s?C\.?)(\s+DE\s+C\.?\s?V\.?)?\.?\s*$/i;
+
+/**
+ * Nombre corto para el digest: sin la forma societaria («S.A. DE C.V.»,
+ * «S. DE R.L. DE C.V.», «S.C.»…) y recortado a `max` caracteres.
+ */
+export function nombreCorto(razonSocial: string, max = 28): string {
+  let n = razonSocial.trim().replace(/\s+/g, " ");
+  for (let i = 0; i < 2; i++) n = n.replace(SUFIJOS_SOCIETARIOS, "").trim();
+  n = n.replace(/[,.\s]+$/, "") || razonSocial.trim();
+  return n.length > max ? n.slice(0, max - 1).trimEnd() + "…" : n;
+}
+
+const MOTIVO_CORTO: Record<MotivoDetenida, string> = {
+  fiel_vencida: "e.firma vencida",
+  fiel_revocada: "e.firma revocada",
+  sin_sync: "sin descarga hace +7 días",
+};
+
+const plural = (n: number, s: string, p = `${s}s`) => `${n} ${n === 1 ? s : p}`;
+
+/** La cartera agrupada por tipo de pendiente (lo comparten los tres formatos). */
+interface Grupos {
+  total: number;
+  sat: Array<{ nombre: string; motivo: MotivoDetenida }>;
+  criticas: Array<{ nombre: string; criticos: number; resto: number }>;
+  pendientes: Array<{ nombre: string; hallazgos: number }>;
+  cierre: Array<{ nombre: string; linea: string }>;
+  alCorriente: number;
+}
+
+function agrupar(empresas: ReadonlyArray<EmpresaResumen>, cierre: ReadonlyArray<LineaCierre>): Grupos {
+  const conAvisos = new Set(cierre.map((c) => c.empresa));
+  const sat = empresas
+    .filter((e) => e.syncDetenida)
+    .map((e) => ({ nombre: nombreCorto(e.razonSocial), motivo: e.syncDetenida! }));
+  const criticas = empresas
+    .filter((e) => e.criticos > 0)
+    .sort((a, b) => b.criticos - a.criticos || b.hallazgos - a.hallazgos)
+    .map((e) => ({ nombre: nombreCorto(e.razonSocial), criticos: e.criticos, resto: e.hallazgos - e.criticos }));
+  const pendientes = empresas
+    .filter((e) => e.criticos === 0 && e.hallazgos > 0)
+    .sort((a, b) => b.hallazgos - a.hallazgos)
+    .map((e) => ({ nombre: nombreCorto(e.razonSocial), hallazgos: e.hallazgos }));
+  const alCorriente = empresas.filter((e) => !e.syncDetenida && e.hallazgos === 0 && !conAvisos.has(e.razonSocial)).length;
+  return {
+    total: empresas.length,
+    sat,
+    criticas,
+    pendientes,
+    cierre: cierre.map((c) => ({ nombre: nombreCorto(c.empresa), linea: c.linea.replace(/[.\s]+$/, "") })),
+    alCorriente,
+  };
+}
+
+function textoDeclaracion(hoy: Date): string {
+  const d = proximaDeclaracionMensual(hoy);
+  const fecha = d.vence.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" }).replace(",", "");
+  const cuando = d.dias < 0 ? "" : d.dias === 0 ? " (hoy)" : d.dias === 1 ? " (mañana)" : ` (en ${d.dias} días)`;
+  return `${d.periodo} vencen el ${fecha}${cuando}`;
+}
+
+/** Junta nombres hasta `max` y resume el resto como «+N». */
+function lista(items: string[], max: number): string {
+  const vis = items.slice(0, max);
+  return vis.join(", ") + (items.length > max ? ` +${items.length - max}` : "");
+}
+
+/** Cuántas empresas listar por sección en el mensaje completo. */
+const MAX_POR_SECCION = 6;
+
+/**
+ * El resumen COMPLETO (PURO), multilínea con formato de WhatsApp (*negritas*,
+ * secciones con emoji). Se manda freeform cuando la persona está dentro de la
+ * ventana de 24h. Devuelve null si no hay empresas.
+ */
 export function formatCarteraDigest(
   empresas: ReadonlyArray<EmpresaResumen>,
-  cierre: ReadonlyArray<LineaCierre> = []
+  cierre: ReadonlyArray<LineaCierre> = [],
+  hoy: Date = new Date(),
 ): string | null {
   if (empresas.length === 0) return null;
-  const bloqueCierre =
-    cierre.length > 0
-      ? ["", "Cierre guiado hoy:", ...cierre.map((c) => `- ${c.linea}`)]
-      : [];
+  const g = agrupar(empresas, cierre);
+  const out: string[] = [`☀️ *Buenos días* — tu cartera hoy (${plural(g.total, "empresa")})`];
 
-  const conPendientes = empresas
-    .filter((e) => e.hallazgos > 0 || e.syncDetenida)
-    .sort((a, b) => b.criticos - a.criticos || b.hallazgos - a.hallazgos);
-  const alCorriente = empresas.length - conPendientes.length;
-  const n = empresas.length;
+  const seccion = (titulo: string, filas: string[]) => {
+    if (filas.length === 0) return;
+    out.push("", titulo, ...filas.slice(0, MAX_POR_SECCION).map((f) => `• ${f}`));
+    if (filas.length > MAX_POR_SECCION) out.push(`• y ${plural(filas.length - MAX_POR_SECCION, "más", "más")}`);
+  };
 
-  const cabecera = `Buenos días. Resumen de tu cartera (${n} empresa${n === 1 ? "" : "s"}).`;
+  seccion("🔴 *Sin descarga del SAT*", g.sat.map((s) => `${s.nombre}: ${MOTIVO_CORTO[s.motivo]}`));
+  seccion(
+    "⚠️ *Críticos*",
+    g.criticas.map((c) => `${c.nombre}: ${plural(c.criticos, "crítico")}${c.resto > 0 ? ` + ${plural(c.resto, "pendiente")}` : ""}`),
+  );
+  seccion("🟡 *Pendientes*", g.pendientes.map((p) => `${p.nombre}: ${p.hallazgos}`));
+  seccion("📋 *Cierre guiado*", g.cierre.map((c) => `${c.nombre}: ${c.linea}`));
 
-  if (conPendientes.length === 0) {
-    return [
-      `${cabecera}\nTodas al corriente. Sin hallazgos abiertos.`,
-      ...bloqueCierre,
-      "\nEscríbeme el nombre de una empresa si quieres revisar algo.",
-    ].join("\n");
-  }
-
-  const listadas = conPendientes.slice(0, MAX_LISTADAS);
-  const lineas = listadas.map((e) => {
-    const crit = e.criticos > 0 ? ` (${e.criticos} crítico${e.criticos === 1 ? "" : "s"})` : "";
-    const sat = e.syncDetenida ? `${MOTIVO_TXT[e.syncDetenida]}; ` : "";
-    return `- ${e.razonSocial}: ${sat}${e.hallazgos} hallazgo${e.hallazgos === 1 ? "" : "s"}${crit}`;
-  });
-
-  const restantes = conPendientes.length - listadas.length;
-  const partes = [
-    cabecera,
-    `Con pendientes (${conPendientes.length}):`,
-    ...lineas,
-  ];
-  if (restantes > 0) partes.push(`y ${restantes} empresa${restantes === 1 ? "" : "s"} más con pendientes.`);
-  if (alCorriente > 0) partes.push(`${alCorriente} al corriente.`);
-  partes.push(...bloqueCierre);
-  partes.push("\nEscríbeme el nombre de una empresa para ver el detalle.");
-
-  return partes.join("\n");
+  out.push("");
+  if (g.alCorriente === g.total) out.push(`✅ Todas al corriente`);
+  else if (g.alCorriente > 0) out.push(`✅ ${g.alCorriente} al corriente`);
+  out.push(`📅 Declaraciones de ${textoDeclaracion(hoy)}`);
+  out.push("", "_Escríbeme el nombre de una empresa para ver el detalle._");
+  return out.join("\n");
 }
 
 /** Tope de {{1}}: WhatsApp limita el cuerpo de la plantilla (~1,024 con el texto fijo). */
 const MAX_LINEA = 850;
-const MAX_EMPRESAS_LINEA = 5;
+
+/** Limpia una variable de plantilla: sin saltos/tabs/4+ espacios ni punto final. */
+function limpiarVariable(s: string, max = MAX_LINEA): string {
+  let v = s.replace(/[\r\n\t]+/g, " ").replace(/ {2,}/g, " ").trim();
+  if (v.length > max) v = v.slice(0, max - 1).replace(/\s+\S*$/, "") + "…";
+  return v.replace(/[.\s]+$/, "");
+}
 
 /**
- * El resumen en UNA línea para {{1}} de la plantilla («Buenos días. Resumen de
- * tu cartera de Contabilidad OS: {{1}}. Responde con el nombre…»). Sin saltos,
- * tabs ni punto final (lo pone la plantilla). Lleva lo que importa por
- * empresa —SAT detenido, críticos, avisos del cierre— y la próxima fecha de
- * declaración. Devuelve null si no hay empresas.
+ * El resumen en UNA línea para {{1}} de la plantilla v1 («Buenos días. Resumen
+ * de tu cartera de Contabilidad OS: {{1}}. Responde con el nombre…»). Las
+ * variables no admiten saltos de línea, así que se agrupa POR TIPO con un emoji
+ * por bloque en vez de empresa por empresa. Devuelve null si no hay empresas.
  */
 export function formatCarteraDigestSummaryLine(
   empresas: ReadonlyArray<EmpresaResumen>,
@@ -131,34 +184,62 @@ export function formatCarteraDigestSummaryLine(
   hoy: Date = new Date(),
 ): string | null {
   if (empresas.length === 0) return null;
+  const v = formatCarteraDigestVariables(empresas, cierre, hoy)!;
+  const partes: string[] = [];
+  if (hay(v.sat)) partes.push(`🔴 ${v.sat}`);
+  if (hay(v.criticos)) partes.push(`⚠️ Críticos: ${v.criticos}`);
+  if (hay(v.pendientes)) partes.push(`🟡 Pendientes: ${v.pendientes}`);
+  partes.push(`✅ ${v.alCorriente} al corriente`);
+  partes.push(`📅 ${v.declaracion}`);
+  return limpiarVariable(partes.join(" · "));
+}
+const NINGUNO = "ninguno";
+const hay = (s: string) => s !== NINGUNO;
+
+export interface DigestVariables {
+  sat: string;
+  criticos: string;
+  pendientes: string;
+  alCorriente: string;
+  declaracion: string;
+}
+
+/**
+ * Variables de la plantilla v2 (multilínea, con las secciones fijas en el
+ * texto aprobado). Ninguna puede ir vacía: Meta rechaza variables vacías, así
+ * que un bloque sin nada lleva «ninguno».
+ */
+export function formatCarteraDigestVariables(
+  empresas: ReadonlyArray<EmpresaResumen>,
+  cierre: ReadonlyArray<LineaCierre> = [],
+  hoy: Date = new Date(),
+): DigestVariables | null {
+  if (empresas.length === 0) return null;
+  const gr = agrupar(empresas, cierre);
+  const motivos = new Set(gr.sat.map((s) => s.motivo));
+  const sat = gr.sat.length === 0
+    ? NINGUNO
+    : motivos.size === 1
+      ? `${MOTIVO_CORTO[gr.sat[0].motivo]}: ${lista(gr.sat.map((s) => s.nombre), 4)}`
+      : lista(gr.sat.map((s) => `${s.nombre} (${MOTIVO_CORTO[s.motivo]})`), 4);
+  const criticos = gr.criticas.length === 0 ? NINGUNO : lista(gr.criticas.map((c) => `${c.nombre} (${c.criticos})`), 4);
+  // El aviso del cierre se pega a su empresa si ya aparece con hallazgos.
   const avisos = new Map<string, string[]>();
-  for (const c of cierre) avisos.set(c.empresa, [...(avisos.get(c.empresa) ?? []), c.linea]);
-
-  const conAlgo = empresas
-    .filter((e) => e.syncDetenida || e.hallazgos > 0 || avisos.has(e.razonSocial))
-    .sort((a, b) => Number(!!b.syncDetenida) - Number(!!a.syncDetenida) || b.criticos - a.criticos || b.hallazgos - a.hallazgos);
-
-  const partes = conAlgo.slice(0, MAX_EMPRESAS_LINEA).map((e) => {
-    const cosas: string[] = [];
-    if (e.syncDetenida) cosas.push(MOTIVO_TXT[e.syncDetenida]);
-    if (e.criticos > 0) cosas.push(`${e.criticos} crítico${e.criticos === 1 ? "" : "s"}`);
-    const resto = e.hallazgos - e.criticos;
-    if (resto > 0) cosas.push(`${resto} pendiente${resto === 1 ? "" : "s"}`);
-    for (const a of avisos.get(e.razonSocial) ?? []) cosas.push(a.replace(/[.\s]+$/, ""));
-    return `${e.razonSocial}: ${cosas.join(", ")}`;
+  for (const c of gr.cierre) avisos.set(c.nombre, [...(avisos.get(c.nombre) ?? []), c.linea.charAt(0).toLowerCase() + c.linea.slice(1)]);
+  const pend = gr.pendientes.map((p) => {
+    const a = avisos.get(p.nombre);
+    avisos.delete(p.nombre);
+    return a ? `${p.nombre} (${p.hallazgos}; ${a.join("; ")})` : `${p.nombre} (${p.hallazgos})`;
   });
-  const masEmpresas = conAlgo.length - partes.length;
-  if (masEmpresas > 0) partes.push(`y ${masEmpresas} empresa${masEmpresas === 1 ? "" : "s"} más con pendientes`);
-  const alCorriente = empresas.length - conAlgo.length;
-  if (alCorriente > 0) partes.push(`${alCorriente} al corriente`);
-
-  const d = proximaDeclaracionMensual(hoy);
-  const fecha = d.vence.toLocaleDateString("es-MX", { day: "numeric", month: "long" });
-  partes.push(`declaraciones de ${d.periodo} vencen el ${fecha}${d.dias >= 0 ? ` (${d.dias === 0 ? "hoy" : d.dias === 1 ? "mañana" : `en ${d.dias} días`})` : ""}`);
-
-  let linea = partes.join(" · ").replace(/[\r\n\t]+/g, " ").replace(/ {2,}/g, " ").trim();
-  if (linea.length > MAX_LINEA) linea = linea.slice(0, MAX_LINEA - 1).replace(/\s+\S*$/, "") + "…";
-  return linea.replace(/[.\s]+$/, "");
+  for (const [nombre, a] of avisos) pend.push(`${nombre} (${a.join("; ")})`);
+  const pendientes = pend.length === 0 ? NINGUNO : lista(pend, 4);
+  return {
+    sat: limpiarVariable(sat, 300),
+    criticos: limpiarVariable(criticos, 300),
+    pendientes: limpiarVariable(pendientes, 300),
+    alCorriente: String(gr.alCorriente),
+    declaracion: limpiarVariable(`declaraciones de ${textoDeclaracion(hoy)}`, 120),
+  };
 }
 
 /**
@@ -196,24 +277,49 @@ export async function computeCarteraResumen(userId: string): Promise<EmpresaResu
   }));
 }
 
+/** Margen bajo las 24h de la ventana de servicio para no rozar el corte. */
+const VENTANA_MS = 23.5 * 3600_000;
+
+/** ¿La persona escribió por WhatsApp en las últimas ~24h? (freeform permitido). */
+export async function dentroDeVentana(linkId: string, ahora: Date = new Date()): Promise<boolean> {
+  const m = await prisma.whatsappMessage.findFirst({
+    where: { role: "USER", conversation: { linkId }, createdAt: { gte: new Date(ahora.getTime() - VENTANA_MS) } },
+    select: { id: true },
+  });
+  return m !== null;
+}
+
+export interface DigestFormatos {
+  texto: string;
+  linea: string;
+  variables: DigestVariables;
+}
+
 /**
- * Envía el resumen a un número. Si hay plantilla configurada
- * (`TWILIO_DIGEST_TEMPLATE_SID`) la usa con el resumen de UNA línea en la
- * variable {{1}} (las plantillas no admiten saltos de línea en variables); si
- * no, cae al freeform con el cuerpo multilínea completo (sólo entregable dentro
- * de la ventana de 24h). Devuelve true si se envió, false si se omitió/falló.
+ * Envía el resumen a un número, eligiendo el mejor formato entregable:
+ *   1. Dentro de la ventana de 24h → freeform multilínea completo.
+ *   2. `TWILIO_DIGEST_TEMPLATE_V2_SID` → plantilla multilínea por secciones.
+ *   3. `TWILIO_DIGEST_TEMPLATE_SID` → plantilla v1 de una línea en {{1}}.
+ *   4. Sin plantilla → freeform (Meta lo rechaza fuera de ventana; se registra).
+ * Devuelve true si se envió, false si se omitió/falló.
  */
 export async function sendCarteraDigest(
   phoneE164: string,
-  textoCompleto: string,
-  resumenLinea: string
+  f: DigestFormatos,
+  enVentana = false,
 ): Promise<boolean> {
-  const templateSid = process.env.TWILIO_DIGEST_TEMPLATE_SID;
+  const v2 = process.env.TWILIO_DIGEST_TEMPLATE_V2_SID;
+  const v1 = process.env.TWILIO_DIGEST_TEMPLATE_SID;
   try {
-    if (templateSid) {
-      await sendWhatsappTemplate(phoneE164, templateSid, { "1": resumenLinea });
+    if (enVentana || (!v2 && !v1)) {
+      await sendWhatsappMessage(phoneE164, f.texto);
+    } else if (v2) {
+      const v = f.variables;
+      await sendWhatsappTemplate(phoneE164, v2, {
+        "1": v.sat, "2": v.criticos, "3": v.pendientes, "4": v.alCorriente, "5": v.declaracion,
+      });
     } else {
-      await sendWhatsappMessage(phoneE164, textoCompleto);
+      await sendWhatsappTemplate(phoneE164, v1!, { "1": f.linea });
     }
     return true;
   } catch (e) {
@@ -241,7 +347,7 @@ export interface DigestRunResult {
 export async function runWhatsappCarteraDigest(): Promise<DigestRunResult> {
   const links = await prisma.whatsappLink.findMany({
     where: { verifiedAt: { not: null }, digestOptOut: false },
-    select: { phoneE164: true, userId: true },
+    select: { id: true, phoneE164: true, userId: true },
   });
 
   let enviados = 0;
@@ -254,11 +360,13 @@ export async function runWhatsappCarteraDigest(): Promise<DigestRunResult> {
       ).catch(() => []);
       const texto = formatCarteraDigest(resumen, cierre);
       const linea = formatCarteraDigestSummaryLine(resumen, cierre);
-      if (!texto || !linea) {
+      const variables = formatCarteraDigestVariables(resumen, cierre);
+      if (!texto || !linea || !variables) {
         omitidos++;
         continue;
       }
-      const ok = await sendCarteraDigest(link.phoneE164, texto, linea);
+      const enVentana = await dentroDeVentana(link.id).catch(() => false);
+      const ok = await sendCarteraDigest(link.phoneE164, { texto, linea, variables }, enVentana);
       ok ? enviados++ : omitidos++;
     } catch (e) {
       omitidos++;
