@@ -980,6 +980,27 @@ Sólo lectura no recibe escritura (al recalcular se le filtra). Borrar un puesto
   (`esIdentificacionDeResponsable`). Las imágenes viven en `HospDocumento.archivo` (≤ 10 MB) y su
   descarga se registra como acceso.
 
+### Notas estructuradas, imagenología y referencia
+
+- **Secciones nuevas** (opcionales; las obligatorias no cambian) en `PLANTILLAS_NOTA`: historia
+  clínica (`motivoConsulta`, `ocupacion`), enfermería (`datosIngreso`, `somatometria`,
+  `dispositivos`, `soluciones`, `oxigenoterapia`, `llenadoCapilar`, `glucemiaCapilar`, `gabinete`,
+  `consentimientosFirmados`), preanestésica (antecedentes, exploración, `laboratorios`, `gabinete`,
+  `goldman`, `consentimientoInformado`…), interconsulta (`medicoSolicitante`, `fechaSolicitud`,
+  `medicoInterconsultante`, `planEstudios`…) y egreso (`signosVitales`, `reingresoMismaAfeccion`,
+  `factoresRiesgo`). El satélite captura varias como objeto o arreglo (rejilla sí/no, campos,
+  tabla; `src/lib/secciones.js`); el hub las admite como JSON y el CDA las lee con `textoDe`.
+- **Documentos de imagenología** (migración `20261020_hosp_imagen_referencia`):
+  `CONSENTIMIENTO_PROCEDIMIENTO_IMAGEN`, `CUESTIONARIO_SEGURIDAD_IMAGEN`,
+  `REGISTRO_PROCEDIMIENTO_IMAGEN` y el firmante `TECNICO`.
+- **Firma en pantalla de consentimientos clínicos**: cirugía, anestesia, procedimiento en imagen y
+  el cuestionario tienen texto legal (`TIPOS_CON_PLANTILLA`, sustituible en Configuración).
+  `POST /documentos/[docId]/preparar-firma` congela el texto con el contenido (exige las
+  obligatorias) y fija los firmantes; mientras no haya firmas, el PATCH de contenido (o marcarlo
+  FIRMADO en papel) lo devuelve a borrador. Reglas en `prepararFirmaDocumento` (`admision.ts`).
+- **Referencia del episodio**: `HospEpisodio.medicoReferencia` y `unidadReferencia` en POST
+  `/episodios` y PATCH `action: datos`.
+
 ### Mascota de ayuda (Cubo/Mochi/Lupa)
 
 El satélite enseña en cada pantalla la mascota de ContabilidadOS; tocarla abre

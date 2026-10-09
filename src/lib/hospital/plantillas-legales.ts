@@ -28,6 +28,13 @@ export const TIPOS_CON_PLANTILLA = [
   "CONSENTIMIENTO_DATOS",
   "AVISO_PRIVACIDAD",
   "CONSENTIMIENTO_HOSPITALIZACION",
+  // Consentimientos clínicos y cuestionario de imagen: se llenan en el
+  // expediente y, si se firman en pantalla, este texto se congela con su hash
+  // (POST /documentos/[docId]/preparar-firma). En papel siguen como antes.
+  "CONSENTIMIENTO_CIRUGIA",
+  "CONSENTIMIENTO_ANESTESIA",
+  "CONSENTIMIENTO_PROCEDIMIENTO_IMAGEN",
+  "CUESTIONARIO_SEGURIDAD_IMAGEN",
 ] as const satisfies readonly HospDocumentoTipo[];
 
 export type TipoConPlantilla = (typeof TIPOS_CON_PLANTILLA)[number];
@@ -153,6 +160,115 @@ Se me informó que puedo revocar este consentimiento en cualquier momento, que e
 
 Firmado por el paciente o su representante legal, en presencia de dos testigos y del médico que informó, conforme al numeral 10.1.1 de la NOM-004-SSA3-2012 y a los artículos 80 a 83 del Reglamento de la Ley General de Salud en materia de prestación de servicios de atención médica, el {{fecha}}. Versión de la plantilla: {{plantilla.version}}.`,
   },
+
+  CONSENTIMIENTO_CIRUGIA: {
+    version: VERSION_PLANTILLAS_DEFAULT,
+    titulo: "Carta de consentimiento informado para cirugía",
+    texto: `CARTA DE CONSENTIMIENTO INFORMADO PARA CIRUGÍA
+
+Establecimiento: {{hospital.razonSocial}} · CLUES {{hospital.clues}} · Licencia sanitaria {{hospital.licenciaSanitaria}}
+Paciente: {{paciente.nombreCompleto}} · Fecha de nacimiento {{paciente.fechaNacimiento}} · CURP {{paciente.curp}} · Expediente {{paciente.expedienteNumero}}
+Atención: {{episodio.folio}} del {{episodio.fechaIngreso}} · Médico tratante: {{episodio.medico}}
+
+La cirugía ambulatoria se refiere a los procedimientos quirúrgicos que se llevan a cabo bajo diversos tipos de anestesia, que no requieren cuidados postoperatorios especiales ni prolongados, y en los que el paciente puede ser dado de alta en un lapso no mayor de 12 horas a partir de su ingreso a la unidad. El tiempo del postoperatorio depende de las características de cada paciente y de la intervención.
+
+Procedimiento que se realizará: {{contenido.procedimiento}}
+Beneficios esperados: {{contenido.beneficios}}
+Riesgos y complicaciones: toda intervención puede presentar, a pesar de la adecuada elección de la técnica y de su correcta realización, efectos indeseables como infección o dehiscencia de la herida, seroma, hematoma, reacciones alérgicas a medicamentos (de leves a graves), granuloma, hemorragias que requieran una nueva intervención o cicatrices hipertróficas. Específicamente para esta cirugía: {{contenido.riesgos}}
+Alternativas de tratamiento: {{contenido.alternativas}}
+Consecuencias de no aceptarla: {{contenido.consecuenciasDeNoAceptar}}
+
+Yo, {{paciente.nombreCompleto}}, o en su caso mi representante legal, declaro en forma libre y voluntaria, sin presión física ni moral, que el médico me proporcionó información completa sobre mi enfermedad y estado de salud actual, en forma amplia, precisa y suficiente y en lenguaje claro y sencillo, y que resolvió todas mis dudas. Autorizo al personal de salud la atención de contingencias, urgencias y la aplicación de medidas de reanimación básica o avanzada que resulten necesarias, atendiendo el principio de libertad prescriptiva.
+
+Autorizo el procedimiento para: {{contenido.paraQuien}}. En caso de persona autorizada por el paciente: {{contenido.personaAutorizada}} · parentesco {{contenido.parentescoAutorizada}} · teléfono {{contenido.telefonoAutorizada}}.
+
+Se me informó que puedo revocar este consentimiento en cualquier momento antes del procedimiento sin que ello afecte mi atención.
+
+Firmado por el paciente o su representante legal, en presencia de dos testigos y del médico que informó, conforme al numeral 10.1 de la NOM-004-SSA3-2012 y a los artículos 80 a 83 del Reglamento de la Ley General de Salud en materia de prestación de servicios de atención médica, el {{fecha}}. Versión de la plantilla: {{plantilla.version}}.`,
+  },
+  CONSENTIMIENTO_ANESTESIA: {
+    version: VERSION_PLANTILLAS_DEFAULT,
+    titulo: "Carta de consentimiento informado para procedimiento anestésico",
+    texto: `CARTA DE CONSENTIMIENTO INFORMADO PARA PROCEDIMIENTO ANESTÉSICO / SEDACIÓN
+
+Establecimiento: {{hospital.razonSocial}} · CLUES {{hospital.clues}} · Licencia sanitaria {{hospital.licenciaSanitaria}}
+Paciente: {{paciente.nombreCompleto}} · Fecha de nacimiento {{paciente.fechaNacimiento}} · CURP {{paciente.curp}} · Expediente {{paciente.expedienteNumero}}
+Atención: {{episodio.folio}} del {{episodio.fechaIngreso}} · Médico tratante: {{episodio.medico}}
+
+Procedimiento quirúrgico programado: {{contenido.procedimiento}}
+Tipo de anestesia o sedación: {{contenido.tipoAnestesia}}
+Beneficios: {{contenido.beneficios}}
+Riesgos y complicaciones: {{contenido.riesgos}}
+Alternativas: {{contenido.alternativas}}
+
+De acuerdo con la NOM-004-SSA3-2012 del expediente clínico (numerales 10.1.1.2 y 10.1.1.3) y la NOM-006-SSA3-2011 para la práctica de la anestesiología (numerales 4.12 y 16.1.1), este documento se suscribe por el paciente o su representante legal y por dos testigos, mediante el cual acepta, bajo la debida información de los riesgos y beneficios esperados, el procedimiento anestésico. Se sujeta a las disposiciones sanitarias vigentes y no obliga al médico a realizar u omitir procedimientos cuando ello entrañe un riesgo injustificado para el paciente.
+
+Por consiguiente, y en calidad de paciente, declaro:
+1. Que cuento con la información suficiente sobre los riesgos y beneficios de mi procedimiento anestésico, y que éste puede cambiar de acuerdo con mis condiciones físicas o emocionales o con lo inherente al procedimiento quirúrgico.
+2. Que todo acto médico implica una serie de riesgos debidos a mi estado físico actual, mis antecedentes, tratamientos previos y la causa que da origen a la intervención, a los procedimientos de diagnóstico y tratamiento o a una combinación de ambos.
+3. Que existe la posibilidad de complicaciones desde leves hasta severas, que pueden causar secuelas permanentes o incluso complicaciones graves que lleven al fallecimiento.
+4. Que puedo requerir tratamientos complementarios que aumenten mi estancia hospitalaria, con la participación de otros servicios o unidades médicas.
+
+Autorizo al personal de salud la atención de contingencias y urgencias derivadas del procedimiento y la aplicación de medidas de reanimación básica o avanzada.
+
+Autorizo el procedimiento para: {{contenido.paraQuien}}. En caso de persona autorizada por el paciente: {{contenido.personaAutorizada}} · parentesco {{contenido.parentescoAutorizada}} · teléfono {{contenido.telefonoAutorizada}}.
+
+Se me informó que puedo revocar este consentimiento en cualquier momento antes del procedimiento sin que ello afecte mi atención.
+
+Firmado por el paciente o su representante legal, en presencia de dos testigos y del médico que informó, conforme al numeral 10.1 de la NOM-004-SSA3-2012 y a los artículos 80 a 83 del Reglamento de la Ley General de Salud en materia de prestación de servicios de atención médica, el {{fecha}}. Versión de la plantilla: {{plantilla.version}}.`,
+  },
+  CONSENTIMIENTO_PROCEDIMIENTO_IMAGEN: {
+    version: VERSION_PLANTILLAS_DEFAULT,
+    titulo: "Consentimiento informado para biopsias y procedimientos mínimamente invasivos en imagenología",
+    texto: `CONSENTIMIENTO INFORMADO PARA BIOPSIAS Y PROCEDIMIENTOS MÍNIMAMENTE INVASIVOS EN SALAS DE IMAGENOLOGÍA
+
+Establecimiento: {{hospital.razonSocial}} · CLUES {{hospital.clues}} · Licencia sanitaria {{hospital.licenciaSanitaria}}
+Paciente: {{paciente.nombreCompleto}} · Fecha de nacimiento {{paciente.fechaNacimiento}} · CURP {{paciente.curp}} · Expediente {{paciente.expedienteNumero}}
+Atención: {{episodio.folio}} del {{episodio.fechaIngreso}} · Médico tratante: {{episodio.medico}}
+
+Yo, {{paciente.nombreCompleto}}, o en su caso mi representante legal, declaro en forma libre y voluntaria, sin presión física ni moral, que he comprendido la información relativa al procedimiento y otorgo mi consentimiento informado. Autorizo al personal de salud la atención de contingencias, urgencias y la aplicación de medidas de reanimación básica o avanzada que sean necesarias, atendiendo el principio de libertad prescriptiva.
+
+Procedimiento que autorizo: {{contenido.procedimiento}}
+Tipo de anestesia o sedación: {{contenido.tipoAnestesia}}
+
+Información del procedimiento:
+1. La biopsia percutánea consiste en obtener una muestra de tejido mediante una aguja introducida a través de la piel, guiada por el método de imagen correspondiente, para establecer un diagnóstico.
+2. El recambio o la colocación de nefrostomía consiste en sustituir o colocar el catéter que drena la orina directamente del riñón hacia una bolsa externa; el recambio periódico previene obstrucciones, infecciones y fugas.
+3. La discólisis consiste en introducir una aguja fina en el disco intervertebral, guiándose con estudios de imagen como la tomografía, para disminuir el dolor causado por una hernia de disco.
+
+Beneficios: {{contenido.beneficios}}
+Riesgos y complicaciones: sangrado o hematoma, infección, reacción alérgica al anestésico local y necesidad de procedimientos adicionales; además: {{contenido.riesgos}}
+Alternativas: {{contenido.alternativas}}
+
+Autorizo el procedimiento para: {{contenido.paraQuien}}. En caso de persona autorizada por el paciente: {{contenido.personaAutorizada}} · parentesco {{contenido.parentescoAutorizada}} · teléfono {{contenido.telefonoAutorizada}}.
+
+Se me informó que puedo revocar este consentimiento en cualquier momento antes del procedimiento sin que ello afecte mi atención.
+
+Firmado por el paciente o su representante legal, en presencia de dos testigos y del médico que informó, conforme al numeral 10.1 de la NOM-004-SSA3-2012 y a los artículos 80 a 83 del Reglamento de la Ley General de Salud en materia de prestación de servicios de atención médica, el {{fecha}}. Versión de la plantilla: {{plantilla.version}}.`,
+  },
+  CUESTIONARIO_SEGURIDAD_IMAGEN: {
+    version: VERSION_PLANTILLAS_DEFAULT,
+    titulo: "Cuestionario de seguridad para estudios de imagen",
+    texto: `CUESTIONARIO DE SEGURIDAD PARA ESTUDIOS DE IMAGEN
+
+Establecimiento: {{hospital.razonSocial}} · CLUES {{hospital.clues}} · Licencia sanitaria {{hospital.licenciaSanitaria}}
+Paciente: {{paciente.nombreCompleto}} · Fecha de nacimiento {{paciente.fechaNacimiento}} · CURP {{paciente.curp}} · Expediente {{paciente.expedienteNumero}}
+Atención: {{episodio.folio}} del {{episodio.fechaIngreso}} · Médico tratante: {{episodio.medico}}
+
+Estudio solicitado: {{contenido.estudio}} · Médico solicitante: {{contenido.medicoSolicitante}} · Hospital de referencia: {{contenido.hospitalReferencia}}
+
+Respuestas del paciente:
+{{contenido.resumenRespuestas}}
+
+Creatinina: {{contenido.creatinina}} · Fecha: {{contenido.fechaCreatinina}}
+Observaciones: {{contenido.observaciones}}
+
+DECLARACIÓN. Yo, en mi carácter de {{contenido.declaranteCalidad}}, declaro que la información proporcionada es verdadera y completa. Entiendo que la omisión de información relevante puede afectar la seguridad durante la realización del estudio.
+
+USO EXCLUSIVO DEL SERVICIO DE IMAGEN. Identificación del paciente corroborada: {{contenido.identificacionCorroborada}} · Preparación verificada: {{contenido.preparacionVerificada}} · Apto para realizar el estudio: {{contenido.aptoEstudio}} · Técnico radiólogo: {{contenido.tecnico}} (céd. {{contenido.tecnicoCedula}}).
+
+Firmado el {{fecha}}. Versión de la plantilla: {{plantilla.version}}.`,
+  },
 };
 
 // ── Firmas requeridas por tipo ───────────────────────────────────────────────
@@ -175,12 +291,14 @@ export const FIRMAS_REQUERIDAS: Partial<Record<HospDocumentoTipo, readonly strin
   CONSENTIMIENTO_CIRUGIA: CONSENTIMIENTO_NOM004,
   CONSENTIMIENTO_ANESTESIA: CONSENTIMIENTO_NOM004,
   CONSENTIMIENTO_TRANSFUSION: CONSENTIMIENTO_NOM004,
+  CONSENTIMIENTO_PROCEDIMIENTO_IMAGEN: CONSENTIMIENTO_NOM004,
+  CUESTIONARIO_SEGURIDAD_IMAGEN: [PACIENTE_O_REPRESENTANTE, "TECNICO"],
   HOJA_EGRESO: [PACIENTE_O_REPRESENTANTE, "MEDICO"],
   IDENTIFICACION: [],
   CONSTANCIA_CURP: [],
 };
 
-export const ROLES_FIRMANTE: readonly HospFirmanteRol[] = ["PACIENTE", "REPRESENTANTE", "TESTIGO1", "TESTIGO2", "MEDICO", "RESPONSABLE_PAGO", "HOSPITAL"];
+export const ROLES_FIRMANTE: readonly HospFirmanteRol[] = ["PACIENTE", "REPRESENTANTE", "TESTIGO1", "TESTIGO2", "MEDICO", "RESPONSABLE_PAGO", "HOSPITAL", "TECNICO"];
 
 export function firmasRequeridasPara(tipo: HospDocumentoTipo): string[] {
   return [...(FIRMAS_REQUERIDAS[tipo] ?? [])];

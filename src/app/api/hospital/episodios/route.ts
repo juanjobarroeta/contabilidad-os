@@ -106,6 +106,8 @@ const createSchema = z.object({
   diagnostico: z.string().max(300).nullable().optional(),
   procedimiento: z.string().max(300).nullable().optional(),
   motivo: z.string().max(1000).nullable().optional(),
+  medicoReferencia: z.string().trim().max(160).nullable().optional(),
+  unidadReferencia: z.string().trim().max(200).nullable().optional(),
   autorizacionPagador: z.string().max(80).nullable().optional(),
   notasAdmin: z.string().max(4000).nullable().optional(),
   cotizacionId: z.string().nullable().optional(),

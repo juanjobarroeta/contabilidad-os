@@ -73,7 +73,7 @@ export const PLANTILLAS_NOTA: Record<HospNotaTipo, PlantillaNota> = {
       "pronostico",
       "plan",
     ],
-    opcionales: ["antecedentesGinecoObstetricos", "interrogatorioAparatosSistemas", "estudiosPrevios", "signosVitales"],
+    opcionales: ["motivoConsulta", "ocupacion", "antecedentesGinecoObstetricos", "interrogatorioAparatosSistemas", "estudiosPrevios", "signosVitales"],
   },
   INGRESO: {
     titulo: "Nota de ingreso",
@@ -101,7 +101,12 @@ export const PLANTILLAS_NOTA: Record<HospNotaTipo, PlantillaNota> = {
     fundamento: "NOM-004-SSA3-2012 §8.5 · NOM-006-SSA3-2011 · NOM-026-SSA3-2012",
     medica: true,
     obligatorias: ["evaluacionClinica", "asa", "tipoAnestesia", "planAnestesico"],
-    opcionales: ["medicacionPreanestesica", "viaAerea", "ayuno", "riesgoAnestesico"],
+    opcionales: [
+      "medicacionPreanestesica", "viaAerea", "ayuno", "riesgoAnestesico",
+      // Formato de valoración preanestésica (Haltus): antecedentes, exploración, laboratorios y gabinete.
+      "padecimientoActual", "antecedentesImportancia", "enfermedadesCronicas", "antecedentesAnestesicos", "antecedentesGinecoObstetricos",
+      "signosVitales", "exploracionFisica", "laboratorios", "gabinete", "goldman", "consentimientoInformado",
+    ],
   },
   POSTOPERATORIA: {
     titulo: "Nota postoperatoria",
@@ -133,7 +138,11 @@ export const PLANTILLAS_NOTA: Record<HospNotaTipo, PlantillaNota> = {
     fundamento: "NOM-004-SSA3-2012 §9.1",
     medica: false,
     obligatorias: ["signosVitales", "medicamentosMinistrados", "procedimientos", "observaciones"],
-    opcionales: ["habitusExterior", "dieta", "balanceLiquidos", "escalaDolor"],
+    opcionales: [
+      "habitusExterior", "dieta", "balanceLiquidos", "escalaDolor",
+      // Hoja de enfermería de urgencias: somatometría, accesos y sondas, soluciones, oxígeno.
+      "datosIngreso", "somatometria", "dispositivos", "soluciones", "oxigenoterapia", "llenadoCapilar", "glucemiaCapilar", "gabinete", "consentimientosFirmados",
+    ],
   },
   HOJA_URGENCIAS: {
     titulo: "Hoja de urgencias",
@@ -154,7 +163,7 @@ export const PLANTILLAS_NOTA: Record<HospNotaTipo, PlantillaNota> = {
     fundamento: "NOM-004-SSA3-2012 §8.3",
     medica: true,
     obligatorias: ["criteriosDiagnosticos", "sugerenciasDiagnosticas", "sugerenciasTratamiento"],
-    opcionales: ["motivo", "especialidad"],
+    opcionales: ["motivo", "especialidad", "medicoSolicitante", "fechaSolicitud", "medicoInterconsultante", "signosVitales", "resumenInterrogatorio", "estudios", "planEstudios", "tratamiento", "pronostico"],
   },
   REFERENCIA: {
     titulo: "Nota de referencia / traslado",
@@ -182,7 +191,7 @@ export const PLANTILLAS_NOTA: Record<HospNotaTipo, PlantillaNota> = {
     fundamento: "NOM-004-SSA3-2012 §8.10 · NOM-026-SSA3-2012 (instrucciones de egreso)",
     medica: true,
     obligatorias: ["diagnosticoEgreso", "motivoEgreso", "evolucion", "planManejo"],
-    opcionales: ["problemasPendientes", "pronostico", "recomendaciones", "causaDefuncion", "diasEstancia"],
+    opcionales: ["problemasPendientes", "pronostico", "recomendaciones", "causaDefuncion", "diasEstancia", "signosVitales", "reingresoMismaAfeccion", "factoresRiesgo"],
   },
 };
 
@@ -281,6 +290,28 @@ export const ETIQUETA_SECCION: Record<string, string> = {
   recomendaciones: "Recomendaciones de vigilancia ambulatoria",
   causaDefuncion: "Causas de defunción",
   diasEstancia: "Días de estancia",
+  motivoConsulta: "Motivo de consulta o ingreso",
+  ocupacion: "Ocupación",
+  antecedentesImportancia: "Antecedentes personales de importancia",
+  enfermedadesCronicas: "Enfermedades crónico-degenerativas",
+  antecedentesAnestesicos: "Antecedentes anestésico-quirúrgicos",
+  laboratorios: "Laboratorios",
+  gabinete: "Estudios de gabinete",
+  goldman: "Riesgo cardiovascular (Goldman)",
+  consentimientoInformado: "Consentimiento informado firmado",
+  datosIngreso: "Datos del ingreso (procedencia, cama, horas)",
+  somatometria: "Somatometría y ayuno",
+  dispositivos: "Accesos y sondas",
+  oxigenoterapia: "Oxigenoterapia",
+  llenadoCapilar: "Llenado capilar",
+  glucemiaCapilar: "Glucemia capilar",
+  consentimientosFirmados: "Consentimientos firmados",
+  medicoSolicitante: "Médico que solicita",
+  fechaSolicitud: "Fecha de solicitud",
+  medicoInterconsultante: "Médico interconsultante",
+  planEstudios: "Plan de estudios",
+  reingresoMismaAfeccion: "¿Reingreso por la misma afección en el año?",
+  factoresRiesgo: "Factores de riesgo (alcohol, tabaco y otras sustancias)",
 };
 
 // ── Escalas ──────────────────────────────────────────────────────────────────

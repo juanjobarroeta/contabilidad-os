@@ -22,6 +22,7 @@ import { AuthzError, requireModule, requireWriter } from "@/lib/authz";
 import { withHospital } from "@/lib/hospital/with-hospital";
 import { aFecha, bitacora, error, errorZod, fechaSchema } from "@/lib/hospital/http";
 import { CAMPOS_CONGELADOS_AL_FIRMAR, errorContenido, errorFirma } from "@/lib/hospital/documentos";
+import { TIPOS_FIRMA_CLINICA } from "@/lib/hospital/admision";
 
 const schema = z.object({
   estado: z.enum(["PENDIENTE", "RECIBIDO", "FIRMADO"]).optional(),
@@ -65,7 +66,10 @@ export const PATCH = withHospital(async (req: Request, ctx: { params: Promise<{ 
   if (doc.estado === "FIRMADO" && tocaFirma) {
     return error(`El documento «${doc.nombre}» ya está firmado: su contenido y sus firmantes no se modifican; registra otro documento`, 409);
   }
-  if ((doc.textoFirmado || doc._count.firmas > 0) && ("contenido" in d || d.estado === "FIRMADO")) {
+  // Consentimiento clínico preparado para firma en pantalla pero sin firmas: editarlo (o firmarlo
+  // en papel) lo devuelve a borrador; el texto se vuelve a congelar al preparar la firma otra vez.
+  const vuelveABorrador = !!doc.textoFirmado && doc._count.firmas === 0 && TIPOS_FIRMA_CLINICA.includes(doc.tipo) && ("contenido" in d || d.estado === "FIRMADO");
+  if (!vuelveABorrador && (doc.textoFirmado || doc._count.firmas > 0) && ("contenido" in d || d.estado === "FIRMADO")) {
     return error(`El documento «${doc.nombre}» lleva texto legal con hash${doc._count.firmas ? ` y ${doc._count.firmas} firma(s)` : ""}: su contenido no cambia y se firma con POST /api/hospital/documentos/${doc.id}/firmas`, 409);
   }
 
@@ -103,6 +107,7 @@ export const PATCH = withHospital(async (req: Request, ctx: { params: Promise<{ 
       ...(d.nombre ? { nombre: d.nombre.trim() } : {}),
       ...(d.requerido !== undefined ? { requerido: d.requerido } : {}),
       ...(d.contenido !== undefined ? { contenido: d.contenido === null ? undefined : (d.contenido as object) } : {}),
+      ...(vuelveABorrador ? { textoFirmado: null, hashContenido: null, plantillaVersion: null } : {}),
       firmadoPor: resultante.firmadoPor,
       firmadoParentesco: resultante.firmadoParentesco,
       testigo1: resultante.testigo1,

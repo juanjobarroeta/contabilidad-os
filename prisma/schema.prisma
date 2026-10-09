@@ -8310,6 +8310,9 @@ model HospEpisodio {
   diagnostico         String?
   procedimiento       String?
   motivo              String?
+  /// Paciente enviado por un médico o una unidad externos (imagenología, interconsultas).
+  medicoReferencia    String?
+  unidadReferencia    String?
   /// Autorización previa del pagador (folio/número que dio la aseguradora).
   autorizacionPagador String?
 
@@ -8516,6 +8519,12 @@ enum HospDocumentoTipo {
   CONSTANCIA_CURP
   /// CDA R2 emitido (GIIS-A001): queda en el expediente tal como salió.
   RESUMEN_CLINICO
+  /// Imagenología: consentimiento para biopsias y procedimientos mínimamente
+  /// invasivos, cuestionario de seguridad previo al estudio y registro del
+  /// procedimiento con método de guía e insumos.
+  CONSENTIMIENTO_PROCEDIMIENTO_IMAGEN
+  CUESTIONARIO_SEGURIDAD_IMAGEN
+  REGISTRO_PROCEDIMIENTO_IMAGEN
   OTRO
 }
 
@@ -9150,6 +9159,8 @@ enum HospFirmanteRol {
   MEDICO
   RESPONSABLE_PAGO
   HOSPITAL
+  /// Técnico radiólogo que verifica identidad, preparación y aptitud (cuestionario de imagen).
+  TECNICO
 }
 
 enum HospFirmaMetodo {
