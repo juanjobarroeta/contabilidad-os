@@ -7933,6 +7933,8 @@ model HospRecurso {
   servicioId String?
   activo     Boolean           @default(true)
   orden      Int               @default(0)
+  /// Minutos de limpieza/rotación entre dos citas del recurso (quirófano, endoscopia).
+  minutosLimpieza Int          @default(0)
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
 
@@ -8664,6 +8666,9 @@ enum HospCitaEstancia {
 }
 
 enum HospCitaEstado {
+  /// Solicitud por programar: tiene unidad y fecha (la hora puede faltar),
+  /// no ocupa el recurso ni cuenta para empalmes hasta que se programa.
+  SOLICITADA
   PROGRAMADA
   CONFIRMADA
   EN_CURSO
@@ -8708,6 +8713,8 @@ model HospCita {
   camaId                  String?
   /// [{ descripcion, cantidad, origen: HOSPITAL|PROVEEDOR|PACIENTE }]
   insumos                 Json?
+  /// Solicitud sin hora confirmada: `inicio` lleva sólo el día y `fin` la duración pedida.
+  horaPorDefinir          Boolean           @default(false)
 
   company       Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   recurso       HospRecurso     @relation("CitaRecurso", fields: [recursoId], references: [id])

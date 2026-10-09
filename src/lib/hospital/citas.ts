@@ -11,7 +11,13 @@ import { nombreCompleto } from "./util";
 type Db = PrismaClient | Prisma.TransactionClient;
 
 export const CITA_TIPOS = ["CIRUGIA", "CONSULTA", "PROCEDIMIENTO", "ESTUDIO", "OTRO"] as const;
-export const CITA_ESTADOS = ["PROGRAMADA", "CONFIRMADA", "EN_CURSO", "TERMINADA", "CANCELADA", "NO_ASISTIO"] as const;
+export const CITA_ESTADOS = ["SOLICITADA", "PROGRAMADA", "CONFIRMADA", "EN_CURSO", "TERMINADA", "CANCELADA", "NO_ASISTIO"] as const;
+/**
+ * Estados que no ocupan el recurso: no cuentan para empalmes ni como cirugía
+ * programada. SOLICITADA es una petición por programar (hoja 2 del Excel).
+ */
+export const CITA_NO_OCUPA = ["SOLICITADA", "CANCELADA", "NO_ASISTIO"] as const;
+export const ocupaRecurso = (estado: string) => !(CITA_NO_OCUPA as readonly string[]).includes(estado);
 
 export const CITA_ESTANCIAS = ["AMBULATORIA", "HOSPITALIZACION"] as const;
 export const INSUMO_ORIGENES = ["HOSPITAL", "PROVEEDOR", "PACIENTE"] as const;
@@ -49,6 +55,7 @@ export const citaCamposSchema = z.object({
   estancia: z.enum(CITA_ESTANCIAS).nullable().optional(),
   camaId: z.string().nullable().optional(),
   insumos: z.array(insumoCitaSchema).max(40).nullable().optional(),
+  horaPorDefinir: z.boolean().optional(),
 });
 export type CitaCampos = z.infer<typeof citaCamposSchema>;
 
@@ -102,27 +109,39 @@ export const incluyeCita = {
   cotizacion: { select: { id: true, folio: true, estado: true } },
 } as const;
 
-/** La cita viva que se cruza con [inicio, fin) en el recurso, si la hay. */
+/**
+ * La cita viva que se cruza con [inicio, fin) en el recurso, si la hay. Si el
+ * recurso pide minutos de limpieza entre casos, el hueco cuenta: una cita que
+ * termina a las 10:00 en un quirófano con 30 min choca con otra a las 10:15.
+ */
 export async function citaEmpalmada(
   db: Db,
   args: { recursoId: string; inicio: Date; fin: Date; excluirId?: string | null }
 ) {
-  return db.hospCita.findFirst({
+  const recurso = await db.hospRecurso.findUnique({ where: { id: args.recursoId }, select: { minutosLimpieza: true } });
+  const limpieza = recurso?.minutosLimpieza ?? 0;
+  const ms = limpieza * 60_000;
+  const choque = await db.hospCita.findFirst({
     where: {
       recursoId: args.recursoId,
       ...(args.excluirId ? { id: { not: args.excluirId } } : {}),
-      estado: { notIn: ["CANCELADA", "NO_ASISTIO"] },
-      inicio: { lt: args.fin },
-      fin: { gt: args.inicio },
+      estado: { notIn: [...CITA_NO_OCUPA] },
+      inicio: { lt: new Date(args.fin.getTime() + ms) },
+      fin: { gt: new Date(args.inicio.getTime() - ms) },
     },
     select: { id: true, titulo: true, inicio: true, fin: true, pacienteNombre: true, recurso: { select: { nombre: true } } },
     orderBy: { inicio: "asc" },
   });
+  if (!choque) return null;
+  // ¿Se enciman de verdad o sólo no deja el hueco de limpieza?
+  const soloLimpieza = choque.inicio.getTime() >= args.fin.getTime() || choque.fin.getTime() <= args.inicio.getTime();
+  return { ...choque, limpieza: soloLimpieza ? limpieza : 0 };
 }
 
-export function describirEmpalme(c: { titulo: string; inicio: Date; fin: Date; pacienteNombre: string | null; recurso: { nombre: string } }): string {
+export function describirEmpalme(c: { titulo: string; inicio: Date; fin: Date; pacienteNombre: string | null; recurso: { nombre: string }; limpieza?: number }): string {
   const quien = c.pacienteNombre ? ` (${c.pacienteNombre})` : "";
-  return `${c.recurso.nombre} ya tiene «${c.titulo}»${quien} de ${horaLocal(c.inicio)} a ${horaLocal(c.fin)}`;
+  const base = `${c.recurso.nombre} ya tiene «${c.titulo}»${quien} de ${horaLocal(c.inicio)} a ${horaLocal(c.fin)}`;
+  return c.limpieza ? `${base} y necesita ${c.limpieza} min de limpieza entre casos` : base;
 }
 
 export function serializarCita<T extends { paciente?: { id: string; nombre: string; apellidoPaterno: string; apellidoMaterno: string | null; fechaNacimiento?: Date | null } | null }>(c: T) {

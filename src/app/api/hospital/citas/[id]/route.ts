@@ -9,7 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { AuthzError, requireModule, requireWriter } from "@/lib/authz";
 import { withHospital } from "@/lib/hospital/with-hospital";
 import { bitacora, error, errorZod } from "@/lib/hospital/http";
-import { citaCamposSchema, citaEmpalmada, datosHojaCita, describirEmpalme, incluyeCita, serializarCita, validarVinculosCita } from "@/lib/hospital/citas";
+import { citaCamposSchema, citaEmpalmada, datosHojaCita, describirEmpalme, incluyeCita, ocupaRecurso, serializarCita, validarVinculosCita } from "@/lib/hospital/citas";
 
 export const PATCH = withHospital(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
   const { id } = await ctx.params;
@@ -37,7 +37,7 @@ export const PATCH = withHospital(async (req: Request, ctx: { params: Promise<{ 
   const recursoId = d.recursoId ?? citaActual.recursoId;
   const estado = d.estado ?? citaActual.estado;
   const seMueve = d.recursoId !== undefined || d.inicio !== undefined || d.fin !== undefined || (d.estado !== undefined && d.estado !== citaActual.estado);
-  if (seMueve && estado !== "CANCELADA" && estado !== "NO_ASISTIO") {
+  if (seMueve && ocupaRecurso(estado)) {
     const choque = await citaEmpalmada(tx, { recursoId, inicio, fin, excluirId: id });
     if (choque) return error(describirEmpalme(choque), 409);
   }
@@ -57,6 +57,8 @@ export const PATCH = withHospital(async (req: Request, ctx: { params: Promise<{ 
       ...(d.cotizacionId !== undefined ? { cotizacionId: d.cotizacionId } : {}),
       ...(d.notas !== undefined ? { notas: d.notas?.trim() || null } : {}),
       ...datosHojaCita(d, citaActual),
+      // Programar una solicitud fija la hora: deja de estar «por definir».
+      horaPorDefinir: estado === "SOLICITADA" ? (d.horaPorDefinir ?? citaActual.horaPorDefinir) : false,
     },
     include: incluyeCita,
   });
