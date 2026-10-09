@@ -343,3 +343,46 @@ export async function listarDocumentosPaciente(db: Db, a: { pacienteId: string; 
   });
   return docs.map((d) => documentoConFirmas(d, { conTexto: false }));
 }
+
+// ── Firma en pantalla de los documentos clínicos ─────────────────────────────
+
+/**
+ * Consentimientos clínicos y cuestionario de imagen: se llenan en el
+ * expediente como siempre y se pueden firmar en papel. Si se firman en
+ * pantalla, este paso congela el texto legal con el contenido de ese momento
+ * (textoFirmado + hashContenido) y fija los firmantes. Mientras nadie firme
+ * se puede volver a editar (el PATCH devuelve el documento a borrador).
+ */
+export const TIPOS_FIRMA_CLINICA: readonly HospDocumentoTipo[] = [
+  "CONSENTIMIENTO_CIRUGIA",
+  "CONSENTIMIENTO_ANESTESIA",
+  "CONSENTIMIENTO_PROCEDIMIENTO_IMAGEN",
+  "CUESTIONARIO_SEGURIDAD_IMAGEN",
+];
+
+export async function prepararFirmaDocumento(db: Db, a: { documentoId: string; ahora?: Date }): Promise<{ documento: DocumentoSerializado; advertencias: string[] }> {
+  const doc = await db.hospDocumento.findUnique({ where: { id: a.documentoId }, omit: { archivo: true }, include: { _count: { select: { firmas: true } } } });
+  if (!doc) throw new HospitalError(404, "Documento no encontrado");
+  if (!TIPOS_FIRMA_CLINICA.includes(doc.tipo)) throw new HospitalError(400, `«${doc.nombre}» no se firma en pantalla desde aquí`);
+  if (doc.estado === "FIRMADO") throw new HospitalError(409, `«${doc.nombre}» ya está firmado`);
+  if (doc._count.firmas > 0) throw new HospitalError(409, `«${doc.nombre}» ya tiene firmas en pantalla: su texto no cambia`);
+  const motivo = errorContenido(doc.tipo, doc.contenido, true);
+  if (motivo) throw new HospitalError(400, motivo);
+
+  const contenido = (doc.contenido as Record<string, unknown> | null) ?? null;
+  const { ctx, plantillas } = await contextoPlantilla(db, { companyId: doc.companyId, pacienteId: doc.pacienteId, episodioId: doc.episodioId, contenido, ahora: a.ahora ?? new Date() });
+  const render = renderizarPlantilla(doc.tipo, ctx, plantillas);
+  if (!render) throw new HospitalError(400, `«${doc.nombre}» no tiene texto legal`);
+  const actualizado = await db.hospDocumento.update({
+    where: { id: doc.id },
+    data: {
+      plantillaVersion: render.version,
+      textoFirmado: render.texto,
+      hashContenido: hashContenidoDocumento(render.texto, contenido),
+      firmasRequeridas: firmasRequeridasPara(doc.tipo),
+    },
+    omit: { archivo: true },
+    include: { firmas: true },
+  });
+  return { documento: documentoConFirmas(actualizado), advertencias: render.advertencias };
+}

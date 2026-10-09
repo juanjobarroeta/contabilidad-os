@@ -32,6 +32,9 @@ export const TIPOS_DOCUMENTO = [
   "CONSENTIMIENTO_DATOS",
   "CONSTANCIA_CURP",
   "RESUMEN_CLINICO",
+  "CONSENTIMIENTO_PROCEDIMIENTO_IMAGEN",
+  "CUESTIONARIO_SEGURIDAD_IMAGEN",
+  "REGISTRO_PROCEDIMIENTO_IMAGEN",
   "OTRO",
 ] as const satisfies readonly HospDocumentoTipo[];
 
@@ -52,6 +55,7 @@ export const TIPOS_CONSENTIMIENTO: readonly HospDocumentoTipo[] = [
   "CONSENTIMIENTO_ANESTESIA",
   "CONSENTIMIENTO_TRANSFUSION",
   "CONSENTIMIENTO_HOSPITALIZACION",
+  "CONSENTIMIENTO_PROCEDIMIENTO_IMAGEN",
 ];
 
 /** Qué firmas exige el documento para pasar a FIRMADO. */
@@ -78,7 +82,8 @@ const consentimiento = (titulo: string, extra: readonly string[] = []): Plantill
   titulo,
   fundamento: "NOM-004-SSA3-2012 §10.1 · RLGSMPSAM arts. 80-83",
   obligatorias: ["procedimiento", "riesgos", "beneficios", "alternativas"],
-  opcionales: ["establecimiento", "consecuenciasDeNoAceptar", "autorizaProcedimientosAdicionales", "observaciones", "lugarFechaHora", ...extra],
+  // paraQuien (PROPIO/FAMILIAR) y la persona autorizada: el formato Haltus los pide en todos los consentimientos.
+  opcionales: ["establecimiento", "consecuenciasDeNoAceptar", "autorizaProcedimientosAdicionales", "observaciones", "lugarFechaHora", "paraQuien", "personaAutorizada", "parentescoAutorizada", "telefonoAutorizada", ...extra],
   firma: { firmante: true, testigos: true, medico: true },
 });
 
@@ -87,6 +92,21 @@ export const PLANTILLAS_DOCUMENTO: Record<HospDocumentoTipo, PlantillaDocumento>
   CONSENTIMIENTO_ANESTESIA: consentimiento("Consentimiento informado para anestesia", ["tipoAnestesia"]),
   CONSENTIMIENTO_TRANSFUSION: consentimiento("Consentimiento informado para transfusión", ["componentes"]),
   CONSENTIMIENTO_HOSPITALIZACION: consentimiento("Consentimiento de ingreso hospitalario"),
+  CONSENTIMIENTO_PROCEDIMIENTO_IMAGEN: consentimiento("Consentimiento informado para biopsias y procedimientos mínimamente invasivos en imagenología", ["tipoAnestesia"]),
+  CUESTIONARIO_SEGURIDAD_IMAGEN: {
+    titulo: "Cuestionario de seguridad para estudios de imagen",
+    fundamento: "NOM-229-SSA1-2002 · NOM-004-SSA3-2012 §9.2",
+    obligatorias: ["estudio", "preguntas"],
+    opcionales: ["medicoSolicitante", "hospitalReferencia", "resumenRespuestas", "creatinina", "fechaCreatinina", "observaciones", "declaranteCalidad", "identificacionCorroborada", "preparacionVerificada", "aptoEstudio", "tecnico", "tecnicoCedula"],
+    firma: { firmante: true, testigos: false, medico: false },
+  },
+  REGISTRO_PROCEDIMIENTO_IMAGEN: {
+    titulo: "Registro de procedimiento mínimamente invasivo, anestesia y control de insumos",
+    fundamento: "NOM-004-SSA3-2012 §8.8 · NOM-006-SSA3-2011",
+    obligatorias: ["tipoProcedimiento", "sitioAnatomico", "metodoGuia", "descripcion"],
+    opcionales: ["horaInicio", "horaFin", "anestesiologo", "anestesiologoCedula", "tipoAnestesia", "insumos", "complicaciones", "observaciones"],
+    firma: { firmante: false, testigos: false, medico: true },
+  },
   REGISTRO_ANESTESICO: {
     titulo: "Registro anestésico",
     fundamento: "NOM-006-SSA3-2011 · NOM-004-SSA3-2012 §8.6",
@@ -210,6 +230,31 @@ export const ETIQUETA_CONTENIDO: Record<string, string> = {
   estatus: "Estatus en RENAPO",
   fechaConsulta: "Fecha de consulta a RENAPO",
   oid: "OID del documento",
+  paraQuien: "Se autoriza para",
+  personaAutorizada: "Persona autorizada por el paciente",
+  parentescoAutorizada: "Parentesco de la persona autorizada",
+  telefonoAutorizada: "Teléfono de la persona autorizada",
+  medicoSolicitante: "Médico solicitante",
+  hospitalReferencia: "Hospital de referencia",
+  preguntas: "Cuestionario de seguridad",
+  resumenRespuestas: "Respuestas del cuestionario",
+  creatinina: "Creatinina",
+  fechaCreatinina: "Fecha de la creatinina",
+  declaranteCalidad: "Declara en su carácter de",
+  identificacionCorroborada: "Identificación del paciente corroborada",
+  preparacionVerificada: "Preparación verificada",
+  aptoEstudio: "Apto para realizar el estudio",
+  tecnico: "Técnico radiólogo",
+  tecnicoCedula: "Cédula del técnico",
+  tipoProcedimiento: "Tipo de procedimiento",
+  sitioAnatomico: "Órgano o sitio anatómico",
+  metodoGuia: "Método de guía",
+  descripcion: "Descripción del procedimiento",
+  horaInicio: "Hora de inicio",
+  horaFin: "Hora de término",
+  anestesiologoCedula: "Cédula del anestesiólogo",
+  insumos: "Control de insumos",
+  complicaciones: "Complicaciones",
 };
 
 const MAX_CLAVES = 60;

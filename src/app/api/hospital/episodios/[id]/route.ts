@@ -167,6 +167,8 @@ const datosSchema = z.object({
   diagnostico: z.string().max(300).nullable().optional(),
   procedimiento: z.string().max(300).nullable().optional(),
   motivo: z.string().max(1000).nullable().optional(),
+  medicoReferencia: z.string().trim().max(160).nullable().optional(),
+  unidadReferencia: z.string().trim().max(200).nullable().optional(),
   autorizacionPagador: z.string().max(80).nullable().optional(),
   notasAdmin: z.string().max(4000).nullable().optional(),
   diagnosticoIngresoCie10: z.string().max(10).nullable().optional(),
@@ -448,6 +450,7 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
     if (ep.estado === "CANCELADO") return error(`El episodio ${ep.folio} está cancelado`, 409);
     const { action: _a, triageAt, ...resto } = d;
     const campos: Record<string, unknown> = Object.fromEntries(Object.entries(resto).filter(([, v]) => v !== undefined));
+    for (const k of ["medicoReferencia", "unidadReferencia"]) if (campos[k] === "") campos[k] = null;
     if (campos.medicoId) {
       const m = await prisma.hospMedico.findUnique({ where: { id: campos.medicoId as string }, select: { companyId: true } });
       if (!m || m.companyId !== ep.companyId) return error("medicoId inválido");

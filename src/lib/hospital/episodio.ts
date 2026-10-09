@@ -70,6 +70,8 @@ export interface CrearEpisodioArgs {
   diagnostico?: string | null;
   procedimiento?: string | null;
   motivo?: string | null;
+  medicoReferencia?: string | null;
+  unidadReferencia?: string | null;
   autorizacionPagador?: string | null;
   notasAdmin?: string | null;
   cotizacionId?: string | null;
@@ -252,6 +254,8 @@ export async function crearEpisodio(db: PrismaClient, args: CrearEpisodioArgs) {
           diagnostico: args.diagnostico?.trim() || null,
           procedimiento: args.procedimiento?.trim() || (cotizacion?.procedimiento ?? null),
           motivo: args.motivo?.trim() || null,
+          medicoReferencia: args.medicoReferencia?.trim() || null,
+          unidadReferencia: args.unidadReferencia?.trim() || null,
           autorizacionPagador: args.autorizacionPagador?.trim() || null,
           notasAdmin: args.notasAdmin?.trim() || null,
           cotizacionId: cotizacion?.id ?? null,

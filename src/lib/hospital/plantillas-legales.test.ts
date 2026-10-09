@@ -27,8 +27,11 @@ const ctx: ContextoPlantilla = {
 };
 
 describe("plantillas legales default", () => {
-  it("existen para los seis tipos, con versión y marcadores conocidos", () => {
-    expect(TIPOS_CON_PLANTILLA).toEqual(["CONTRATO_SERVICIOS", "COMPROMISO_PAGO", "CESION_DERECHOS", "CONSENTIMIENTO_DATOS", "AVISO_PRIVACIDAD", "CONSENTIMIENTO_HOSPITALIZACION"]);
+  it("existen para los tipos del paquete y los consentimientos clínicos, con versión y marcadores conocidos", () => {
+    expect(TIPOS_CON_PLANTILLA).toEqual([
+      "CONTRATO_SERVICIOS", "COMPROMISO_PAGO", "CESION_DERECHOS", "CONSENTIMIENTO_DATOS", "AVISO_PRIVACIDAD", "CONSENTIMIENTO_HOSPITALIZACION",
+      "CONSENTIMIENTO_CIRUGIA", "CONSENTIMIENTO_ANESTESIA", "CONSENTIMIENTO_PROCEDIMIENTO_IMAGEN", "CUESTIONARIO_SEGURIDAD_IMAGEN",
+    ]);
     for (const t of TIPOS_CON_PLANTILLA) {
       expect(PLANTILLAS_LEGALES_DEFAULT[t].version).toBe(VERSION_PLANTILLAS_DEFAULT);
       const r = renderizarPlantilla(t, ctx, null)!;
@@ -45,6 +48,18 @@ describe("plantillas legales default", () => {
     expect(TIPOS_ADMISION).toContain("CONTRATO_SERVICIOS");
     expect(errorContenido("CONTRATO_SERVICIOS", null, true)).toBeNull();
     expect(errorContenido("CONSTANCIA_CURP", { curp: "X", estatus: "AN" }, true)).toBeNull();
+  });
+
+  it("los consentimientos clínicos y el cuestionario de imagen resuelven su contenido", () => {
+    const anestesia = renderizarPlantilla("CONSENTIMIENTO_ANESTESIA", { ...ctx, contenido: { procedimiento: "Reducción cerrada de muñeca", tipoAnestesia: "Mixta", paraQuien: "Mi persona" } }, null)!;
+    expect(anestesia.texto).toContain("Reducción cerrada de muñeca");
+    expect(anestesia.texto).toContain("Tipo de anestesia o sedación: Mixta");
+    expect(anestesia.texto).toContain("4. Que puedo requerir tratamientos complementarios");
+    const cuestionario = renderizarPlantilla("CUESTIONARIO_SEGURIDAD_IMAGEN", { ...ctx, contenido: { estudio: "Discólisis", resumenRespuestas: "¿Padece asma?: Sí (salbutamol)", aptoEstudio: "Sí" } }, null)!;
+    expect(cuestionario.texto).toContain("¿Padece asma?: Sí (salbutamol)");
+    expect(cuestionario.texto).toContain("Apto para realizar el estudio: Sí");
+    expect(FIRMAS_REQUERIDAS.CUESTIONARIO_SEGURIDAD_IMAGEN).toEqual(["PACIENTE|REPRESENTANTE", "TECNICO"]);
+    expect(FIRMAS_REQUERIDAS.CONSENTIMIENTO_PROCEDIMIENTO_IMAGEN).toEqual(["PACIENTE|REPRESENTANTE", "TESTIGO1", "TESTIGO2", "MEDICO"]);
   });
 
   it("firmas requeridas por tipo como las describe el contrato", () => {

@@ -1211,6 +1211,7 @@ async function main() {
       TESTIGO1: { nombre: "Rodrigo Salazar Mendoza" },
       TESTIGO2: { nombre: "Enf. Laura Méndez" },
       MEDICO: { nombre: "Dr. Alonso Vega", identificacion: "5583201" },
+      TECNICO: { nombre: "T.R. Fátima Cortés (Imagenología)" },
     };
     let minuto = 32;
     for (const doc of paquete.documentos) {
