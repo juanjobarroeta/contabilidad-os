@@ -1,5 +1,5 @@
 /**
- * GET  /api/hospital/citas?companyId=…&desde=YYYY-MM-DD&hasta=YYYY-MM-DD[&recursoId=&medicoId=]
+ * GET  /api/hospital/citas?companyId=…&desde=YYYY-MM-DD&hasta=YYYY-MM-DD[&recursoId=&medicoId=&estado=]
  * POST /api/hospital/citas — 409 si empalma con otra cita viva del recurso.
  *
  * `desde`/`hasta` a secas son días locales completos (hasta inclusivo); sin
@@ -13,7 +13,7 @@ import { prisma } from "@/lib/prisma";
 import { requireMembership, requireModule, requireWriter } from "@/lib/authz";
 import { withHospital } from "@/lib/hospital/with-hospital";
 import { bitacora, error, errorZod, rangoDeQuery } from "@/lib/hospital/http";
-import { citaCamposSchema, citaEmpalmada, datosHojaCita, describirEmpalme, incluyeCita, puedeProgramarAgenda, serializarCita, validarVinculosCita } from "@/lib/hospital/citas";
+import { CITA_ESTADOS, citaCamposSchema, citaEmpalmada, datosHojaCita, describirEmpalme, incluyeCita, ocupaRecurso, puedeProgramarAgenda, serializarCita, validarVinculosCita } from "@/lib/hospital/citas";
 
 export const GET = withHospital(async (req: Request) => {
   const { searchParams } = new URL(req.url);
@@ -27,11 +27,13 @@ export const GET = withHospital(async (req: Request) => {
   if (!rango || rango.hasta <= rango.desde) return error("Rango de fechas inválido (desde, hasta)");
   const recursoId = searchParams.get("recursoId");
   const medicoId = searchParams.get("medicoId");
+  const estadoQ = searchParams.get("estado");
+  const estado = (CITA_ESTADOS as readonly string[]).includes(estadoQ ?? "") ? (estadoQ as (typeof CITA_ESTADOS)[number]) : null;
 
   const [recursos, citas, miembro] = await Promise.all([
     prisma.hospRecurso.findMany({
       where: { companyId, activo: true, tipo: { in: ["QUIROFANO", "CONSULTORIO", "SALA"] } },
-      select: { id: true, tipo: true, area: true, nombre: true, estado: true, orden: true },
+      select: { id: true, tipo: true, area: true, nombre: true, estado: true, orden: true, minutosLimpieza: true },
       orderBy: [{ tipo: "asc" }, { orden: "asc" }, { nombre: "asc" }],
     }),
     prisma.hospCita.findMany({
@@ -41,6 +43,7 @@ export const GET = withHospital(async (req: Request) => {
         fin: { gt: rango.desde },
         ...(recursoId ? { recursoId } : {}),
         ...(medicoId ? { medicoId } : {}),
+        ...(estado ? { estado } : {}),
       },
       include: incluyeCita,
       orderBy: { inicio: "asc" },
@@ -80,7 +83,7 @@ export const POST = withHospital(async (req: Request) => {
   if (v.error != null) return error(v.error);
 
   const estado = d.estado ?? "PROGRAMADA";
-  if (estado !== "CANCELADA" && estado !== "NO_ASISTIO") {
+  if (ocupaRecurso(estado)) {
     const choque = await citaEmpalmada(tx, { recursoId: d.recursoId, inicio, fin });
     if (choque) return error(describirEmpalme(choque), 409);
   }
@@ -101,6 +104,7 @@ export const POST = withHospital(async (req: Request) => {
       cotizacionId: d.cotizacionId ?? null,
       notas: d.notas?.trim() || null,
       ...datosHojaCita(d),
+      horaPorDefinir: estado === "SOLICITADA" && d.horaPorDefinir === true,
     },
     include: incluyeCita,
   });

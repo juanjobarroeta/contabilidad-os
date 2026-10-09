@@ -14,6 +14,7 @@ import type { EdadSaeh } from "./codigos";
 import { CLUES_ESTATUS_EN_OPERACION, TIPOLOGIAS_PSIQUIATRICAS } from "./codigos";
 import type { HojaSaeh, PacienteSaeh } from "./hoja";
 import type { RegistroSaeh } from "./registro";
+import { CITA_NO_OCUPA } from "../citas";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -117,7 +118,7 @@ const incluye = {
   traslados: { orderBy: { fecha: "asc" as const }, select: { fecha: true, tipo: true, deRecursoId: true, aRecursoId: true } },
   signos: { orderBy: { fecha: "desc" as const }, take: 30, select: { peso: true, talla: true } },
   notas: { where: { tipo: { in: ["PREANESTESICA", "POSTOPERATORIA"] as const }, reemplazadaPor: { is: null } }, select: { tipo: true, secciones: true } },
-  citas: { where: { tipo: "CIRUGIA" as const, estado: { notIn: ["CANCELADA", "NO_ASISTIO"] as const } }, select: { inicio: true, fin: true } },
+  citas: { where: { tipo: "CIRUGIA" as const, estado: { notIn: [...CITA_NO_OCUPA] } }, select: { inicio: true, fin: true } },
 } satisfies Prisma.HospEpisodioInclude;
 
 type EpisodioCargado = Prisma.HospEpisodioGetPayload<{ include: typeof incluye }>;

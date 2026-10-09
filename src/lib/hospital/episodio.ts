@@ -29,6 +29,7 @@ import { buscarCie, resolverCie } from "./cie";
 import { normalizarAsa } from "./notas";
 import { inicioDiaLocal } from "./tz";
 import { r2 } from "./util";
+import { CITA_NO_OCUPA } from "./citas";
 
 /** NOM-026-SSA3-2012: la cirugía ambulatoria egresa en un lapso no mayor a 12 h. */
 export const HORAS_LIMITE_AMBULATORIO = 12;
@@ -228,7 +229,7 @@ export async function crearEpisodio(db: PrismaClient, args: CrearEpisodioArgs) {
             companyId: args.companyId,
             pacienteId: paciente.id,
             recurso: { tipo: "QUIROFANO" },
-            estado: { notIn: ["CANCELADA", "NO_ASISTIO"] },
+            estado: { notIn: [...CITA_NO_OCUPA] },
             inicio: { gte: inicioDiaLocal(fechaIngreso) },
           },
         })) > 0;

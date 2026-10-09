@@ -1,7 +1,8 @@
 /**
  * PATCH /api/hospital/recursos/[id] — nombre, área, estado (LIMPIEZA→LIBRE,
- * FUERA_DE_SERVICIO…), servicio, activo, orden. No se pone LIBRE ni fuera de
- * servicio una cama que un episodio activo ocupa (409): eso lo hace el alta.
+ * FUERA_DE_SERVICIO…), servicio, activo, orden, minutos de limpieza entre
+ * citas. No se pone LIBRE ni fuera de servicio una cama que un episodio
+ * activo ocupa (409): eso lo hace el alta.
  */
 
 import { NextResponse } from "next/server";
@@ -19,6 +20,7 @@ const schema = z.object({
   servicioId: z.string().nullable().optional(),
   activo: z.boolean().optional(),
   orden: z.number().int().min(0).max(10000).optional(),
+  minutosLimpieza: z.number().int().min(0).max(240).optional(),
 });
 
 export const PATCH = withHospital(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {

@@ -55,6 +55,7 @@ const createSchema = z.object({
   nombre: z.string().min(1).max(60),
   servicioId: z.string().nullable().optional(),
   orden: z.number().int().min(0).max(10000).optional(),
+  minutosLimpieza: z.number().int().min(0).max(240).optional(),
   estado: z.enum(["LIBRE", "LIMPIEZA", "FUERA_DE_SERVICIO"]).optional(),
 });
 
