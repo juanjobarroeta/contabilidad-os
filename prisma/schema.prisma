@@ -8190,10 +8190,14 @@ model HospServicio {
   claveProdServ String?
   claveUnidad   String?
   activo        Boolean            @default(true)
+  /// Grupo de la lista de precios del hospital (LC, PAT, ENDOS, TAC…): así
+  /// viene en su sistema y así lo buscan; `categoria` es la del cargo.
+  grupo         String?
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   tarifas            HospTarifa[]
+  citas              HospCita[]
   cargos             HospCargo[]
   recursos           HospRecurso[]
   cotizacionPartidas HospCotizacionPartida[]
@@ -8724,6 +8728,8 @@ model HospCita {
   insumos                 Json?
   /// Solicitud sin hora confirmada: `inicio` lleva sólo el día y `fin` la duración pedida.
   horaPorDefinir          Boolean           @default(false)
+  /// Servicio del tarifario que se hace (código y nombre de la lista del hospital).
+  servicioId              String?
 
   company       Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   recurso       HospRecurso     @relation("CitaRecurso", fields: [recursoId], references: [id])
@@ -8731,6 +8737,7 @@ model HospCita {
   paciente      HospPaciente?   @relation(fields: [pacienteId], references: [id])
   medico        HospMedico?     @relation("CitaMedico", fields: [medicoId], references: [id])
   anestesiologo HospMedico?     @relation("CitaAnestesiologo", fields: [anestesiologoId], references: [id])
+  servicio      HospServicio?   @relation(fields: [servicioId], references: [id], onDelete: SetNull)
   episodio   HospEpisodio?   @relation(fields: [episodioId], references: [id])
   cotizacion HospCotizacion? @relation(fields: [cotizacionId], references: [id])
 
