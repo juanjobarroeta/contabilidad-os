@@ -18,6 +18,7 @@
 
 import { prisma } from "../prisma";
 import { esComprobanteDeEgreso } from "../contabilidad/nota-credito";
+import { consultarPorLotes } from "../prisma-lotes";
 
 export interface FacturaInput {
   id: string;
@@ -316,22 +317,26 @@ export async function saldosPorCliente(companyId: string): Promise<Map<string, n
     select: { id: true, customerId: true, total: true, tipoSat: true },
   });
   const ids = facturas.map((f) => f.id);
+  // Lotes: `companyId`/`status`/`monto` en el mismo `where` que el `IN` le
+  // impiden a Prisma partir sola la consulta (ver prisma-lotes.ts), y esta
+  // cartera puede tener más facturas que el tope de bind variables de
+  // Postgres (CONTABILIDAD-OS-H: 32,770 recibidos, máximo 32,767).
   const [directos, detalles] = await Promise.all([
-    ids.length
-      ? prisma.bankTransaction.findMany({
-          where: { companyId, status: "MATCHED", invoiceId: { in: ids }, monto: { gt: 0 } },
-          select: { invoiceId: true, monto: true },
-        })
-      : [],
-    ids.length
-      ? prisma.conciliacionDetalle.findMany({
-          where: {
-            invoiceId: { in: ids },
-            bankTransaction: { companyId, status: "MATCHED", monto: { gt: 0 }, invoiceId: null },
-          },
-          select: { invoiceId: true, montoAsignado: true },
-        })
-      : [],
+    consultarPorLotes(ids, (lote) =>
+      prisma.bankTransaction.findMany({
+        where: { companyId, status: "MATCHED", invoiceId: { in: lote }, monto: { gt: 0 } },
+        select: { invoiceId: true, monto: true },
+      })
+    ),
+    consultarPorLotes(ids, (lote) =>
+      prisma.conciliacionDetalle.findMany({
+        where: {
+          invoiceId: { in: lote },
+          bankTransaction: { companyId, status: "MATCHED", monto: { gt: 0 }, invoiceId: null },
+        },
+        select: { invoiceId: true, montoAsignado: true },
+      })
+    ),
   ]);
 
   const clienteDe = new Map<string, string>();
