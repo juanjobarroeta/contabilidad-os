@@ -56,6 +56,7 @@ export const citaCamposSchema = z.object({
   camaId: z.string().nullable().optional(),
   insumos: z.array(insumoCitaSchema).max(40).nullable().optional(),
   horaPorDefinir: z.boolean().optional(),
+  servicioId: z.string().nullable().optional(),
 });
 export type CitaCampos = z.infer<typeof citaCamposSchema>;
 
@@ -77,6 +78,7 @@ export interface DatosHojaCita {
   estancia?: (typeof CITA_ESTANCIAS)[number] | null;
   camaId?: string | null;
   insumos?: Prisma.InputJsonValue | typeof Prisma.DbNull;
+  servicioId?: string | null;
 }
 
 export function datosHojaCita(d: Partial<CitaCampos>, actual?: { anestesiologoId: string | null } | null): DatosHojaCita {
@@ -96,6 +98,7 @@ export function datosHojaCita(d: Partial<CitaCampos>, actual?: { anestesiologoId
   if (d.estancia !== undefined) out.estancia = d.estancia;
   if (d.camaId !== undefined) out.camaId = d.camaId || null;
   if (d.insumos !== undefined) out.insumos = d.insumos?.length ? d.insumos : Prisma.DbNull;
+  if (d.servicioId !== undefined) out.servicioId = d.servicioId || null;
   return out;
 }
 
@@ -105,6 +108,7 @@ export const incluyeCita = {
   medico: { select: { id: true, nombre: true, especialidad: true } },
   anestesiologo: { select: { id: true, nombre: true, especialidad: true } },
   cama: { select: { id: true, nombre: true, area: true } },
+  servicio: { select: { id: true, clave: true, nombre: true, grupo: true } },
   episodio: { select: { id: true, folio: true, estado: true } },
   cotizacion: { select: { id: true, folio: true, estado: true } },
 } as const;
@@ -152,7 +156,7 @@ export function serializarCita<T extends { paciente?: { id: string; nombre: stri
 export async function validarVinculosCita(
   db: Db,
   companyId: string,
-  d: { recursoId?: string; pacienteId?: string | null; medicoId?: string | null; anestesiologoId?: string | null; camaId?: string | null; episodioId?: string | null; cotizacionId?: string | null }
+  d: { recursoId?: string; pacienteId?: string | null; medicoId?: string | null; anestesiologoId?: string | null; camaId?: string | null; servicioId?: string | null; episodioId?: string | null; cotizacionId?: string | null }
 ): Promise<{ error: string } | { error: null; recurso: { id: string; nombre: string; tipo: string } | null; pacienteNombre: string | null }> {
   let recurso: { id: string; nombre: string; tipo: string } | null = null;
   if (d.recursoId) {
@@ -179,6 +183,10 @@ export async function validarVinculosCita(
     const c = await db.hospRecurso.findUnique({ where: { id: d.camaId }, select: { companyId: true, tipo: true } });
     if (!c || c.companyId !== companyId) return { error: "camaId inválido" };
     if (c.tipo !== "CAMA") return { error: "La habitación de la cita debe ser una cama del censo" };
+  }
+  if (d.servicioId) {
+    const sv = await db.hospServicio.findUnique({ where: { id: d.servicioId }, select: { companyId: true } });
+    if (!sv || sv.companyId !== companyId) return { error: "servicioId inválido" };
   }
   if (d.episodioId) {
     const e = await db.hospEpisodio.findUnique({ where: { id: d.episodioId }, select: { companyId: true } });

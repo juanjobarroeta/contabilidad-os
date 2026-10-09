@@ -15,6 +15,7 @@ export const servicioSchema = z.object({
   claveProdServ: z.string().max(10).nullable().optional(),
   claveUnidad: z.string().max(5).nullable().optional(),
   activo: z.boolean().optional(),
+  grupo: z.string().trim().max(20).nullable().optional(),
 });
 
 export const tarifasSchema = z.object({
