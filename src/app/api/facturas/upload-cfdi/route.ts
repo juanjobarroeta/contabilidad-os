@@ -6,6 +6,7 @@ import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { importCfdiFromXml } from "@/lib/facturas/import-cfdi";
 import { REGIMEN_PLACEHOLDER } from "@/lib/facturas/identidad-receptor";
 import { meteredCreate } from "@/lib/costos/anthropic";
+import { MODELO_LECTOR } from "@/lib/ai/modelos";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -61,7 +62,7 @@ export async function POST(req: Request) {
   const anthropic = new Anthropic();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const response: any = await meteredCreate(anthropic, { companyId, subtipo: "facturas.upload_cfdi" }, {
-    model: "claude-sonnet-4-5",
+    model: MODELO_LECTOR,
     max_tokens: 2048,
     system: `Extrae los datos de esta factura/CFDI mexicana en JSON, sin markdown. Convención: tipo "INGRESO" si la empresa la emitió, "EGRESO" si la recibió. Campos: { "uuid": string|null, "fecha": "YYYY-MM-DD"|null, "rfcEmisor": string|null, "nombreEmisor": string|null, "rfcReceptor": string|null, "nombreReceptor": string|null, "subtotal": number, "totalImpuestos": number, "total": number, "metodoPago": "PUE"|"PPD"|null, "formaPago": string|null }. Montos como números. Si falta algo, null.`,
     messages: [

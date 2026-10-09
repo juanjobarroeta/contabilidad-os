@@ -27,8 +27,9 @@ import { prisma } from "../prisma";
 import { meteredCreate } from "@/lib/costos/anthropic";
 import { embedTexts, toVectorLiteral } from "./embed";
 import { buildCita } from "./search";
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 
-export const RESUMEN_MODEL = process.env.AI_RESUMEN_MODEL ?? "claude-haiku-4-5-20251001";
+export const RESUMEN_MODEL = process.env.AI_RESUMEN_MODEL ?? MODELO_RAPIDO;
 /** Caracteres del texto de la unidad que ve el modelo (todas las partes, en orden). */
 const TEXTO_MAX = 6000;
 const REGIMENES_VALIDOS = new Set(["601", "603", "605", "606", "608", "610", "611", "612", "614", "616", "620", "621", "622", "623", "624", "625", "626"]);

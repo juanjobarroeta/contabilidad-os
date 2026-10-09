@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { meteredCreate } from "@/lib/costos/anthropic";
 import { asegurarUsoIA, respuestaTopeIA } from "@/lib/ai/guardia";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { MODELO_LECTOR } from "@/lib/ai/modelos";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/bancos/parse-pdf
@@ -89,7 +90,7 @@ export async function POST(req: Request) {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const response: any = await meteredCreate(anthropic, { subtipo: "bancos.parse_pdf", companyId, userId }, {
-      model: "claude-sonnet-4-5",
+      model: MODELO_LECTOR,
       max_tokens: 8192, // Bank statements can be long
       system: SYSTEM_PROMPT,
       messages: [{

@@ -17,6 +17,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import { recordLlmCost } from "@/lib/costos/record";
+import { MODELO_LECTOR, ajustarParams } from "@/lib/ai/modelos";
 
 let _anthropic: Anthropic | null = null;
 const anthropic = () => (_anthropic ??= new Anthropic());
@@ -137,8 +138,8 @@ export async function generarSintesisAuditoria(
     // Configurable por despliegue (AI_AUDIT_MODEL); Sonnet 4.5 sigue siendo el
     // default: la síntesis es un resumen de 220 palabras sobre datos ya
     // agrupados, no necesita el modelo del chat.
-    const model = process.env.AI_AUDIT_MODEL ?? "claude-sonnet-4-5";
-    const response = await anthropic().messages.create({
+    const model = process.env.AI_AUDIT_MODEL ?? MODELO_LECTOR;
+    const response = await anthropic().messages.create(ajustarParams({
       model,
       max_tokens: 700,
       system: SYSTEM,
@@ -148,7 +149,7 @@ export async function generarSintesisAuditoria(
           content: `Empresa: ${company.razonSocial} (${company.rfc}, régimen ${company.regimenFiscal}). ${abiertos.length} hallazgo(s) abiertos en ${grupos.length} grupo(s):\n\n${JSON.stringify(grupos, null, 2)}`,
         },
       ],
-    });
+    }));
     void recordLlmCost(response.model ?? model, response.usage, {
       companyId,
       userId: opts.userId ?? null,

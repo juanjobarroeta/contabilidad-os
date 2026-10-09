@@ -19,6 +19,7 @@ import { prisma } from "@/lib/prisma";
 import { apuntar } from "./bitacora";
 import { alcance, despachoParaCrear } from "./despacho";
 import { recordLlmCost, type CostCtx } from "@/lib/costos/record";
+import { MODELO_RAPIDO, ajustarParams } from "@/lib/ai/modelos";
 
 export interface Parte {
   id?: string;
@@ -407,7 +408,7 @@ export async function ejecutarHerramientaAsunto(
 
 // ── Extracción desde un documento ────────────────────────────────────────────
 
-const MODELO_EXTRACCION = process.env.AI_RESUMEN_MODEL ?? "claude-haiku-4-5-20251001";
+const MODELO_EXTRACCION = process.env.AI_RESUMEN_MODEL ?? MODELO_RAPIDO;
 
 export interface DatosExtraidos {
   partes: Partial<Parte>[];
@@ -422,7 +423,7 @@ export interface DatosExtraidos {
 /** Partes, expediente y autoridad que un documento declara (proemio, encabezado, comparecientes). Nunca inventa: si no está, no viene. */
 export async function extraerDatosDeDocumento(anthropic: Anthropic, doc: { nombre: string; texto: string; id: string }, opts: { cost: CostCtx }): Promise<DatosExtraidos> {
   const muestra = doc.texto.length > 40_000 ? `${doc.texto.slice(0, 30_000)}\n[…]\n${doc.texto.slice(-8_000)}` : doc.texto;
-  const res = await anthropic.messages.create({
+  const res = await anthropic.messages.create(ajustarParams({
     model: MODELO_EXTRACCION,
     max_tokens: 1_500,
     system: "Extraes datos de documentos jurídicos mexicanos. Sólo lo que el texto dice literalmente; nada inferido ni inventado. Respondes únicamente con JSON.",
@@ -432,7 +433,7 @@ export async function extraerDatosDeDocumento(anthropic: Anthropic, doc: { nombr
         content: `Documento «${doc.nombre}». Extrae, si aparecen: las PARTES (cada una con rol —actor, demandado, mutuante, mutuario, arrendador, arrendatario, prestador, cliente, apoderado…—, tipoPersona fisica|moral, nombre completo tal cual, rfc, curp, domicilio, representante), el expediente, la autoridad (juzgado/tribunal), la materia, la vía o tipo de juicio, la entidad federativa (clave SAT: PUE, CHH, CMX, JAL…) y el tipo de documento (demanda, contestación, contrato, sentencia, acuerdo, pliego, otro).\nJSON: {"partes":[{"rol":"","tipoPersona":"fisica","nombre":"","rfc":null,"curp":null,"domicilio":null,"representante":null}],"expediente":null,"autoridad":null,"materia":null,"via":null,"entidad":null,"tipoDocumento":null}\n\n${muestra}`,
       },
     ],
-  });
+  }));
   await recordLlmCost(MODELO_EXTRACCION, res.usage, { ...opts.cost, subtipo: "ai.juridico.extraccion" });
   const texto = res.content
     .filter((c): c is Anthropic.TextBlock => c.type === "text")

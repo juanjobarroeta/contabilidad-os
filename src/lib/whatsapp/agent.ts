@@ -8,6 +8,8 @@ import { entidadesDeEmpresa } from "@/lib/fiscal-kb/entidades-empresa";
 import { nombreDe, sanearPiel } from "@/lib/copiloto/personajes";
 import { sanearProgreso } from "@/lib/onboarding/progreso";
 import { meteredCreate } from "@/lib/costos/anthropic";
+import { MODELO_AGENTE } from "@/lib/ai/modelos";
+import { cacheEnUltimoMensaje } from "@/lib/ai/cache-conversacion";
 
 const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY from env
 
@@ -15,7 +17,7 @@ const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY from env
 // the API key's tier doesn't have the primary). WhatsApp conversations are
 // chattier, so we allow a couple more tool rounds — but cap hard to keep
 // latency under Twilio's webhook timeout and to bound cost.
-const MODEL = process.env.AI_CHAT_MODEL ?? "claude-fable-5";
+const MODEL = process.env.AI_CHAT_MODEL ?? MODELO_AGENTE;
 const MODEL_FALLBACK = "claude-opus-4-8";
 const MAX_TOOL_ROUNDS = 6;
 const MAX_TOKENS = 1024; // replies are short on WhatsApp
@@ -89,7 +91,7 @@ export async function runWhatsappAgent(opts: {
         max_tokens: MAX_TOKENS,
         system,
         tools,
-        messages,
+        messages: cacheEnUltimoMensaje(messages),
       });
     } catch (err) {
       if (model !== MODEL_FALLBACK && err instanceof Anthropic.NotFoundError) {
@@ -99,7 +101,7 @@ export async function runWhatsappAgent(opts: {
           max_tokens: MAX_TOKENS,
           system,
           tools,
-          messages,
+          messages: cacheEnUltimoMensaje(messages),
         });
       } else {
         throw err;

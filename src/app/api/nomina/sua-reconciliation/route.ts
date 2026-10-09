@@ -6,6 +6,7 @@ import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { meteredCreate } from "@/lib/costos/anthropic";
 import { asegurarUsoIA, respuestaTopeIA } from "@/lib/ai/guardia";
 import { calcularImss } from "@/lib/nomina/imss";
+import { MODELO_LECTOR } from "@/lib/ai/modelos";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/nomina/sua-reconciliation
@@ -115,7 +116,7 @@ export async function POST(req: Request) {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const response: any = await meteredCreate(anthropic, { companyId, userId: session.user.id, subtipo: "nomina.sua" }, {
-      model: "claude-sonnet-4-5",
+      model: MODELO_LECTOR,
       max_tokens: 4096,
       system: SYSTEM_PROMPT,
       messages: [{

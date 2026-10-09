@@ -35,6 +35,8 @@ import {
   toolsPresentacion,
   type Card,
 } from "@/lib/copiloto/tarjetas";
+import { MODELO_AGENTE } from "@/lib/ai/modelos";
+import { cacheEnUltimoMensaje } from "@/lib/ai/cache-conversacion";
 
 const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY from env
 
@@ -51,7 +53,7 @@ const MAX_RONDAS_TOTALES = 8;
 // Assistant brain: best available model, overridable per deployment. If the API
 // key's tier doesn't have the primary yet, fall back once instead of breaking
 // the chat.
-const CHAT_MODEL = process.env.AI_CHAT_MODEL ?? "claude-fable-5";
+const CHAT_MODEL = process.env.AI_CHAT_MODEL ?? MODELO_AGENTE;
 const CHAT_MODEL_FALLBACK = "claude-opus-4-8";
 // Heartbeat keeps the SSE connection alive during the silent gaps while tools
 // execute (tax position, KB embedding/vector search) and the next model call
@@ -354,7 +356,8 @@ export async function POST(req: Request) {
             max_tokens: 4096,
             system: systemBlocks,
             tools: availableTools,
-            messages: currentMessages,
+            // Breakpoint al final: la ronda siguiente lee de caché todo lo anterior.
+            messages: cacheEnUltimoMensaje(currentMessages),
             stream: true,
           };
           let response;

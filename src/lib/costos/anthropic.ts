@@ -7,13 +7,15 @@
 
 import type Anthropic from "@anthropic-ai/sdk";
 import { recordLlmCost, type CostCtx } from "./record";
+import { ajustarParams } from "@/lib/ai/modelos";
 
 export async function meteredCreate(
   client: Anthropic,
   ctx: CostCtx,
   params: Anthropic.MessageCreateParamsNonStreaming,
 ): Promise<Anthropic.Message> {
-  const msg = await client.messages.create(params);
+  // Sonnet/Haiku 5.5 piensan por defecto; para extraer/clasificar se apaga.
+  const msg = await client.messages.create(ajustarParams(params));
   void recordLlmCost(msg.model ?? String(params.model), msg.usage, ctx);
   return msg;
 }

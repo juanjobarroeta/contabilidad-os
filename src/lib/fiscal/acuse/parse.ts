@@ -12,6 +12,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { recordLlmCost, type CostCtx } from "@/lib/costos/record";
 import { REGIMEN_LABELS, VALID_REGIMENES } from "@/lib/fiscal/regimen-capabilities";
+import { MODELO_LECTOR, ajustarParams } from "@/lib/ai/modelos";
 
 // Compatibilidad para los llamadores históricos de este parser. El catálogo
 // canónico vive en regimen-capabilities.ts.
@@ -247,9 +248,9 @@ export class SatParsePagadoError extends Error {
  * SatParsePagadoError — el llamador decide, sabiendo que ya costó.
  */
 export async function parseSatDocument(base64: string, cost?: CostCtx): Promise<ParsedSatDocument> {
-  const model = "claude-sonnet-4-5";
+  const model = MODELO_LECTOR;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const response: any = await anthropic().messages.create({
+  const response: any = await anthropic().messages.create(ajustarParams({
     model,
     max_tokens: 3072,
     system: SYSTEM_PROMPT,
@@ -262,7 +263,7 @@ export async function parseSatDocument(base64: string, cost?: CostCtx): Promise<
         ],
       },
     ],
-  });
+  }));
   // Métrica de costo (fire-and-forget; no bloquea ni rompe el parseo).
   void recordLlmCost(response?.model ?? model, response?.usage, {
     ...cost,

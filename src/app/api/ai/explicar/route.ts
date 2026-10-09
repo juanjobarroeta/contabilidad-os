@@ -13,6 +13,7 @@ import {
   promptExplicacion,
   SISTEMA_EXPLICACION,
 } from "@/lib/copiloto/explicar";
+import { MODELO_RAPIDO, ajustarParams } from "@/lib/ai/modelos";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/ai/explicar  { companyId, ref, ruta? } → { explicacion, acciones }
@@ -28,7 +29,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 const anthropic = new Anthropic();
-const MODELO = process.env.AI_EXPLICAR_MODEL ?? "claude-haiku-4-5-20251001";
+const MODELO = process.env.AI_EXPLICAR_MODEL ?? MODELO_RAPIDO;
 
 interface Respuesta {
   explicacion: string;
@@ -110,12 +111,12 @@ export async function POST(req: Request) {
   const acciones = accionesPara(ref);
 
   try {
-    const r = await anthropic.messages.create({
+    const r = await anthropic.messages.create(ajustarParams({
       model: MODELO,
       max_tokens: 160,
       system: SISTEMA_EXPLICACION,
       messages: [{ role: "user", content: promptExplicacion(ref, registro, ruta) }],
-    });
+    }));
     await recordLlmCost(MODELO, r.usage, { companyId, userId, subtipo: "ai.explicar" });
     const explicacion = r.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
