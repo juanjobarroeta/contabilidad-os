@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { requireContaBotAccess } from "@/lib/contabot/access";
+import { requireBancosAccess } from "@/lib/bancos/statements/access";
 import { gateEscritura } from "@/lib/subscription";
 import { uploadBankDocument } from "@/lib/bancos/statements/upload";
 import { publicError } from "@/lib/bancos/statements/contract";
@@ -11,7 +11,7 @@ export async function POST(req: Request) {
   const session = await auth(); if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const form = await req.formData(), companyId = String(form.get("companyId") ?? ""), bankAccountId = String(form.get("bankAccountId") ?? "");
-    const access = await requireContaBotAccess(session.user.id, companyId, undefined, { requireEnabled: false });
+    const access = await requireBancosAccess(session.user.id, companyId);
     if (!access.canWrite) return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
     const gate = await gateEscritura(session.user.id); if (gate) return gate;
     if (!await prisma.bankAccount.findFirst({ where: { id: bankAccountId, companyId }, select: { id: true } })) return NextResponse.json({ error: "Selecciona la cuenta de esta empresa." }, { status: 400 });
