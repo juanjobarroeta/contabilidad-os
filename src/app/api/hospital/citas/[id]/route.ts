@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { AuthzError, requireModule, requireWriter } from "@/lib/authz";
 import { withHospital } from "@/lib/hospital/with-hospital";
 import { bitacora, error, errorZod } from "@/lib/hospital/http";
+import { resolverAltasCita, type AltaCita } from "@/lib/hospital/cita-altas";
 import { citaCamposSchema, citaEmpalmada, datosHojaCita, describirEmpalme, incluyeCita, ocupaRecurso, serializarCita, validarVinculosCita } from "@/lib/hospital/citas";
 
 export const PATCH = withHospital(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
@@ -16,7 +17,7 @@ export const PATCH = withHospital(async (req: Request, ctx: { params: Promise<{ 
   const body = await req.json().catch(() => null);
   const parsed = citaCamposSchema.partial().safeParse(body);
   if (!parsed.success) return errorZod(parsed.error);
-  const d = parsed.data;
+  const { pacienteNuevo, medicoNuevo, anestesiologoNuevo, ...d } = parsed.data;
 
   const cita = await prisma.hospCita.findUnique({ where: { id }, include: { recurso: { select: { nombre: true } } } });
   if (!cita) throw new AuthzError(404, "Cita no encontrada");
@@ -24,6 +25,7 @@ export const PATCH = withHospital(async (req: Request, ctx: { params: Promise<{ 
   const { user } = await requireWriter(cita.companyId, req);
   await requireModule(cita.companyId, "HOSPITAL", req);
 
+  let altas: AltaCita[] = [];
   const actualizada = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`agenda:${cita.companyId}`}))`;
     const citaActual = await tx.hospCita.findUniqueOrThrow({ where: { id } });
@@ -41,6 +43,13 @@ export const PATCH = withHospital(async (req: Request, ctx: { params: Promise<{ 
     const choque = await citaEmpalmada(tx, { recursoId, inicio, fin, excluirId: id });
     if (choque) return error(describirEmpalme(choque), 409);
   }
+
+  const a = await resolverAltasCita(tx, citaActual.companyId, { ...d, pacienteNuevo, medicoNuevo, anestesiologoNuevo });
+  if (a.error != null) return error(a.error);
+  altas = a.altas;
+  if (a.pacienteId) { d.pacienteId = a.pacienteId; d.pacienteNombre = a.altas.find((x) => x.rol === "PACIENTE")?.nombre ?? d.pacienteNombre; }
+  if (a.medicoId) d.medicoId = a.medicoId;
+  if (a.anestesiologoId) d.anestesiologoId = a.anestesiologoId;
 
   return tx.hospCita.update({
     where: { id },
@@ -73,5 +82,14 @@ export const PATCH = withHospital(async (req: Request, ctx: { params: Promise<{ 
     entidadId: id,
     detalle: { titulo: cita.titulo, cambios: Object.keys(d), estadoAntes: cita.estado, estadoDespues: actualizada.estado, recurso: actualizada.recurso.nombre },
   });
-  return NextResponse.json(serializarCita(actualizada));
+  for (const x of altas.filter((x) => x.nuevo)) {
+    bitacora(user, req, {
+      companyId: cita.companyId,
+      accion: x.entidad === "HospPaciente" ? "hospital.paciente.crear" : "hospital.medico.crear",
+      entidad: x.entidad,
+      entidadId: x.id,
+      detalle: { nombre: x.nombre, rol: x.rol, origen: "agenda", cita: id, ...(x.entidad === "HospMedico" ? { porCredencializar: true } : {}) },
+    });
+  }
+  return NextResponse.json({ ...serializarCita(actualizada), altas });
 });

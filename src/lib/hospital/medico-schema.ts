@@ -19,6 +19,8 @@ export const medicoSchema = z.object({
   supplierId: z.string().nullable().optional(),
   employeeId: z.string().nullable().optional(),
   activo: z.boolean().optional(),
+  /** false = ya se credencializó (exige cédula). */
+  porCredencializar: z.boolean().optional(),
   curp: z.string().trim().max(18).nullable().optional(),
   nombres: z.string().trim().max(120).nullable().optional(),
   apellidoPaterno: z.string().trim().max(120).nullable().optional(),

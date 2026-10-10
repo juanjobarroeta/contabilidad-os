@@ -8230,6 +8230,9 @@ model HospMedico {
   credencialVerificadaAt  DateTime?
   credencialVerificadaPor String?
   credencialEvidencia     String?
+  /// Dado de alta con sólo el nombre (desde la agenda): falta credencializarlo
+  /// (cédula, especialidad, documentos). Sale en «Requiere atención» hasta que alguien lo marca.
+  porCredencializar       Boolean   @default(false)
   id                      String    @id @default(cuid())
   companyId               String
   createdAt               DateTime  @default(now())
@@ -8725,9 +8728,12 @@ model HospCita {
   instrumentista          String?
   diagnostico             String?
   estancia                HospCitaEstancia?
+  /// Días de estancia previstos cuando va a hospitalización.
+  diasEstancia            Int?
   /// Cama/habitación a la que va el paciente (recurso CAMA).
   camaId                  String?
-  /// [{ descripcion, cantidad, origen: HOSPITAL|PROVEEDOR|PACIENTE }]
+  /// [{ descripcion, cantidad, servicioId?, clave? }] — de la lista de precios o libre; los pone el hospital
+  /// (citas viejas pueden traer origen PROVEEDOR|PACIENTE).
   insumos                 Json?
   /// Solicitud sin hora confirmada: `inicio` lleva sólo el día y `fin` la duración pedida.
   horaPorDefinir          Boolean           @default(false)

@@ -4,6 +4,8 @@
  * P2: `curp` validada; `nombres` / `apellidoPaterno` / `apellidoMaterno`
  * explícitos mandan; si el médico no tiene partes guardadas y cambia `nombre`,
  * se parten por heurística. Nunca se pisa una captura manual con la heurística.
+ * `porCredencializar: false` (el médico dado de alta desde la agenda ya se
+ * credencializó) exige cédula, guardada o en el mismo cambio.
  */
 
 import { NextResponse } from "next/server";
@@ -20,7 +22,7 @@ export const PATCH = withHospital(async (req: Request, ctx: { params: Promise<{ 
   if (!parsed.success) return errorZod(parsed.error);
   const { curp, nombres, apellidoPaterno, apellidoMaterno, ...d } = parsed.data;
 
-  const medico = await prisma.hospMedico.findUnique({ where: { id }, select: { id: true, companyId: true, nombre: true, nombres: true, apellidoPaterno: true, apellidoMaterno: true } });
+  const medico = await prisma.hospMedico.findUnique({ where: { id }, select: { id: true, companyId: true, nombre: true, nombres: true, apellidoPaterno: true, apellidoMaterno: true, cedula: true } });
   if (!medico) throw new AuthzError(404, "Médico no encontrado");
 
   const { user } = await requireWriter(medico.companyId, req);
@@ -33,6 +35,9 @@ export const PATCH = withHospital(async (req: Request, ctx: { params: Promise<{ 
   if (d.employeeId) {
     const e = await prisma.employee.findUnique({ where: { id: d.employeeId }, select: { companyId: true } });
     if (!e || e.companyId !== medico.companyId) return error("employeeId inválido");
+  }
+  if (d.porCredencializar === false && !(d.cedula !== undefined ? d.cedula?.trim() : medico.cedula)) {
+    return error("Para credencializar captura primero la cédula profesional del médico");
   }
   let curpDatos: { curp: string | null } | Record<string, never> = {};
   if (curp !== undefined) {
