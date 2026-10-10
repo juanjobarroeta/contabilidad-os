@@ -30,7 +30,7 @@ export async function POST(req: Request) {
     const invoiceTotal = Number(invoice.total);
 
     // Auth: writer on the invoice's company
-    await requireWriter(invoice.companyId);
+    await requireWriter(invoice.companyId, req);
 
     // Load txs and verify they all belong to the same company as the invoice
     const txs = await prisma.bankTransaction.findMany({

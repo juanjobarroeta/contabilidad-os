@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { auth } from "@/lib/auth";
 import { meteredCreate } from "@/lib/costos/anthropic";
 import { asegurarUsoIA, respuestaTopeIA } from "@/lib/ai/guardia";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { MODELO_LECTOR } from "@/lib/ai/modelos";
+import { sesionOBearer } from "@/lib/bancos/statements/access";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/bancos/parse-pdf
@@ -50,7 +50,7 @@ SCHEMA:
 }`;
 
 export async function POST(req: Request) {
-  const session = await auth();
+  const session = await sesionOBearer(req);
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   if (!process.env.ANTHROPIC_API_KEY) {

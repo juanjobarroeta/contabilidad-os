@@ -27,6 +27,7 @@ const API_DIR = path.join(APP_DIR, "api");
 
 /** Autenticación de cualquier tipo: sesión, bearer, secreto, firma, token. */
 const AUTENTICADORES: RegExp[] = [
+  /\bsesionOBearer\b/, // requireUser (sesión o bearer) — src/lib/bancos/statements/access.ts
   /\brequireContaBotAccess\b/, // company membership + accounting module, exercised against Postgres
   // Membresía / tenant (src/lib/authz.ts)
   /\brequireMembership\b/,

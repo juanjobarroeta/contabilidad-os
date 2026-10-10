@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import type { FamiliaConcepto, SignoMovimiento } from "@/lib/bancos/categorizar-concepto";
@@ -10,6 +9,7 @@ import {
   upsertReglaCategorizacion,
   contarSimilaresSinConciliar,
 } from "@/lib/bancos/reglas-categorizacion";
+import { sesionOBearer } from "@/lib/bancos/statements/access";
 
 const FAMILIAS_VALIDAS = Object.keys(FAMILIA_META) as FamiliaConcepto[];
 
@@ -19,7 +19,7 @@ const FAMILIAS_VALIDAS = Object.keys(FAMILIA_META) as FamiliaConcepto[];
  * usa la UI para confirmar "categorizar N similares" antes de ejecutar.
  */
 export async function GET(req: Request) {
-  const session = await auth();
+  const session = await sesionOBearer(req);
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const url = new URL(req.url);
@@ -59,7 +59,7 @@ export async function GET(req: Request) {
  * la aplica de forma retroactiva a los demás movimientos similares sin conciliar.
  */
 export async function POST(req: Request) {
-  const session = await auth();
+  const session = await sesionOBearer(req);
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json().catch(() => null);

@@ -1,9 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const getEffectiveCompanyMembership = vi.fn();
-vi.mock("@/lib/authz", () => ({ getEffectiveCompanyMembership: (...a: unknown[]) => getEffectiveCompanyMembership(...a) }));
+const requireUser = vi.fn();
+vi.mock("@/lib/authz", () => ({
+  getEffectiveCompanyMembership: (...a: unknown[]) => getEffectiveCompanyMembership(...a),
+  requireUser: (...a: unknown[]) => requireUser(...a),
+}));
 
-import { requireBancosAccess, BancosAccessError } from "./access";
+import { requireBancosAccess, BancosAccessError, sesionOBearer } from "./access";
+
+describe("sesionOBearer", () => {
+  it("acepta el bearer de un satélite (HospitalOS) con la forma de auth()", async () => {
+    requireUser.mockResolvedValueOnce({ id: "u1", email: "a@b.c" });
+    const req = new Request("http://x", { headers: { authorization: "Bearer t" } });
+    await expect(sesionOBearer(req)).resolves.toEqual({ user: { id: "u1", email: "a@b.c" } });
+    expect(requireUser).toHaveBeenCalledWith(req);
+  });
+  it("sin sesión ni token válido → null (la ruta responde 401)", async () => {
+    requireUser.mockRejectedValueOnce(new Error("401"));
+    await expect(sesionOBearer(new Request("http://x"))).resolves.toBeNull();
+  });
+});
 
 describe("requireBancosAccess", () => {
   beforeEach(() => getEffectiveCompanyMembership.mockReset());
