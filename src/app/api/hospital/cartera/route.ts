@@ -63,6 +63,7 @@ export const GET = withAuthz(async (req: Request) => {
 
   const amparado = await amparadoPorReps(
     prisma,
+    companyId,
     facturas.filter((f) => (f.tipoSat ?? "I") !== "E").map((f) => f.uuid)
   );
   const pagadorPorCustomer = new Map<string, (typeof pagadores)[number]>();

@@ -173,7 +173,7 @@ export async function perfilContactoHospital(
   const anticipos = facturasDb.filter((f) => esAnticipo(f.rawXml)).map(resumenCfdi);
   const notasCredito = todasDb.filter((f) => (f.tipoSat ?? "I") === "E").map(resumenCfdi);
 
-  const amparado = await amparadoPorReps(db, facturasDb.map((f) => f.uuid));
+  const amparado = await amparadoPorReps(db, companyId, facturasDb.map((f) => f.uuid));
 
   const aging = agingVacio();
   let masDe30 = 0;

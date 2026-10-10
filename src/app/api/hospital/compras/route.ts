@@ -101,7 +101,7 @@ export const GET = withAuthz(async (req: Request) => {
     }
   }
   const [amparado, insumosPorClave, derivados] = await Promise.all([
-    amparadoPorReps(prisma, facturasDb.map((f) => f.uuid)),
+    amparadoPorReps(prisma, companyId, facturasDb.map((f) => f.uuid)),
     clavesDesc.size
       ? prisma.hospInsumo.findMany({
           where: { companyId, clave: { in: [...clavesDesc] } },

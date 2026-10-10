@@ -123,7 +123,7 @@ export const GET = withHospital(async (req: Request, ctx: { params: Promise<{ id
     if (!facturas.has(f.id)) facturas.set(f.id, { ...f, total: numero(f) });
   }
 
-  const amparado = await amparadoPorReps(prisma, [...facturas.values()].map((f) => f.uuid));
+  const amparado = await amparadoPorReps(prisma, pagador.companyId, [...facturas.values()].map((f) => f.uuid));
   const hoy = new Date();
   const evidencia = new Map<string, { pagado: number; saldo: number }>();
   for (const f of facturas.values()) {

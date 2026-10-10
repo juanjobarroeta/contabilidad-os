@@ -102,7 +102,10 @@ export const GET = withAuthz(
       .filter(Boolean) as string[];
     const reps = uuids.length
       ? await prisma.pagoDoctoRelacionado.findMany({
-          where: { parentUuid: { in: variantesUuid(uuids) } },
+          where: {
+            parentUuid: { in: variantesUuid(uuids) },
+            pagoInvoice: { companyId: contacto.companyId, tipo: "PAGO", status: { not: "CANCELLED" }, sustituidoPorUuid: null },
+          },
           select: {
             parentUuid: true,
             impPagado: true,

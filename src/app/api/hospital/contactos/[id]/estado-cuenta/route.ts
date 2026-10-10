@@ -18,6 +18,12 @@ import { normalizarUuid, variantesUuid } from "@/lib/fiscal/uuid";
 //            cartera) y pago/cobro conciliado en banco que excede lo amparado
 //            por REP.
 // Saldo corrido + saldo anterior al ejercicio. Sólo lectura.
+//
+// Cada pago se aplica a LA factura que dice su XML, sin pasar de lo que esa
+// factura debe: un REP de 2026 que paga facturas de 2025 abona a esas
+// facturas (que vienen en el saldo anterior), nunca de más. Si una PUE trae
+// REP, el REP es la evidencia y la PUE implícita cubre sólo el resto. Sólo
+// cuentan CFDIs vigentes: ni cancelados ni sustituidos (TipoRelacion 04).
 // ─────────────────────────────────────────────────────────────────────────────
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -58,7 +64,7 @@ export const GET = withAuthz(async (req: Request, ctx: { params: Promise<{ id: s
 
   const facturas = (
     await prisma.invoice.findMany({
-      where: { companyId: contacto.companyId, customerId: id, tipo, status: { not: "CANCELLED" } },
+      where: { companyId: contacto.companyId, customerId: id, tipo, status: { not: "CANCELLED" }, sustituidoPorUuid: null },
       select: {
         id: true, uuid: true, serie: true, folio: true, fecha: true, total: true,
         metodoPago: true, tipoSat: true,
@@ -71,31 +77,44 @@ export const GET = withAuthz(async (req: Request, ctx: { params: Promise<{ id: s
   const uuids = facturas.filter((f) => f.tipoSat !== "E").map((f) => f.uuid).filter(Boolean) as string[];
   const reps = uuids.length
     ? await prisma.pagoDoctoRelacionado.findMany({
-        where: { parentUuid: { in: variantesUuid(uuids) } },
-        select: { parentUuid: true, impPagado: true, numParcialidad: true, fechaPago: true, pagoInvoiceId: true },
+        where: {
+          parentUuid: { in: variantesUuid(uuids) },
+          // Mismo criterio que amparadoPorReps: un REP cancelado o sustituido no paga nada.
+          pagoInvoice: { companyId: contacto.companyId, tipo: "PAGO", status: { not: "CANCELLED" }, sustituidoPorUuid: null },
+        },
+        select: { parentUuid: true, impPagado: true, numParcialidad: true, fechaPago: true, pagoInvoiceId: true, pagoInvoice: { select: { fecha: true } } },
       })
     : [];
+  reps.sort((a, b) => +(a.fechaPago ?? a.pagoInvoice.fecha) - +(b.fechaPago ?? b.pagoInvoice.fecha));
 
   const ref = (f: { serie: string | null; folio: string | null }) =>
     [f.serie, f.folio].filter(Boolean).join("-") || null;
   const refPorUuid = new Map(
-    facturas.filter((f) => f.uuid).map((f) => [normalizarUuid(f.uuid!), { ref: ref(f), id: f.id, fecha: f.fecha }])
+    facturas.filter((f) => f.uuid).map((f) => [normalizarUuid(f.uuid!), { ref: ref(f), id: f.id, fecha: f.fecha, total: f.total }])
   );
+  const fechaCorta = (d: Date) => d.toISOString().slice(0, 10).split("-").reverse().join("/");
 
   const movimientos: Mov[] = [];
+  // Lo aplicado por REP a cada factura, en orden de fecha de pago y topado a su total.
   const repPorFactura = new Map<string, number>();
   for (const r of reps) {
     const k = normalizarUuid(r.parentUuid);
-    repPorFactura.set(k, (repPorFactura.get(k) ?? 0) + Number(r.impPagado ?? 0));
     const padre = refPorUuid.get(k);
+    if (!padre) continue;
+    const previo = repPorFactura.get(k) ?? 0;
+    const abono = r2(Math.min(Number(r.impPagado ?? 0), Math.max(0, padre.total - previo)));
+    if (abono <= 0.005) continue;
+    repPorFactura.set(k, r2(previo + abono));
+    const fecha = r.fechaPago ?? r.pagoInvoice.fecha;
+    const deOtroAnio = padre.fecha.getFullYear() !== fecha.getFullYear();
     movimientos.push({
-      fecha: r.fechaPago ?? padre?.fecha ?? new Date(),
+      fecha,
       tipo: "PAGO_REP",
-      referencia: padre?.ref ?? null,
+      referencia: padre.ref,
       invoiceId: r.pagoInvoiceId,
-      concepto: `Pago (REP${r.numParcialidad ? ` parcialidad ${r.numParcialidad}` : ""}) de ${padre?.ref ?? "factura"}`,
+      concepto: `Pago (REP${r.numParcialidad ? ` parcialidad ${r.numParcialidad}` : ""}) de ${padre.ref ?? "factura"}${deOtroAnio ? ` del ${fechaCorta(padre.fecha)}` : ""}`,
       cargo: 0,
-      abono: Number(r.impPagado ?? 0),
+      abono,
     });
   }
 
@@ -124,12 +143,16 @@ export const GET = withAuthz(async (req: Request, ctx: { params: Promise<{ id: s
         });
       }
     } else {
-      // PUE: liquidada en su emisión (misma regla de evidencia que la cartera).
-      movimientos.push({
-        fecha: f.fecha, tipo: "PAGO_PUE", referencia: ref(f), invoiceId: f.id,
-        concepto: `Pago de ${ref(f) ?? "factura"} (PUE — una sola exhibición)`,
-        cargo: 0, abono: f.total,
-      });
+      // PUE: liquidada en su emisión (misma regla de evidencia que la cartera),
+      // salvo lo que un REP dice haber pagado después: eso queda en su fecha.
+      const implicito = r2(f.total - rep);
+      if (implicito > 0.005) {
+        movimientos.push({
+          fecha: f.fecha, tipo: "PAGO_PUE", referencia: ref(f), invoiceId: f.id,
+          concepto: `Pago de ${ref(f) ?? "factura"} (PUE — una sola exhibición)`,
+          cargo: 0, abono: implicito,
+        });
+      }
     }
   }
 

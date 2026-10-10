@@ -14,7 +14,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { normalizarUuid, variantesUuid } from "@/lib/fiscal/uuid";
+import { normalizarUuid } from "@/lib/fiscal/uuid";
+import { amparadoPorReps as amparadoPorRepsVigentes } from "@/lib/facturas/reps-amparados";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -88,24 +89,13 @@ export function conciliadoDe(detalles: Array<{ montoAsignado: unknown }>): numbe
 
 /**
  * Importe amparado por complementos de pago hacia cada factura, por UUID
- * normalizado. Una sola consulta para todas las facturas de la vista.
+ * normalizado. Una sola consulta para todas las facturas de la vista. Sólo
+ * REPs vigentes de ESTA empresa: uno cancelado o sustituido no ampara nada, y
+ * el mismo XML guardado en otra empresa del despacho (emisor y receptor en el
+ * hub) no se cuenta dos veces.
  */
-export async function amparadoPorReps(
-  db: Db,
-  uuids: Iterable<string | null | undefined>
-): Promise<Map<string, number>> {
-  const lista = [...uuids].filter((u): u is string => !!u);
-  const amparado = new Map<string, number>();
-  if (lista.length === 0) return amparado;
-  const links = await db.pagoDoctoRelacionado.findMany({
-    where: { parentUuid: { in: variantesUuid(lista) } },
-    select: { parentUuid: true, impPagado: true },
-  });
-  for (const l of links) {
-    const k = normalizarUuid(l.parentUuid);
-    amparado.set(k, (amparado.get(k) ?? 0) + Number(l.impPagado ?? 0));
-  }
-  return amparado;
+export function amparadoPorReps(db: Db, companyId: string, uuids: Iterable<string | null | undefined>): Promise<Map<string, number>> {
+  return amparadoPorRepsVigentes(db, companyId, uuids);
 }
 
 export function amparadoDe(amparado: Map<string, number>, uuid: string | null | undefined): number {

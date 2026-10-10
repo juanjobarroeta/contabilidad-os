@@ -96,7 +96,7 @@ export async function flujoEfectivo(db: Db, companyId: string, semanas = 8, hoy 
   const s = vacias();
 
   // Entradas: lo que falta por cobrar de cada factura emitida.
-  const ampIng = await amparadoPorReps(db, ingresos.map((f) => f.uuid));
+  const ampIng = await amparadoPorReps(db, companyId, ingresos.map((f) => f.uuid));
   let porCobrarVencido = 0;
   for (const f of ingresos) {
     const ev = pagadoPorEvidencia({ metodoPago: f.metodoPago, total: Number(f.total), conciliado: conciliadoDe(f.conciliacionDetalles), amparadoRep: amparadoDe(ampIng, f.uuid) });
@@ -118,7 +118,7 @@ export async function flujoEfectivo(db: Db, companyId: string, semanas = 8, hoy 
 
   // Salidas 2: facturas de proveedor con saldo que no son de ninguna orden.
   const ligadas = new Set(vinculadas.map((v) => v.invoiceId));
-  const ampEgr = await amparadoPorReps(db, egresos.map((f) => f.uuid));
+  const ampEgr = await amparadoPorReps(db, companyId, egresos.map((f) => f.uuid));
   for (const f of egresos) {
     if (ligadas.has(f.id)) continue;
     const ev = pagadoPorEvidencia({ metodoPago: f.metodoPago, total: Number(f.total), conciliado: conciliadoDe(f.conciliacionDetalles), amparadoRep: amparadoDe(ampEgr, f.uuid) });
