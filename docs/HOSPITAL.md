@@ -310,7 +310,11 @@ GET  /api/hospital/medicos?companyId= · POST · PATCH /medicos/[id]
 GET  /api/hospital/medicos/honorarios?companyId=&anio=&mes=
 GET  /api/hospital/pagadores?companyId= · POST · PATCH /pagadores/[id]
 GET  /api/hospital/servicios?companyId=[&categoria=] · POST · PATCH /servicios/[id] · PUT /servicios/[id]/tarifas
-GET  /api/hospital/citas?companyId=&desde=&hasta= · POST (409 si empalma) · PATCH /citas/[id]
+GET  /api/hospital/citas?companyId=&desde=&hasta= · POST (409 si empalma; nace CONFIRMADA salvo solicitud) · PATCH /citas/[id]
+     · pacienteNuevo { nombre, fechaNacimiento } / medicoNuevo { nombre } / anestesiologoNuevo { nombre }: alta en la misma
+       transacción (lib/hospital/cita-altas.ts); reusa paciente con mismo nombre+fecha y médico activo con mismo nombre;
+       el médico nuevo nace porCredencializar (alerta MEDICO_POR_CREDENCIALIZAR hasta PATCH /medicos/[id] { porCredencializar:false }, exige cédula)
+     · diasEstancia (sólo HOSPITALIZACION) · insumos[] { descripcion, cantidad, servicioId?, clave? } de la lista de precios o libres
 GET  /api/hospital/cotizaciones?companyId= · POST · GET/PATCH /cotizaciones/[id] · POST /cotizaciones/[id]/convertir
 GET  /api/hospital/mantenimiento?companyId=[&estado=] · POST · PATCH /mantenimiento/[id]
 ```

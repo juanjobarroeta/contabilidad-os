@@ -22,10 +22,15 @@ export const ocupaRecurso = (estado: string) => !(CITA_NO_OCUPA as readonly stri
 export const CITA_ESTANCIAS = ["AMBULATORIA", "HOSPITALIZACION"] as const;
 export const INSUMO_ORIGENES = ["HOSPITAL", "PROVEEDOR", "PACIENTE"] as const;
 
-/** Lo que se pide para el caso y quién lo trae (la hoja de quirófano lo separa). */
+/**
+ * Lo que se pide para el caso: de la lista de precios (servicioId + clave) o
+ * texto libre. Lo pone el hospital; `origen` sólo sobrevive en citas viejas.
+ */
 export const insumoCitaSchema = z.object({
   descripcion: z.string().trim().min(1).max(200),
   cantidad: z.number().positive().max(10000).nullable().optional(),
+  servicioId: z.string().min(1).nullable().optional(),
+  clave: z.string().max(40).nullable().optional(),
   origen: z.enum(INSUMO_ORIGENES).default("HOSPITAL"),
 });
 export type InsumoCita = z.infer<typeof insumoCitaSchema>;
@@ -53,10 +58,15 @@ export const citaCamposSchema = z.object({
   instrumentista: textoOpcional(120),
   diagnostico: textoOpcional(300),
   estancia: z.enum(CITA_ESTANCIAS).nullable().optional(),
+  diasEstancia: z.number().int().min(1).max(365).nullable().optional(),
   camaId: z.string().nullable().optional(),
   insumos: z.array(insumoCitaSchema).max(40).nullable().optional(),
   horaPorDefinir: z.boolean().optional(),
   servicioId: z.string().nullable().optional(),
+  // Altas desde la agenda (lib/hospital/cita-altas.ts): sólo cuando no viene el id.
+  pacienteNuevo: z.object({ nombre: z.string().trim().min(3).max(200), fechaNacimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha de nacimiento AAAA-MM-DD") }).optional(),
+  medicoNuevo: z.object({ nombre: z.string().trim().min(3).max(200) }).optional(),
+  anestesiologoNuevo: z.object({ nombre: z.string().trim().min(3).max(200) }).optional(),
 });
 export type CitaCampos = z.infer<typeof citaCamposSchema>;
 
@@ -76,6 +86,7 @@ export interface DatosHojaCita {
   instrumentista?: string | null;
   diagnostico?: string | null;
   estancia?: (typeof CITA_ESTANCIAS)[number] | null;
+  diasEstancia?: number | null;
   camaId?: string | null;
   insumos?: Prisma.InputJsonValue | typeof Prisma.DbNull;
   servicioId?: string | null;
@@ -96,6 +107,9 @@ export function datosHojaCita(d: Partial<CitaCampos>, actual?: { anestesiologoId
   if (d.instrumentista !== undefined) out.instrumentista = limpio(d.instrumentista);
   if (d.diagnostico !== undefined) out.diagnostico = limpio(d.diagnostico);
   if (d.estancia !== undefined) out.estancia = d.estancia;
+  if (d.diasEstancia !== undefined) out.diasEstancia = d.diasEstancia;
+  // Los días sólo tienen sentido en hospitalización.
+  if (d.estancia !== undefined && d.estancia !== "HOSPITALIZACION") out.diasEstancia = null;
   if (d.camaId !== undefined) out.camaId = d.camaId || null;
   if (d.insumos !== undefined) out.insumos = d.insumos?.length ? d.insumos : Prisma.DbNull;
   if (d.servicioId !== undefined) out.servicioId = d.servicioId || null;
@@ -156,7 +170,7 @@ export function serializarCita<T extends { paciente?: { id: string; nombre: stri
 export async function validarVinculosCita(
   db: Db,
   companyId: string,
-  d: { recursoId?: string; pacienteId?: string | null; medicoId?: string | null; anestesiologoId?: string | null; camaId?: string | null; servicioId?: string | null; episodioId?: string | null; cotizacionId?: string | null }
+  d: { recursoId?: string; pacienteId?: string | null; medicoId?: string | null; anestesiologoId?: string | null; camaId?: string | null; servicioId?: string | null; episodioId?: string | null; cotizacionId?: string | null; insumos?: Array<{ servicioId?: string | null }> | null }
 ): Promise<{ error: string } | { error: null; recurso: { id: string; nombre: string; tipo: string } | null; pacienteNombre: string | null }> {
   let recurso: { id: string; nombre: string; tipo: string } | null = null;
   if (d.recursoId) {
@@ -187,6 +201,11 @@ export async function validarVinculosCita(
   if (d.servicioId) {
     const sv = await db.hospServicio.findUnique({ where: { id: d.servicioId }, select: { companyId: true } });
     if (!sv || sv.companyId !== companyId) return { error: "servicioId inválido" };
+  }
+  const serviciosInsumo = [...new Set((d.insumos ?? []).map((i) => i.servicioId).filter((x): x is string => !!x))];
+  if (serviciosInsumo.length) {
+    const n = await db.hospServicio.count({ where: { companyId, id: { in: serviciosInsumo } } });
+    if (n !== serviciosInsumo.length) return { error: "Un insumo no es de la lista de precios de este hospital" };
   }
   if (d.episodioId) {
     const e = await db.hospEpisodio.findUnique({ where: { id: d.episodioId }, select: { companyId: true } });

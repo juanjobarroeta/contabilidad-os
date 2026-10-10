@@ -1,6 +1,9 @@
 /**
  * GET  /api/hospital/citas?companyId=…&desde=YYYY-MM-DD&hasta=YYYY-MM-DD[&recursoId=&medicoId=&estado=]
  * POST /api/hospital/citas — 409 si empalma con otra cita viva del recurso.
+ *      Lo agendado nace CONFIRMADO (salvo solicitudes). `pacienteNuevo`,
+ *      `medicoNuevo` y `anestesiologoNuevo` dan de alta lo que se escribió
+ *      libre (lib/hospital/cita-altas.ts) en la misma transacción.
  *
  * `desde`/`hasta` a secas son días locales completos (hasta inclusivo); sin
  * ellos, hoy. Responde los recursos agendables (quirófanos, consultorios,
@@ -13,6 +16,7 @@ import { prisma } from "@/lib/prisma";
 import { requireMembership, requireModule, requireWriter } from "@/lib/authz";
 import { withHospital } from "@/lib/hospital/with-hospital";
 import { bitacora, error, errorZod, rangoDeQuery } from "@/lib/hospital/http";
+import { resolverAltasCita, type AltaCita } from "@/lib/hospital/cita-altas";
 import { CITA_ESTADOS, citaCamposSchema, citaEmpalmada, datosHojaCita, describirEmpalme, incluyeCita, ocupaRecurso, puedeProgramarAgenda, serializarCita, validarVinculosCita } from "@/lib/hospital/citas";
 
 export const GET = withHospital(async (req: Request) => {
@@ -68,11 +72,12 @@ export const POST = withHospital(async (req: Request) => {
   const body = await req.json().catch(() => null);
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) return errorZod(parsed.error);
-  const { companyId, ...d } = parsed.data;
+  const { companyId, pacienteNuevo, medicoNuevo, anestesiologoNuevo, ...d } = parsed.data;
 
   const { user } = await requireWriter(companyId, req);
   await requireModule(companyId, "HOSPITAL", req);
 
+  let altas: AltaCita[] = [];
   const cita = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`agenda:${companyId}`}))`;
   const inicio = new Date(d.inicio);
@@ -82,11 +87,17 @@ export const POST = withHospital(async (req: Request) => {
   const v = await validarVinculosCita(tx, companyId, d);
   if (v.error != null) return error(v.error);
 
-  const estado = d.estado ?? "PROGRAMADA";
+  const estado = d.estado ?? "CONFIRMADA";
   if (ocupaRecurso(estado)) {
     const choque = await citaEmpalmada(tx, { recursoId: d.recursoId, inicio, fin });
     if (choque) return error(describirEmpalme(choque), 409);
   }
+
+  // Después del empalme: una cita rechazada no deja altas huérfanas.
+  const a = await resolverAltasCita(tx, companyId, { ...d, pacienteNuevo, medicoNuevo, anestesiologoNuevo });
+  if (a.error != null) return error(a.error);
+  altas = a.altas;
+  const altaPaciente = a.altas.find((x) => x.rol === "PACIENTE");
 
   return tx.hospCita.create({
     data: {
@@ -97,13 +108,13 @@ export const POST = withHospital(async (req: Request) => {
       inicio,
       fin,
       estado,
-      pacienteId: d.pacienteId ?? null,
-      pacienteNombre: d.pacienteNombre?.trim() || v.pacienteNombre,
-      medicoId: d.medicoId ?? null,
+      pacienteId: d.pacienteId ?? a.pacienteId ?? null,
+      pacienteNombre: d.pacienteNombre?.trim() || v.pacienteNombre || altaPaciente?.nombre || null,
+      medicoId: d.medicoId ?? a.medicoId ?? null,
       episodioId: d.episodioId ?? null,
       cotizacionId: d.cotizacionId ?? null,
       notas: d.notas?.trim() || null,
-      ...datosHojaCita(d),
+      ...datosHojaCita({ ...d, ...(a.anestesiologoId ? { anestesiologoId: a.anestesiologoId } : {}) }),
       horaPorDefinir: estado === "SOLICITADA" && d.horaPorDefinir === true,
     },
     include: incluyeCita,
@@ -119,5 +130,14 @@ export const POST = withHospital(async (req: Request) => {
     entidadId: cita.id,
     detalle: { recurso: d.recursoId, titulo: cita.titulo, inicio: cita.inicio.toISOString(), fin: cita.fin.toISOString(), estado: cita.estado },
   });
-  return NextResponse.json(serializarCita(cita), { status: 201 });
+  for (const x of altas.filter((x) => x.nuevo)) {
+    bitacora(user, req, {
+      companyId,
+      accion: x.entidad === "HospPaciente" ? "hospital.paciente.crear" : "hospital.medico.crear",
+      entidad: x.entidad,
+      entidadId: x.id,
+      detalle: { nombre: x.nombre, rol: x.rol, origen: "agenda", cita: cita.id, ...(x.entidad === "HospMedico" ? { porCredencializar: true } : {}) },
+    });
+  }
+  return NextResponse.json({ ...serializarCita(cita), altas }, { status: 201 });
 });

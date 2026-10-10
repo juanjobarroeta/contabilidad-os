@@ -75,7 +75,8 @@ type Atencion = {
     | "RESPONSABLE_PENDIENTE"
     | "PLAN_SIN_AUTORIZACION"
     | "CUENTA_FUERA_DE_PLAN"
-    | "SAEH_INCOMPLETO";
+    | "SAEH_INCOMPLETO"
+    | "MEDICO_POR_CREDENCIALIZAR";
   titulo: string;
   detalle: string;
   href: string;
@@ -292,6 +293,22 @@ export const GET = withAuthz(async (req: Request) => {
   const atencion: Atencion[] = [];
   for (const [key, label] of [["responsableSanitarioCedula", "Cédula del responsable sanitario"], ["licenciaSanitaria", "Licencia sanitaria"], ["avisoPrivacidadVersion", "Versión del aviso de privacidad"], ["avisoPrivacidadUrl", "Aviso de privacidad"], ["oidRaiz", "OID registrado"]] as const) {
     if (!config?.[key]) atencion.push({ tipo: "CONFIGURACION_PENDIENTE", titulo: `${label}: sin configurar`, detalle: "Captura y verifica la evidencia aplicable en Configuración y Cumplimiento", href: "/configuracion", refId: key });
+  }
+  // Médicos y anestesiólogos dados de alta desde la agenda con sólo el nombre.
+  const porCredencializar = await prisma.hospMedico.findMany({
+    where: { companyId, activo: true, porCredencializar: true },
+    select: { id: true, nombre: true, especialidad: true, cedula: true },
+    orderBy: { createdAt: "asc" },
+    take: MAX_POR_ALERTA,
+  });
+  for (const m of porCredencializar) {
+    atencion.push({
+      tipo: "MEDICO_POR_CREDENCIALIZAR",
+      titulo: `${m.nombre}: por credencializar`,
+      detalle: [m.especialidad, m.cedula ? `cédula ${m.cedula}` : "sin cédula", "dado de alta desde la agenda"].filter(Boolean).join(" · "),
+      href: "/medicos",
+      refId: m.id,
+    });
   }
   const sinFecha = await prisma.hospLote.count({ where: { companyId, existencia: { gt: 0 }, caducidad: null } });
   if (sinFecha) atencion.push({ tipo: "LOTE_SIN_VERIFICAR", titulo: `${sinFecha} lotes sin caducidad verificada`, detalle: "No elegibles para aplicación; revisar recepción física y fecha", href: "/farmacia", refId: "lotes-sin-fecha" });
