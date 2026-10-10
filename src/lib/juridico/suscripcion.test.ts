@@ -52,6 +52,43 @@ describe("plan de paga", () => {
   });
 });
 
+describe("la casa propia", () => {
+  // Los cortes son para los prospectos. Al despacho de quien opera el producto
+  // no se le cobra ni se le corta, y ya van tres veces que un contador distinto
+  // lo deja fuera de su propio copiloto.
+  const casa = { casaPropia: true, asientos: 1, periodoFin: null } as const;
+
+  it("no la corta ninguno de los tres cortes de la prueba", () => {
+    const porDias = decidirSuscripcion({ ...casa, plan: "prueba", pruebaHasta: enDias(-30), documentosDelMes: 0 }, ahora);
+    const porDocs = decidirSuscripcion({ ...casa, plan: "prueba", pruebaHasta: enDias(5), documentosDelMes: DOCUMENTOS_DE_PRUEBA * 10 }, ahora);
+    const porGasto = decidirSuscripcion({ ...casa, plan: "prueba", pruebaHasta: enDias(5), documentosDelMes: 0, gastoUsd: TOPE_USD_PRUEBA * 5 }, ahora);
+    for (const e of [porDias, porDocs, porGasto]) {
+      expect(e.activo).toBe(true);
+      expect(e.motivo).toBeUndefined();
+      expect(e.casaPropia).toBe(true);
+    }
+  });
+
+  it("tampoco la corta un cobro que Stripe no pudo hacer", () => {
+    for (const plan of ["suspendido", "cancelado"] as const) {
+      const e = decidirSuscripcion({ ...casa, plan, pruebaHasta: null, documentosDelMes: 999 }, ahora);
+      expect(e.activo).toBe(true);
+      expect(e.motivo).toBeUndefined();
+    }
+  });
+
+  it("no le avisa de nada: no hay nada que vaya a pasarle", () => {
+    const e = decidirSuscripcion({ ...casa, plan: "prueba", pruebaHasta: enDias(0), documentosDelMes: DOCUMENTOS_DE_PRUEBA }, ahora);
+    expect(e.avisar).toBe(false);
+  });
+
+  it("sin la marca, todo corta igual que antes", () => {
+    const e = decidirSuscripcion({ plan: "prueba", pruebaHasta: enDias(-1), asientos: 1, periodoFin: null, documentosDelMes: 0 }, ahora);
+    expect(e.activo).toBe(false);
+    expect(e.casaPropia).toBeUndefined();
+  });
+});
+
 describe("estados de Stripe", () => {
   it("past_due todavía deja trabajar: Stripe sigue reintentando el cobro", () => {
     expect(planDesdeEstadoStripe("active")).toBe("activo");

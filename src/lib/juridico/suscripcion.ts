@@ -57,6 +57,8 @@ export interface EstadoSuscripcion {
   motivo?: string;
   /** true cuando queda poco y conviene avisar sin estorbar. */
   avisar: boolean;
+  /** El despacho de quien opera el producto: ni se le cobra ni se le corta. */
+  casaPropia?: boolean;
 }
 
 /** Días completos que faltan para una fecha. Puro. */
@@ -84,6 +86,17 @@ export function decidirSuscripcion(
     gastoUsd?: number;
     /** El despacho del operador no se corta por gasto: es nuestra propia casa. */
     sinTopeDeGasto?: boolean;
+    /**
+     * El despacho de quien OPERA el producto. No se le cobra ni se le corta por
+     * nada: ni días, ni documentos, ni gasto, ni un cobro que Stripe no pudo
+     * hacer.
+     *
+     * Es la tercera vez que el mismo corte deja al operador fuera de su propio
+     * copiloto —el tope del asiento el 14-sep, el tope de gasto de la prueba el
+     * 16-sep—, y las dos anteriores se parcharon una por una. Los cortes son
+     * para los prospectos; la casa no es un prospecto.
+     */
+    casaPropia?: boolean;
   },
   ahora: Date = new Date()
 ): EstadoSuscripcion {
@@ -99,6 +112,10 @@ export function decidirSuscripcion(
     periodoFin: d.periodoFin,
     ...(d.plan === "prueba" ? { gastoUsd: gasto, topeUsd: TOPE_USD_PRUEBA } : {}),
   };
+
+  // La casa, antes que cualquier corte. Tampoco se le avisa de nada, porque no
+  // hay nada que vaya a pasarle.
+  if (d.casaPropia) return { ...base, activo: true, avisar: false, casaPropia: true };
 
   if (d.plan === "activo") {
     // Un periodo vencido no corta: Stripe reintenta el cobro y el webhook
@@ -168,6 +185,9 @@ export async function estadoSuscripcion(despachoId: string, ahora: Date = new Da
   const inicioMes = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), 1));
   const desde = d.plan === "prueba" ? d.createdAt : inicioMes;
   const enPrueba = d.plan === "prueba";
+  // Se consulta para CUALQUIER plan, no sólo durante la prueba: un cobro que
+  // Stripe no pudo hacer tampoco puede dejar al operador fuera de su producto.
+  const casaPropia = await despachoDeOperador(despachoId);
   return decidirSuscripcion(
     {
       plan: (esPlan(d.plan) ? d.plan : "prueba") as PlanDespacho,
@@ -177,7 +197,8 @@ export async function estadoSuscripcion(despachoId: string, ahora: Date = new Da
       documentosDelMes: await documentosDelMes(despachoId, desde),
       // El gasto sólo importa mientras la prueba corre: quien ya paga no tiene tope aquí.
       gastoUsd: enPrueba ? await gastoDePruebaUsd(despachoId, d.createdAt) : 0,
-      sinTopeDeGasto: enPrueba ? await despachoDeOperador(despachoId) : true,
+      sinTopeDeGasto: !enPrueba || casaPropia,
+      casaPropia,
     },
     ahora
   );
