@@ -1018,7 +1018,8 @@ export async function programarPlan(
         titulo: plan.nombre,
         inicio,
         fin,
-        estado: "PROGRAMADA",
+        // Programar el plan lo agenda: nace confirmada, igual que en la agenda.
+        estado: "CONFIRMADA",
         pacienteId: plan.pacienteId,
         pacienteNombre: v.pacienteNombre,
         medicoId: medicoId ?? null,

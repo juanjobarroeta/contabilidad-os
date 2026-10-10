@@ -69,6 +69,7 @@ export function firmaResumen(f: HospFirma, opts: { conImagen?: boolean; hashCont
     ip: f.ip,
     userAgent: f.userAgent,
     geolocalizacion: f.geolocalizacion,
+    trazoReutilizado: f.trazoReutilizado,
     userId: f.userId,
     userEmail: f.userEmail,
     hashDocumento: f.hashDocumento,
@@ -117,6 +118,8 @@ export interface FirmarDocumentoArgs {
   /** data URL PNG. */
   imagen: string;
   geolocalizacion?: string | null;
+  /** Trazo capturado una vez y aplicado aquí con «Acepto» tras leer el documento. */
+  trazoReutilizado?: boolean;
   ip?: string | null;
   userAgent?: string | null;
   user?: { id?: string | null; email?: string | null } | null;
@@ -179,6 +182,7 @@ export async function firmarDocumento(db: PrismaClient, a: FirmarDocumentoArgs):
         ip: a.ip ?? null,
         userAgent: a.userAgent?.slice(0, 300) ?? null,
         geolocalizacion: a.geolocalizacion?.trim().slice(0, 120) || null,
+        trazoReutilizado: a.trazoReutilizado === true,
         userId: a.user?.id ?? null,
         userEmail: a.user?.email ?? null,
         at,

@@ -530,7 +530,8 @@ POST /api/hospital/pacientes/[id]/documentos { tipo, episodioId?, contenido?, pl
        CESION_DERECHOS [PACIENTE|REPRESENTANTE] · AVISO_PRIVACIDAD y CONSENTIMIENTO_DATOS [PACIENTE|REPRESENTANTE] ·
        CONSENTIMIENTO_* [PACIENTE|REPRESENTANTE, TESTIGO1, TESTIGO2, MEDICO]
 POST /api/hospital/episodios/[id]/admision → crea el paquete estándar que falte según tipo de episodio y pagador y lo devuelve
-POST /api/hospital/documentos/[docId]/firmas { rol, nombre, identificacion?, parentesco?, imagen (data URL PNG), geolocalizacion? }
+POST /api/hospital/documentos/[docId]/firmas { rol, nombre, identificacion?, parentesco?, imagen (data URL PNG), geolocalizacion?, trazoReutilizado? }
+     · trazoReutilizado: el trazo se capturó una vez para el paquete y aquí se aplicó con «Acepto» tras leer el texto (queda en HospFirma y en la bitácora)
      → firma; hashDocumento = documento.hashContenido; hashFirma = sha256(imagen|hashDocumento|rol|nombre|at); ip y userAgent del request;
        con todas las requeridas → estado FIRMADO y firmadoAt. Las firmas no se editan ni se borran; el texto firmado tampoco.
 GET  /api/hospital/documentos/[docId][?firmas=1] → documento + firmas (con imagen si firmas=1) + evidencia { hashContenido, firmas: [{ rol, nombre, at, ip, hashFirma }] }

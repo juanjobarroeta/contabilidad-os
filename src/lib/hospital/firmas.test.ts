@@ -53,6 +53,7 @@ describe("cadena de evidencia", () => {
     ip: "187.190.12.34",
     userAgent: "Haltus Admisión/1.0",
     geolocalizacion: null,
+    trazoReutilizado: false,
     userId: "u1",
     userEmail: "revisor@haltus.test",
     at,

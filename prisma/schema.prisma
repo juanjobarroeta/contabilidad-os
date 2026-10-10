@@ -9206,6 +9206,9 @@ model HospFirma {
   ip              String?
   userAgent       String?
   geolocalizacion String?
+  /// El firmante trazó su firma UNA vez para varios documentos y en éste la
+  /// aplicó con un «Acepto» después de leerlo (firma del paquete de admisión).
+  trazoReutilizado Boolean        @default(false)
   userId          String?
   userEmail       String?
   at              DateTime        @default(now())
