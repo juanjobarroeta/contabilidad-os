@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { requireBancosAccess } from "@/lib/bancos/statements/access";
+import { requireBancosAccess, sesionOBearer } from "@/lib/bancos/statements/access";
 import { gateEscritura } from "@/lib/subscription";
 import { accountReview, reviewPage, documentPage, previewReview, executeReview } from "@/lib/bancos/statements/review";
 import { publicError, reviewRequestSchema, scopeSchema } from "@/lib/bancos/statements/contract";
@@ -8,7 +7,7 @@ import { autoVerificarEstado, estadosPorRevisar } from "@/lib/bancos/statements/
 export const runtime = "nodejs";
 const noStore = { "Cache-Control": "no-store" };
 export async function GET(req: Request) {
-  const session = await auth(); if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const session = await sesionOBearer(req); if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const p = new URL(req.url).searchParams;
   // Estados por revisar de TODOS los meses y cuentas (no requiere periodo).
   if (p.get("pendientes") === "1") {
@@ -29,7 +28,7 @@ export async function GET(req: Request) {
   } catch (e) { return NextResponse.json({ error: publicError(e) }, { status: (e as { status?: number }).status ?? 409, headers: noStore }); }
 }
 export async function POST(req: Request) {
-  const session = await auth(); if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const session = await sesionOBearer(req); if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = await req.json().catch(() => null);
   // Reintento de la verificación automática (p. ej. el mes ya terminó o se
   // resolvieron las filas pendientes). Mismos controles que la manual.

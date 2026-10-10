@@ -1,4 +1,4 @@
-import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { getEffectiveCompanyMembership, requireUser } from "@/lib/authz";
 
 export class BancosAccessError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -15,4 +15,14 @@ export async function requireBancosAccess(userId: string, companyId: string) {
   const member = await getEffectiveCompanyMembership(userId, companyId);
   if (!member) throw new BancosAccessError(403, "Sin acceso a esta empresa.");
   return { canWrite: member.role !== "VIEWER", role: member.role };
+}
+
+/**
+ * Sesión web O bearer de satélite (HospitalOS, PurificadoraOS…), con la misma
+ * forma que `auth()` para no tocar el resto de la ruta. Los permisos se siguen
+ * resolviendo por empresa en cada ruta; esto sólo identifica al usuario.
+ */
+export async function sesionOBearer(req: Request): Promise<{ user: { id: string; email: string | null } } | null> {
+  try { const u = await requireUser(req); return { user: { id: u.id, email: u.email ?? null } }; }
+  catch { return null; }
 }

@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
 import { asegurarUsoIA } from "@/lib/ai/guardia";
 import { sugerenciasPeriodo, aprobarSugerencia } from "@/lib/bancos/sugerencias-concepto";
 import type { FamiliaConcepto } from "@/lib/bancos/categorizar-concepto";
+import { sesionOBearer } from "@/lib/bancos/statements/access";
 
 const FAMILIAS_VALIDAS: FamiliaConcepto[] = [
   "COMISION",
@@ -27,7 +27,7 @@ const FAMILIAS_VALIDAS: FamiliaConcepto[] = [
  * para los que las reglas no clasifican). NO escribe en el ledger.
  */
 export async function GET(req: Request) {
-  const session = await auth();
+  const session = await sesionOBearer(req);
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const url = new URL(req.url);
@@ -65,7 +65,7 @@ export async function GET(req: Request) {
  * escribe en el ledger.
  */
 export async function POST(req: Request) {
-  const session = await auth();
+  const session = await sesionOBearer(req);
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json().catch(() => null);
