@@ -407,6 +407,12 @@ POST /api/hospital/episodios/[id]/notas { tipo, texto, secciones?, fecha?, medic
      · el hub calcula `hash` (SHA-256 del contenido canónico: episodio, tipo, fecha, texto, secciones, autor, cédula,
        médico, reemplazaId) y `selloAt`; la respuesta trae hashVerificado
 ```
+Índice del expediente (lo calcula el satélite; el hub guarda sólo lo corregido a mano):
+```
+PUT /api/hospital/episodios/[id]/indice { ajustes: { "<renglón>": "SI"|"NO"|"NA" } }
+     → sustituye HospEpisodio.indiceAjustes ({} vuelve a lo calculado); bitácora hospital.episodio.indice con antes/después
+       409 episodio cancelado · GET /episodios/[id] lo devuelve como `indiceAjustes`
+```
 Secciones obligatorias por tipo (las opcionales están en `PLANTILLAS_NOTA`):
 
 | Tipo | Obligatorias |

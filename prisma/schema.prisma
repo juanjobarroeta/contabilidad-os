@@ -8317,6 +8317,9 @@ model HospEpisodio {
   /// Paciente enviado por un médico o una unidad externos (imagenología, interconsultas).
   medicoReferencia    String?
   unidadReferencia    String?
+  /// Correcciones a mano del índice del expediente: { "6": "SI", "16": "NA", … }.
+  /// Lo que no está aquí se calcula de las notas, documentos y cargos.
+  indiceAjustes       Json?
   /// Autorización previa del pagador (folio/número que dio la aseguradora).
   autorizacionPagador String?
 
