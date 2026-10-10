@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { AuthzError, requireWriter } from "@/lib/authz";
+import { PPD_ACUMULADO_TOLERANCIA } from "@/lib/conciliacion";
 
 // POST /api/bancos/batch-match
 // Body: { txIds: string[], invoiceId: string }
@@ -47,6 +48,22 @@ export async function POST(req: Request) {
         { error: "Los movimientos pertenecen a otra empresa" },
         { status: 403 }
       );
+    }
+
+    // Freno al sobrepago: lo ya cobrado de la factura por OTROS movimientos
+    // (match directo + porciones de reparto) más el neto de estos no puede
+    // rebasar el total (+1%, la misma tolerancia del reparto). Antes no había
+    // freno y un satélite podía cubrir una factura dos veces.
+    const netoLote = txs.reduce((s, t) => s + Number(t.monto), 0);
+    const [directos, porciones] = await Promise.all([
+      prisma.bankTransaction.findMany({ where: { invoiceId, id: { notIn: txIds }, status: "MATCHED" }, select: { monto: true } }),
+      prisma.conciliacionDetalle.aggregate({ where: { invoiceId, bankTransactionId: { notIn: txIds } }, _sum: { montoAsignado: true } }),
+    ]);
+    const yaCobrado = Math.abs(directos.reduce((s, t) => s + Number(t.monto), 0)) + Number(porciones._sum.montoAsignado ?? 0);
+    if (yaCobrado + Math.abs(netoLote) > invoiceTotal * (1 + PPD_ACUMULADO_TOLERANCIA) + 0.005) {
+      return NextResponse.json({
+        error: `Estos movimientos suman ${Math.abs(netoLote).toFixed(2)} y a la factura le quedan ${Math.max(0, invoiceTotal - yaCobrado).toFixed(2)} por cobrar.`,
+      }, { status: 400 });
     }
 
     // Update all to MATCHED pointing at the same invoice
