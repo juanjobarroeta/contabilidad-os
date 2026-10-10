@@ -386,7 +386,7 @@ export async function ordenesDeCompra(db: Db, companyId: string, filtro: FiltroO
       },
     },
   });
-  const amparado = await amparadoPorReps(db, vinculos.map((v) => v.invoice.uuid));
+  const amparado = await amparadoPorReps(db, companyId, vinculos.map((v) => v.invoice.uuid));
   const cfdisDe = new Map<string, typeof vinculos>();
   for (const v of vinculos) cfdisDe.set(v.targetId!, [...(cfdisDe.get(v.targetId!) ?? []), v]);
 

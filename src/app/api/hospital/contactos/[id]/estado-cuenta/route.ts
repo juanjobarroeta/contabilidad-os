@@ -17,7 +17,14 @@ import { normalizarUuid, variantesUuid } from "@/lib/fiscal/uuid";
 //            PUE (liquidada en su emisión — misma regla de evidencia que la
 //            cartera) y pago/cobro conciliado en banco que excede lo amparado
 //            por REP.
-// Saldo corrido + saldo anterior al ejercicio. Sólo lectura.
+// Saldo corrido + saldo anterior al ejercicio, por FECHA DE LA FACTURA: un
+// pago cuenta en el ejercicio de la factura que paga. Sólo lectura.
+//
+// Cada pago se aplica a LA factura que dice su XML, sin pasar de lo que esa
+// factura debe: un REP de 2026 que paga facturas de 2025 baja el saldo de
+// 2025 (y sale en ese ejercicio), no el de 2026; nunca de más. Si una PUE trae
+// REP, el REP es la evidencia y la PUE implícita cubre sólo el resto. Sólo
+// cuentan CFDIs vigentes: ni cancelados ni sustituidos (TipoRelacion 04).
 // ─────────────────────────────────────────────────────────────────────────────
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -30,6 +37,8 @@ type Mov = {
   concepto: string;
   cargo: number;
   abono: number;
+  /** Fecha de la factura a la que pertenece: decide en qué ejercicio cuenta. */
+  de: Date;
 };
 
 export const GET = withAuthz(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
@@ -58,7 +67,7 @@ export const GET = withAuthz(async (req: Request, ctx: { params: Promise<{ id: s
 
   const facturas = (
     await prisma.invoice.findMany({
-      where: { companyId: contacto.companyId, customerId: id, tipo, status: { not: "CANCELLED" } },
+      where: { companyId: contacto.companyId, customerId: id, tipo, status: { not: "CANCELLED" }, sustituidoPorUuid: null },
       select: {
         id: true, uuid: true, serie: true, folio: true, fecha: true, total: true,
         metodoPago: true, tipoSat: true,
@@ -71,44 +80,58 @@ export const GET = withAuthz(async (req: Request, ctx: { params: Promise<{ id: s
   const uuids = facturas.filter((f) => f.tipoSat !== "E").map((f) => f.uuid).filter(Boolean) as string[];
   const reps = uuids.length
     ? await prisma.pagoDoctoRelacionado.findMany({
-        where: { parentUuid: { in: variantesUuid(uuids) } },
-        select: { parentUuid: true, impPagado: true, numParcialidad: true, fechaPago: true, pagoInvoiceId: true },
+        where: {
+          parentUuid: { in: variantesUuid(uuids) },
+          // Mismo criterio que amparadoPorReps: un REP cancelado o sustituido no paga nada.
+          pagoInvoice: { companyId: contacto.companyId, tipo: "PAGO", status: { not: "CANCELLED" }, sustituidoPorUuid: null },
+        },
+        select: { parentUuid: true, impPagado: true, numParcialidad: true, fechaPago: true, pagoInvoiceId: true, pagoInvoice: { select: { fecha: true } } },
       })
     : [];
+  reps.sort((a, b) => +(a.fechaPago ?? a.pagoInvoice.fecha) - +(b.fechaPago ?? b.pagoInvoice.fecha));
 
   const ref = (f: { serie: string | null; folio: string | null }) =>
     [f.serie, f.folio].filter(Boolean).join("-") || null;
   const refPorUuid = new Map(
-    facturas.filter((f) => f.uuid).map((f) => [normalizarUuid(f.uuid!), { ref: ref(f), id: f.id, fecha: f.fecha }])
+    facturas.filter((f) => f.uuid).map((f) => [normalizarUuid(f.uuid!), { ref: ref(f), id: f.id, fecha: f.fecha, total: f.total }])
   );
+  const fechaCorta = (d: Date) => d.toISOString().slice(0, 10).split("-").reverse().join("/");
 
   const movimientos: Mov[] = [];
+  // Lo aplicado por REP a cada factura, en orden de fecha de pago y topado a su total.
   const repPorFactura = new Map<string, number>();
   for (const r of reps) {
     const k = normalizarUuid(r.parentUuid);
-    repPorFactura.set(k, (repPorFactura.get(k) ?? 0) + Number(r.impPagado ?? 0));
     const padre = refPorUuid.get(k);
+    if (!padre) continue;
+    const previo = repPorFactura.get(k) ?? 0;
+    const abono = r2(Math.min(Number(r.impPagado ?? 0), Math.max(0, padre.total - previo)));
+    if (abono <= 0.005) continue;
+    repPorFactura.set(k, r2(previo + abono));
+    const fecha = r.fechaPago ?? r.pagoInvoice.fecha;
+    const deOtroAnio = padre.fecha.getFullYear() !== fecha.getFullYear();
     movimientos.push({
-      fecha: r.fechaPago ?? padre?.fecha ?? new Date(),
+      fecha,
       tipo: "PAGO_REP",
-      referencia: padre?.ref ?? null,
+      de: padre.fecha,
+      referencia: padre.ref,
       invoiceId: r.pagoInvoiceId,
-      concepto: `Pago (REP${r.numParcialidad ? ` parcialidad ${r.numParcialidad}` : ""}) de ${padre?.ref ?? "factura"}`,
+      concepto: `Pago (REP${r.numParcialidad ? ` parcialidad ${r.numParcialidad}` : ""}) de ${padre.ref ?? "factura"}${deOtroAnio ? ` del ${fechaCorta(padre.fecha)}` : ""}`,
       cargo: 0,
-      abono: Number(r.impPagado ?? 0),
+      abono,
     });
   }
 
   for (const f of facturas) {
     if (f.tipoSat === "E") {
       movimientos.push({
-        fecha: f.fecha, tipo: "NOTA_CREDITO", referencia: ref(f), invoiceId: f.id,
+        fecha: f.fecha, de: f.fecha, tipo: "NOTA_CREDITO", referencia: ref(f), invoiceId: f.id,
         concepto: `Nota de crédito ${ref(f) ?? ""}`.trim(), cargo: 0, abono: f.total,
       });
       continue;
     }
     movimientos.push({
-      fecha: f.fecha, tipo: "FACTURA", referencia: ref(f), invoiceId: f.id,
+      fecha: f.fecha, de: f.fecha, tipo: "FACTURA", referencia: ref(f), invoiceId: f.id,
       concepto: `Factura ${ref(f) ?? ""}`.trim(), cargo: f.total, abono: 0,
     });
     const conciliado = f.conciliacionDetalles.reduce((s, d) => s + Math.abs(Number(d.montoAsignado)), 0);
@@ -118,18 +141,22 @@ export const GET = withAuthz(async (req: Request, ctx: { params: Promise<{ id: s
       const excedente = Math.max(0, Math.min(conciliado, f.total) - rep);
       if (excedente > 0.01) {
         movimientos.push({
-          fecha: f.fecha, tipo: "COBRO_BANCO", referencia: ref(f), invoiceId: f.id,
+          fecha: f.fecha, de: f.fecha, tipo: "COBRO_BANCO", referencia: ref(f), invoiceId: f.id,
           concepto: `${verboBanco} conciliado en banco de ${ref(f) ?? "factura"} (sin REP)`,
           cargo: 0, abono: excedente,
         });
       }
     } else {
-      // PUE: liquidada en su emisión (misma regla de evidencia que la cartera).
-      movimientos.push({
-        fecha: f.fecha, tipo: "PAGO_PUE", referencia: ref(f), invoiceId: f.id,
-        concepto: `Pago de ${ref(f) ?? "factura"} (PUE — una sola exhibición)`,
-        cargo: 0, abono: f.total,
-      });
+      // PUE: liquidada en su emisión (misma regla de evidencia que la cartera),
+      // salvo lo que un REP dice haber pagado después: eso queda en su fecha.
+      const implicito = r2(f.total - rep);
+      if (implicito > 0.005) {
+        movimientos.push({
+          fecha: f.fecha, de: f.fecha, tipo: "PAGO_PUE", referencia: ref(f), invoiceId: f.id,
+          concepto: `Pago de ${ref(f) ?? "factura"} (PUE — una sola exhibición)`,
+          cargo: 0, abono: implicito,
+        });
+      }
     }
   }
 
@@ -137,15 +164,19 @@ export const GET = withAuthz(async (req: Request, ctx: { params: Promise<{ id: s
   // corrido nunca «baje» antes de que exista la factura que se paga.
   movimientos.sort((a, b) => +a.fecha - +b.fecha || b.cargo - a.cargo);
 
+  // Cada movimiento cuenta en el ejercicio de SU factura, no en el de su
+  // fecha: el REP de 2026 que paga una factura de 2025 baja el saldo de 2025.
+  // El saldo anterior es lo que hoy siguen debiendo las facturas previas.
   const saldoAnterior = r2(
-    movimientos.filter((m) => m.fecha < inicio).reduce((s, m) => s + m.cargo - m.abono, 0)
+    movimientos.filter((m) => m.de < inicio).reduce((s, m) => s + m.cargo - m.abono, 0)
   );
-  const delEjercicio = movimientos.filter((m) => m.fecha >= inicio && m.fecha < fin);
+  const delEjercicio = movimientos.filter((m) => m.de >= inicio && m.de < fin);
 
   let saldo = saldoAnterior;
   const conSaldo = delEjercicio.map((m) => {
     saldo = r2(saldo + m.cargo - m.abono);
-    return { ...m, cargo: r2(m.cargo), abono: r2(m.abono), saldo };
+    const { de: _de, ...resto } = m;
+    return { ...resto, cargo: r2(m.cargo), abono: r2(m.abono), saldo };
   });
 
   const { companyId: _companyId, ...contactoPublico } = contacto;

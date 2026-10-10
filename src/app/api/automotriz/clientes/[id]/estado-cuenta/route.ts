@@ -61,7 +61,10 @@ export const GET = withAuthz(async (req: Request, ctx: { params: Promise<{ id: s
   const uuids = facturas.filter((f) => f.tipoSat !== "E").map((f) => f.uuid).filter(Boolean) as string[];
   const reps = uuids.length
     ? await prisma.pagoDoctoRelacionado.findMany({
-        where: { parentUuid: { in: variantesUuid(uuids) } },
+        where: {
+          parentUuid: { in: variantesUuid(uuids) },
+          pagoInvoice: { companyId: cliente.companyId, tipo: "PAGO", status: { not: "CANCELLED" }, sustituidoPorUuid: null },
+        },
         select: { parentUuid: true, impPagado: true, numParcialidad: true, fechaPago: true, pagoInvoiceId: true },
       })
     : [];

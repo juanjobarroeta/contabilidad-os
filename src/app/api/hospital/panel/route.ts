@@ -236,7 +236,7 @@ export const GET = withAuthz(async (req: Request) => {
     cirugias.filter((c) => estados.includes(c.estado)).reduce((s, c) => s + c._count._all, 0);
 
   // ── Por cobrar / comprometido: misma evidencia que la cartera ──
-  const amparado = await amparadoPorReps(prisma, [...porCobrarDb, ...porPagarDb].map((f) => f.uuid));
+  const amparado = await amparadoPorReps(prisma, companyId, [...porCobrarDb, ...porPagarDb].map((f) => f.uuid));
   const saldoDe = (f: (typeof porCobrarDb)[number]) =>
     pagadoPorEvidencia({
       metodoPago: f.metodoPago,
