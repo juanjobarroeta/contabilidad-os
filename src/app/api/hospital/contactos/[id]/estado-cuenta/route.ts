@@ -17,11 +17,12 @@ import { normalizarUuid, variantesUuid } from "@/lib/fiscal/uuid";
 //            PUE (liquidada en su emisión — misma regla de evidencia que la
 //            cartera) y pago/cobro conciliado en banco que excede lo amparado
 //            por REP.
-// Saldo corrido + saldo anterior al ejercicio. Sólo lectura.
+// Saldo corrido + saldo anterior al ejercicio, por FECHA DE LA FACTURA: un
+// pago cuenta en el ejercicio de la factura que paga. Sólo lectura.
 //
 // Cada pago se aplica a LA factura que dice su XML, sin pasar de lo que esa
-// factura debe: un REP de 2026 que paga facturas de 2025 abona a esas
-// facturas (que vienen en el saldo anterior), nunca de más. Si una PUE trae
+// factura debe: un REP de 2026 que paga facturas de 2025 baja el saldo de
+// 2025 (y sale en ese ejercicio), no el de 2026; nunca de más. Si una PUE trae
 // REP, el REP es la evidencia y la PUE implícita cubre sólo el resto. Sólo
 // cuentan CFDIs vigentes: ni cancelados ni sustituidos (TipoRelacion 04).
 // ─────────────────────────────────────────────────────────────────────────────
@@ -36,6 +37,8 @@ type Mov = {
   concepto: string;
   cargo: number;
   abono: number;
+  /** Fecha de la factura a la que pertenece: decide en qué ejercicio cuenta. */
+  de: Date;
 };
 
 export const GET = withAuthz(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
@@ -110,6 +113,7 @@ export const GET = withAuthz(async (req: Request, ctx: { params: Promise<{ id: s
     movimientos.push({
       fecha,
       tipo: "PAGO_REP",
+      de: padre.fecha,
       referencia: padre.ref,
       invoiceId: r.pagoInvoiceId,
       concepto: `Pago (REP${r.numParcialidad ? ` parcialidad ${r.numParcialidad}` : ""}) de ${padre.ref ?? "factura"}${deOtroAnio ? ` del ${fechaCorta(padre.fecha)}` : ""}`,
@@ -121,13 +125,13 @@ export const GET = withAuthz(async (req: Request, ctx: { params: Promise<{ id: s
   for (const f of facturas) {
     if (f.tipoSat === "E") {
       movimientos.push({
-        fecha: f.fecha, tipo: "NOTA_CREDITO", referencia: ref(f), invoiceId: f.id,
+        fecha: f.fecha, de: f.fecha, tipo: "NOTA_CREDITO", referencia: ref(f), invoiceId: f.id,
         concepto: `Nota de crédito ${ref(f) ?? ""}`.trim(), cargo: 0, abono: f.total,
       });
       continue;
     }
     movimientos.push({
-      fecha: f.fecha, tipo: "FACTURA", referencia: ref(f), invoiceId: f.id,
+      fecha: f.fecha, de: f.fecha, tipo: "FACTURA", referencia: ref(f), invoiceId: f.id,
       concepto: `Factura ${ref(f) ?? ""}`.trim(), cargo: f.total, abono: 0,
     });
     const conciliado = f.conciliacionDetalles.reduce((s, d) => s + Math.abs(Number(d.montoAsignado)), 0);
@@ -137,7 +141,7 @@ export const GET = withAuthz(async (req: Request, ctx: { params: Promise<{ id: s
       const excedente = Math.max(0, Math.min(conciliado, f.total) - rep);
       if (excedente > 0.01) {
         movimientos.push({
-          fecha: f.fecha, tipo: "COBRO_BANCO", referencia: ref(f), invoiceId: f.id,
+          fecha: f.fecha, de: f.fecha, tipo: "COBRO_BANCO", referencia: ref(f), invoiceId: f.id,
           concepto: `${verboBanco} conciliado en banco de ${ref(f) ?? "factura"} (sin REP)`,
           cargo: 0, abono: excedente,
         });
@@ -148,7 +152,7 @@ export const GET = withAuthz(async (req: Request, ctx: { params: Promise<{ id: s
       const implicito = r2(f.total - rep);
       if (implicito > 0.005) {
         movimientos.push({
-          fecha: f.fecha, tipo: "PAGO_PUE", referencia: ref(f), invoiceId: f.id,
+          fecha: f.fecha, de: f.fecha, tipo: "PAGO_PUE", referencia: ref(f), invoiceId: f.id,
           concepto: `Pago de ${ref(f) ?? "factura"} (PUE — una sola exhibición)`,
           cargo: 0, abono: implicito,
         });
@@ -160,15 +164,19 @@ export const GET = withAuthz(async (req: Request, ctx: { params: Promise<{ id: s
   // corrido nunca «baje» antes de que exista la factura que se paga.
   movimientos.sort((a, b) => +a.fecha - +b.fecha || b.cargo - a.cargo);
 
+  // Cada movimiento cuenta en el ejercicio de SU factura, no en el de su
+  // fecha: el REP de 2026 que paga una factura de 2025 baja el saldo de 2025.
+  // El saldo anterior es lo que hoy siguen debiendo las facturas previas.
   const saldoAnterior = r2(
-    movimientos.filter((m) => m.fecha < inicio).reduce((s, m) => s + m.cargo - m.abono, 0)
+    movimientos.filter((m) => m.de < inicio).reduce((s, m) => s + m.cargo - m.abono, 0)
   );
-  const delEjercicio = movimientos.filter((m) => m.fecha >= inicio && m.fecha < fin);
+  const delEjercicio = movimientos.filter((m) => m.de >= inicio && m.de < fin);
 
   let saldo = saldoAnterior;
   const conSaldo = delEjercicio.map((m) => {
     saldo = r2(saldo + m.cargo - m.abono);
-    return { ...m, cargo: r2(m.cargo), abono: r2(m.abono), saldo };
+    const { de: _de, ...resto } = m;
+    return { ...resto, cargo: r2(m.cargo), abono: r2(m.abono), saldo };
   });
 
   const { companyId: _companyId, ...contactoPublico } = contacto;

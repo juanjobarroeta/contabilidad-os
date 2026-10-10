@@ -1,8 +1,8 @@
 /**
  * Estado de cuenta documental del contacto: sólo CFDIs vigentes, y cada pago
- * se aplica a la factura que dice su XML sin pasar de lo que debe — un REP de
- * 2026 que paga una factura de 2025 abona a ésa (que viene en el saldo
- * anterior), y una PUE con REP no se paga dos veces.
+ * se aplica a la factura que dice su XML sin pasar de lo que debe y cuenta en
+ * el ejercicio de ESA factura — un REP de 2026 que paga una factura de 2025
+ * baja el saldo de 2025, no el de 2026 — y una PUE con REP no se paga dos veces.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -60,18 +60,31 @@ describe("estado de cuenta del contacto", () => {
     expect(estado.whereReps).toMatchObject({ pagoInvoice: { companyId: "c1", tipo: "PAGO", status: { not: "CANCELLED" }, sustituidoPorUuid: null } });
   });
 
-  it("un REP de 2026 abona a la factura de 2025 que viene en el saldo anterior", async () => {
+  it("un REP de 2026 que paga una factura de 2025 baja el saldo de 2025, no el de 2026", async () => {
     estado.facturas = [
       factura({ id: "f25", uuid: U25, folio: "25", fecha: new Date(2025, 10, 15), total: 1000, metodoPago: "PPD" }),
       factura({ id: "f26", uuid: U26, folio: "26", fecha: new Date(2026, 0, 20), total: 500, metodoPago: "PPD" }),
     ];
     estado.reps = [rep({ parentUuid: U25, impPagado: 1000, fechaPago: new Date(2026, 1, 3) })];
-    const d = await edoCuenta();
-    expect(d.saldoAnterior).toBe(1000);
-    const pago = d.movimientos.find((m: { tipo: string }) => m.tipo === "PAGO_REP");
-    expect(pago).toMatchObject({ abono: 1000, referencia: "F-25" });
+
+    const d26 = await edoCuenta(2026);
+    expect(d26.saldoAnterior).toBe(0);
+    expect(d26.movimientos.map((m: { tipo: string }) => m.tipo)).toEqual(["FACTURA"]);
+    expect(d26.resumen.saldoFinal).toBe(500);
+
+    const d25 = await edoCuenta(2025);
+    const pago = d25.movimientos.find((m: { tipo: string }) => m.tipo === "PAGO_REP");
+    expect(pago).toMatchObject({ abono: 1000, referencia: "F-25", fecha: new Date(2026, 1, 3).toISOString() });
     expect(pago.concepto).toContain("del 15/11/2025");
-    expect(d.resumen.saldoFinal).toBe(500);
+    expect(pago.de).toBeUndefined();
+    expect(d25.resumen.saldoFinal).toBe(0);
+  });
+
+  it("un REP de 2025 que paga una factura de 2025 sigue en 2025", async () => {
+    estado.facturas = [factura({ id: "f25", uuid: U25, folio: "25", fecha: new Date(2025, 10, 15), total: 1000, metodoPago: "PPD" })];
+    estado.reps = [rep({ parentUuid: U25, impPagado: 400, fechaPago: new Date(2025, 11, 1) })];
+    expect((await edoCuenta(2025)).resumen.saldoFinal).toBe(600);
+    expect((await edoCuenta(2026)).saldoAnterior).toBe(600);
   });
 
   it("un REP no paga más de lo que debe su factura", async () => {
@@ -88,9 +101,9 @@ describe("estado de cuenta del contacto", () => {
   it("una PUE con REP no se paga dos veces: el REP en su fecha, la PUE implícita sólo el resto", async () => {
     estado.facturas = [factura({ id: "f25", uuid: U25, folio: "25", fecha: new Date(2025, 10, 15), total: 1000, metodoPago: "PUE" })];
     estado.reps = [rep({ parentUuid: U25, impPagado: 600, fechaPago: new Date(2026, 1, 3) })];
-    const d = await edoCuenta();
-    expect(d.saldoAnterior).toBe(600);
-    expect(d.movimientos.map((m: { tipo: string; abono: number }) => [m.tipo, m.abono])).toEqual([["PAGO_REP", 600]]);
+    const d = await edoCuenta(2025);
+    expect(d.movimientos.map((m: { tipo: string; abono: number }) => [m.tipo, m.abono])).toEqual([["FACTURA", 0], ["PAGO_PUE", 400], ["PAGO_REP", 600]]);
     expect(d.resumen.saldoFinal).toBe(0);
+    expect((await edoCuenta(2026)).saldoAnterior).toBe(0);
   });
 });
