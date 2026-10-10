@@ -16,6 +16,8 @@ import { ejecutarHerramientaPasada } from "./ejecutar";
 import { NOMBRE_CIERRE, NOMBRES_PASADA, toolsPasada } from "./herramientas";
 import { mensajeDePasada, normalizarResumen, promptDelContador, resumenEnTexto } from "./prompt";
 import { managedContaBotEnabled } from "@/lib/contabot/config";
+import { MODELO_AGENTE } from "@/lib/ai/modelos";
+import { cacheEnUltimoMensaje } from "@/lib/ai/cache-conversacion";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LA PASADA DEL CONTADOR — la revisión que nadie pidió.
@@ -36,7 +38,7 @@ import { managedContaBotEnabled } from "@/lib/contabot/config";
 
 const anthropic = new Anthropic();
 
-const MODELO = process.env.AI_CONTADOR_MODEL ?? process.env.AI_CHAT_MODEL ?? "claude-fable-5";
+const MODELO = process.env.AI_CONTADOR_MODEL ?? process.env.AI_CHAT_MODEL ?? MODELO_AGENTE;
 const MAX_RONDAS = 10;
 const MAX_TOKENS = 2048;
 
@@ -117,7 +119,7 @@ export async function correrPasadaEmpresa(companyId: string, hoy = new Date()): 
     const res = await meteredCreate(
       anthropic,
       { companyId, userId: null, subtipo: "contador.pasada" },
-      { model: MODELO, max_tokens: MAX_TOKENS, system, tools: TOOLS_PASADA, messages },
+      { model: MODELO, max_tokens: MAX_TOKENS, system, tools: TOOLS_PASADA, messages: cacheEnUltimoMensaje(messages) },
     );
 
     const usos = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");

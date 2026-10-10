@@ -25,6 +25,7 @@ import { reportError } from "@/lib/observability";
 import { mensajeDeErrorParaAbogado } from "@/lib/juridico/errores";
 import { indiceOrdenamientos } from "@/lib/juridico/indice-ordenamientos";
 import type { CheckpointTurno, EventoTurno } from "@/lib/juridico/turnos";
+import { MODELO_AGENTE } from "@/lib/ai/modelos";
 
 const anthropic = new Anthropic();
 
@@ -36,7 +37,7 @@ const MAX_TOOL_ROUNDS_CON_DOCUMENTOS = 24;
 // tokens se cortaba a la mitad (y el turno moría con «user messages must have
 // non-empty content»).
 const MAX_TOKENS_SALIDA = 16_000;
-export const CHAT_MODEL = process.env.AI_CHAT_MODEL ?? "claude-fable-5";
+export const CHAT_MODEL = process.env.AI_CHAT_MODEL ?? MODELO_AGENTE;
 const CHAT_MODEL_FALLBACK = "claude-opus-4-8";
 
 export interface Traza {

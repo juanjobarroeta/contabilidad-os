@@ -12,6 +12,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { recordLlmCost } from "@/lib/costos/record";
 import type { InsumosCredito, ResultadoScore } from "./score";
+import { MODELO_LECTOR, ajustarParams } from "@/lib/ai/modelos";
 
 let _anthropic: Anthropic | null = null;
 const anthropic = () => (_anthropic ??= new Anthropic());
@@ -62,8 +63,8 @@ export async function generarAnalisisCredito(args: {
   };
 
   try {
-    const model = "claude-sonnet-4-5";
-    const response = await anthropic().messages.create({
+    const model = MODELO_LECTOR;
+    const response = await anthropic().messages.create(ajustarParams({
       model,
       max_tokens: 1200,
       system: SYSTEM,
@@ -73,7 +74,7 @@ export async function generarAnalisisCredito(args: {
           content: `Redacta el memo de crédito para este expediente:\n\n${JSON.stringify(resumen, null, 2)}`,
         },
       ],
-    });
+    }));
     void recordLlmCost(response.model ?? model, response.usage, {
       companyId: args.companyId,
       subtipo: "llm.credito_analisis",

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { reportError } from "@/lib/observability";
 import { clasificarFalloIa } from "@/lib/ia-salud";
+import { MODELO_RAPIDO, ajustarParams } from "@/lib/ai/modelos";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET/POST /api/cron/ia-salud — ¿puede el producto hablar con el modelo?
@@ -19,7 +20,7 @@ import { clasificarFalloIa } from "@/lib/ia-salud";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const MODELO = "claude-haiku-4-5-20251001";
+const MODELO = MODELO_RAPIDO;
 
 function isAuthorized(req: Request): boolean {
   const secret = process.env.CRON_SECRET;
@@ -38,7 +39,7 @@ async function handle(req: Request) {
   }
   const t0 = Date.now();
   try {
-    const r = await new Anthropic({ maxRetries: 0 }).messages.create({ model: MODELO, max_tokens: 1, messages: [{ role: "user", content: "ok" }] });
+    const r = await new Anthropic({ maxRetries: 0 }).messages.create(ajustarParams({ model: MODELO, max_tokens: 1, messages: [{ role: "user", content: "ok" }] }));
     return NextResponse.json({ ok: true, ms: Date.now() - t0, modelo: r.model });
   } catch (e) {
     const fallo = clasificarFalloIa(e);

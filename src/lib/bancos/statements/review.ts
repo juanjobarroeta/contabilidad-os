@@ -118,7 +118,7 @@ async function removalEvidence(db: Db, scope: ReviewScope, movementId: string) {
 }
 function requireReason(reason: string) { if (typeof reason !== "string" || reason.trim().length < 8 || reason.length > 1000) throw new Error("Explica la decisión (8 a 1,000 caracteres)."); }
 
-function verificationErrors(review: AccountReview, op: Extract<ReviewOperation, { type: "verify" }>) {
+export function verificationErrors(review: AccountReview, op: Extract<ReviewOperation, { type: "verify" }>) {
   const errors: string[] = [], doc = review.documents.find((d) => d.id === op.batchId), bounds = monthBounds(review.scope.year, review.scope.month);
   if (!doc) return ["Documento no encontrado en esta cuenta y periodo."];
   if (!op.accountConfirmed || !op.coverageConfirmed || !op.originalReviewed) errors.push("Confirma cuenta, moneda, cobertura completa y revisión del original.");

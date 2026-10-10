@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { meteredCreate } from "@/lib/costos/anthropic";
 import { asegurarUsoIA, respuestaTopeIA } from "@/lib/ai/guardia";
 import { getEffectiveCompanyMembership } from "@/lib/authz";
+import { MODELO_LECTOR } from "@/lib/ai/modelos";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/nomina/parse-employee-docs
@@ -150,7 +151,7 @@ export async function POST(req: Request) {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const response: any = await meteredCreate(anthropic, { subtipo: "nomina.parse_empleado", companyId, userId }, {
-      model: "claude-sonnet-4-5",
+      model: MODELO_LECTOR,
       max_tokens: 2048,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: [contentBlock, { type: "text", text: USER_PROMPT }] }],

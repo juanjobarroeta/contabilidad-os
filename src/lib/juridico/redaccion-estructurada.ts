@@ -38,6 +38,7 @@ import { extraerCitas } from "@/lib/ai/eval/medidas";
 import { bloqueAsuntoParaPrompt, type Asunto } from "./asuntos";
 import { indexarDocumento, limpiarTexto, type DocumentoCargado } from "./documentos";
 import { MIME_BORRADOR, type DocumentoResumen } from "./redaccion";
+import { MODELO_AGENTE } from "@/lib/ai/modelos";
 
 export interface PlanSeccion {
   n: number;
@@ -79,7 +80,7 @@ export interface Version {
 
 export type Emitir = (e: Record<string, unknown> & { type: string }) => void;
 
-const MODELO = process.env.AI_REDACCION_MODEL ?? process.env.AI_CHAT_MODEL ?? "claude-fable-5";
+const MODELO = process.env.AI_REDACCION_MODEL ?? process.env.AI_CHAT_MODEL ?? MODELO_AGENTE;
 const MODELO_RESPALDO = "claude-opus-4-8";
 const FUENTES_NORMATIVA = ["LEY", "REGLAMENTO", "RMF", "CRITERIO", "DOF", "GUIA"];
 const SECCIONES_EN_PARALELO = 3;

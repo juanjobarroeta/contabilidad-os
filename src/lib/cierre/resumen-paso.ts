@@ -21,9 +21,10 @@ import { conversacionDelPeriodo } from "./pase-diario";
 import { etiquetaPeriodo } from "./plantillas";
 import { toolsDelPaso } from "./workflow";
 import type { ClavePasoCierre } from "./claves";
+import { MODELO_AGENTE } from "@/lib/ai/modelos";
 
 const anthropic = new Anthropic(); // ANTHROPIC_API_KEY del entorno
-const MODELO = process.env.AI_CIERRE_MODEL ?? process.env.AI_CHAT_MODEL ?? "claude-fable-5";
+const MODELO = process.env.AI_CIERRE_MODEL ?? process.env.AI_CHAT_MODEL ?? MODELO_AGENTE;
 
 export interface AperturaPaso {
   texto: string;

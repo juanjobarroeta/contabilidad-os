@@ -23,9 +23,10 @@ import type {
   SignoMovimiento,
   SugerenciaCategoria,
 } from "./categorizar-concepto";
+import { MODELO_AGENTE } from "@/lib/ai/modelos";
 
 const anthropic = new Anthropic(); // ANTHROPIC_API_KEY del entorno
-const MODEL = process.env.AI_CHAT_MODEL ?? "claude-fable-5";
+const MODEL = process.env.AI_CHAT_MODEL ?? MODELO_AGENTE;
 const MODEL_FALLBACK = "claude-opus-4-8";
 const MAX_TOKENS = 32; // sólo emitimos una palabra (la familia)
 

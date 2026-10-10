@@ -12,8 +12,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { meteredCreate } from "@/lib/costos/anthropic";
 import type { CostCtx } from "@/lib/costos/record";
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 
-export const RERANK_MODEL = process.env.AI_RERANK_MODEL ?? "claude-haiku-4-5-20251001";
+export const RERANK_MODEL = process.env.AI_RERANK_MODEL ?? MODELO_RAPIDO;
 /** Caracteres de cada candidato que ve el modelo (el encabezado del artículo va al principio). */
 const EXTRACTO_CHARS = 600;
 

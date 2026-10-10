@@ -13,13 +13,18 @@ export const MICRO_USD = 1_000_000;
 /**
  * Precio Anthropic por 1,000,000 de tokens (USD), lista pública 2026-06.
  *
- * El chat y el agente de WhatsApp corren en claude-fable-5 (AI_CHAT_MODEL) con
+ * Modelos actuales por tipo de trabajo: src/lib/ai/modelos.ts (Opus 5.5 /
+ * Sonnet 5.5 / Haiku 5.5). Antes el chat y el agente de WhatsApp corrían en
+ * claude-fable-5 (AI_CHAT_MODEL) con
  * fallback a claude-opus-4-8, y ninguno de los dos estaba en esta tabla: caían
  * al DEFAULT (Sonnet 4.5, $3/$15) y la rentabilidad por cliente subestimaba el
  * costo del copiloto ~3×. Un modelo desconocido sigue cayendo al default — por
  * eso al cambiar AI_CHAT_MODEL hay que agregar su renglón aquí.
  */
 export const ANTHROPIC_PRICES_USD_PER_MTOK: Record<string, { in: number; out: number }> = {
+  "claude-opus-5-5": { in: 4, out: 20 },
+  "claude-sonnet-5-5": { in: 2, out: 10 },
+  "claude-haiku-5-5": { in: 0.1, out: 0.5 },
   "claude-fable-5-1": { in: 10, out: 50 },
   "claude-fable-5": { in: 10, out: 50 },
   "claude-opus-5": { in: 5, out: 25 },

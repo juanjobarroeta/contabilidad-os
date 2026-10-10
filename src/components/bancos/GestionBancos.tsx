@@ -161,6 +161,25 @@ function fileToBase64(file: File): Promise<string> {
 
 export type VistaBancos = "cuentas" | "movimientos" | "historico";
 
+type ArchivoResultado = { nombre: string; periodo: string | null; estado: "verificado" | "revisar" | "repetido" | "listo" | "error"; detalle: string };
+const ICONO_ARCHIVO: Record<ArchivoResultado["estado"], string> = { verificado: "✅", revisar: "⚠️", repetido: "↺", listo: "•", error: "✖" };
+const MESES_CORTOS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+function etiquetaMes(periodo: string) {
+  const [y, m] = periodo.split("-").map(Number);
+  const nombre = MESES_CORTOS[m - 1];
+  return nombre ? `${nombre.charAt(0).toUpperCase()}${nombre.slice(1)} ${y}` : periodo;
+}
+/** Una línea por archivo: verificado, por revisar (con el motivo) o ya cargado. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function resultadoDeArchivo(nombre: string, data: any): ArchivoResultado {
+  const periodo = typeof data?.verificacion?.periodo === "string" ? data.verificacion.periodo : /^\d{4}-\d{2}$/.test(data?.periodo ?? "") ? data.periodo : null;
+  const movs = `${data?.imported ?? 0} movimiento${data?.imported === 1 ? "" : "s"}`;
+  if (data?.verificacion?.verificado) return { nombre, periodo, estado: "verificado", detalle: data?.replay ? "ya estaba cargado · verificado" : `${movs} · verificado` };
+  if (data?.replay) return { nombre, periodo, estado: "repetido", detalle: "ya estaba cargado; no se duplicó" + (data?.verificacion?.motivos?.[0] ? ` · por revisar: ${data.verificacion.motivos[0]}` : "") };
+  if (data?.verificacion?.motivos?.length) return { nombre, periodo, estado: "revisar", detalle: `${movs} · por revisar: ${data.verificacion.motivos[0]}` };
+  return { nombre, periodo, estado: "listo", detalle: movs };
+}
+
 export function GestionBancos({
   vista,
   onResolverEnLaMesa,
@@ -218,6 +237,8 @@ export function GestionBancos({
     posiblesDuplicados: number;
     pending: number;
     descartadas: { fila: number; motivo: string }[];
+    /** Resultado por archivo (la bolsa de 12 PDFs se lee de un vistazo). */
+    archivos?: ArchivoResultado[];
   } | null>(null);
   // Historial de lotes importados (con su PDF de evidencia cuando lo hay).
   const [lotes, setLotes] = useState<{
@@ -442,6 +463,7 @@ export function GestionBancos({
       let posiblesDuplicados = 0, pending = 0;
       const descartadas: { fila: number; motivo: string }[] = [];
       const errores: string[] = [];
+      const archivos: ArchivoResultado[] = [];
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         if (files.length > 1) showToast(`Procesando ${i + 1}/${files.length}: ${file.name}…`);
@@ -452,11 +474,14 @@ export function GestionBancos({
             pending += data.pending ?? 0;
             posiblesDuplicados += data.posiblesDuplicados ?? 0;
             descartadas.push(...(data.descartadas ?? []));
+            archivos.push(resultadoDeArchivo(file.name, data));
           } else {
             errores.push(`${file.name}: ${data?.message ?? data?.error ?? "no se pudo importar"}`);
+            archivos.push({ nombre: file.name, periodo: null, estado: "error", detalle: data?.message ?? data?.error ?? "No se pudo importar." });
           }
         } catch {
           errores.push(`${file.name}: error inesperado`);
+          archivos.push({ nombre: file.name, periodo: null, estado: "error", detalle: "Error inesperado." });
         }
       }
       showToast(
@@ -468,8 +493,8 @@ export function GestionBancos({
             (errores.length > 0 ? ` · ${errores.length} archivo(s) con problema: ${errores.join("; ")}` : "")
       );
       setImportReport(
-        descartadas.length > 0 || posiblesDuplicados > 0 || pending > 0
-          ? { imported, posiblesDuplicados, pending, descartadas }
+        descartadas.length > 0 || posiblesDuplicados > 0 || pending > 0 || archivos.some((a) => a.estado !== "listo")
+          ? { imported, posiblesDuplicados, pending, descartadas, archivos }
           : null
       );
       await Promise.all([loadTxs(), loadAccounts(), loadLotes()]);
@@ -686,7 +711,23 @@ export function GestionBancos({
                       <> {importReport.posiblesDuplicados} filas respaldan operaciones existentes; se conservó el original.</>
                     )}
                   </p>
-                  <p className="mt-2">{importReport.pending} filas por revisar. <a className="underline" href={`/bancos?tab=estados&year=${year}&month=${month}`}>Abrir Estados y duplicados</a></p>
+                  {importReport.archivos && importReport.archivos.length > 0 && (
+                    <ul className="mt-2 space-y-1">
+                      {importReport.archivos.map((a, i) => (
+                        <li key={i} className="flex flex-wrap items-baseline gap-x-2">
+                          <span aria-hidden>{ICONO_ARCHIVO[a.estado]}</span>
+                          <span className="font-medium">{a.periodo ? etiquetaMes(a.periodo) : a.nombre}</span>
+                          <span className="opacity-80">{a.detalle}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {(importReport.pending > 0 || importReport.archivos?.some((a) => a.estado === "revisar")) && (
+                    <p className="mt-2">
+                      {importReport.pending > 0 ? `${importReport.pending} filas por revisar. ` : ""}
+                      <a className="underline" href="/bancos?tab=estados">Abrir Estados por revisar</a>
+                    </p>
+                  )}
                   {importReport.descartadas.length > 0 && (
                     <details className="mt-1.5">
                       <summary className="cursor-pointer font-medium underline decoration-dotted underline-offset-2">

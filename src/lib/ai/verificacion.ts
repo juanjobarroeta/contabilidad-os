@@ -41,8 +41,9 @@ import { getArticulo } from "@/lib/fiscal-kb/search";
 import { citasConPosicion, claveCita, extraerCitas } from "@/lib/ai/eval/medidas";
 import { citasEnProsa, type EntradaIndice } from "@/lib/ai/citas-prosa";
 import { ESTADOS } from "@/lib/fiscal-kb/catalogo/ojn";
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 
-export const VERIFICACION_MODEL = process.env.AI_VERIFICACION_MODEL ?? "claude-haiku-4-5-20251001";
+export const VERIFICACION_MODEL = process.env.AI_VERIFICACION_MODEL ?? MODELO_RAPIDO;
 /** Caracteres por fuente y en total que ve el verificador (Haiku: ~15 k tokens). */
 const FUENTE_MAX = 12000;
 const FUENTES_TOTAL_MAX = 60000;

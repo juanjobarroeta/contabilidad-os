@@ -4,6 +4,7 @@ import { meteredCreate } from "@/lib/costos/anthropic";
 import { INTAKE_PRODUCTS, productByKey } from "./config";
 import { indexAskEmbedding, findSemanticDuplicate, titlesLookDuplicate } from "./dedupe";
 import type { IntakeAskKind } from "@prisma/client";
+import { MODELO_AGENTE } from "@/lib/ai/modelos";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Agente de extracción: RawIntake/IntakeTranscript → CandidateAsk.
@@ -15,7 +16,7 @@ import type { IntakeAskKind } from "@prisma/client";
 // para extraer una conversación como conversación, no como nueve fragmentos.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const MODEL = process.env.AI_EXTRACT_MODEL ?? process.env.AI_CHAT_MODEL ?? "claude-fable-5";
+const MODEL = process.env.AI_EXTRACT_MODEL ?? process.env.AI_CHAT_MODEL ?? MODELO_AGENTE;
 const MODEL_FALLBACK = "claude-opus-4-8";
 const MAX_TOKENS = 2048;
 

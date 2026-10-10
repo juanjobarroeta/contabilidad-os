@@ -9,15 +9,16 @@
 //
 // El modelo pasa por la única puerta del módulo (`llamarModelo`: topes de IA,
 // costo por empresa/usuario). Modelo: AI_HOSPITAL_AYUDA_MODEL (default
-// claude-haiku-4-5, rápido y barato para preguntas de uso).
+// MODELO_RAPIDO, Haiku 5.5: rápido y barato para preguntas de uso).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { PrismaClient } from "@prisma/client";
 import { HospitalError } from "../errores";
 import { llamarModelo } from "../asistente/modelo";
 import { CONOCIMIENTO, PAGINAS_AYUDA } from "./conocimiento";
+import { MODELO_RAPIDO } from "@/lib/ai/modelos";
 
-export const MODELO_AYUDA_DEFAULT = "claude-haiku-4-5";
+export const MODELO_AYUDA_DEFAULT = MODELO_RAPIDO;
 export const MAX_PREGUNTA = 1000;
 export const MAX_HISTORIAL = 8;
 const MAX_TEXTO_HISTORIAL = 1500;

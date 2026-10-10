@@ -8,7 +8,7 @@
 // modelo contesta otra cosa, reintenta UNA vez pidiéndole sólo el objeto. Si el
 // modelo configurado no existe para la cuenta (404/403) cae al de respaldo.
 //
-// Modelo: AI_HOSPITAL_MODEL (default claude-sonnet-4-5); respaldo:
+// Modelo: AI_HOSPITAL_MODEL (default MODELO_LECTOR, Sonnet 5.5); respaldo:
 // AI_HOSPITAL_MODEL_FALLBACK (default claude-sonnet-4-6). Al cambiarlos hay
 // que dar de alta su tarifa en src/lib/costos/rates.ts.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -17,8 +17,9 @@ import Anthropic from "@anthropic-ai/sdk";
 import { asegurarUsoIA } from "@/lib/ai/guardia";
 import { meteredCreate } from "@/lib/costos/anthropic";
 import { HospitalError } from "../errores";
+import { MODELO_LECTOR } from "@/lib/ai/modelos";
 
-export const MODELO_DEFAULT = "claude-sonnet-4-5";
+export const MODELO_DEFAULT = MODELO_LECTOR;
 export const MODELO_RESPALDO_DEFAULT = "claude-sonnet-4-6";
 const MAX_TOKENS_DEFAULT = 6000;
 

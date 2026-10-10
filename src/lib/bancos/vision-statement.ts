@@ -10,6 +10,7 @@ import {
   leerSaldos,
   type CotejoControles,
 } from "./controles-estado";
+import { MODELO_LECTOR } from "@/lib/ai/modelos";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Extracción de un estado de cuenta (PDF o foto) con visión.
@@ -40,7 +41,7 @@ import {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const anthropic = new Anthropic();
-const MODEL = "claude-sonnet-4-5";
+const MODEL = MODELO_LECTOR;
 const BALANCE_TOLERANCE = 1.0; // MXN; rounding slack on the reconciliation check
 // Techo por lote. Un lote de 4 páginas son ~45 movimientos ≈ 6 000 tokens de
 // JSON; 16 000 deja margen de sobra para que la respuesta NUNCA se trunque.

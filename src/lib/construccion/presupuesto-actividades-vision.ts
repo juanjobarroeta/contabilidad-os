@@ -6,6 +6,7 @@ import type {
   ParsedPresupuestoLeaf,
   PresupuestoParseResult,
 } from "./presupuesto-parser";
+import { MODELO_LECTOR } from "@/lib/ai/modelos";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Extracción por visión de un "PRESUPUESTO POR ACTIVIDADES" en PDF — el
@@ -26,7 +27,7 @@ import type {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const anthropic = new Anthropic();
-const MODEL = "claude-sonnet-4-5";
+const MODEL = MODELO_LECTOR;
 
 const SYSTEM_PROMPT = `Eres un experto en presupuestos de obra pública mexicana (formato "Presupuesto por Actividades" de licitaciones, estilo Opus/INIFED). Extrae la estructura completa en JSON, sin explicaciones.
 
