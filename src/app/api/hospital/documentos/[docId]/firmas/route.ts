@@ -29,6 +29,7 @@ const schema = z.object({
   parentesco: z.string().trim().max(60).nullable().optional(),
   imagen: z.string().min(1).max(450_000),
   geolocalizacion: z.string().trim().max(120).nullable().optional(),
+  trazoReutilizado: z.boolean().optional(),
 });
 
 export const POST = withHospital(async (req: Request, ctx: { params: Promise<{ docId: string }> }) => {
@@ -52,6 +53,7 @@ export const POST = withHospital(async (req: Request, ctx: { params: Promise<{ d
     parentesco: d.parentesco,
     imagen: d.imagen,
     geolocalizacion: d.geolocalizacion,
+    trazoReutilizado: d.trazoReutilizado,
     ip: ipDeRequest(req),
     userAgent: req.headers.get("user-agent"),
     user,
@@ -62,7 +64,7 @@ export const POST = withHospital(async (req: Request, ctx: { params: Promise<{ d
     accion: "hospital.documento.firmar",
     entidad: "HospDocumento",
     entidadId: doc.id,
-    detalle: { folio: doc.episodio?.folio ?? null, tipo: doc.tipo, nombre: doc.nombre, rol: d.rol, firmante: d.nombre, hashFirma: r.firma.hashFirma, estado: r.documento.estado, faltan: r.faltan },
+    detalle: { folio: doc.episodio?.folio ?? null, tipo: doc.tipo, nombre: doc.nombre, rol: d.rol, firmante: d.nombre, trazoReutilizado: d.trazoReutilizado === true, hashFirma: r.firma.hashFirma, estado: r.documento.estado, faltan: r.faltan },
   });
 
   return NextResponse.json({ firma: r.firma, documento: r.documento, faltan: r.faltan, estado: r.documento.estado }, { status: 201 });
