@@ -26,3 +26,20 @@ export async function sesionOBearer(req: Request): Promise<{ user: { id: string;
   try { const u = await requireUser(req); return { user: { id: u.id, email: u.email ?? null } }; }
   catch { return null; }
 }
+
+/**
+ * Escritura sobre estados de cuenta. Además de no ser VIEWER, en un hospital
+ * el personal necesita el permiso FINANZAS_ESCRIBIR de su puesto (la misma
+ * regla que caja, bancos y cobros en HospitalOS). Dueños y administradores, y
+ * quien entra por despacho u operación de plataforma, escriben con su rol.
+ */
+export async function requireEscrituraBancos(userId: string, companyId: string) {
+  const access = await requireBancosAccess(userId, companyId);
+  if (!access.canWrite) throw new BancosAccessError(403, "Tu usuario sólo puede consultar.");
+  const { prisma } = await import("@/lib/prisma");
+  const hospital = await prisma.hospConfig.findUnique({ where: { companyId }, select: { id: true } });
+  if (!hospital || ["OWNER", "ADMIN"].includes(access.role)) return access;
+  const member = await prisma.companyMember.findUnique({ where: { userId_companyId: { userId, companyId } }, select: { hospitalPermisos: true } });
+  if (member && !member.hospitalPermisos.includes("FINANZAS_ESCRIBIR")) throw new BancosAccessError(403, "Tu puesto no tiene permiso para modificar finanzas (FINANZAS_ESCRIBIR).");
+  return access;
+}

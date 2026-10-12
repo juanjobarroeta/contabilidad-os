@@ -12,6 +12,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { monthBounds } from "./matching";
+import { mesDeCobertura } from "../periodo-declarado";
 import { accountReview, executeReview, previewReview, verificationErrors, type ReviewOperation, type ReviewRequest } from "./review";
 
 export const MOTIVO_AUTOMATICO =
@@ -28,13 +29,13 @@ export interface DocumentoEstado {
   controls: unknown;
 }
 
-/** Mes al que pertenece el documento: inicio impreso, si no el periodo detectado. */
+/**
+ * Mes al que pertenece el documento: inicio impreso; si no, el periodo
+ * «DEL … AL …» tal como lo guardó el importador (BBVA, Santander y Banorte lo
+ * escriben distinto); si no, un «AAAA-MM».
+ */
 export function mesDelDocumento(doc: Pick<DocumentoEstado, "periodo" | "periodStart">): { year: number; month: number } | null {
-  const ym = (doc.periodStart ?? doc.periodo ?? "").slice(0, 7);
-  const m = /^(\d{4})-(\d{2})$/.exec(ym);
-  if (!m) return null;
-  const year = Number(m[1]), month = Number(m[2]);
-  return month >= 1 && month <= 12 ? { year, month } : null;
+  return mesDeCobertura(doc);
 }
 
 const num = (v: unknown) => (v == null || v === "" ? null : Number(v));
