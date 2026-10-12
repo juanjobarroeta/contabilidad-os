@@ -30,11 +30,23 @@ export const GET = withAuthz(async (req: Request) => {
 
   const q = searchParams.get("q")?.trim() ?? "";
   if (q.length < MIN_CONSULTA) {
-    return NextResponse.json({ pacientes: [], episodios: [], insumos: [], contactos: [] });
+    return NextResponse.json({ pacientes: [], episodios: [], insumos: [], contactos: [], facturas: [] });
   }
   const como = { contains: q, mode: "insensitive" as const };
 
-  const [pacientes, episodios, insumos, contactos] = await Promise.all([
+  // Facturas: por folio («331486» o «AA-331486»), UUID (desde 8 caracteres) o
+  // importe exacto («16156.61», «$16,156.61»). Sólo para quien ve facturación o
+  // el directorio: la búsqueda es de la paleta, pero los CFDIs son de finanzas.
+  const verFacturas = await puedeVerFacturas(companyId, req);
+  const [seriePart, folioPart] = q.includes("-") ? [q.slice(0, q.lastIndexOf("-")).trim(), q.slice(q.lastIndexOf("-") + 1).trim()] : [null, q];
+  const importe = /^\$?\s*[\d,]+\.\d{1,2}$/.test(q) ? Number(q.replace(/[$,\s]/g, "")) : null;
+  const filtrosFactura = [
+    { folio: { contains: folioPart, mode: "insensitive" as const }, ...(seriePart ? { serie: { equals: seriePart, mode: "insensitive" as const } } : {}) },
+    ...(q.replace(/-/g, "").length >= 8 && /^[0-9a-f-]+$/i.test(q) ? [{ uuid: { startsWith: q, mode: "insensitive" as const } }] : []),
+    ...(importe != null && Number.isFinite(importe) ? [{ total: importe }] : []),
+  ];
+
+  const [pacientes, episodios, insumos, contactos, facturas] = await Promise.all([
     prisma.hospPaciente.findMany({
       where: {
         companyId,
@@ -84,6 +96,17 @@ export const GET = withAuthz(async (req: Request) => {
       orderBy: { razonSocial: "asc" },
       take: POR_GRUPO,
     }),
+    verFacturas
+      ? prisma.invoice.findMany({
+          where: { companyId, status: { not: "DRAFT" }, OR: filtrosFactura },
+          select: {
+            id: true, serie: true, folio: true, uuid: true, fecha: true, total: true, tipo: true, tipoSat: true, status: true,
+            customerId: true, contraparteNombre: true, customer: { select: { razonSocial: true } },
+          },
+          orderBy: { fecha: "desc" },
+          take: POR_GRUPO,
+        })
+      : Promise.resolve([]),
   ]);
 
   // Existencia y dirección comercial sólo para los pocos que salieron.
@@ -141,6 +164,19 @@ export const GET = withAuthz(async (req: Request) => {
       categoria: i.categoria,
       controlado: i.controlado,
     })),
+    facturas: facturas.map((f) => ({
+      id: f.id,
+      folio: [f.serie, f.folio].filter(Boolean).join("-") || (f.uuid ?? "").slice(0, 8),
+      uuid: f.uuid,
+      fecha: f.fecha,
+      total: r2(Number(f.total)),
+      // Desde el lado de esta empresa: emitida (cliente) o recibida (proveedor).
+      lado: f.tipo === "EGRESO" ? "PROVEEDOR" : "CLIENTE",
+      tipo: f.tipoSat === "E" ? "Nota de crédito" : f.tipo === "PAGO" || f.tipoSat === "P" ? "Complemento de pago" : f.tipo === "EGRESO" ? "Factura recibida" : "Factura emitida",
+      cancelada: f.status === "CANCELLED",
+      contraparte: f.customer?.razonSocial ?? f.contraparteNombre ?? null,
+      customerId: f.customerId,
+    })),
     contactos: contactos.map((c) => ({
       id: c.id,
       razonSocial: c.razonSocial,
@@ -150,3 +186,13 @@ export const GET = withAuthz(async (req: Request) => {
     })),
   });
 });
+
+/** ¿El miembro ve facturas? Lista vacía de páginas = ve todo (la regla del hospital). */
+async function puedeVerFacturas(companyId: string, req: Request): Promise<boolean> {
+  // Por usuario+empresa, no por membership.id: un acceso de despacho u operador
+  // no tiene fila propia en CompanyMember (y entonces ve todo, como en el resto).
+  const { user } = await requireMembership(companyId, undefined, req);
+  const m = await prisma.companyMember.findUnique({ where: { userId_companyId: { userId: user.id, companyId } }, select: { hospitalPaginas: true } });
+  const paginas = m?.hospitalPaginas ?? [];
+  return paginas.length === 0 || ["facturacion", "clientes", "proveedores", "cuentas", "caja", "compras", "bancos"].some((p) => paginas.includes(p));
+}
