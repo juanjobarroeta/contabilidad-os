@@ -8725,6 +8725,8 @@ model HospCita {
   tipoAnestesia           Int?
   enfermera               String?
   solicitaInstrumentista  Boolean           @default(false)
+  /// El médico pide enfermera circulante para el caso.
+  solicitaCirculante      Boolean           @default(false)
   instrumentista          String?
   diagnostico             String?
   estancia                HospCitaEstancia?
