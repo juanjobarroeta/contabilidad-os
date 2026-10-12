@@ -28,6 +28,8 @@ import {
   type Aging,
 } from "./cobranza";
 import { nombrePaciente, totalCargo } from "./formato";
+import { normalizarUuid } from "@/lib/fiscal/uuid";
+import { padresDeNota } from "@/lib/fiscal/iva-notas-credito";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -44,6 +46,8 @@ export interface FacturaPerfil {
   pagado: number;
   amparadoRep: number;
   repPendiente: number;
+  /** Lo que sus notas de crédito (CfdiRelacionados 01/03/07) le quitaron. */
+  notasCredito: number;
   saldo: number;
   /** Días desde la fecha del CFDI y corte de antigüedad (sólo informativo si saldo = 0). */
   dias: number;
@@ -71,6 +75,8 @@ export interface PerfilContactoHospital {
     repPendienteMonto: number;
     repPendienteFacturas: number;
     totalNotasCredito: number;
+    /** Notas sin factura relacionada en este perfil (o lo que sobró): ya restadas de `saldo`. */
+    notasCreditoSinAplicar: number;
     totalAnticipos: number;
     /** Saldo abierto con más de 30 días. */
     masDe30: number;
@@ -146,6 +152,8 @@ export async function perfilContactoHospital(
         // Prefiltro barato de anticipos (clave 84111506): sólo se pregunta si
         // el XML contiene la clave, no se parsea.
         rawXml: true,
+        cfdiRelacionadoUuid: true,
+        tipoRelacion: true,
         conciliacionDetalles: { select: { montoAsignado: true } },
       },
       orderBy: { fecha: "desc" },
@@ -175,12 +183,42 @@ export async function perfilContactoHospital(
 
   const amparado = await amparadoPorReps(db, companyId, facturasDb.map((f) => f.uuid));
 
+  // Cada nota de crédito se aplica a las facturas que relaciona su XML, sin
+  // pasar de lo que cada una debe. En PUE la nota reduce el pago implícito
+  // (se pagó neto); en PPD reduce el saldo. Lo que no tiene factura
+  // relacionada aquí (o sobra) queda como «notas sin aplicar» y resta al saldo total.
+  const evidencia = new Map(facturasDb.map((f) => {
+    const conciliado = conciliadoDe(f.conciliacionDetalles);
+    const amparadoRep = amparadoDe(amparado, f.uuid);
+    return [f.id, { conciliado, amparadoRep, ev: pagadoPorEvidencia({ metodoPago: f.metodoPago, total: f.total, conciliado, amparadoRep }) }] as const;
+  }));
+  const porUuid = new Map(facturasDb.filter((f) => f.uuid).map((f) => [normalizarUuid(f.uuid!), f]));
+  const ncAplicada = new Map<string, number>();
+  let notasSinAplicar = 0;
+  for (const nc of todasDb.filter((f) => (f.tipoSat ?? "I") === "E").sort((a, b) => +a.fecha - +b.fecha)) {
+    let resto = nc.total;
+    for (const u of padresDeNota(nc)) {
+      const f = porUuid.get(u);
+      if (!f || resto <= 0.005) continue;
+      const ya = ncAplicada.get(f.id) ?? 0;
+      const e = evidencia.get(f.id)!.ev;
+      const cabe = f.metodoPago === "PPD" ? Math.max(0, e.saldo - ya) : Math.max(0, f.total - ya);
+      const aplica = r2(Math.min(resto, cabe));
+      if (aplica <= 0) continue;
+      ncAplicada.set(f.id, r2(ya + aplica));
+      resto = r2(resto - aplica);
+    }
+    notasSinAplicar = r2(notasSinAplicar + Math.max(0, resto));
+  }
+
   const aging = agingVacio();
   let masDe30 = 0;
   const facturas: FacturaPerfil[] = facturasDb.map((f) => {
-    const conciliado = conciliadoDe(f.conciliacionDetalles);
-    const amparadoRep = amparadoDe(amparado, f.uuid);
-    const ev = pagadoPorEvidencia({ metodoPago: f.metodoPago, total: f.total, conciliado, amparadoRep });
+    const { amparadoRep, ev: ev0 } = evidencia.get(f.id)!;
+    const nc = ncAplicada.get(f.id) ?? 0;
+    const ev = f.metodoPago === "PPD"
+      ? { ...ev0, saldo: r2(Math.max(0, ev0.saldo - nc)) }
+      : { ...ev0, pagado: r2(Math.max(0, ev0.pagado - nc)) };
     const dias = Math.max(0, Math.floor((hoy.getTime() - f.fecha.getTime()) / DIA_MS));
     const bucket = bucketAging(f.fecha, hoy);
     if (ev.saldo > 0) {
@@ -199,6 +237,7 @@ export async function perfilContactoHospital(
       pagado: ev.pagado,
       amparadoRep,
       repPendiente: ev.repPendiente,
+      notasCredito: nc,
       saldo: ev.saldo,
       dias,
       aging: bucket,
@@ -264,7 +303,9 @@ export async function perfilContactoHospital(
       numFacturas: facturas.length,
       totalFacturado: r2(facturas.reduce((s, f) => s + f.total, 0)),
       totalPagado: r2(facturas.reduce((s, f) => s + f.pagado, 0)),
-      saldo: r2(facturas.reduce((s, f) => s + f.saldo, 0)),
+      // Las notas sin factura relacionada restan al total (puede quedar a favor).
+      saldo: r2(facturas.reduce((s, f) => s + f.saldo, 0) - notasSinAplicar),
+      notasCreditoSinAplicar: notasSinAplicar,
       repPendienteMonto: r2(conRepPendiente.reduce((s, f) => s + f.repPendiente, 0)),
       repPendienteFacturas: conRepPendiente.length,
       totalNotasCredito: r2(notasCredito.reduce((s, n) => s + n.total, 0)),
