@@ -316,6 +316,7 @@ GET  /api/hospital/citas?companyId=&desde=&hasta= · POST (409 si empalma; nace 
        el médico nuevo nace porCredencializar (alerta MEDICO_POR_CREDENCIALIZAR hasta PATCH /medicos/[id] { porCredencializar:false }, exige cédula)
      · diasEstancia (sólo HOSPITALIZACION) · insumos[] { descripcion, cantidad, servicioId?, clave? } de la lista de precios o libres
 GET  /api/hospital/cotizaciones?companyId= · POST · GET/PATCH /cotizaciones/[id] · POST /cotizaciones/[id]/convertir
+POST /api/hospital/cotizaciones/leer { companyId, archivoBase64, mime: PDF|imagen, pagadorId? } — lee la cotización de OTRO hospital (IA, efímera, no escribe) y empareja cada renglón con el tarifario (palabras en común; la presentación cuenta). Devuelve su total, el nuestro con IVA y los renglones sin emparejar, para mejorar su precio.
      · para un médico: medicoId (paciente opcional) y dirigidaA («A quien corresponda»)
      · paquete: precioPaquete = total con IVA pactado; aPaquete() prorratea las partidas a ese total (la conversión y el IVA cuadran)
        y el PDF las imprime agrupadas, sólo con cantidad, con «TOTAL, CON IVA» y las especificaciones (notas, una por renglón)
