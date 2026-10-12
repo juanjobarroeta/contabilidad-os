@@ -36,7 +36,9 @@ export async function uploadBankDocument(opts: { companyId: string; bankAccountI
     extractionBytes = result.pdf;
   }
   const extraction = await extractStatementFromDocument(extractionBytes, mime, { companyId: opts.companyId, subtipo: "bancos.vision_statement" });
-  const period = periodoDe(extraction.transactions) ?? extraction.periodoInicio?.slice(0,7) ?? extraction.periodo ?? opts.month;
+  // La cobertura IMPRESA manda; el mes de los renglones es sólo respaldo (un
+  // año mal leído en un renglón movía el documento entero de mes).
+  const period = extraction.periodoInicio?.slice(0,7) ?? periodoDe(extraction.transactions) ?? extraction.periodo ?? opts.month;
   const hold = extraction.balanceCheck.cuadra === false || extraction.controles?.cuadra === false;
   const imported = await persistStatementTransactions({ companyId: opts.companyId, bankAccountId: opts.bankAccountId, userId: opts.userId,
     transactions: extraction.transactions, source: "UPLOAD_PDF", banco: extraction.banco, periodo: period,

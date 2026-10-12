@@ -11,6 +11,8 @@ import {
   type CotejoControles,
 } from "./controles-estado";
 import { MODELO_LECTOR } from "@/lib/ai/modelos";
+import { esEstadoBbva, leerEstadoBbva, type LecturaBbva } from "./bbva-texto";
+import { corregirAnios, leerPeriodoDeclarado, type PeriodoDeclarado } from "./periodo-declarado";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Extracción de un estado de cuenta (PDF o foto) con visión.
@@ -149,6 +151,19 @@ export async function extractStatementFromDocument(
   // la cuenta después (caso real: BBVA agosto 2026, saldo final nulo).
   const saldosTexto = leido ? leerSaldos(leido.texto) : null;
   const paginas = leido?.paginas ?? 0;
+  // La cobertura que el banco imprime («DEL 01/08/2026 AL 31/08/2026»): manda
+  // sobre la que adivine el modelo y fija el año de los renglones «05/ENE».
+  const periodoTexto = leido ? leerPeriodoDeclarado(leido.texto) : null;
+
+  // BBVA trae capa de texto y formato fijo: se lee sin IA y sólo se acepta si
+  // cuadra al centavo con todo lo que el banco declara (bbva-texto.ts). Si no
+  // cuadra, se sigue con la visión como siempre y se dice por qué.
+  const avisosTexto: string[] = [];
+  if (leido && periodoTexto && esEstadoBbva(leido.texto)) {
+    const r = leerEstadoBbva(leido.texto, periodoTexto);
+    if (r.ok) return extraccionDeBbva(r.lectura, periodoTexto, leido.texto, controles);
+    avisosTexto.push(`No se pudo leer el formato BBVA directo del texto (${r.motivo}); se leyó con el asistente.`);
+  }
 
   // Un documento corto (o una foto, o un PDF escaneado sin texto) va en una
   // sola llamada, como siempre. Sólo se parte lo que de verdad lo necesita.
@@ -157,7 +172,7 @@ export async function extractStatementFromDocument(
       ? rangosDeLotes(paginas)
       : [];
 
-  const warnings: string[] = [];
+  const warnings: string[] = [...avisosTexto];
   let raws: RawExtraction[];
 
   if (rangos.length > 1) {
@@ -202,8 +217,8 @@ export async function extractStatementFromDocument(
   const cabeza = raws.find((r) => r.saldoInicial != null) ?? raws[0];
   const raw: RawExtraction = {
     moneda: cabeza?.moneda ?? null,
-    periodoInicio: cabeza?.periodoInicio ?? null,
-    periodoFin: cabeza?.periodoFin ?? null,
+    periodoInicio: periodoTexto?.inicio ?? cabeza?.periodoInicio ?? null,
+    periodoFin: periodoTexto?.fin ?? cabeza?.periodoFin ?? null,
     banco: raws.find((r) => r.banco)?.banco ?? null,
     numeroCuenta: raws.find((r) => r.numeroCuenta)?.numeroCuenta ?? null,
     periodo: raws.find((r) => r.periodo)?.periodo ?? null,
@@ -249,6 +264,14 @@ export async function extractStatementFromDocument(
 
   if (transactions.length === 0) {
     warnings.push("No se detectaron movimientos en el documento.");
+  }
+
+  // Años inventados: el estado imprime «27/FEB» sin año y el modelo a veces
+  // pone uno cualquiera (renglones de «2019-03-18» en el estado de marzo 2026
+  // de BBVA). Con la cobertura impresa, el año sale de ella.
+  if (periodoTexto) {
+    const corregidos = corregirAnios(transactions, periodoTexto);
+    if (corregidos > 0) warnings.push(`${corregidos} renglón(es) traían un año fuera del periodo impreso; se tomó el año del periodo.`);
   }
 
   // ── Candado 1: los totales que el banco imprime ───────────────────────────
@@ -417,3 +440,34 @@ function round2(n: number): number {
 function fmt(n: number): string {
   return n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 }
+
+/** La extracción completa a partir de la lectura directa del texto de BBVA. */
+function extraccionDeBbva(lectura: LecturaBbva, periodo: PeriodoDeclarado, texto: string, controles: ReturnType<typeof leerControles> | null): StatementExtraction {
+  const transactions: ParsedTransaction[] = lectura.movimientos.map((m) => ({
+    fecha: new Date(`${m.fecha}T12:00:00`),
+    ...(m.pagina ? { sourcePage: m.pagina } : {}),
+    descripcion: m.descripcion || "Movimiento",
+    monto: m.monto,
+    referencia: m.referencia ?? undefined,
+    saldo: m.saldo ?? undefined,
+    ...(m.sublineas.length ? { sublineas: m.sublineas } : {}),
+  }));
+  const d = lectura.declarado;
+  const sumaMovimientos = round2(transactions.reduce((s, t) => s + t.monto, 0));
+  return {
+    moneda: /MONEDA NACIONAL/i.test(texto) ? "MXN" : null,
+    periodoInicio: periodo.inicio,
+    periodoFin: periodo.fin,
+    controlesDeclarados: { credits: d.abonos, debits: d.cargos, creditCount: d.conteoAbonos, debitCount: d.conteoCargos },
+    banco: "BBVA",
+    numeroCuenta: /No\. de Cuenta\s+(\d+)/i.exec(texto)?.[1] ?? null,
+    periodo: periodo.inicio.slice(0, 7),
+    transactions,
+    balanceCheck: { saldoInicial: d.saldoInicial, saldoFinal: d.saldoFinal, sumaMovimientos,
+      esperadoFinal: round2(d.saldoInicial + sumaMovimientos), cuadra: true, diferencia: round2(d.saldoInicial + sumaMovimientos - d.saldoFinal) },
+    controles: controles ? cotejarControles(controles, transactions) : null,
+    lotes: 0,
+    warnings: ["Leído directo del texto del PDF (formato BBVA), sin IA: cuadra al centavo con los totales, conteos y saldos que imprime el banco."],
+  };
+}
+
