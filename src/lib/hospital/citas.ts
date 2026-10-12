@@ -127,7 +127,7 @@ export const incluyeCita = {
   cama: { select: { id: true, nombre: true, area: true } },
   servicio: { select: { id: true, clave: true, nombre: true, grupo: true } },
   episodio: { select: { id: true, folio: true, estado: true } },
-  cotizacion: { select: { id: true, folio: true, estado: true } },
+  cotizacion: { select: { id: true, folio: true, estado: true, procedimiento: true, total: true, precioPaquete: true } },
 } as const;
 
 /**

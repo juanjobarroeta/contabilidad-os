@@ -1,5 +1,5 @@
 /**
- * GET  /api/hospital/cotizaciones?companyId=…[&estado=&q=]
+ * GET  /api/hospital/cotizaciones?companyId=…[&estado=&q=&medicoId=&pacienteId=]
  * POST /api/hospital/cotizaciones
  *
  * «Una captura, tres documentos» (lámina 7): la cotización se arma con el
@@ -29,9 +29,14 @@ export const GET = withHospital(async (req: Request) => {
 
   const estado = searchParams.get("estado") as HospCotizacionEstado | null;
   const q = searchParams.get("q")?.trim();
+  // Desde la agenda: las del médico o las del paciente de la cita.
+  const medicoId = searchParams.get("medicoId");
+  const pacienteId = searchParams.get("pacienteId");
+  const de = [medicoId ? { medicoId } : null, pacienteId ? { pacienteId } : null].filter((x) => x !== null);
   const where: Prisma.HospCotizacionWhereInput = {
     companyId,
     ...(estado ? { estado } : {}),
+    ...(de.length ? { AND: [{ OR: de }] } : {}),
     ...(q ? { OR: [{ folio: { contains: q, mode: "insensitive" } }, { pacienteNombre: { contains: q, mode: "insensitive" } }, { medico: { nombre: { contains: q, mode: "insensitive" } } }, { procedimiento: { contains: q, mode: "insensitive" } }] } : {}),
   };
   const cotizaciones = await prisma.hospCotizacion.findMany({
