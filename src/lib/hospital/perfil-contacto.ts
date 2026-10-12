@@ -64,6 +64,27 @@ interface CfdiResumen {
   total: number;
 }
 
+/**
+ * Una nota de crédito (o lo que sobró de ella) que no se pudo restar de una
+ * factura abierta. «Sin factura relacionada» engañaba: casi siempre SÍ relaciona
+ * una factura, pero esa factura ya estaba liquidada (su REP o el banco cubrieron
+ * el total), así que la nota quedó como saldo a favor — o el REP del proveedor
+ * pagó de más y hay que aclararlo con él.
+ */
+export interface NotaSinAplicar {
+  id: string;
+  uuid: string | null;
+  serie: string | null;
+  folio: string | null;
+  fecha: Date;
+  total: number;
+  /** Lo que no se aplicó (≤ total). */
+  sinAplicar: number;
+  motivo: "SIN_RELACION" | "FACTURA_LIQUIDADA" | "FACTURA_NO_ENCONTRADA";
+  /** La(s) factura(s) que relaciona su XML, si están en este perfil. */
+  facturas: { id: string; uuid: string | null; serie: string | null; folio: string | null }[];
+}
+
 export interface PerfilContactoHospital {
   contacto: { id: string; rfc: string; razonSocial: string; email: string | null; phone: string | null };
   direccion: "CLIENTE" | "PROVEEDOR";
@@ -77,6 +98,8 @@ export interface PerfilContactoHospital {
     totalNotasCredito: number;
     /** Notas sin factura relacionada en este perfil (o lo que sobró): ya restadas de `saldo`. */
     notasCreditoSinAplicar: number;
+    /** El detalle de `notasCreditoSinAplicar`: cada nota con lo que sobró y POR QUÉ. */
+    notasSinAplicarDetalle: NotaSinAplicar[];
     totalAnticipos: number;
     /** Saldo abierto con más de 30 días. */
     masDe30: number;
@@ -195,9 +218,11 @@ export async function perfilContactoHospital(
   const porUuid = new Map(facturasDb.filter((f) => f.uuid).map((f) => [normalizarUuid(f.uuid!), f]));
   const ncAplicada = new Map<string, number>();
   let notasSinAplicar = 0;
+  const notasSinAplicarDetalle: NotaSinAplicar[] = [];
   for (const nc of todasDb.filter((f) => (f.tipoSat ?? "I") === "E").sort((a, b) => +a.fecha - +b.fecha)) {
     let resto = nc.total;
-    for (const u of padresDeNota(nc)) {
+    const padres = padresDeNota(nc);
+    for (const u of padres) {
       const f = porUuid.get(u);
       if (!f || resto <= 0.005) continue;
       const ya = ncAplicada.get(f.id) ?? 0;
@@ -209,6 +234,20 @@ export async function perfilContactoHospital(
       resto = r2(resto - aplica);
     }
     notasSinAplicar = r2(notasSinAplicar + Math.max(0, resto));
+    if (resto > 0.005) {
+      const encontradas = padres.map((u) => porUuid.get(u)).filter((f): f is NonNullable<typeof f> => !!f);
+      notasSinAplicarDetalle.push({
+        id: nc.id,
+        uuid: nc.uuid,
+        serie: nc.serie,
+        folio: nc.folio,
+        fecha: nc.fecha,
+        total: nc.total,
+        sinAplicar: r2(resto),
+        motivo: padres.length === 0 ? "SIN_RELACION" : encontradas.length ? "FACTURA_LIQUIDADA" : "FACTURA_NO_ENCONTRADA",
+        facturas: encontradas.map((f) => ({ id: f.id, uuid: f.uuid, serie: f.serie, folio: f.folio })),
+      });
+    }
   }
 
   const aging = agingVacio();
@@ -306,6 +345,7 @@ export async function perfilContactoHospital(
       // Las notas sin factura relacionada restan al total (puede quedar a favor).
       saldo: r2(facturas.reduce((s, f) => s + f.saldo, 0) - notasSinAplicar),
       notasCreditoSinAplicar: notasSinAplicar,
+      notasSinAplicarDetalle,
       repPendienteMonto: r2(conRepPendiente.reduce((s, f) => s + f.repPendiente, 0)),
       repPendienteFacturas: conRepPendiente.length,
       totalNotasCredito: r2(notasCredito.reduce((s, n) => s + n.total, 0)),

@@ -131,6 +131,22 @@ describe("perfilContactoHospital() — notas de crédito", () => {
     expect([vieja.notasCredito, vieja.saldo]).toEqual([5000, 0]);
     expect(p.resumen.notasCreditoSinAplicar).toBe(2000);
     expect(p.resumen.saldo).toBe(58000);
+    // Lo que sobró SÍ relaciona una factura: ya estaba liquidada, no «sin relación».
+    expect(p.resumen.notasSinAplicarDetalle).toEqual([
+      expect.objectContaining({ folio: "n1", sinAplicar: 2000, motivo: "FACTURA_LIQUIDADA", facturas: [expect.objectContaining({ id: "f-vieja" })] }),
+    ]);
+  });
+
+  it("una nota sin CfdiRelacionados queda como SIN_RELACION; una que apunta a un UUID ajeno, FACTURA_NO_ENCONTRADA", async () => {
+    const p = (await perfilContactoHospital(conNotas([
+      { id: "n1", total: 300, rawXml: "<cfdi:Comprobante TipoDeComprobante=\"E\"></cfdi:Comprobante>" },
+      { id: "n2", total: 200, rawXml: xmlNota(["99999999-0000-0000-0000-000000000009"]) },
+    ]) as never, "c1", "cust1", "CLIENTE", HOY))!;
+    expect(p.resumen.notasSinAplicarDetalle.map((n) => [n.folio, n.motivo, n.sinAplicar])).toEqual([
+      ["n1", "SIN_RELACION", 300],
+      ["n2", "FACTURA_NO_ENCONTRADA", 200],
+    ]);
+    expect(p.resumen.notasCreditoSinAplicar).toBe(500);
   });
 
   it("en una PUE la nota reduce el pago implícito: el saldo sigue en 0 y no sobra nada", async () => {
