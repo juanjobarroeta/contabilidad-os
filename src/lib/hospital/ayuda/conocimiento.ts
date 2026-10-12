@@ -275,7 +275,8 @@ Reglas del servidor:
 
 ## cotizaciones — Cotizaciones (/cotizaciones)
 - **Para qué**: presupuestos con el tarifario del pagador que, al ingresar, se vuelven la cuenta.
-- **Nueva cotización** → Paciente (con ficha o sólo el nombre), Pagador (tarifario o precio de lista), Vigencia hasta, Procedimiento, partidas (**Agregar partida**) → **Guardar cotización**.
+- **Nueva cotización** → **Para** Paciente o **Médico** (al médico se le cotiza aunque todavía no haya paciente, con «Dirigida a», p. ej. «A quien corresponda»), Paciente (con ficha o sólo el nombre), Pagador (tarifario o precio de lista), Vigencia hasta, Procedimiento, partidas (**Agregar partida**) → **Guardar cotización**.
+- **Cotizar como paquete**: se pone el **total del paquete con IVA**; el PDF sale como la carta de paquete del hospital (partidas agrupadas por Quirófano / Insumos y medicamentos / Hospitalización, sólo con cantidad, «TOTAL, CON IVA» y las **Especificaciones**, que vienen precargadas y se editan). Los insumos pueden ir sin precio: el total se reparte entre las partidas del tarifario. Quedan guardadas con folio.
 - **Detalle**: **Descargar PDF**, **Marcar enviada**, **Marcar aceptada**, **Cancelar**, **Convertir en ingreso** (Tipo de ingreso, Médico tratante, Fecha de ingreso → **Convertir**; requiere paciente con ficha), **Ver expediente**.
 - Estados: Borrador, Enviada, Aceptada, Convertida en ingreso, Vencida, Cancelada.
 
