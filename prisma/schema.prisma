@@ -8261,6 +8261,7 @@ model HospMedico {
   episodios           HospEpisodio[]
   citas               HospCita[] @relation("CitaMedico")
   citasAnestesiologo  HospCita[] @relation("CitaAnestesiologo")
+  cotizaciones        HospCotizacion[]
   cargos              HospCargo[]
   notas               HospNota[]
   egresosSaeh         HospEgresoSaeh[]
@@ -8778,6 +8779,12 @@ model HospCotizacion {
   pacienteId     String?
   pacienteNombre String
   pagadorId      String?
+  /// Cotización para un médico (el médico la pide para su paciente; puede no tener paciente todavía).
+  medicoId       String?
+  /// Encabezado de la carta: «A quien corresponda», «Dr. Juan Pérez»…
+  dirigidaA      String?
+  /// Paquete: total con IVA pactado. Las partidas se prorratean a este total y se imprimen sin precio.
+  precioPaquete  Decimal? @db.Decimal(18, 6)
   procedimiento  String
   estado         HospCotizacionEstado @default(BORRADOR)
   vigenciaHasta  DateTime?
@@ -8792,6 +8799,7 @@ model HospCotizacion {
   company  Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   paciente HospPaciente? @relation(fields: [pacienteId], references: [id])
   pagador  HospPagador?  @relation(fields: [pagadorId], references: [id])
+  medico   HospMedico?   @relation(fields: [medicoId], references: [id], onDelete: SetNull)
 
   partidas HospCotizacionPartida[]
   episodio HospEpisodio?
@@ -8800,6 +8808,7 @@ model HospCotizacion {
 
   @@unique([companyId, folio])
   @@index([companyId, estado])
+  @@index([companyId, medicoId])
 }
 
 model HospCotizacionPartida {

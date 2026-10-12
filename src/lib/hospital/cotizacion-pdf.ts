@@ -31,6 +31,12 @@ export type CotizacionParaPdf = {
   createdAt: Date | string;
   vigenciaHasta: Date | string | null;
   pacienteNombre: string;
+  /** Cotización para un médico: su nombre. */
+  medicoNombre?: string | null;
+  /** Encabezado de la carta («A quien corresponda»). */
+  dirigidaA?: string | null;
+  /** Paquete: total con IVA pactado; las partidas se imprimen sin precio, agrupadas. */
+  precioPaquete?: number | null;
   procedimiento: string;
   notas: string | null;
   pagador: { nombre: string; tabulador: string | null } | null;
@@ -152,6 +158,51 @@ function encabezadoTabla(l: Lienzo) {
   l.y -= 24;
 }
 
+// Grupos de la carta de paquete (el formato de Haltus): QUIRÓFANO, INSUMOS Y MEDICAMENTOS, HOSPITALIZACIÓN…
+const GRUPO_PAQUETE: Record<string, string> = {
+  QUIROFANO: "QUIRÓFANO", FARMACIA: "INSUMOS Y MEDICAMENTOS", MATERIAL: "INSUMOS Y MEDICAMENTOS",
+  HABITACION: "HOSPITALIZACIÓN", EQUIPO: "EQUIPO", ESTUDIO: "ESTUDIOS", PROCEDIMIENTO: "PROCEDIMIENTOS",
+  URGENCIAS: "URGENCIAS", HONORARIO: "HONORARIOS MÉDICOS", OTRO: "OTROS",
+};
+const ORDEN_GRUPO = ["QUIRÓFANO", "PROCEDIMIENTOS", "INSUMOS Y MEDICAMENTOS", "EQUIPO", "ESTUDIOS", "URGENCIAS", "HOSPITALIZACIÓN", "HONORARIOS MÉDICOS", "OTROS"];
+
+/** Partidas agrupadas, sólo descripción y cantidad, y el total con IVA pactado. */
+function dibujarPaquete(l: Lienzo, c: CotizacionParaPdf) {
+  const { regular, negrita } = l;
+  const grupos = new Map<string, PartidaParaPdf[]>();
+  for (const p of c.partidas) {
+    const g = GRUPO_PAQUETE[p.categoria] ?? "OTROS";
+    grupos.set(g, [...(grupos.get(g) ?? []), p]);
+  }
+  const orden = [...grupos.keys()].sort((a, b) => ORDEN_GRUPO.indexOf(a) - ORDEN_GRUPO.indexOf(b));
+  const cabecera = () => {
+    l.page.drawRectangle({ x: MARGEN, y: l.y - 16, width: ANCHO, height: 18, color: SUAVE });
+    l.page.drawText("Grupo / descripción", { x: COL.concepto + 6, y: l.y - 11, size: 8.5, font: regular, color: GRIS });
+    textoDerecha(l.page, "Cantidad", COL.importe - 6, l.y - 11, regular, 8.5, GRIS);
+    l.y -= 24;
+  };
+  cabecera();
+  for (const g of orden) {
+    if (l.y < MARGEN + 110) { nuevaPagina(l); cabecera(); }
+    l.page.drawText(textoSeguro(g), { x: COL.concepto + 6, y: l.y, size: 9, font: negrita, color: TINTA });
+    l.y -= 14;
+    for (const p of grupos.get(g)!) {
+      const lineas = envolver(p.descripcion, regular, 9.5, ANCHO - 120);
+      if (l.y - lineas.length * 11.5 < MARGEN + 90) { nuevaPagina(l); cabecera(); }
+      textoDerecha(l.page, cantidad(p.cantidad), COL.importe - 6, l.y, regular, 9.5);
+      for (const t of lineas) { l.page.drawText(t, { x: COL.concepto + 18, y: l.y, size: 9.5, font: regular, color: TINTA }); l.y -= 11.5; }
+      l.y -= 2;
+    }
+    l.page.drawLine({ start: { x: MARGEN, y: l.y + 4 }, end: { x: CARTA[0] - MARGEN, y: l.y + 4 }, thickness: 0.4, color: LINEA });
+    l.y -= 8;
+  }
+  if (l.y < MARGEN + 110) nuevaPagina(l);
+  l.y -= 6;
+  textoDerecha(l.page, "TOTAL, CON IVA", X_ETIQUETA_TOTAL, l.y, negrita, 10);
+  textoDerecha(l.page, dinero(c.precioPaquete ?? c.total), COL.importe - 6, l.y, negrita, 12);
+  l.y -= 20;
+}
+
 export async function generarPdfCotizacion(c: CotizacionParaPdf, emisor: EmisorParaPdf, hoy: Date = new Date()): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
   pdf.setTitle(`Cotización ${c.folio}`);
@@ -186,9 +237,12 @@ export async function generarPdfCotizacion(c: CotizacionParaPdf, emisor: EmisorP
   l.y -= 18;
 
   // ── Para quién y qué ──────────────────────────────────────────────────────
+  const paquete = c.precioPaquete != null && c.precioPaquete > 0;
   const datos: Array<[string, string]> = [
-    ["Paciente", c.pacienteNombre],
-    ["Pagador", c.pagador ? `${c.pagador.nombre}${c.pagador.tabulador ? ` · tarifario ${c.pagador.tabulador}` : ""}` : "Particular · precio de lista"],
+    ...(c.dirigidaA || c.medicoNombre ? [["Dirigida a", c.dirigidaA || c.medicoNombre || ""] as [string, string]] : []),
+    ...(c.medicoNombre ? [["Médico", c.medicoNombre] as [string, string]] : []),
+    ...(c.pacienteNombre ? [["Paciente", c.pacienteNombre] as [string, string]] : []),
+    ...(paquete ? [] : [["Pagador", c.pagador ? `${c.pagador.nombre}${c.pagador.tabulador ? ` · tarifario ${c.pagador.tabulador}` : ""}` : "Particular · precio de lista"] as [string, string]]),
     ["Procedimiento", c.procedimiento],
   ];
   for (const [k, v] of datos) {
@@ -199,6 +253,9 @@ export async function generarPdfCotizacion(c: CotizacionParaPdf, emisor: EmisorP
   }
   l.y -= 8;
 
+  if (paquete) {
+    dibujarPaquete(l, c);
+  } else {
   // ── Partidas ──────────────────────────────────────────────────────────────
   encabezadoTabla(l);
   for (const p of c.partidas) {
@@ -236,18 +293,22 @@ export async function generarPdfCotizacion(c: CotizacionParaPdf, emisor: EmisorP
     l.y -= size + 6;
   }
 
-  // ── Notas ─────────────────────────────────────────────────────────────────
+  }
+
+  // ── Notas (en paquete: especificaciones, una por renglón) ─────────────────
   if (c.notas && textoSeguro(c.notas)) {
     l.y -= 10;
-    const lineas = envolver(c.notas, regular, 9, ANCHO);
+    const lineas = c.notas.split(/\r?\n/).filter((t) => t.trim()).flatMap((t) => envolver(t, regular, 9, ANCHO));
     if (l.y - lineas.length * 11.5 < MARGEN + 60) nuevaPagina(l);
-    l.page.drawText("Notas", { x: MARGEN, y: l.y, size: 8.5, font: regular, color: GRIS });
+    l.page.drawText(paquete ? "ESPECIFICACIONES" : "Notas", { x: MARGEN, y: l.y, size: 8.5, font: paquete ? negrita : regular, color: paquete ? TINTA : GRIS });
     l.y -= 13;
     for (const t of lineas) { l.page.drawText(t, { x: MARGEN, y: l.y, size: 9, font: regular, color: TINTA }); l.y -= 11.5; }
   }
 
   // ── Pie en cada página ────────────────────────────────────────────────────
-  const aviso = `Importe estimado con los precios vigentes al ${fechaLarga(c.createdAt)}; el importe final depende de la atención que se brinde. ${c.vigenciaHasta ? `Cotización vigente hasta el ${fechaLarga(c.vigenciaHasta)}.` : ""}`.trim();
+  const aviso = paquete
+    ? `Cotización de paquete: el total incluye IVA y no refleja el importe final de la factura. ${c.vigenciaHasta ? `Vigente hasta el ${fechaLarga(c.vigenciaHasta)}.` : ""}`.trim()
+    : `Importe estimado con los precios vigentes al ${fechaLarga(c.createdAt)}; el importe final depende de la atención que se brinde. ${c.vigenciaHasta ? `Cotización vigente hasta el ${fechaLarga(c.vigenciaHasta)}.` : ""}`.trim();
   const n = l.paginas.length;
   l.paginas.forEach((pg, i) => {
     pg.drawLine({ start: { x: MARGEN, y: MARGEN + 22 }, end: { x: CARTA[0] - MARGEN, y: MARGEN + 22 }, thickness: 0.4, color: LINEA });

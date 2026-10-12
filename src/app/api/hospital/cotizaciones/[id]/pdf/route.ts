@@ -34,6 +34,7 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
     {
       folio: c.folio, estado: c.estado, createdAt: c.createdAt, vigenciaHasta: c.vigenciaHasta,
       pacienteNombre: c.pacienteNombre, procedimiento: c.procedimiento, notas: c.notas,
+      medicoNombre: c.medico?.nombre ?? null, dirigidaA: c.dirigidaA, precioPaquete: c.precioPaquete == null ? null : Number(c.precioPaquete),
       pagador: c.pagador ? { nombre: c.pagador.nombre, tabulador: c.pagador.tabulador } : null,
       partidas: s.partidas.map((p) => ({ descripcion: p.descripcion, categoria: p.categoria, cantidad: Number(p.cantidad), precioUnitario: Number(p.precioUnitario), ivaTasa: p.ivaTasa == null ? null : Number(p.ivaTasa), importe: Number(p.importe) })),
       subtotal: s.subtotal, iva: s.iva, total: s.total,
