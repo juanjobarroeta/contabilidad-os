@@ -74,7 +74,9 @@ describe("perfilContactoHospital() — lado CLIENTE", () => {
     expect(pue.saldo).toBe(0);
 
     expect(p.aging).toEqual({ "0-30": 0, "31-60": 60000, "61-90": 0, "90+": 5000 });
-    expect(p.resumen.saldo).toBe(65000);
+    // La nota de 1,500 no relaciona ninguna factura: resta al total, no a una factura.
+    expect(p.resumen.notasCreditoSinAplicar).toBe(1500);
+    expect(p.resumen.saldo).toBe(63500);
     expect(p.resumen.masDe30).toBe(65000);
 
     expect(p.pagador).toMatchObject({ id: "pag1", nombre: "GNP Seguros", topeAutorizacion: 60000 });
@@ -97,5 +99,45 @@ describe("perfilContactoHospital() — lado PROVEEDOR", () => {
   });
   it("fail-closed: contacto de otra empresa → null", async () => {
     expect(await perfilContactoHospital(fakeDb() as never, "c2", "cust1", "CLIENTE", HOY)).toBeNull();
+  });
+});
+
+describe("perfilContactoHospital() — notas de crédito", () => {
+  const xmlNota = (uuids: string[]) =>
+    `<cfdi:Comprobante TipoDeComprobante="E"><cfdi:CfdiRelacionados TipoRelacion="01">${uuids.map((u) => `<cfdi:CfdiRelacionado UUID="${u}"/>`).join("")}</cfdi:CfdiRelacionados></cfdi:Comprobante>`;
+  const conNotas = (notas: Array<{ id: string; total: number; rawXml: string | null }>) => {
+    const db = fakeDb() as any;
+    const original = db.invoice.findMany;
+    db.invoice.findMany = async (q: any) => {
+      const base = (await original(q)).filter((f: any) => f.tipoSat !== "E");
+      return q.where.tipo === "INGRESO"
+        ? [...base, ...notas.map((n) => ({ ...n, companyId: "c1", customerId: "cust1", tipo: "INGRESO", status: "STAMPED", tipoSat: "E", uuid: `NC-${n.id}`, serie: "NC", folio: n.id, facturapiId: null, fecha: hace(5), metodoPago: "PUE", conciliacionDetalles: [] }))]
+        : base;
+    };
+    return db;
+  };
+
+  it("la nota baja el saldo de la factura PPD que relaciona su XML", async () => {
+    const p = (await perfilContactoHospital(conNotas([{ id: "n1", total: 5000, rawXml: xmlNota(["F5BF65B3-86C0-11F1-9687-578EFC729F41"]) }]) as never, "c1", "cust1", "CLIENTE", HOY))!;
+    const ppd = p.facturas.find((f) => f.id === "f-ppd")!;
+    expect([ppd.notasCredito, ppd.saldo]).toEqual([5000, 55000]);
+    expect(p.resumen.notasCreditoSinAplicar).toBe(0);
+    expect(p.resumen.saldo).toBe(60000);
+  });
+
+  it("no baja más de lo que la factura debe; lo que sobra resta al total", async () => {
+    const p = (await perfilContactoHospital(conNotas([{ id: "n1", total: 7000, rawXml: xmlNota(["11111111-0000-0000-0000-000000000002"]) }]) as never, "c1", "cust1", "CLIENTE", HOY))!;
+    const vieja = p.facturas.find((f) => f.id === "f-vieja")!;
+    expect([vieja.notasCredito, vieja.saldo]).toEqual([5000, 0]);
+    expect(p.resumen.notasCreditoSinAplicar).toBe(2000);
+    expect(p.resumen.saldo).toBe(58000);
+  });
+
+  it("en una PUE la nota reduce el pago implícito: el saldo sigue en 0 y no sobra nada", async () => {
+    const p = (await perfilContactoHospital(conNotas([{ id: "n1", total: 1000, rawXml: xmlNota(["11111111-0000-0000-0000-000000000001"]) }]) as never, "c1", "cust1", "CLIENTE", HOY))!;
+    const pue = p.facturas.find((f) => f.id === "f-pue")!;
+    expect([pue.notasCredito, pue.pagado, pue.saldo]).toEqual([1000, 9000, 0]);
+    expect(p.resumen.notasCreditoSinAplicar).toBe(0);
+    expect(p.resumen.saldo).toBe(65000);
   });
 });
