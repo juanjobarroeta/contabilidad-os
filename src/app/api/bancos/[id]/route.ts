@@ -97,6 +97,10 @@ export async function GET(req: Request, { params }: Params) {
       status: "IGNORED",
       OR: [{ notes: null }, { notes: { notIn: knownTags } }],
     };
+  } else if (status === "RESUELTOS") {
+    // Conciliados con factura o clasificados sin ella (cualquier etiqueta): lo
+    // que ya no espera a nadie. La pestaña «Conciliados» de HospitalOS.
+    where = { ...scope, status: { in: ["MATCHED", "IGNORED"] } };
   } else if (status && status !== "all") {
     // "all" (o sin status) = todos los movimientos, sin filtro de estado.
     // Cualquier otro valor es un estado del enum (UNMATCHED/MATCHED/IGNORED).
