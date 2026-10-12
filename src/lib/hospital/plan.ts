@@ -955,7 +955,7 @@ export function referenciaCitaPlan(planId: string): string {
  */
 function hojaDesdePlan(
   plan: { anestesiologoId: string | null; tipoAnestesia: number | null; diagnosticoCie10: string | null; tipoEpisodio: string; estanciaNoches: number; insumos: unknown },
-  previa: { anestesiologoId: string | null; anestesiologoConfirmado: boolean; enfermera: string | null; solicitaInstrumentista: boolean; instrumentista: string | null; camaId: string | null; insumos: unknown } | null
+  previa: { anestesiologoId: string | null; anestesiologoConfirmado: boolean; enfermera: string | null; solicitaInstrumentista: boolean; solicitaCirculante: boolean; instrumentista: string | null; camaId: string | null; insumos: unknown } | null
 ) {
   const insumos = insumosDePlan(plan.insumos)
     .filter((i) => !i.opcional && i.nombre)
@@ -970,6 +970,7 @@ function hojaDesdePlan(
     estancia: plan.tipoEpisodio === "HOSPITALIZACION" || plan.estanciaNoches > 0 ? ("HOSPITALIZACION" as const) : ("AMBULATORIA" as const),
     enfermera: previa?.enfermera ?? null,
     solicitaInstrumentista: previa?.solicitaInstrumentista ?? false,
+    solicitaCirculante: previa?.solicitaCirculante ?? false,
     instrumentista: previa?.instrumentista ?? null,
     camaId: previa?.camaId ?? null,
     insumos: Array.isArray(previa?.insumos) && previa.insumos.length ? (previa.insumos as Prisma.InputJsonValue) : insumos.length ? insumos : Prisma.DbNull,
@@ -1002,7 +1003,7 @@ export async function programarPlan(
   // Reprogramación: la cita viva anterior del plan se cancela (y no cuenta como empalme).
   const previa = await db.hospCita.findFirst({
     where: { companyId: plan.companyId, pacienteId: plan.pacienteId, notas: { contains: referencia }, estado: { in: ["PROGRAMADA", "CONFIRMADA"] } },
-    select: { id: true, anestesiologoId: true, anestesiologoConfirmado: true, enfermera: true, solicitaInstrumentista: true, instrumentista: true, camaId: true, insumos: true },
+    select: { id: true, anestesiologoId: true, anestesiologoConfirmado: true, enfermera: true, solicitaInstrumentista: true, solicitaCirculante: true, instrumentista: true, camaId: true, insumos: true },
   });
   const choque = await citaEmpalmada(db, { recursoId: args.recursoId, inicio, fin, excluirId: previa?.id ?? null });
   if (choque) throw new HospitalError(409, describirEmpalme(choque));

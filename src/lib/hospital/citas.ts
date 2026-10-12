@@ -55,6 +55,7 @@ export const citaCamposSchema = z.object({
   tipoAnestesia: z.number().int().min(1).max(6).nullable().optional(),
   enfermera: textoOpcional(120),
   solicitaInstrumentista: z.boolean().optional(),
+  solicitaCirculante: z.boolean().optional(),
   instrumentista: textoOpcional(120),
   diagnostico: textoOpcional(300),
   estancia: z.enum(CITA_ESTANCIAS).nullable().optional(),
@@ -83,6 +84,7 @@ export interface DatosHojaCita {
   tipoAnestesia?: number | null;
   enfermera?: string | null;
   solicitaInstrumentista?: boolean;
+  solicitaCirculante?: boolean;
   instrumentista?: string | null;
   diagnostico?: string | null;
   estancia?: (typeof CITA_ESTANCIAS)[number] | null;
@@ -104,6 +106,7 @@ export function datosHojaCita(d: Partial<CitaCampos>, actual?: { anestesiologoId
   if (d.tipoAnestesia !== undefined) out.tipoAnestesia = d.tipoAnestesia;
   if (d.enfermera !== undefined) out.enfermera = limpio(d.enfermera);
   if (d.solicitaInstrumentista !== undefined) out.solicitaInstrumentista = d.solicitaInstrumentista;
+  if (d.solicitaCirculante !== undefined) out.solicitaCirculante = d.solicitaCirculante;
   if (d.instrumentista !== undefined) out.instrumentista = limpio(d.instrumentista);
   if (d.diagnostico !== undefined) out.diagnostico = limpio(d.diagnostico);
   if (d.estancia !== undefined) out.estancia = d.estancia;
