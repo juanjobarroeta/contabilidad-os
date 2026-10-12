@@ -14,7 +14,7 @@ import { prisma } from "@/lib/prisma";
 import { AuthzError, requireMembership, requireModule, requireWriter } from "@/lib/authz";
 import { withHospital } from "@/lib/hospital/with-hospital";
 import { aFecha, bitacora, error, errorZod, fechaSchema } from "@/lib/hospital/http";
-import { armarPartidas, incluyeCotizacion, partidaSchema, serializarCotizacion } from "@/lib/hospital/cotizacion";
+import { aPaquete, armarPartidas, incluyeCotizacion, partidaSchema, serializarCotizacion } from "@/lib/hospital/cotizacion";
 import { pacienteResumen } from "@/lib/hospital/serializar";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -44,7 +44,8 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
 
 const patchSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("estado"), estado: z.enum(["BORRADOR", "ENVIADA", "ACEPTADA", "VENCIDA", "CANCELADA"]) }),
-  z.object({ action: z.literal("partidas"), partidas: z.array(partidaSchema).min(1).max(200) }),
+  // precioPaquete: omitido = el que ya tenía; null = deja de ser paquete.
+  z.object({ action: z.literal("partidas"), partidas: z.array(partidaSchema).min(1).max(200), precioPaquete: z.number().positive().max(100_000_000).nullable().optional() }),
   z.object({
     action: z.literal("datos"),
     procedimiento: z.string().min(1).max(300).optional(),
@@ -52,7 +53,9 @@ const patchSchema = z.discriminatedUnion("action", [
     notas: z.string().max(4000).nullable().optional(),
     pagadorId: z.string().nullable().optional(),
     pacienteId: z.string().nullable().optional(),
-    pacienteNombre: z.string().min(1).max(200).optional(),
+    pacienteNombre: z.string().max(200).optional(),
+    medicoId: z.string().nullable().optional(),
+    dirigidaA: z.string().max(200).nullable().optional(),
   }),
 ]);
 
@@ -63,7 +66,7 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
   if (!parsed.success) return errorZod(parsed.error);
   const d = parsed.data;
 
-  const c = await prisma.hospCotizacion.findUnique({ where: { id }, select: { id: true, companyId: true, folio: true, estado: true, pagadorId: true, total: true } });
+  const c = await prisma.hospCotizacion.findUnique({ where: { id }, select: { id: true, companyId: true, folio: true, estado: true, pagadorId: true, total: true, precioPaquete: true } });
   if (!c) throw new AuthzError(404, "Cotización no encontrada");
 
   const { user } = await requireWriter(c.companyId, req);
@@ -84,12 +87,14 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
 
   if (d.action === "partidas") {
     if (c.estado !== "BORRADOR" && c.estado !== "ENVIADA") return error(`Las partidas sólo se editan en BORRADOR o ENVIADA (está ${c.estado})`, 409);
-    const armado = await armarPartidas(prisma, c.companyId, c.pagadorId, d.partidas);
+    const precioPaquete = d.precioPaquete !== undefined ? d.precioPaquete : c.precioPaquete == null ? null : Number(c.precioPaquete);
+    const lista = await armarPartidas(prisma, c.companyId, c.pagadorId, d.partidas);
+    const armado = precioPaquete ? aPaquete(lista, precioPaquete) : lista;
     const actualizada = await prisma.$transaction(async (tx) => {
       await tx.hospCotizacionPartida.deleteMany({ where: { cotizacionId: id } });
       return tx.hospCotizacion.update({
         where: { id },
-        data: { subtotal: armado.subtotal, iva: armado.iva, total: armado.total, partidas: { create: armado.partidas } },
+        data: { subtotal: armado.subtotal, iva: armado.iva, total: armado.total, precioPaquete, partidas: { create: armado.partidas } },
         include: incluyeCotizacion,
       });
     });
@@ -103,6 +108,10 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
   if (campos.pagadorId) {
     const p = await prisma.hospPagador.findUnique({ where: { id: campos.pagadorId }, select: { companyId: true } });
     if (!p || p.companyId !== c.companyId) return error("pagadorId inválido");
+  }
+  if (campos.medicoId) {
+    const m = await prisma.hospMedico.findUnique({ where: { id: campos.medicoId }, select: { companyId: true } });
+    if (!m || m.companyId !== c.companyId) return error("medicoId inválido");
   }
   if (campos.pacienteId) {
     const p = await prisma.hospPaciente.findUnique({ where: { id: campos.pacienteId }, select: { companyId: true } });

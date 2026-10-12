@@ -94,3 +94,25 @@ describe("generarPdfCotizacion", () => {
     expect(t).not.toContain("Notas");
   });
 });
+
+describe("generarPdfCotizacion — paquete para un médico", () => {
+  it("genera la carta de paquete sin precios por partida", async () => {
+    const { generarPdfCotizacion } = await import("./cotizacion-pdf");
+    const bytes = await generarPdfCotizacion(
+      {
+        folio: "COT-2026-0010", estado: "ENVIADA", createdAt: new Date("2026-10-10T12:00:00Z"), vigenciaHasta: null,
+        pacienteNombre: "", medicoNombre: "Dr. Gibran Melchor", dirigidaA: "A quien corresponda", precioPaquete: 23000,
+        procedimiento: "Rinoplastia primaria", notas: "- Los HONORARIOS MÉDICOS no se encuentran dentro de esta cotización.",
+        pagador: null,
+        partidas: [
+          { descripcion: "SALA DE QUIRÓFANO POR HORA", categoria: "QUIROFANO", cantidad: 3, precioUnitario: 3000, ivaTasa: 0.16, importe: 9000 },
+          { descripcion: "SOLUCIÓN CLORURO DE SODIO 1000ML", categoria: "FARMACIA", cantidad: 3, precioUnitario: 100, ivaTasa: 0, importe: 300 },
+          { descripcion: "HABITACION CORTA ESTANCIA", categoria: "HABITACION", cantidad: 1, precioUnitario: 2000, ivaTasa: 0.16, importe: 2000 },
+        ],
+        subtotal: 20000, iva: 3000, total: 23000,
+      },
+      { nombre: "Hospital Haltus Hope", razonSocial: "Haltus", rfc: "HAL010101AAA", domicilio: null, telefono: null, email: null, clues: null, licenciaSanitaria: null },
+    );
+    expect(bytes.length).toBeGreaterThan(1000);
+  });
+});

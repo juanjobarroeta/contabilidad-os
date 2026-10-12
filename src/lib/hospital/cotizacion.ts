@@ -81,7 +81,41 @@ export async function armarPartidas(
   return { partidas, subtotal, iva, total: r2(subtotal + iva) };
 }
 
+/**
+ * Paquete: el hospital pacta un TOTAL CON IVA y las partidas se prorratean a
+ * ese total (mismo peso que tenían a precio de lista), así la conversión a
+ * cuenta y el IVA por categoría siguen cuadrando. Los centavos que sobren del
+ * redondeo se cargan a la partida más grande. Lanza 400 si ninguna partida
+ * tiene precio: no hay con qué repartir.
+ */
+export function aPaquete(
+  armado: { partidas: PartidaArmada[]; subtotal: number; iva: number; total: number },
+  precioPaquete: number
+): { partidas: PartidaArmada[]; subtotal: number; iva: number; total: number } {
+  if (!(precioPaquete > 0)) throw new HospitalError(400, "El precio del paquete debe ser mayor a cero");
+  if (!(armado.total > 0)) throw new HospitalError(400, "Para cotizar en paquete al menos una partida debe tener precio (del tarifario o capturado)");
+  const factor = precioPaquete / armado.total;
+  const conIva = (p: PartidaArmada) => p.importe * (1 + (p.ivaTasa ?? 0));
+  const partidas = armado.partidas.map((p) => {
+    const importe = r2(p.importe * factor);
+    return { ...p, importe, precioUnitario: p.cantidad > 0 ? Math.round((importe / p.cantidad) * 1e6) / 1e6 : 0 };
+  });
+  const totalDe = (ps: PartidaArmada[]) => r2(ps.reduce((s, p) => s + p.importe + (p.ivaTasa == null ? 0 : r2(p.importe * p.ivaTasa)), 0));
+  const residuo = r2(precioPaquete - totalDe(partidas));
+  if (Math.abs(residuo) >= 0.005) {
+    const mayor = partidas.reduce((a, b) => (conIva(b) > conIva(a) ? b : a));
+    const ajuste = r2(residuo / (1 + (mayor.ivaTasa ?? 0)));
+    mayor.importe = r2(mayor.importe + ajuste);
+    mayor.precioUnitario = mayor.cantidad > 0 ? Math.round((mayor.importe / mayor.cantidad) * 1e6) / 1e6 : 0;
+  }
+  const subtotal = r2(partidas.reduce((s, p) => s + p.importe, 0));
+  const total = r2(precioPaquete);
+  // El total pactado manda; el IVA es lo que falta para llegar a él.
+  return { partidas, subtotal, iva: r2(total - subtotal), total };
+}
+
 export const incluyeCotizacion = {
+  medico: { select: { id: true, nombre: true, especialidad: true } },
   paciente: { select: { id: true, nombre: true, apellidoPaterno: true, apellidoMaterno: true, fechaNacimiento: true } },
   pagador: { select: { id: true, nombre: true, tipo: true, tabulador: true } },
   episodio: { select: { id: true, folio: true, estado: true } },
@@ -93,6 +127,7 @@ export function serializarCotizacion<
     subtotal: unknown;
     iva: unknown;
     total: unknown;
+    precioPaquete?: unknown;
     partidas?: Array<{ cantidad: unknown; precioUnitario: unknown; ivaTasa: unknown; importe: unknown } & Record<string, unknown>>;
   },
 >(c: T) {
@@ -101,6 +136,7 @@ export function serializarCotizacion<
     subtotal: Number(c.subtotal),
     iva: Number(c.iva),
     total: Number(c.total),
+    precioPaquete: c.precioPaquete == null ? null : Number(c.precioPaquete),
     partidas: (c.partidas ?? []).map((p) => {
       const importe = Number(p.importe);
       const ivaTasa = p.ivaTasa == null ? null : Number(p.ivaTasa);
