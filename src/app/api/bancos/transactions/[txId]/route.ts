@@ -18,8 +18,34 @@ import { registrarDecision } from "@/lib/decisiones";
 import { motivoSinEvidencia } from "@/lib/bancos/traspaso-evidencia";
 import { evidenciaTraspasoPorIds } from "@/lib/bancos/traspaso-evidencia-db";
 import { validarParDevolucion } from "@/lib/bancos/devoluciones";
+import { detalleMovimiento } from "@/lib/bancos/detalle-movimiento";
 
 type Params = { params: Promise<{ txId: string }> };
+
+/**
+ * GET /api/bancos/transactions/[txId]
+ *
+ * El detalle del movimiento en una llamada (lib/bancos/detalle-movimiento):
+ * cuenta, contraparte y CEP, cada factura con lo aplicado y su saldo, REPs,
+ * impuesto, liquidación de terminal con sus cobros, y el rastro de decisiones.
+ */
+export async function GET(req: Request, { params }: Params) {
+  let user;
+  try {
+    user = await requireUser(req);
+  } catch (e) {
+    if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
+  const { txId } = await params;
+  const identidad = await prisma.bankTransaction.findUnique({ where: { id: txId }, select: { companyId: true } });
+  if (!identidad) return NextResponse.json({ error: "Movimiento no encontrado" }, { status: 404 });
+  const member = await getEffectiveCompanyMembership(user.id, identidad.companyId);
+  if (!member) return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
+  const detalle = await detalleMovimiento(txId);
+  if (!detalle) return NextResponse.json({ error: "Movimiento no encontrado" }, { status: 404 });
+  return NextResponse.json(detalle);
+}
 
 /**
  * DELETE /api/bancos/transactions/[txId]

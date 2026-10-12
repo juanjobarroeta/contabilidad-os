@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { rangoDeFechas } from "@/lib/bancos/rango-fechas";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
@@ -31,17 +32,15 @@ export async function GET(req: Request, { params }: Params) {
   const { searchParams } = new URL(req.url);
   const status   = searchParams.get("status") ?? undefined;
   const page     = parseInt(searchParams.get("page") ?? "1");
-  const pageSize = parseInt(searchParams.get("pageSize") ?? "50");
+  const pageSize = Math.min(500, Math.max(1, parseInt(searchParams.get("pageSize") ?? "50") || 50));
   const mes      = searchParams.get("mes") ?? "";
   // Búsqueda del archivo: concepto, contraparte, RFC, referencia e importe.
   // Acota la lista Y TODOS los conteos — un chip que cuenta otra cosa que la
   // lista que acompaña es una cifra que se contradice a la vista.
   const q        = (searchParams.get("q") ?? "").trim();
-  let fechaMes: { gte: Date; lt: Date } | undefined;
-  if (/^\d{4}-\d{2}$/.test(mes)) {
-    const [y, m] = mes.split("-").map(Number);
-    fechaMes = { gte: new Date(Date.UTC(y, m - 1, 1)), lt: new Date(Date.UTC(y, m, 1)) };
-  }
+  // Un mes (?mes=) o un rango (?desde=&hasta=, inclusivos): el rango es lo que
+  // pide «año a la fecha» o «últimos 12 meses» (lib/bancos/rango-fechas).
+  const fechaMes = rangoDeFechas({ mes, desde: searchParams.get("desde"), hasta: searchParams.get("hasta") }) ?? undefined;
 
   // «todas»: la vista de TODAS las cuentas de la empresa (?companyId=). El
   // mesa ya la ofrecía; sin ella la pestaña Movimientos aterrizaba en una
@@ -104,7 +103,7 @@ export async function GET(req: Request, { params }: Params) {
     where = { ...scope, status: status as "UNMATCHED" | "MATCHED" | "IGNORED" };
   }
 
-  const [transactions, total] = await Promise.all([
+  const [transactions, total, entradas, salidas] = await Promise.all([
     prisma.bankTransaction.findMany({
       where,
       include: {
@@ -182,6 +181,10 @@ export async function GET(req: Request, { params }: Params) {
       take: pageSize,
     }),
     prisma.bankTransaction.count({ where }),
+    // Totales de TODO el filtro, no de la página: con un año de movimientos la
+    // lista va paginada y sumar en el cliente mentiría.
+    prisma.bankTransaction.aggregate({ where: { AND: [where, { monto: { gt: 0 } }] }, _sum: { monto: true } }),
+    prisma.bankTransaction.aggregate({ where: { AND: [where, { monto: { lt: 0 } }] }, _sum: { monto: true } }),
   ]);
 
   // Status counts — group by status, then split IGNORED into its tagged subcategories
@@ -256,6 +259,10 @@ export async function GET(req: Request, { params }: Params) {
       sugerenciaDevolucion: porDevolucion[t.id] ?? null,
     })),
     pagination: { page, pageSize, total, pages: Math.ceil(total / pageSize) },
+    totales: {
+      entradas: Number(entradas._sum.monto ?? 0),
+      salidas: Number(salidas._sum.monto ?? 0),
+    },
     meses: mesesDelSelector(mesesRaw),
     statusCounts: {
       UNMATCHED: statusCounts.UNMATCHED ?? 0,
