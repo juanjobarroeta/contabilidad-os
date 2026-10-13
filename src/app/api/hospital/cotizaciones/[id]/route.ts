@@ -18,7 +18,7 @@ import { withHospital } from "@/lib/hospital/with-hospital";
 import { aFecha, bitacora, error, errorZod, fechaSchema } from "@/lib/hospital/http";
 import { aPaquete, armarPartidas, incluyeCotizacion, partidaSchema, serializarCotizacion } from "@/lib/hospital/cotizacion";
 import { pacienteResumen } from "@/lib/hospital/serializar";
-import { DIAS_PRIMER_SEGUIMIENTO, MOTIVOS_PERDIDA, ORIGENES_COTIZACION } from "@/lib/hospital/cotizacion-crm";
+import { DIAS_PRIMER_SEGUIMIENTO, MOTIVOS_PERDIDA, ORIGENES_COTIZACION, equipoComercial } from "@/lib/hospital/cotizacion-crm";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -48,7 +48,8 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
   await requireMembership(c.companyId, undefined, req);
   await requireModule(c.companyId, "HOSPITAL", req);
 
-  return NextResponse.json({ ...serializarCotizacion(c), paciente: c.paciente ? pacienteResumen(c.paciente) : null });
+  const equipo = await equipoComercial(prisma, c.companyId);
+  return NextResponse.json({ ...serializarCotizacion(c), paciente: c.paciente ? pacienteResumen(c.paciente) : null, equipo });
 });
 
 const patchSchema = z.discriminatedUnion("action", [

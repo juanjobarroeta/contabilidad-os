@@ -14,7 +14,7 @@ import { requireMembership, requireModule } from "@/lib/authz";
 import { withHospital } from "@/lib/hospital/with-hospital";
 import { error } from "@/lib/hospital/http";
 import { nombreCompleto } from "@/lib/hospital/util";
-import { ABIERTAS, tableroCrm } from "@/lib/hospital/cotizacion-crm";
+import { ABIERTAS, equipoComercial, tableroCrm } from "@/lib/hospital/cotizacion-crm";
 
 const fecha = (s: string | null) => (s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(`${s}T00:00:00`) : null);
 
@@ -55,5 +55,10 @@ export const GET = withHospital(async (req: Request) => {
     })),
     hoy
   );
-  return NextResponse.json({ desde: desde.toISOString(), hasta: hasta.toISOString(), ...tablero });
+  const equipo = await equipoComercial(prisma, companyId);
+  const nombreDe = new Map(equipo.map((u) => [u.userId, u.nombre]));
+  return NextResponse.json({
+    desde: desde.toISOString(), hasta: hasta.toISOString(), equipo, ...tablero,
+    porResponsable: tablero.porResponsable.map((g) => ({ ...g, nombre: g.clave === "SIN" ? "Sin responsable" : nombreDe.get(g.clave) ?? "Usuario dado de baja" })),
+  });
 });

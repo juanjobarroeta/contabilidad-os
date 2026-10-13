@@ -6,7 +6,14 @@
 // tablero. La ruta GET /cotizaciones/crm sólo lee y llama a `tableroCrm`.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { r2 } from "./util";
+
+/** Quienes pueden ser responsables: los usuarios del hospital (sólo id y nombre). */
+export async function equipoComercial(db: PrismaClient | Prisma.TransactionClient, companyId: string) {
+  const miembros = await db.companyMember.findMany({ where: { companyId }, select: { user: { select: { id: true, name: true, email: true } } } });
+  return miembros.map((m) => ({ userId: m.user.id, nombre: m.user.name || m.user.email })).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+}
 
 export const TIPOS_SEGUIMIENTO = ["LLAMADA", "WHATSAPP", "CORREO", "VISITA", "NOTA"] as const;
 export const RESULTADOS_SEGUIMIENTO = ["CONTESTO", "NO_CONTESTO", "INTERESADO", "LO_PENSARA", "RECHAZO"] as const;
