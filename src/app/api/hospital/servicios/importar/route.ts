@@ -16,6 +16,13 @@
  * - Si la hoja trae varias listas (columna «lista de precio»), `lista` dice
  *   cuál importar; sin ella y con más de una, la vista previa responde
  *   { requiereLista, listas } y aplicar responde 400.
+ * - FORMATO ANCHO (una columna de precio por lista: Clave, Descripción, BUPA,
+ *   PARTICULAR, SURA…): `destino` y `lista` no aplican; `mapeo` (JSON
+ *   { encabezado: "LISTA" | pagadorId | "NUEVO:[TIPO:]nombre" | "OMITIR" })
+ *   dice a dónde va cada columna. La vista previa responde { formato: "ANCHO",
+ *   columnasPrecio, sugerencia, pagadores, porColumna } (con la sugerencia si
+ *   no se manda mapeo); aplicar exige el mapeo y escribe todo en una
+ *   transacción (lib/hospital/tarifario-ancho-db).
  */
 
 import { NextResponse } from "next/server";
@@ -25,6 +32,7 @@ import { withHospital } from "@/lib/hospital/with-hospital";
 import { bitacora, error } from "@/lib/hospital/http";
 import { ivaDefault } from "@/lib/hospital/util";
 import { categoriaDeGrupo, filasDeArchivo, leerListaPrecios, planearImportacion, resumirPlan } from "@/lib/hospital/tarifario-importar";
+import { aplicarAncho, planearAncho, resumirAncho } from "@/lib/hospital/tarifario-ancho-db";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const LOTE = 200;
@@ -56,6 +64,52 @@ export const POST = withHospital(async (req: Request) => {
   }
 
   const lectura = leerListaPrecios(filasDeArchivo(buffer));
+  if (lectura.formato === "ANCHO") {
+    let mapeo: Record<string, unknown> | null = null;
+    const crudo = campo("mapeo");
+    if (crudo) {
+      try {
+        const m = JSON.parse(crudo);
+        if (!m || typeof m !== "object" || Array.isArray(m)) throw new Error();
+        mapeo = m as Record<string, unknown>;
+      } catch {
+        return error("«mapeo» debe ser un objeto JSON { columna: destino }");
+      }
+    }
+    if (aplicar && !mapeo) return error("Para importar una lista con varias columnas manda el «mapeo» de cada columna", 400);
+    const plan = await planearAncho(prisma, companyId, lectura, mapeo);
+    const respuesta = {
+      formato: "ANCHO" as const,
+      columnasPrecio: lectura.columnasPrecio,
+      sugerencia: plan.sugerencia,
+      porConfirmar: plan.porConfirmar,
+      pagadores: plan.pagadores,
+      filas: new Set(lectura.filas.map((x) => x.clave)).size,
+      errores: lectura.errores,
+      porColumna: resumirAncho(plan),
+    };
+    if (!aplicar) return NextResponse.json({ aplicado: false, ...respuesta });
+    const hecho = await aplicarAncho(prisma, companyId, plan, { desactivarFaltantes });
+    bitacora(user, req, {
+      companyId,
+      accion: "hospital.tarifario.importar",
+      entidad: "HospServicio",
+      entidadId: "ANCHO",
+      detalle: {
+        archivo: f.name,
+        formato: "ANCHO",
+        ...hecho,
+        columnas: plan.columnas.map((c) => ({
+          encabezado: c.encabezado,
+          destino: c.destino.tipo === "PAGADOR" ? c.destino.nombre : c.destino.tipo === "NUEVO" ? `nuevo: ${c.destino.nombre}` : c.destino.tipo,
+          nuevos: c.plan?.nuevos.length ?? 0,
+          cambios: c.plan?.cambios.length ?? 0,
+          iguales: c.plan?.iguales ?? 0,
+        })),
+      },
+    });
+    return NextResponse.json({ aplicado: true, ...respuesta, ...hecho });
+  }
   if (lectura.listas.length > 1 && !listaElegida) {
     // La pantalla pregunta cuál; aplicar sin elegir no se permite.
     if (aplicar) return error(`La hoja trae ${lectura.listas.length} listas (${lectura.listas.join(", ")}): elige cuál importar`, 400);

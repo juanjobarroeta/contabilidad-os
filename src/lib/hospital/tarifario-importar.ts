@@ -28,8 +28,17 @@ export interface FilaLista {
 export interface LecturaLista {
   filas: FilaLista[];
   errores: Array<{ fila: number; motivo: string }>;
-  /** Listas de precio distintas que trae la hoja (columna «lista de precio»). */
+  /** Listas de precio distintas que trae la hoja (columna «lista de precio», o los encabezados en formato ancho). */
   listas: string[];
+  /**
+   * LARGO: una fila por clave y lista (Clave, Descripción, Grupo, Lista, Precio).
+   * ANCHO: una fila por clave y una COLUMNA de precio por lista (Clave,
+   * Descripción, BUPA, PARTICULAR, SURA…). En ancho cada celda con precio se
+   * vuelve una FilaLista con `lista` = el encabezado de su columna.
+   */
+  formato: "LARGO" | "ANCHO";
+  /** Sólo en ANCHO: cada columna de precio y cuántas filas traen precio en ella. */
+  columnasPrecio: Array<{ encabezado: string; filasConPrecio: number }>;
 }
 
 const norm = (s: unknown) =>
@@ -82,7 +91,11 @@ export function leerListaPrecios(crudas: unknown[][]): LecturaLista {
     return -1;
   };
   const c = { clave: col("clave"), descripcion: col("descripcion"), grupo: col("grupo"), lista: col("lista"), precio: col("precio") };
-  if (c.descripcion < 0 || c.precio < 0) throw new HospitalError(400, "Faltan columnas: la hoja necesita «Clave», «Descripción» y «Precio»");
+  if (c.descripcion >= 0 && c.precio < 0 && c.lista < 0) {
+    const ancho = leerFormatoAncho(crudas, iEnc, c);
+    if (ancho) return ancho;
+  }
+  if (c.descripcion < 0 || c.precio < 0) throw new HospitalError(400, "Faltan columnas: la hoja necesita «Clave», «Descripción» y «Precio» (o una columna de precio por lista)");
 
   const filas: FilaLista[] = [];
   const errores: LecturaLista["errores"] = [];
@@ -111,7 +124,209 @@ export function leerListaPrecios(crudas: unknown[][]): LecturaLista {
     });
   });
   const listas = [...new Set(filas.map((f) => f.lista).filter((x): x is string => !!x))];
-  return { filas, errores, listas };
+  return { filas, errores, listas, formato: "LARGO", columnasPrecio: [] };
+}
+
+/** El grupo cuando la hoja no trae columna: las letras con que empieza la clave (LC001 → LC, ENDOS011 → ENDOS). */
+export function grupoDeClave(clave: string): string | null {
+  return /^[A-Z]+/.exec(clave)?.[0] ?? null;
+}
+
+/**
+ * Formato ANCHO: tras Clave y Descripción, cada columna cuyo contenido es
+ * casi todo precio es una lista (BUPA, PARTICULAR, SURA…). Una celda vacía es
+ * «esa lista no cobra esto», no un error. Devuelve null si no hay ninguna
+ * columna con cara de precios.
+ */
+function leerFormatoAncho(
+  crudas: unknown[][],
+  iEnc: number,
+  c: { clave: number; descripcion: number; grupo: number },
+): LecturaLista | null {
+  const encCrudo = crudas[iEnc] as unknown[];
+  const cuerpo = crudas.slice(iEnc + 1).filter((r) => Array.isArray(r) && r.some((v) => v != null && String(v).trim() !== ""));
+  const vacia = (v: unknown) => v == null || String(v).trim() === "";
+  const columnas: Array<{ i: number; encabezado: string }> = [];
+  encCrudo.forEach((h, i) => {
+    const encabezado = String(h ?? "").replace(/\s+/g, " ").trim();
+    if (!encabezado || i === c.clave || i === c.descripcion || i === c.grupo) return;
+    const llenas = cuerpo.map((r) => (r as unknown[])[i]).filter((v) => !vacia(v));
+    if (llenas.length === 0) return;
+    const numericas = llenas.filter((v) => numero(v) != null).length;
+    if (numericas / llenas.length >= 0.8) columnas.push({ i, encabezado });
+  });
+  if (columnas.length === 0) return null;
+
+  const filas: FilaLista[] = [];
+  const errores: LecturaLista["errores"] = [];
+  const vistas = new Map<string, number>();
+  const conPrecio = new Map<string, number>();
+  crudas.slice(iEnc + 1).forEach((r, k) => {
+    const fila = iEnc + 2 + k;
+    if (!Array.isArray(r) || r.every((v) => vacia(v))) return;
+    const clave = String(r[c.clave] ?? "").replace(/\s+/g, "").toUpperCase();
+    const descripcion = String(r[c.descripcion] ?? "").replace(/\s+/g, " ").trim();
+    if (!clave) return void errores.push({ fila, motivo: "sin clave" });
+    if (clave.length > 40) return void errores.push({ fila, motivo: `clave ${clave.slice(0, 20)}… de más de 40 caracteres` });
+    if (!descripcion) return void errores.push({ fila, motivo: `${clave}: sin descripción` });
+    if (vistas.has(clave)) return void errores.push({ fila, motivo: `${clave}: repetida (ya viene en la fila ${vistas.get(clave)})` });
+    vistas.set(clave, fila);
+    const grupo = c.grupo >= 0 ? String(r[c.grupo] ?? "").trim().toUpperCase() || null : grupoDeClave(clave);
+    let alguna = false;
+    for (const { i, encabezado } of columnas) {
+      if (vacia(r[i])) continue;
+      const precio = numero(r[i]);
+      if (precio == null || precio < 0) { errores.push({ fila, motivo: `${clave}: precio inválido en ${encabezado}` }); continue; }
+      alguna = true;
+      conPrecio.set(encabezado, (conPrecio.get(encabezado) ?? 0) + 1);
+      filas.push({ fila, clave, descripcion: descripcion.slice(0, 200), grupo, lista: encabezado, precio: r2(precio) });
+    }
+    if (!alguna) errores.push({ fila, motivo: `${clave}: sin precio en ninguna lista` });
+  });
+  return {
+    filas,
+    errores,
+    listas: columnas.map((x) => x.encabezado),
+    formato: "ANCHO",
+    columnasPrecio: columnas.map((x) => ({ encabezado: x.encabezado, filasConPrecio: conPrecio.get(x.encabezado) ?? 0 })),
+  };
+}
+
+// ── Mapeo columna → destino ──────────────────────────────────────────────────
+
+export type DestinoColumna =
+  | { tipo: "LISTA" }
+  | { tipo: "PAGADOR"; pagadorId: string }
+  | { tipo: "NUEVO"; nombre: string; pagadorTipo: "ASEGURADORA" | "EMPRESA" | "GOBIERNO" | "PARTICULAR" }
+  | { tipo: "OMITIR" };
+
+/**
+ * Lee un destino del mapeo: "LISTA" | <pagadorId> | "NUEVO:<nombre>" |
+ * "NUEVO:<TIPO>:<nombre>" | "OMITIR" (o vacío).
+ */
+export function destinoDeMapeo(valor: unknown): DestinoColumna {
+  const v = String(valor ?? "").trim();
+  if (!v || v === "OMITIR") return { tipo: "OMITIR" };
+  if (v === "LISTA") return { tipo: "LISTA" };
+  if (v.startsWith("NUEVO:")) {
+    const resto = v.slice(6);
+    const m = /^(ASEGURADORA|EMPRESA|GOBIERNO|PARTICULAR):(.*)$/.exec(resto);
+    const nombre = (m ? m[2] : resto).replace(/\s+/g, " ").trim().slice(0, 120);
+    if (!nombre) return { tipo: "OMITIR" };
+    return { tipo: "NUEVO", nombre, pagadorTipo: (m?.[1] as "ASEGURADORA" | "EMPRESA" | "GOBIERNO" | "PARTICULAR") ?? "ASEGURADORA" };
+  }
+  return { tipo: "PAGADOR", pagadorId: v };
+}
+
+const RUIDO = new Set(["sa", "de", "cv", "sab", "sapi", "s", "a", "c", "v", "rl", "srl", "compania", "cia", "seguros", "seguro", "grupo", "y", "la", "el", "del", "mexico", "servicios"]);
+const compacto = (s: string) =>
+  norm(s)
+    .replace(/[^a-z0-9 ]/g, " ")
+    .split(" ")
+    .filter((t) => t && !RUIDO.has(t))
+    .join("");
+const tokens = (s: string) => norm(s).replace(/[^a-z0-9 ]/g, " ").split(" ").filter((t) => t && !RUIDO.has(t));
+
+/** La llave de un encabezado en la tabla de alias: sin acentos, espacios ni signos. */
+export function llaveEncabezado(encabezado: string): string {
+  return norm(encabezado).replace(/[^a-z0-9]/g, "");
+}
+
+export type TipoPagadorLista = "ASEGURADORA" | "EMPRESA" | "GOBIERNO" | "PARTICULAR";
+
+/**
+ * Lo que se sabe de una columna: el pagador al que fue la última vez, o con
+ * qué nombre y tipo crearlo. `confirmado: false` = es una suposición y la
+ * pantalla pide revisarla.
+ */
+export type AliasColumna = { pagadorId: string } | { nombre: string; tipo: TipoPagadorLista; confirmado?: boolean };
+
+/**
+ * Lo que dijo el dueño de la lista de CENTRO (oct-2026) y vale para cualquier
+ * hospital con los mismos encabezados. Lo de cada empresa vive en
+ * HospConfig.aliasTarifas y manda sobre esto.
+ */
+export const ALIAS_BASE: Record<string, AliasColumna> = {
+  partext: { nombre: "Particular externo", tipo: "PARTICULAR", confirmado: true },
+  pxexterno: { nombre: "Paciente externo", tipo: "PARTICULAR", confirmado: true },
+  sofia: { nombre: "Sofía", tipo: "EMPRESA", confirmado: true },
+  bupa: { nombre: "BUPA", tipo: "ASEGURADORA", confirmado: false },
+  mediproses: { nombre: "MEDIPROSES", tipo: "EMPRESA", confirmado: false },
+  vita: { nombre: "VITA", tipo: "EMPRESA", confirmado: false },
+};
+
+export interface SugerenciaMapeo {
+  /** encabezado → "LISTA" | pagadorId | "NUEVO:<TIPO>:<nombre>" | null. */
+  mapeo: Record<string, string | null>;
+  /** Encabezados cuya sugerencia es una suposición: la pantalla pide confirmarla. */
+  porConfirmar: string[];
+}
+
+/**
+ * Sugiere a qué va cada columna, en este orden:
+ *  1. PARTICULAR → precio de lista.
+ *  2. Lo que la empresa ya decidió antes (alias con pagadorId).
+ *  3. Un pagador cuyo tabulador o nombre coincide: exacto (sin acentos ni
+ *     «Seguros», «SA de CV»…), uno empieza con el otro (PLANSEG ↔ Plan
+ *     Seguro) o la primera palabra completa del pagador (ONCOCENTER ↔ Onco
+ *     Hope). Si dos empatan no se adivina.
+ *  4. Un alias con nombre: el pagador con ese nombre si ya existe; si no,
+ *     crearlo (NUEVO).
+ *  5. Nada de lo anterior: crear uno con el nombre de la columna, tipo
+ *     EMPRESA, marcado por confirmar.
+ */
+export function sugerirMapeo(
+  encabezados: string[],
+  pagadores: Array<{ id: string; nombre: string; tabulador: string | null; activo?: boolean }>,
+  aliasEmpresa: Record<string, AliasColumna> = {},
+): SugerenciaMapeo {
+  const mapeo: Record<string, string | null> = {};
+  const porConfirmar: string[] = [];
+  const usados = new Set<string>();
+  const vivos = pagadores.filter((p) => p.activo !== false);
+  for (const enc of encabezados) {
+    const ce = compacto(enc);
+    const llave = llaveEncabezado(enc);
+    if (ce === "particular") { mapeo[enc] = "LISTA"; continue; }
+
+    const alias = aliasEmpresa[llave] ?? ALIAS_BASE[llave];
+    if (alias && "pagadorId" in alias && vivos.some((p) => p.id === alias.pagadorId) && !usados.has(alias.pagadorId)) {
+      mapeo[enc] = alias.pagadorId; usados.add(alias.pagadorId); continue;
+    }
+
+    let mejor: { id: string; puntos: number } | null = null;
+    let empate = false;
+    for (const p of vivos) {
+      if (usados.has(p.id)) continue;
+      let puntos = 0;
+      for (const n of [p.tabulador, p.nombre].filter((x): x is string => !!x)) {
+        const cn = compacto(n);
+        if (!cn || !ce) continue;
+        if (cn === ce) puntos = Math.max(puntos, 3);
+        else if (Math.min(cn.length, ce.length) >= 4 && (cn.startsWith(ce) || ce.startsWith(cn))) puntos = Math.max(puntos, 2);
+        else {
+          const primera = tokens(n)[0];
+          if (primera && primera.length >= 4 && ce.startsWith(primera)) puntos = Math.max(puntos, 1);
+        }
+      }
+      if (!puntos) continue;
+      if (!mejor || puntos > mejor.puntos) { mejor = { id: p.id, puntos }; empate = false; }
+      else if (puntos === mejor.puntos) empate = true;
+    }
+    if (mejor && !empate) { mapeo[enc] = mejor.id; usados.add(mejor.id); continue; }
+
+    if (alias && "nombre" in alias) {
+      const ya = vivos.find((p) => !usados.has(p.id) && compacto(p.nombre) === compacto(alias.nombre));
+      if (ya) { mapeo[enc] = ya.id; usados.add(ya.id); }
+      else mapeo[enc] = `NUEVO:${alias.tipo}:${alias.nombre}`;
+      if (alias.confirmado === false) porConfirmar.push(enc);
+      continue;
+    }
+
+    mapeo[enc] = `NUEVO:EMPRESA:${enc}`;
+    porConfirmar.push(enc);
+  }
+  return { mapeo, porConfirmar };
 }
 
 /**
