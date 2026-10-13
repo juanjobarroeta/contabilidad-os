@@ -8764,6 +8764,8 @@ enum HospCotizacionEstado {
   CONVERTIDA
   VENCIDA
   CANCELADA
+  /// El paciente o el médico no la tomó (precio, otro hospital, pospuso…): `motivoPerdida`.
+  PERDIDA
 }
 
 /// Cotización con el tarifario del pagador. «Una captura, tres documentos»:
@@ -8796,19 +8798,59 @@ model HospCotizacion {
   notas           String? @db.Text
   creadoPorUserId String?
 
+  // ── Seguimiento (CRM) ──
+  /// Quien le da seguimiento (User.id; se muestra con el directorio de usuarios).
+  responsableUserId  String?
+  /// Cuándo toca volver a llamar; vencida = sale en «Requiere atención».
+  proximoSeguimiento DateTime?
+  contactoNombre     String?
+  contactoTelefono   String?
+  contactoEmail      String?
+  /// De dónde llegó: MEDICO, TELEFONO, WHATSAPP, ASEGURADORA, RECOMENDACION, REDES, OTRO.
+  origen             String?
+  enviadaAt          DateTime?
+  /// Cuando se aceptó, se perdió o se convirtió (para el tiempo de cierre).
+  cerradaAt          DateTime?
+  motivoPerdida      String?
+  /// Hospital que se la llevó, si se sabe.
+  perdidaContra      String?
+
   company  Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   paciente HospPaciente? @relation(fields: [pacienteId], references: [id])
   pagador  HospPagador?  @relation(fields: [pagadorId], references: [id])
   medico   HospMedico?   @relation(fields: [medicoId], references: [id], onDelete: SetNull)
 
-  partidas HospCotizacionPartida[]
-  episodio HospEpisodio?
-  plan     HospPlanTratamiento?
-  citas    HospCita[]
+  partidas     HospCotizacionPartida[]
+  episodio     HospEpisodio?
+  plan         HospPlanTratamiento?
+  citas        HospCita[]
+  seguimientos HospCotizacionSeguimiento[]
 
   @@unique([companyId, folio])
   @@index([companyId, estado])
   @@index([companyId, medicoId])
+  @@index([companyId, proximoSeguimiento])
+}
+
+/// Bitácora comercial de una cotización: cada llamada, WhatsApp, correo o
+/// visita, y los cambios de estado. Sólo se agrega; no se edita.
+model HospCotizacionSeguimiento {
+  id           String   @id @default(cuid())
+  companyId    String
+  cotizacionId String
+  createdAt    DateTime @default(now())
+  userId       String?
+  userNombre   String?
+  /// LLAMADA, WHATSAPP, CORREO, VISITA, NOTA, ESTADO.
+  tipo         String
+  /// CONTESTO, NO_CONTESTO, INTERESADO, LO_PENSARA, RECHAZO… (libre, opcional).
+  resultado    String?
+  nota         String?  @db.Text
+
+  cotizacion HospCotizacion @relation(fields: [cotizacionId], references: [id], onDelete: Cascade)
+
+  @@index([cotizacionId, createdAt])
+  @@index([companyId, createdAt])
 }
 
 model HospCotizacionPartida {

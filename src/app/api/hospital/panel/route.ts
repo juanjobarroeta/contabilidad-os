@@ -76,7 +76,8 @@ type Atencion = {
     | "PLAN_SIN_AUTORIZACION"
     | "CUENTA_FUERA_DE_PLAN"
     | "SAEH_INCOMPLETO"
-    | "MEDICO_POR_CREDENCIALIZAR";
+    | "MEDICO_POR_CREDENCIALIZAR"
+    | "COTIZACION_SEGUIMIENTO";
   titulo: string;
   detalle: string;
   href: string;
@@ -308,6 +309,24 @@ export const GET = withAuthz(async (req: Request) => {
       detalle: [m.especialidad, m.cedula ? `cédula ${m.cedula}` : "sin cédula", "dado de alta desde la agenda"].filter(Boolean).join(" · "),
       href: "/medicos",
       refId: m.id,
+    });
+  }
+  // Cotizaciones abiertas a las que ya les tocaba llamada.
+  const finDeHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 1);
+  const porSeguir = await prisma.hospCotizacion.findMany({
+    where: { companyId, estado: { in: ["BORRADOR", "ENVIADA", "ACEPTADA"] }, proximoSeguimiento: { lt: finDeHoy } },
+    select: { id: true, folio: true, procedimiento: true, total: true, proximoSeguimiento: true, pacienteNombre: true, medico: { select: { nombre: true } } },
+    orderBy: { proximoSeguimiento: "asc" },
+    take: MAX_POR_ALERTA,
+  });
+  for (const q of porSeguir) {
+    const vencido = q.proximoSeguimiento! < new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+    atencion.push({
+      tipo: "COTIZACION_SEGUIMIENTO",
+      titulo: `${q.folio} · ${q.procedimiento}: ${vencido ? "seguimiento vencido" : "toca seguimiento hoy"}`,
+      detalle: [q.pacienteNombre || q.medico?.nombre || null, `$${Number(q.total).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`].filter(Boolean).join(" · "),
+      href: `/cotizaciones?abrir=${q.id}`,
+      refId: q.id,
     });
   }
   const sinFecha = await prisma.hospLote.count({ where: { companyId, existencia: { gt: 0 }, caducidad: null } });
