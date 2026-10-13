@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const DOCUMENT_KINDS = ["balanza", "polizas", "catalogo", "iva", "isr", "retenciones", "factura", "prefactura", "nomina", "recibo_nomina"] as const;
+export const DOCUMENT_KINDS = ["balanza", "polizas", "catalogo", "iva", "isr", "retenciones", "factura", "prefactura", "nomina", "recibo_nomina", "reporte_facturas"] as const;
 export const documentRefSchema = z.object({
   kind: z.enum(DOCUMENT_KINDS),
   companyId: z.string().min(1).max(100),
@@ -8,7 +8,7 @@ export const documentRefSchema = z.object({
   year: z.number().int().min(2000).max(2100).optional(),
   month: z.number().int().min(1).max(12).optional(),
 }).strict().superRefine((r, ctx) => {
-  const record = ["factura", "prefactura", "nomina", "recibo_nomina"].includes(r.kind);
+  const record = ["factura", "prefactura", "nomina", "recibo_nomina", "reporte_facturas"].includes(r.kind);
   if (record && !r.id) ctx.addIssue({ code: "custom", message: "Documento requerido" });
   if (!record && r.kind !== "catalogo" && (!r.year || !r.month))
     ctx.addIssue({ code: "custom", message: "Periodo requerido" });
@@ -19,8 +19,9 @@ export const documentTitles: Record<DocumentRef["kind"], string> = {
   balanza: "Balanza de comprobación", polizas: "Pólizas y libro diario", catalogo: "Catálogo de cuentas",
   iva: "Papel de IVA", isr: "Papel de ISR", retenciones: "Papel de retenciones",
   factura: "CFDI", prefactura: "Prefactura", nomina: "Nómina", recibo_nomina: "Recibo de nómina",
+  reporte_facturas: "Reporte de facturas",
 };
-export const DOCUMENT_TOOL_NAMES = new Set(["buscar_documentos", "mostrar_documento", "preparar_prefactura", "preparar_nomina"]);
+export const DOCUMENT_TOOL_NAMES = new Set(["buscar_documentos", "mostrar_documento", "preparar_prefactura", "preparar_nomina", "reporte_facturas"]);
 export const DOCUMENT_PREPARE_NAMES = new Set(["preparar_prefactura", "preparar_nomina"]);
 
 /** Cards carry references only. Titles, amounts, status and links come from an

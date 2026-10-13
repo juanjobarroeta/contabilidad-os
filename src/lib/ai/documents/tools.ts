@@ -8,6 +8,17 @@ const taxes = { type: "array", maxItems: 10, items: { type: "object", properties
 }, required: ["type", "rate", "factor", "withholding"], additionalProperties: false } };
 
 export const documentTools: Anthropic.Tool[] = [
+  { name: "reporte_facturas", description: "Arma un REPORTE de facturas de esta empresa y lo entrega en el chat con descargas: Excel (renglón por CFDI con subtotal, descuento, IVA, retenciones, total, método, estado, pagado y saldo) y ZIP con los XML. Úsalo cuando pidan «las facturas de X», «lo que nos facturó Y en tal periodo», «facturas pendientes de cobro/pago de A y B», «descárgame las facturas…». Traduce el periodo a fechas AAAA-MM-DD (p. ej. «el primer trimestre de 2026» → 2026-01-01 a 2026-03-31). Contrapartes por nombre o RFC tal como las dice el usuario; si la respuesta trae `aclarar`, pregunta cuál de los candidatos es — no escojas tú. Las cifras del resumen vienen de la consulta: repítelas, no las recalcules ni inventes. Entregar el archivo aquí no autoriza enviarlo a terceros.", input_schema: {
+    type: "object", properties: {
+      contrapartes: { type: "array", maxItems: 20, items: { type: "string" }, description: "Nombres o RFC de clientes/proveedores. Vacío = todas." },
+      desde: { type: "string", description: "AAAA-MM-DD" }, hasta: { type: "string", description: "AAAA-MM-DD" },
+      direccion: { type: "string", enum: ["EMITIDAS", "RECIBIDAS", "AMBAS"], description: "EMITIDAS = a clientes; RECIBIDAS = de proveedores." },
+      tipos: { type: "array", maxItems: 4, items: { type: "string", enum: ["I", "E", "P", "N"] }, description: "I ingreso/gasto, E nota de crédito, P complemento de pago, N nómina. Vacío = todos." },
+      estado: { type: "string", enum: ["VIGENTES", "CANCELADAS", "TODAS"] },
+      metodoPago: { type: "string", enum: ["PUE", "PPD"] },
+      saldo: { type: "string", enum: ["PAGADAS", "PENDIENTES", "TODAS"] },
+    }, additionalProperties: false,
+  } },
   { name: "buscar_documentos", description: "Recupera CFDIs, prefacturas, corridas y recibos de nómina de ESTA empresa. Usa nombre/RFC/UUID y fechas; devuelve tarjetas con archivos auténticos y vista previa. Para un documento antiguo recupera el existente; nunca lo generes o timbres de nuevo. Los archivos se entregan al usuario en el chat; enviar a terceros es otra acción y requiere petición expresa.", input_schema: {
     type: "object", properties: { kind: { type: "string", enum: ["factura", "prefactura", "nomina", "recibo_nomina"] }, q: str, date_from: str, date_to: str, cursor: { type: "integer", minimum: 0 } }, required: ["kind"], additionalProperties: false,
   } },

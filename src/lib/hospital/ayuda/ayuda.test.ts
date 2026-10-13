@@ -113,3 +113,12 @@ describe("tablero", () => {
 it("el catálogo de páginas no repite llaves", () => {
   expect(new Set(PAGINAS_AYUDA.map((p) => p.key)).size).toBe(PAGINAS_AYUDA.length);
 });
+
+describe("sanearRespuesta — reporte de facturas", () => {
+  it("deja pasar los filtros del reporte cuando el modelo los pone", async () => {
+    const { sanearRespuesta } = await import("./ayuda");
+    const r = sanearRespuesta({ respuesta: "Junto las facturas.", paginas: [], reporte: { contrapartes: ["PISA"], desde: "2026-01-01" } }, { rol: "OWNER", paginas: [], permisos: [], puesto: null });
+    expect(r?.reporte).toEqual({ contrapartes: ["PISA"], desde: "2026-01-01" });
+    expect(sanearRespuesta({ respuesta: "Hola", paginas: [], reporte: null }, { rol: "OWNER", paginas: [], permisos: [], puesto: null })).not.toHaveProperty("reporte");
+  });
+});

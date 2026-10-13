@@ -466,6 +466,7 @@ model Company {
   solicitudes        Solicitud[]
   expedienteNotas    ExpedienteNota[]
   agendaSat          AgendaSat[]
+  reportesFacturas   ReporteFacturas[]
   saludSnapshots     SaludSnapshot[]
 
   // Orden de rotación del barrido de vigencia (nulls primero: las empresas
@@ -10880,3 +10881,27 @@ model BankDocumentInbox {
   expiresAt DateTime
   @@index([companyId, expiresAt])
 }
+
+/// Reporte de facturas pedido a Mochi («las facturas de X de enero a marzo»).
+/// Guarda los FILTROS ya resueltos, no los renglones: el Excel y el ZIP se
+/// arman al descargar con los datos de ese momento. El resumen es el que se le
+/// enseñó al usuario en el chat.
+model ReporteFacturas {
+  id         String   @id @default(cuid())
+  companyId  String
+  userId     String
+  createdAt  DateTime @default(now())
+  /// "contabot" (copiloto del hub) | "hospital-ayuda" (Mochi en HospitalOS)
+  origen     String
+  titulo     String
+  /// FiltrosReporte validado (lib/facturas/reporte-facturas).
+  filtros    Json
+  /// Contactos resueltos: ids de Customer (null = todas las contrapartes).
+  customerIds String[]
+  resumen    Json
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+}
+
