@@ -15,6 +15,7 @@ import { requireMembership, requireModule, requireWriter } from "@/lib/authz";
 import { withHospital } from "@/lib/hospital/with-hospital";
 import { aFecha, bitacora, error, errorZod, fechaSchema } from "@/lib/hospital/http";
 import { conFolioUnico, siguienteFolio } from "@/lib/hospital/folio";
+import { datosDeVersion, fotoDeProtocolo } from "@/lib/hospital/cotizacion-historial-db";
 import { aPaquete, armarPartidas, incluyeCotizacion, partidaSchema, serializarCotizacion } from "@/lib/hospital/cotizacion";
 import { pacienteResumen } from "@/lib/hospital/serializar";
 import { nombreCompleto } from "@/lib/hospital/util";
@@ -78,6 +79,10 @@ const createSchema = z.object({
   contactoEmail: z.string().trim().email().max(200).nullable().optional().or(z.literal("").transform(() => null)),
   origen: z.enum(ORIGENES_COTIZACION).nullable().optional(),
   responsableUserId: z.string().nullable().optional(),
+  /** Protocolo/paquete del que nace: se congela su foto para medir después cuánto se descontó y dónde. */
+  protocoloId: z.string().nullable().optional(),
+  /** Por qué se movió respecto de la plantilla (interno, no sale en el PDF). */
+  motivo: z.string().trim().max(1000).nullable().optional(),
 });
 
 export const POST = withHospital(async (req: Request) => {
@@ -114,6 +119,9 @@ export const POST = withHospital(async (req: Request) => {
   const lista = await armarPartidas(prisma, d.companyId, d.pagadorId, d.partidas);
   const armado = d.precioPaquete ? aPaquete(lista, d.precioPaquete) : lista;
   const hoy = new Date();
+  // Historia: la foto del protocolo de origen (si nace de uno) y la versión 1.
+  const origen = d.protocoloId ? await fotoDeProtocolo(prisma, d.companyId, d.protocoloId, d.pagadorId) : null;
+  const version1 = await datosDeVersion(prisma, d.companyId, 1, lista, armado, d.precioPaquete ?? null, user, d.motivo);
 
   const cotizacion = await conFolioUnico(() =>
     prisma.$transaction(async (tx) => {
@@ -147,6 +155,8 @@ export const POST = withHospital(async (req: Request) => {
           notas: d.notas?.trim() || null,
           creadoPorUserId: user.id,
           partidas: { create: armado.partidas },
+          ...(origen ? { origenPaquete: { create: origen } } : {}),
+          versiones: { create: version1 },
         },
         include: incluyeCotizacion,
       });

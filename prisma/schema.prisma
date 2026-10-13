@@ -8869,6 +8869,10 @@ model HospCotizacion {
   plan         HospPlanTratamiento?
   citas        HospCita[]
   seguimientos HospCotizacionSeguimiento[]
+  /// De qué protocolo/paquete nació (foto inmutable al crearla).
+  origenPaquete HospCotizacionOrigen?
+  /// Cada vez que se guardan sus partidas, una foto numerada.
+  versiones     HospCotizacionVersion[]
 
   @@unique([companyId, folio])
   @@index([companyId, estado])
@@ -8895,6 +8899,56 @@ model HospCotizacionSeguimiento {
 
   @@index([cotizacionId, createdAt])
   @@index([companyId, createdAt])
+}
+
+/// La foto INMUTABLE del protocolo o paquete del que nació la cotización: sus
+/// partidas a precio de tarifa/lista y su total (el de paquete si lo tiene).
+/// Contra esto se mide cuánto se descontó y dónde (lib/hospital/cotizacion-historial).
+model HospCotizacionOrigen {
+  id               String   @id @default(cuid())
+  cotizacionId     String   @unique
+  createdAt        DateTime @default(now())
+  protocoloId      String?
+  protocoloClave   String?
+  protocoloNombre  String
+  protocoloVersion Int?
+  /// Tarifario con el que se preció la foto.
+  pagadorId        String?
+  /// Total con IVA del paquete del protocolo; null = sin precio de paquete.
+  precioPaquete    Decimal? @db.Decimal(18, 6)
+  /// Suma con IVA de las partidas a tarifa/lista.
+  totalLista       Decimal  @db.Decimal(18, 6)
+  /// Lo que valía: el paquete si lo hay, si no la suma a lista.
+  total            Decimal  @db.Decimal(18, 6)
+  /// [{ servicioId, clave, categoria, descripcion, cantidad, precioUnitario, ivaTasa, sinCotizar }]
+  partidas         Json
+
+  cotizacion HospCotizacion @relation(fields: [cotizacionId], references: [id], onDelete: Cascade)
+}
+
+/// Cada guardado de las partidas de una cotización: quién, cuándo, por qué y
+/// las partidas a tarifa/lista con sus totales. Sólo se agrega.
+model HospCotizacionVersion {
+  id            String   @id @default(cuid())
+  cotizacionId  String
+  numero        Int
+  createdAt     DateTime @default(now())
+  userId        String?
+  userNombre    String?
+  motivo        String?
+  /// La primera foto de una cotización anterior a la historia: se armó de sus
+  /// partidas ya prorrateadas, no de las de tarifa.
+  reconstruida  Boolean  @default(false)
+  precioPaquete Decimal? @db.Decimal(18, 6)
+  totalLista    Decimal  @db.Decimal(18, 6)
+  subtotal      Decimal  @db.Decimal(18, 6)
+  iva           Decimal  @db.Decimal(18, 6)
+  total         Decimal  @db.Decimal(18, 6)
+  partidas      Json
+
+  cotizacion HospCotizacion @relation(fields: [cotizacionId], references: [id], onDelete: Cascade)
+
+  @@unique([cotizacionId, numero])
 }
 
 model HospCotizacionPartida {
