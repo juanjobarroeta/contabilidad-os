@@ -592,6 +592,7 @@ GET  /api/hospital/protocolos?companyId=[&q=&activo=1] → [{ id, clave, nombre,
        partidas: [{ orden, servicioId, categoria, descripcion, cantidad, opcional }], insumos: [{ insumoId, nombre, cantidad, opcional }], usos }]
 POST /api/hospital/protocolos { clave, nombre, tipoEpisodio, procedimientoCie9?, diagnosticoCie10?, …, partidas, insumos } · PATCH /protocolos/[id] (sube version) · DELETE = activo:false
 POST /api/hospital/protocolos/[id]/simular { pagadorId? } → partidas con precio del convenio (HospTarifa) o lista, subtotal/iva/total, costo estimado de insumos (ultimoCosto), honorarios
+POST /api/hospital/protocolos/importar multipart { archivo: xlsx, companyId, aplicar?: "1", omitir?: "CLAVE,…" } — las tablas de cotización del hospital (una hoja por procedimiento: título «PROCEDIMIENTO:/CIRUGIA:», secciones, DESCRIPCIÓN|CANTIDAD|PRECIO, «TOTAL C/IVA», «PAQUETE») → protocolos. Sin aplicar sólo muestra lo leído y el emparejamiento con el tarifario; con aplicar crea los que no existen. Los precios de la hoja vienen con IVA: sin servicio del tarifario se guardan sin IVA como `precioReferencia` de la partida; «PAQUETE» va a `HospProtocolo.precioPaquete`.
 GET  /api/hospital/planes?companyId=[&pacienteId=&estado=&protocoloId=&q=&desde=&hasta=] → planes con paciente, protocolo, médico, anestesiólogo, pagador,
        recurso, cotización { id, folio, estado, total }, episodio { id, folio, estado, fechaIngreso, fechaAlta }, partidas (con iva/total por renglón), insumos, honorarios
      · GET /planes/[id] agrega `cita` (la cita de quirófano viva)

@@ -92,6 +92,7 @@ export const POST = withHospital(async (req: Request) => {
       requiereAnestesiologo: d.requiereAnestesiologo,
       honorarioCirujano: d.honorarioCirujano ?? null,
       honorarioAnestesiologo: d.honorarioAnestesiologo ?? null,
+      precioPaquete: d.precioPaquete ?? null,
       activo: d.activo ?? true,
       partidas: { create: partidas },
       insumos: { create: insumos },

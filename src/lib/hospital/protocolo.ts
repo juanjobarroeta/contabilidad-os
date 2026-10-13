@@ -40,6 +40,8 @@ export const protocoloPartidaSchema = z.object({
   descripcion: z.string().min(1).max(300).optional(),
   cantidad: z.number().positive().max(100000).default(1),
   opcional: z.boolean().default(false),
+  /** Precio de la tabla de origen; sólo cuenta sin servicio del tarifario. */
+  precioReferencia: dinero.nullable().optional(),
 });
 export type ProtocoloPartidaEntrada = z.infer<typeof protocoloPartidaSchema>;
 
@@ -64,6 +66,7 @@ export const protocoloCamposSchema = z.object({
   requiereAnestesiologo: z.boolean().default(false),
   honorarioCirujano: dinero.nullable().optional(),
   honorarioAnestesiologo: dinero.nullable().optional(),
+  precioPaquete: z.number().positive().max(100_000_000).nullable().optional(),
   activo: z.boolean().optional(),
   partidas: z.array(protocoloPartidaSchema).max(200).default([]),
   insumos: z.array(protocoloInsumoSchema).max(200).default([]),
@@ -95,6 +98,7 @@ export function serializarProtocolo(p: ProtocoloConRelaciones) {
     ...datos,
     honorarioCirujano: p.honorarioCirujano == null ? null : Number(p.honorarioCirujano),
     honorarioAnestesiologo: p.honorarioAnestesiologo == null ? null : Number(p.honorarioAnestesiologo),
+    precioPaquete: p.precioPaquete == null ? null : Number(p.precioPaquete),
     partidas: partidas.map((x) => ({
       id: x.id,
       orden: x.orden,
@@ -103,6 +107,7 @@ export function serializarProtocolo(p: ProtocoloConRelaciones) {
       descripcion: x.descripcion,
       cantidad: Number(x.cantidad),
       opcional: x.opcional,
+      precioReferencia: x.precioReferencia == null ? null : Number(x.precioReferencia),
       servicio: x.servicio
         ? {
             id: x.servicio.id,
@@ -141,6 +146,7 @@ export interface ProtocoloPartidaArmada {
   descripcion: string;
   cantidad: number;
   opcional: boolean;
+  precioReferencia: number | null;
 }
 
 /**
@@ -160,7 +166,10 @@ export async function armarPartidasProtocolo(db: Db, companyId: string, entradas
     const categoria = p.categoria ?? servicio?.categoria;
     const descripcion = p.descripcion?.trim() || servicio?.nombre;
     if (!categoria || !descripcion) throw new HospitalError(400, `La partida ${i + 1} necesita servicioId o (categoria, descripcion)`);
-    return { orden: p.orden ?? i, servicioId: servicio?.id ?? null, categoria, descripcion, cantidad: p.cantidad, opcional: p.opcional };
+    return {
+      orden: p.orden ?? i, servicioId: servicio?.id ?? null, categoria, descripcion, cantidad: p.cantidad, opcional: p.opcional,
+      precioReferencia: servicio ? null : (p.precioReferencia ?? null),
+    };
   });
 }
 
@@ -216,17 +225,18 @@ export type EntradaPreciable = PartidaEntrada & { opcional?: boolean };
 /**
  * Partidas guardadas en un protocolo → entradas de `armarPartidas`. La
  * categoría y la descripción del protocolo mandan sobre las del servicio;
- * sin servicio no hay tarifa: precio 0 hasta que el piso lo capture.
+ * sin servicio no hay tarifa: el precio de referencia de la tabla de origen,
+ * o 0 hasta que el piso lo capture.
  */
 export function entradasDeProtocolo(
-  partidas: Array<{ servicioId: string | null; categoria: HospCargoCategoria; descripcion: string; cantidad: unknown; opcional: boolean }>
+  partidas: Array<{ servicioId: string | null; categoria: HospCargoCategoria; descripcion: string; cantidad: unknown; opcional: boolean; precioReferencia?: unknown }>
 ): EntradaPreciable[] {
   return partidas.map((p) => ({
     servicioId: p.servicioId,
     categoria: p.categoria,
     descripcion: p.descripcion,
     cantidad: Number(p.cantidad),
-    ...(p.servicioId ? {} : { precioUnitario: 0 }),
+    ...(p.servicioId ? {} : { precioUnitario: p.precioReferencia == null ? 0 : Number(p.precioReferencia) }),
     opcional: p.opcional,
   }));
 }

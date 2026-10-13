@@ -71,6 +71,7 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
         ...(d.requiereAnestesiologo !== undefined ? { requiereAnestesiologo: d.requiereAnestesiologo } : {}),
         ...(d.honorarioCirujano !== undefined ? { honorarioCirujano: d.honorarioCirujano } : {}),
         ...(d.honorarioAnestesiologo !== undefined ? { honorarioAnestesiologo: d.honorarioAnestesiologo } : {}),
+        ...(d.precioPaquete !== undefined ? { precioPaquete: d.precioPaquete } : {}),
         ...(d.activo !== undefined ? { activo: d.activo } : {}),
         ...(partidas ? { partidas: { create: partidas } } : {}),
         ...(insumos ? { insumos: { create: insumos } } : {}),
