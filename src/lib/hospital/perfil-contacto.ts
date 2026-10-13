@@ -30,6 +30,7 @@ import {
 import { nombrePaciente, totalCargo } from "./formato";
 import { normalizarUuid } from "@/lib/fiscal/uuid";
 import { padresDeNota } from "@/lib/fiscal/iva-notas-credito";
+import { cierresDeclaradosPorReps, notasAplicadasEnPago } from "@/lib/facturas/reps-amparados";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -100,6 +101,8 @@ export interface PerfilContactoHospital {
     notasCreditoSinAplicar: number;
     /** El detalle de `notasCreditoSinAplicar`: cada nota con lo que sobró y POR QUÉ. */
     notasSinAplicarDetalle: NotaSinAplicar[];
+    /** Notas que el emisor aplicó en el PAGO de otra factura (su REP la cerró con esa reducción): no quedan a favor. */
+    notasAplicadasEnPago: { notaId: string; nota: string; facturaId: string; factura: string; monto: number }[];
     totalAnticipos: number;
     /** Saldo abierto con más de 30 días. */
     masDe30: number;
@@ -219,6 +222,7 @@ export async function perfilContactoHospital(
   const ncAplicada = new Map<string, number>();
   let notasSinAplicar = 0;
   const notasSinAplicarDetalle: NotaSinAplicar[] = [];
+  const sobrantes: { nc: (typeof todasDb)[number]; resto: number; padres: string[] }[] = [];
   for (const nc of todasDb.filter((f) => (f.tipoSat ?? "I") === "E").sort((a, b) => +a.fecha - +b.fecha)) {
     let resto = nc.total;
     const padres = padresDeNota(nc);
@@ -233,8 +237,32 @@ export async function perfilContactoHospital(
       ncAplicada.set(f.id, r2(ya + aplica));
       resto = r2(resto - aplica);
     }
+    if (resto > 0.005) sobrantes.push({ nc, resto, padres });
+  }
+
+  // Segunda pasada: lo que sobró de cada nota contra las facturas que el REP
+  // del emisor cerró con MENOS de su total. Si el sobrante es exactamente esa
+  // reducción, la nota se aplicó en ese pago: no queda a favor.
+  const cierres = await cierresDeclaradosPorReps(db, companyId, facturasDb.filter((f) => f.metodoPago === "PPD").map((f) => f.uuid));
+  const reducciones = facturasDb
+    .filter((f) => f.metodoPago === "PPD" && f.uuid)
+    .map((f) => {
+      const c = cierres.get(normalizarUuid(f.uuid!));
+      const declarada = c?.cerrada && c.saldoAnteriorMax > 0 ? r2(f.total - c.saldoAnteriorMax) : 0;
+      return { facturaId: f.id, monto: r2(declarada - (ncAplicada.get(f.id) ?? 0)) };
+    });
+  const enPago = notasAplicadasEnPago(sobrantes.map((x) => ({ notaId: x.nc.id, monto: x.resto })), reducciones);
+  const porId = new Map(facturasDb.map((f) => [f.id, f]));
+  const notasAplicadasEnPagoDetalle: { notaId: string; nota: string; facturaId: string; factura: string; monto: number }[] = [];
+  for (const { nc, resto, padres } of sobrantes) {
+    const facturaId = enPago.get(nc.id);
+    if (facturaId) {
+      const f = porId.get(facturaId)!;
+      notasAplicadasEnPagoDetalle.push({ notaId: nc.id, nota: [nc.serie, nc.folio].filter(Boolean).join("-"), facturaId, factura: [f.serie, f.folio].filter(Boolean).join("-"), monto: r2(resto) });
+      continue;
+    }
     notasSinAplicar = r2(notasSinAplicar + Math.max(0, resto));
-    if (resto > 0.005) {
+    {
       const encontradas = padres.map((u) => porUuid.get(u)).filter((f): f is NonNullable<typeof f> => !!f);
       notasSinAplicarDetalle.push({
         id: nc.id,
@@ -346,6 +374,7 @@ export async function perfilContactoHospital(
       saldo: r2(facturas.reduce((s, f) => s + f.saldo, 0) - notasSinAplicar),
       notasCreditoSinAplicar: notasSinAplicar,
       notasSinAplicarDetalle,
+      notasAplicadasEnPago: notasAplicadasEnPagoDetalle,
       repPendienteMonto: r2(conRepPendiente.reduce((s, f) => s + f.repPendiente, 0)),
       repPendienteFacturas: conRepPendiente.length,
       totalNotasCredito: r2(notasCredito.reduce((s, n) => s + n.total, 0)),

@@ -59,3 +59,17 @@ describe("repsPorFactura()", () => {
     ]);
   });
 });
+
+describe("notasAplicadasEnPago() — la nota que el emisor aplicó en el pago de OTRA factura", () => {
+  it("el sobrante igual a la reducción que declara el REP se aplica ahí (PRONAMAC: NCC-12305 → VP-45045)", async () => {
+    const { notasAplicadasEnPago } = await import("./reps-amparados");
+    const r = notasAplicadasEnPago([{ notaId: "ncc-12305", monto: 376.74 }], [{ facturaId: "vp-45045", monto: 376.74 }, { facturaId: "aa-1", monto: 0 }]);
+    expect([...r]).toEqual([["ncc-12305", "vp-45045"]]);
+  });
+  it("sin reducción exacta no inventa nada; cada reducción se usa una sola vez", async () => {
+    const { notasAplicadasEnPago } = await import("./reps-amparados");
+    expect(notasAplicadasEnPago([{ notaId: "n1", monto: 30.69 }], [{ facturaId: "f1", monto: 376.74 }]).size).toBe(0);
+    const r = notasAplicadasEnPago([{ notaId: "n1", monto: 100 }, { notaId: "n2", monto: 100 }], [{ facturaId: "f1", monto: 100 }]);
+    expect([...r]).toEqual([["n1", "f1"]]);
+  });
+});
