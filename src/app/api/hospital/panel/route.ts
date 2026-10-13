@@ -16,6 +16,7 @@
  * terminar (SINBA).
  */
 
+import { DIAS_POR_VENCER, resumenCredencial } from "@/lib/hospital/medico-credencial";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, requireModule, withAuthz } from "@/lib/authz";
@@ -77,6 +78,7 @@ type Atencion = {
     | "CUENTA_FUERA_DE_PLAN"
     | "SAEH_INCOMPLETO"
     | "MEDICO_POR_CREDENCIALIZAR"
+    | "MEDICO_DOCUMENTO_VENCE"
     | "COTIZACION_SEGUIMIENTO";
   titulo: string;
   detalle: string;
@@ -310,6 +312,25 @@ export const GET = withAuthz(async (req: Request) => {
       href: "/medicos",
       refId: m.id,
     });
+  }
+  // Documentos de credencialización vencidos o que vencen en 30 días.
+  const limiteDocs = new Date(hoy.getTime() + DIAS_POR_VENCER * 86_400_000);
+  const conDocsPorVencer = await prisma.hospMedico.findMany({
+    where: { companyId, activo: true, documentos: { some: { vigenciaHasta: { lt: limiteDocs } } } },
+    select: { id: true, nombre: true, especialidad: true, documentos: { select: { id: true, tipo: true, estado: true, vigenciaHasta: true, createdAt: true } } },
+    take: MAX_POR_ALERTA * 3,
+  });
+  for (const m of conDocsPorVencer) {
+    const r = resumenCredencial(m, m.documentos, hoy);
+    if (r.estado !== "VENCIDO" && r.estado !== "POR_VENCER") continue;
+    atencion.push({
+      tipo: "MEDICO_DOCUMENTO_VENCE",
+      titulo: `${m.nombre}: ${r.estado === "VENCIDO" ? `vencido ${r.vencidos.join(", ")}` : `vence pronto ${r.porVencer.join(", ")}`}`,
+      detalle: "Credencialización: pide el documento renovado",
+      href: `/credencializacion?medico=${m.id}`,
+      refId: m.id,
+    });
+    if (atencion.filter((a) => a.tipo === "MEDICO_DOCUMENTO_VENCE").length >= MAX_POR_ALERTA) break;
   }
   // Cotizaciones abiertas a las que ya les tocaba llamada.
   const finDeHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 1);

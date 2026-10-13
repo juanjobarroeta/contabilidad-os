@@ -317,6 +317,7 @@ GET  /api/hospital/citas?companyId=&desde=&hasta= · POST (409 si empalma; nace 
      · diasEstancia (sólo HOSPITALIZACION) · insumos[] { descripcion, cantidad, servicioId?, clave? } de la lista de precios o libres
 GET  /api/hospital/cotizaciones?companyId=[&medicoId=&pacienteId=] (desde la agenda: las del médico o del paciente; la cita guarda `cotizacionId` y la trae con folio, procedimiento y total) · POST · GET/PATCH /cotizaciones/[id] · POST /cotizaciones/[id]/convertir
 POST /api/hospital/cotizaciones/leer { companyId, archivoBase64, mime: PDF|imagen, pagadorId? } — lee la cotización de OTRO hospital (IA, efímera, no escribe) y empareja cada renglón con el tarifario (palabras en común; la presentación cuenta). Devuelve su total, el nuestro con IVA y los renglones sin emparejar, para mejorar su precio.
+Partida «No cotizado» (`sinCotizar: true`): el concepto se menciona sin precio (importe 0, fuera del total); en el PDF sale «No cotizado» o, en paquete, en un bloque «NO INCLUIDO EN ESTA COTIZACIÓN»; al convertir no pasa a la cuenta.
 Seguimiento comercial (CRM): la cotización lleva responsable (default quien la captura), contacto, origen (MEDICO/TELEFONO/WHATSAPP/ASEGURADORA/RECOMENDACION/REDES/OTRO), `proximoSeguimiento`, `enviadaAt`/`cerradaAt` y estado PERDIDA con `motivoPerdida` (PRECIO/OTRO_HOSPITAL/POSPUSO/ASEGURADORA/SIN_RESPUESTA/OTRO) y `perdidaContra`. Enviar agenda la primera llamada a 2 días. POST /cotizaciones/[id]/seguimientos { tipo: LLAMADA|WHATSAPP|CORREO|VISITA|NOTA, resultado?, nota?, proximoSeguimiento? } agrega a la bitácora (HospCotizacionSeguimiento; los cambios de estado entran solos como ESTADO). GET /cotizaciones/crm?companyId=&desde=&hasta= → KPIs, a quién toca llamar, por médico/responsable/origen y motivos de pérdida. «Requiere atención» avisa COTIZACION_SEGUIMIENTO.
      · para un médico: medicoId (paciente opcional) y dirigidaA («A quien corresponda»)
      · paquete: precioPaquete = total con IVA pactado; aPaquete() prorratea las partidas a ese total (la conversión y el IVA cuadran)
@@ -1049,3 +1050,7 @@ hay que actualizar su sección de la guía.**
   verificador).
 - No expone historial clínico en el portal del paciente (fuera de la
   propuesta: datos sensibles, se decide aparte).
+
+
+### Credencialización de médicos
+HospMedicoDocumento (cédula profesional y de especialidad, título, certificación del consejo, seguro de RC, INE, constancia fiscal, currículum, convenio): número, vigencia, archivo (bytes en la base, ≤ 8 MB, PDF o imagen), estado RECIBIDO → VERIFICADO/RECHAZADO con quién y cuándo. Requisitos en src/lib/hospital/medico-credencial.ts (el especialista además: cédula de especialidad y consejo). GET /medicos/credenciales → cada médico con su resumen (COMPLETO / POR_VENCER ≤ 30 días / VENCIDO / INCOMPLETO). POST /medicos/[id]/documentos · GET (archivo) / PATCH / DELETE /medicos/[id]/documentos/[docId]. «Requiere atención» avisa MEDICO_DOCUMENTO_VENCE. HospMedico gana cedulaEspecialidad, credencialNotas y credencialSeguimiento; `porCredencializar: false` registra credencialVerificadaAt/Por.

@@ -116,3 +116,24 @@ describe("generarPdfCotizacion — paquete para un médico", () => {
     expect(bytes.length).toBeGreaterThan(1000);
   });
 });
+
+describe("conceptos «No cotizado»", () => {
+  const conNoCotizado = (paquete: boolean): CotizacionParaPdf => ({
+    ...cot, precioPaquete: paquete ? 23000 : null,
+    partidas: [
+      ...cot.partidas,
+      { descripcion: "Torre de laparoscopia", categoria: "EQUIPO", cantidad: 1, precioUnitario: 0, ivaTasa: 0.16, importe: 0, sinCotizar: true },
+    ],
+  });
+
+  it("carta normal: el concepto sale con «No cotizado» en vez de precio", async () => {
+    const t = await texto(await generarPdfCotizacion(conNoCotizado(false), emisor));
+    expect(t).toContain("Torre de laparoscopia");
+    expect(t).toContain("No cotizado");
+  });
+
+  it("paquete: va aparte, «no incluido en esta cotización»", async () => {
+    const t = await texto(await generarPdfCotizacion(conNoCotizado(true), emisor));
+    expect(t).toMatch(/NO INCLUIDO EN ESTA COTIZACI[ÓO]N \(NO COTIZADO\)[\s\S]*Torre de laparoscopia/);
+  });
+});

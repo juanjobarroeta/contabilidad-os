@@ -23,6 +23,8 @@ export type PartidaParaPdf = {
   precioUnitario: number;
   ivaTasa: number | null;
   importe: number;
+  /** Se menciona sin precio: «No cotizado». */
+  sinCotizar?: boolean;
 };
 
 export type CotizacionParaPdf = {
@@ -170,7 +172,8 @@ const ORDEN_GRUPO = ["QUIRÓFANO", "PROCEDIMIENTOS", "INSUMOS Y MEDICAMENTOS", "
 function dibujarPaquete(l: Lienzo, c: CotizacionParaPdf) {
   const { regular, negrita } = l;
   const grupos = new Map<string, PartidaParaPdf[]>();
-  for (const p of c.partidas) {
+  // Lo no cotizado no va dentro del paquete: sale aparte, al final.
+  for (const p of c.partidas.filter((x) => !x.sinCotizar)) {
     const g = GRUPO_PAQUETE[p.categoria] ?? "OTROS";
     grupos.set(g, [...(grupos.get(g) ?? []), p]);
   }
@@ -191,6 +194,21 @@ function dibujarPaquete(l: Lienzo, c: CotizacionParaPdf) {
       if (l.y - lineas.length * 11.5 < MARGEN + 90) { nuevaPagina(l); cabecera(); }
       textoDerecha(l.page, cantidad(p.cantidad), COL.importe - 6, l.y, regular, 9.5);
       for (const t of lineas) { l.page.drawText(t, { x: COL.concepto + 18, y: l.y, size: 9.5, font: regular, color: TINTA }); l.y -= 11.5; }
+      l.y -= 2;
+    }
+    l.page.drawLine({ start: { x: MARGEN, y: l.y + 4 }, end: { x: CARTA[0] - MARGEN, y: l.y + 4 }, thickness: 0.4, color: LINEA });
+    l.y -= 8;
+  }
+  const fuera = c.partidas.filter((x) => x.sinCotizar);
+  if (fuera.length) {
+    if (l.y < MARGEN + 110) { nuevaPagina(l); cabecera(); }
+    l.page.drawText("NO INCLUIDO EN ESTA COTIZACIÓN (NO COTIZADO)", { x: COL.concepto + 6, y: l.y, size: 9, font: negrita, color: TINTA });
+    l.y -= 14;
+    for (const p of fuera) {
+      const lineas = envolver(p.descripcion, regular, 9.5, ANCHO - 120);
+      if (l.y - lineas.length * 11.5 < MARGEN + 90) { nuevaPagina(l); cabecera(); }
+      textoDerecha(l.page, cantidad(p.cantidad), COL.importe - 6, l.y, regular, 9.5);
+      for (const t of lineas) { l.page.drawText(t, { x: COL.concepto + 18, y: l.y, size: 9.5, font: regular, color: GRIS }); l.y -= 11.5; }
       l.y -= 2;
     }
     l.page.drawLine({ start: { x: MARGEN, y: l.y + 4 }, end: { x: CARTA[0] - MARGEN, y: l.y + 4 }, thickness: 0.4, color: LINEA });
@@ -267,9 +285,13 @@ export async function generarPdfCotizacion(c: CotizacionParaPdf, emisor: EmisorP
     for (const t of lineas) { pg.drawText(t, { x: COL.concepto + 6, y: yy, size: 9.5, font: regular, color: TINTA }); yy -= 11.5; }
     pg.drawText(CATEGORIA[p.categoria] ?? textoSeguro(p.categoria), { x: COL.concepto + 6, y: yy, size: 7.5, font: regular, color: GRIS });
     textoDerecha(pg, cantidad(p.cantidad), COL.cant, l.y, regular, 9.5);
-    textoDerecha(pg, dinero(p.precioUnitario), COL.unitario, l.y, regular, 9.5);
-    pg.drawText(ivaTexto(p.ivaTasa), { x: COL.iva, y: l.y, size: 9.5, font: regular, color: TINTA });
-    textoDerecha(pg, dinero(p.importe), COL.importe - 6, l.y, regular, 9.5);
+    if (p.sinCotizar) {
+      textoDerecha(pg, "No cotizado", COL.importe - 6, l.y, regular, 9.5, GRIS);
+    } else {
+      textoDerecha(pg, dinero(p.precioUnitario), COL.unitario, l.y, regular, 9.5);
+      pg.drawText(ivaTexto(p.ivaTasa), { x: COL.iva, y: l.y, size: 9.5, font: regular, color: TINTA });
+      textoDerecha(pg, dinero(p.importe), COL.importe - 6, l.y, regular, 9.5);
+    }
     l.y = yy - 10;
     pg.drawLine({ start: { x: MARGEN, y: l.y + 4 }, end: { x: CARTA[0] - MARGEN, y: l.y + 4 }, thickness: 0.4, color: LINEA });
     l.y -= 6;

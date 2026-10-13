@@ -22,3 +22,17 @@ describe("aPaquete", () => {
     expect(() => aPaquete({ partidas: [partida(0, null)], subtotal: 0, iva: 0, total: 0 }, 1000)).toThrow(/al menos una partida/);
   });
 });
+
+describe("armarPartidas con «No cotizado»", () => {
+  it("importe 0 aunque traiga precio, y no entra al total", async () => {
+    const { armarPartidas } = await import("./cotizacion");
+    const db = { hospServicio: { findMany: async () => [] }, hospConfig: { findUnique: async () => ({ ivaServicios: 0.16 }) } } as never;
+    const r = await armarPartidas(db, "c1", null, [
+      { categoria: "QUIROFANO", descripcion: "Sala", cantidad: 1, precioUnitario: 1000 },
+      { categoria: "EQUIPO", descripcion: "Torre de laparoscopia", cantidad: 1, precioUnitario: 5000, sinCotizar: true },
+      { categoria: "EQUIPO", descripcion: "Arco en C", cantidad: 1, sinCotizar: true },
+    ]);
+    expect(r.partidas.map((p) => [p.importe, p.sinCotizar])).toEqual([[1000, false], [0, true], [0, true]]);
+    expect(r.total).toBe(1160);
+  });
+});
