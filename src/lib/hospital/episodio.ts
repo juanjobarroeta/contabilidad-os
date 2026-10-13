@@ -329,7 +329,7 @@ export async function crearEpisodio(db: PrismaClient, args: CrearEpisodioArgs) {
       if (cotizacion) {
         await tx.hospCotizacion.update({
           where: { id: cotizacion.id },
-          data: { estado: "CONVERTIDA", pacienteId: cotizacion.pacienteId ?? paciente.id },
+          data: { estado: "CONVERTIDA", pacienteId: cotizacion.pacienteId ?? paciente.id, cerradaAt: new Date(), proximoSeguimiento: null },
         });
         // P3: si la cotización nació de un plan de tratamiento, el plan sigue
         // al episodio (EN_CURSO) y le presta su autorización del pagador.
