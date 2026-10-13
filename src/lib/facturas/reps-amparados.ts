@@ -50,6 +50,61 @@ export async function amparadoPorReps(
   return out;
 }
 
+/**
+ * Lo que los REPs DECLARAN que se descontó de cada factura padre antes de
+ * pagarla: si un REP la deja en saldo insoluto 0 y el saldo anterior más alto
+ * que declaran es menor que el total, el emisor redujo la factura por
+ * fuera del pago — casi siempre aplicó una nota de crédito, aunque el XML de
+ * esa nota relacione OTRA factura (CENTRO, PRONAMAC: la NCC-12305 relaciona
+ * AA-339292 y el proveedor la aplicó a VP-45045, pagada 376.74 abajo).
+ * Devuelve UUID normalizado → { cerrada, saldoAnteriorMax }.
+ */
+export async function cierresDeclaradosPorReps(
+  db: Db,
+  companyId: string,
+  uuids: Iterable<string | null | undefined>,
+): Promise<Map<string, { cerrada: boolean; saldoAnteriorMax: number }>> {
+  const out = new Map<string, { cerrada: boolean; saldoAnteriorMax: number }>();
+  const lista = variantesUuid(uuids);
+  if (lista.length === 0) return out;
+  const links = await db.pagoDoctoRelacionado.findMany({
+    where: {
+      parentUuid: { in: lista },
+      pagoInvoice: { companyId, tipo: "PAGO", status: { not: "CANCELLED" }, sustituidoPorUuid: null },
+    },
+    select: { parentUuid: true, impSaldoAnterior: true, impSaldoInsoluto: true },
+  });
+  for (const l of links) {
+    const k = normalizarUuid(l.parentUuid);
+    const prev = out.get(k) ?? { cerrada: false, saldoAnteriorMax: 0 };
+    out.set(k, {
+      cerrada: prev.cerrada || (l.impSaldoInsoluto != null && Number(l.impSaldoInsoluto) < 0.01),
+      saldoAnteriorMax: Math.max(prev.saldoAnteriorMax, Number(l.impSaldoAnterior ?? 0)),
+    });
+  }
+  return out;
+}
+
+/**
+ * Notas que sobraron, contra facturas que el REP cerró con menos de su total:
+ * una nota cuyo sobrante es EXACTAMENTE la reducción que el REP declara (±1
+ * centavo) se aplicó en ese pago. PURA. Cada reducción se consume una vez.
+ */
+export function notasAplicadasEnPago(
+  sobrantes: { notaId: string; monto: number }[],
+  reducciones: { facturaId: string; monto: number }[],
+): Map<string, string> {
+  const libres = reducciones.filter((r) => r.monto > 0.01).map((r) => ({ ...r }));
+  const out = new Map<string, string>();
+  for (const n of sobrantes) {
+    const i = libres.findIndex((r) => Math.abs(r.monto - n.monto) <= 0.01);
+    if (i < 0) continue;
+    out.set(n.notaId, libres[i].facturaId);
+    libres.splice(i, 1);
+  }
+  return out;
+}
+
 /** Los REPs que amparan cada factura padre, para enseñarlos con su folio. */
 export async function repsPorFactura(
   db: Db,
