@@ -18,6 +18,8 @@ import { withHospital } from "@/lib/hospital/with-hospital";
 import { aFecha, bitacora, error, errorZod, fechaSchema } from "@/lib/hospital/http";
 import { aPaquete, armarPartidas, incluyeCotizacion, partidaSchema, serializarCotizacion } from "@/lib/hospital/cotizacion";
 import { pacienteResumen } from "@/lib/hospital/serializar";
+import { datosDeVersion, historiaDeCotizacion, lineasDeArmado } from "@/lib/hospital/cotizacion-historial-db";
+import { totalLineas } from "@/lib/hospital/cotizacion-historial";
 import { DIAS_PRIMER_SEGUIMIENTO, MOTIVOS_PERDIDA, ORIGENES_COTIZACION, equipoComercial } from "@/lib/hospital/cotizacion-crm";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -41,6 +43,8 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
       ...incluyeCotizacion,
       citas: { select: { id: true, titulo: true, inicio: true, fin: true, estado: true, recurso: { select: { id: true, nombre: true } } } },
       seguimientos: { orderBy: { createdAt: "desc" }, take: 200 },
+      origenPaquete: true,
+      versiones: { orderBy: { numero: "asc" } },
     },
   });
   if (!c) throw new AuthzError(404, "Cotización no encontrada");
@@ -49,7 +53,11 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
   await requireModule(c.companyId, "HOSPITAL", req);
 
   const equipo = await equipoComercial(prisma, c.companyId);
-  return NextResponse.json({ ...serializarCotizacion(c), paciente: c.paciente ? pacienteResumen(c.paciente) : null, equipo });
+  // Historia: de qué paquete nació, sus versiones y cuánto se descontó y dónde.
+  // Interno: no sale en el PDF del paciente.
+  const { origenPaquete, versiones, ...resto } = c;
+  const historia = historiaDeCotizacion(origenPaquete, versiones);
+  return NextResponse.json({ ...serializarCotizacion(resto), paciente: c.paciente ? pacienteResumen(c.paciente) : null, equipo, ...historia });
 });
 
 const patchSchema = z.discriminatedUnion("action", [
@@ -61,7 +69,7 @@ const patchSchema = z.discriminatedUnion("action", [
     nota: z.string().trim().max(2000).optional(),
   }),
   // precioPaquete: omitido = el que ya tenía; null = deja de ser paquete.
-  z.object({ action: z.literal("partidas"), partidas: z.array(partidaSchema).min(1).max(200), precioPaquete: z.number().positive().max(100_000_000).nullable().optional() }),
+  z.object({ action: z.literal("partidas"), partidas: z.array(partidaSchema).min(1).max(200), precioPaquete: z.number().positive().max(100_000_000).nullable().optional(), motivo: z.string().trim().max(1000).nullable().optional() }),
   z.object({
     action: z.literal("datos"),
     procedimiento: z.string().min(1).max(300).optional(),
@@ -141,6 +149,30 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
     const lista = await armarPartidas(prisma, c.companyId, c.pagadorId, d.partidas);
     const armado = precioPaquete ? aPaquete(lista, precioPaquete) : lista;
     const actualizada = await prisma.$transaction(async (tx) => {
+      // Historia: cada guardado es una versión. Una cotización anterior a la
+      // historia primero congela lo que tenía (ya prorrateado: «reconstruida»).
+      const ultima = await tx.hospCotizacionVersion.findFirst({ where: { cotizacionId: id }, orderBy: { numero: "desc" }, select: { numero: true } });
+      let numero = (ultima?.numero ?? 0) + 1;
+      if (!ultima) {
+        const previas = await tx.hospCotizacionPartida.findMany({ where: { cotizacionId: id }, orderBy: { orden: "asc" } });
+        const armadas = previas.map((p, i) => ({
+          orden: i, servicioId: p.servicioId, categoria: p.categoria, descripcion: p.descripcion, cantidad: Number(p.cantidad),
+          precioUnitario: Number(p.precioUnitario), ivaTasa: p.ivaTasa == null ? null : Number(p.ivaTasa), importe: Number(p.importe), sinCotizar: p.sinCotizar,
+        }));
+        const lineas = await lineasDeArmado(tx, c.companyId, armadas);
+        const actual = await tx.hospCotizacion.findUnique({ where: { id }, select: { subtotal: true, iva: true, total: true, precioPaquete: true, creadoPorUserId: true } });
+        await tx.hospCotizacionVersion.create({
+          data: {
+            cotizacionId: id, numero: 1, reconstruida: true, userId: actual?.creadoPorUserId ?? null, userNombre: null, motivo: null,
+            precioPaquete: actual?.precioPaquete ?? null, totalLista: totalLineas(lineas),
+            subtotal: actual?.subtotal ?? 0, iva: actual?.iva ?? 0, total: actual?.total ?? 0, partidas: lineas as never,
+          },
+        });
+        numero = 2;
+      }
+      await tx.hospCotizacionVersion.create({
+        data: { cotizacionId: id, ...(await datosDeVersion(tx, c.companyId, numero, lista, armado, precioPaquete, user, d.motivo)) },
+      });
       await tx.hospCotizacionPartida.deleteMany({ where: { cotizacionId: id } });
       return tx.hospCotizacion.update({
         where: { id },
