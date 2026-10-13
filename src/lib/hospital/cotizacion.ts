@@ -20,6 +20,8 @@ export const partidaSchema = z.object({
   precioUnitario: dinero.optional(),
   /** undefined = la tasa del servicio o el default por categoría. */
   ivaTasa: tasaIva.optional(),
+  /** Concepto mencionado sin precio («No cotizado»): importe 0, fuera del total. */
+  sinCotizar: z.boolean().optional(),
 });
 
 export type PartidaEntrada = z.infer<typeof partidaSchema>;
@@ -33,6 +35,7 @@ export interface PartidaArmada {
   precioUnitario: number;
   ivaTasa: number | null;
   importe: number;
+  sinCotizar?: boolean;
 }
 
 export async function armarPartidas(
@@ -58,7 +61,7 @@ export async function armarPartidas(
     const tarifa = servicio && Array.isArray(servicio.tarifas) ? servicio.tarifas[0] : null;
     const categoria = p.categoria ?? servicio?.categoria;
     const descripcion = p.descripcion?.trim() || servicio?.nombre;
-    const precioUnitario = p.precioUnitario ?? (servicio ? r2(Number(tarifa?.precio ?? servicio.precioLista)) : undefined);
+    const precioUnitario = p.sinCotizar ? 0 : p.precioUnitario ?? (servicio ? r2(Number(tarifa?.precio ?? servicio.precioLista)) : undefined);
     if (!categoria || !descripcion || precioUnitario == null) {
       throw new HospitalError(400, `La partida ${i + 1} necesita servicioId o (categoria, descripcion, precioUnitario)`);
     }
@@ -73,6 +76,7 @@ export async function armarPartidas(
       precioUnitario,
       ivaTasa,
       importe: r2(p.cantidad * precioUnitario),
+      sinCotizar: p.sinCotizar ?? false,
     };
   });
 

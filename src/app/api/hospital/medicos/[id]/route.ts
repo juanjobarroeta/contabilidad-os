@@ -54,6 +54,8 @@ export const PATCH = withHospital(async (req: Request, ctx: { params: Promise<{ 
     data: {
       ...d,
       ...((d.cedula !== undefined || d.nombre !== undefined) ? { credencialVerificadaAt: null, credencialVerificadaPor: null, credencialEvidencia: null } : {}),
+      // Quien lo da por credencializado queda registrado (después del reseteo de arriba).
+      ...(d.porCredencializar === false ? { credencialVerificadaAt: new Date(), credencialVerificadaPor: user.name ?? user.email ?? user.id } : {}),
       ...(d.nombre ? { nombre: d.nombre.trim() } : {}),
       ...(d.rfc !== undefined ? { rfc: d.rfc?.trim().toUpperCase() || null } : {}),
       ...(d.paisNacimientoClave !== undefined ? { paisNacimientoClave: d.paisNacimientoClave ? d.paisNacimientoClave.padStart(3, "0") : null } : {}),

@@ -8233,6 +8233,11 @@ model HospMedico {
   /// Dado de alta con sólo el nombre (desde la agenda): falta credencializarlo
   /// (cédula, especialidad, documentos). Sale en «Requiere atención» hasta que alguien lo marca.
   porCredencializar       Boolean   @default(false)
+  /// Cédula de especialidad (la profesional va en `cedula`).
+  cedulaEspecialidad      String?
+  /// Bitácora libre del trámite («pidió prórroga del seguro»…) y cuándo volver a revisarlo.
+  credencialNotas         String?   @db.Text
+  credencialSeguimiento   DateTime?
   id                      String    @id @default(cuid())
   companyId               String
   createdAt               DateTime  @default(now())
@@ -8267,9 +8272,43 @@ model HospMedico {
   egresosSaeh         HospEgresoSaeh[]
   planesCirujano      HospPlanTratamiento[] @relation("PlanMedico")
   planesAnestesiologo HospPlanTratamiento[] @relation("PlanAnestesiologo")
+  documentos          HospMedicoDocumento[]
 
   @@unique([companyId, userId])
   @@index([companyId, activo])
+}
+
+/// Expediente de credencialización del médico: cédulas, certificación del
+/// consejo, seguro de responsabilidad civil, identificación… cada uno con su
+/// vigencia y quién lo verificó. El archivo va en la base (como HospDocumento).
+model HospMedicoDocumento {
+  id        String   @id @default(cuid())
+  companyId String
+  medicoId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// CEDULA_PROFESIONAL, CEDULA_ESPECIALIDAD, TITULO, CERTIFICACION_CONSEJO, SEGURO_RC, INE, CONSTANCIA_FISCAL, CURRICULUM, CONTRATO, OTRO.
+  tipo          String
+  numero        String?
+  emitidoPor    String?
+  vigenciaHasta DateTime?
+  /// RECIBIDO → VERIFICADO | RECHAZADO.
+  estado        String    @default("RECIBIDO")
+  notas         String?
+  verificadoPorUserId String?
+  verificadoPorNombre String?
+  verificadoAt  DateTime?
+  nombreArchivo String?
+  mime          String?
+  bytes         Int?
+  archivo       Bytes?
+  subidoPorUserId String?
+
+  medico HospMedico @relation(fields: [medicoId], references: [id], onDelete: Cascade)
+
+  @@index([medicoId])
+  @@index([companyId, vigenciaHasta])
 }
 
 enum HospEpisodioTipo {
@@ -8823,6 +8862,9 @@ model HospCotizacionPartida {
   precioUnitario Decimal            @db.Decimal(18, 6)
   ivaTasa        Decimal?           @db.Decimal(18, 6)
   importe        Decimal            @db.Decimal(18, 6)
+  /// «No cotizado»: el concepto se menciona (el médico ve que se consideró)
+  /// pero no lleva precio ni entra al total ni a la cuenta al convertir.
+  sinCotizar     Boolean            @default(false)
 
   cotizacion HospCotizacion @relation(fields: [cotizacionId], references: [id], onDelete: Cascade)
   servicio   HospServicio?  @relation(fields: [servicioId], references: [id])

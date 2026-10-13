@@ -21,6 +21,9 @@ export const medicoSchema = z.object({
   activo: z.boolean().optional(),
   /** false = ya se credencializó (exige cédula). */
   porCredencializar: z.boolean().optional(),
+  cedulaEspecialidad: z.string().trim().max(20).nullable().optional(),
+  credencialNotas: z.string().max(8000).nullable().optional(),
+  credencialSeguimiento: z.string().datetime({ offset: true }).nullable().optional().transform((v) => (v === undefined ? undefined : v === null ? null : new Date(v))),
   curp: z.string().trim().max(18).nullable().optional(),
   nombres: z.string().trim().max(120).nullable().optional(),
   apellidoPaterno: z.string().trim().max(120).nullable().optional(),

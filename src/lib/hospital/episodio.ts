@@ -290,10 +290,11 @@ export async function crearEpisodio(db: PrismaClient, args: CrearEpisodioArgs) {
                 },
               }
             : {}),
-          ...(cotizacion && cotizacion.partidas.length
+          ...(cotizacion && cotizacion.partidas.some((p) => !p.sinCotizar)
             ? {
                 cargos: {
-                  create: cotizacion.partidas.map((p) => ({
+                  // Lo «no cotizado» no se cobró: no pasa a la cuenta.
+                  create: cotizacion.partidas.filter((p) => !p.sinCotizar).map((p) => ({
                     companyId: args.companyId,
                     fecha: fechaIngreso,
                     categoria: p.categoria,
