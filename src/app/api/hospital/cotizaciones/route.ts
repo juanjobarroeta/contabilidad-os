@@ -18,6 +18,8 @@ import { conFolioUnico, siguienteFolio } from "@/lib/hospital/folio";
 import { aPaquete, armarPartidas, incluyeCotizacion, partidaSchema, serializarCotizacion } from "@/lib/hospital/cotizacion";
 import { pacienteResumen } from "@/lib/hospital/serializar";
 import { nombreCompleto } from "@/lib/hospital/util";
+import { resolverAltasCita } from "@/lib/hospital/cita-altas";
+import { HospitalError } from "@/lib/hospital/errores";
 
 export const GET = withHospital(async (req: Request) => {
   const { searchParams } = new URL(req.url);
@@ -60,6 +62,8 @@ const createSchema = z.object({
   pacienteNombre: z.string().max(200).nullable().optional(),
   pagadorId: z.string().nullable().optional(),
   medicoId: z.string().nullable().optional(),
+  /** Médico escrito libre: se da de alta por credencializar (mismo trato que en la agenda). */
+  medicoNuevo: z.object({ nombre: z.string().trim().min(3).max(200) }).optional(),
   dirigidaA: z.string().max(200).nullable().optional(),
   precioPaquete: z.number().positive().max(100_000_000).nullable().optional(),
   procedimiento: z.string().min(1).max(300),
@@ -85,7 +89,7 @@ export const POST = withHospital(async (req: Request) => {
     pacienteNombre ??= nombreCompleto(p);
   }
   // Una cotización para un médico puede no tener paciente todavía.
-  if (!pacienteNombre && !d.medicoId) return error("pacienteId, pacienteNombre o medicoId requerido");
+  if (!pacienteNombre && !d.medicoId && !d.medicoNuevo) return error("pacienteId, pacienteNombre o medicoId requerido");
   if (d.medicoId) {
     const m = await prisma.hospMedico.findUnique({ where: { id: d.medicoId }, select: { companyId: true } });
     if (!m || m.companyId !== d.companyId) return error("medicoId inválido");
@@ -102,6 +106,9 @@ export const POST = withHospital(async (req: Request) => {
   const cotizacion = await conFolioUnico(() =>
     prisma.$transaction(async (tx) => {
       const folio = await siguienteFolio(tx, d.companyId, "cotizacion", hoy);
+      const altas = d.medicoNuevo && !d.medicoId ? await resolverAltasCita(tx, d.companyId, { medicoNuevo: d.medicoNuevo }, hoy) : null;
+      if (altas && altas.error !== null) throw new HospitalError(400, altas.error);
+      const medicoId = d.medicoId ?? altas?.medicoId ?? null;
       return tx.hospCotizacion.create({
         data: {
           companyId: d.companyId,
@@ -109,7 +116,7 @@ export const POST = withHospital(async (req: Request) => {
           pacienteId: d.pacienteId ?? null,
           pacienteNombre: pacienteNombre ?? "",
           pagadorId: d.pagadorId ?? null,
-          medicoId: d.medicoId ?? null,
+          medicoId,
           dirigidaA: d.dirigidaA?.trim() || null,
           precioPaquete: d.precioPaquete ?? null,
           procedimiento: d.procedimiento.trim(),
@@ -132,7 +139,7 @@ export const POST = withHospital(async (req: Request) => {
     accion: "hospital.cotizacion.crear",
     entidad: "HospCotizacion",
     entidadId: cotizacion.id,
-    detalle: { folio: cotizacion.folio, paciente: pacienteNombre, medicoId: d.medicoId ?? null, paquete: d.precioPaquete ?? null, procedimiento: cotizacion.procedimiento, total: armado.total, partidas: armado.partidas.length },
+    detalle: { folio: cotizacion.folio, paciente: pacienteNombre, medicoId: cotizacion.medicoId, medicoNuevo: d.medicoNuevo?.nombre ?? null, paquete: d.precioPaquete ?? null, procedimiento: cotizacion.procedimiento, total: armado.total, partidas: armado.partidas.length },
   });
   return NextResponse.json({ ...serializarCotizacion(cotizacion), paciente: cotizacion.paciente ? pacienteResumen(cotizacion.paciente) : null }, { status: 201 });
 });
