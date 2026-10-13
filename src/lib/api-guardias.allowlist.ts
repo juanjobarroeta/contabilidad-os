@@ -100,6 +100,11 @@ export const RUTAS_PUBLICAS: EntradaAllowlist[] = [
  */
 export const RUTAS_CON_AUTH_PROPIA: EntradaAllowlist[] = [
   {
+    ruta: "api/facturas/reporte/[id]/route.ts",
+    razon:
+      "El companyId sale del ReporteFacturas guardado, nunca de la petición. Con sesión (requireUser) o con enlace firmado HMAC atado al reporte y al formato; en ambos casos puedeVerFacturas (getEffectiveCompanyMembership + permisos de página) se revisa antes de consultar.",
+  },
+  {
     ruta: "api/onboarding/fiel/route.ts",
     razon:
       "No toca datos de ninguna empresa: valida la e.firma y pide la CSF ANTES de que exista la empresa (no guarda nada). El único companyId es el `null` que se pasa a la guardia de IA (tope por usuario).",

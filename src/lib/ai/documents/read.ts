@@ -2,6 +2,7 @@ import { motivoTimbradoNoDisponible } from "@/lib/nomina/timbrado-candado";
 import { prisma } from "@/lib/prisma";
 import { signDraftToken } from "@/lib/facturas/file-token";
 import { documentRefSchema, documentTitles, type DocumentRef, type DocumentView } from "./contract";
+import { descargasDeReporte } from "@/lib/facturas/reporte-servicio";
 
 export async function readDocument(input: DocumentRef): Promise<DocumentView> {
   const ref = documentRefSchema.parse(input);
@@ -16,6 +17,14 @@ export async function readDocument(input: DocumentRef): Promise<DocumentView> {
     if (["iva", "isr", "retenciones"].includes(ref.kind))
       base.downloads.push({ label: "Descargar CSV", href: `/api/papeles/${ref.kind}?${query}&format=csv` });
     return base;
+  }
+  if (ref.kind === "reporte_facturas") {
+    const row = await prisma.reporteFacturas.findFirst({ where: { id: ref.id, companyId: ref.companyId } });
+    if (!row) throw new Error("Reporte no encontrado en esta empresa.");
+    const resumen = row.resumen as { facturas?: number; total?: number; saldo?: number };
+    return { ...base, title: row.titulo, status: `${resumen.facturas ?? 0} CFDI · saldo ${Number(resumen.saldo ?? 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" })}`,
+      total: Number(resumen.total ?? 0), period: row.createdAt.toISOString().slice(0, 10), updatedAt: row.createdAt.toISOString(),
+      source: "Facturas de ContabilidadOS; los archivos se arman al descargar con los datos de ese momento", downloads: descargasDeReporte(row.id) };
   }
   if (ref.kind === "prefactura") {
     const row = await prisma.facturaBorrador.findFirst({ where: { id: ref.id, companyId: ref.companyId }, include: { customer: { select: { companyId: true, razonSocial: true, rfc: true } } } });

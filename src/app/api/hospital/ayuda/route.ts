@@ -13,6 +13,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, requireModule } from "@/lib/authz";
+import { crearReporte, descargasDeReporte, textoResumen } from "@/lib/facturas/reporte-servicio";
 import { withHospital } from "@/lib/hospital/with-hospital";
 import { bitacora, errorZod } from "@/lib/hospital/http";
 import { nombreUsuario } from "@/lib/hospital/util";
@@ -77,5 +78,29 @@ export const POST = withHospital(async (req: Request) => {
     detalle: { pagina: d.pagina ?? null, elemento: d.elemento?.tipo ?? null, modelo: r.modelo, sinRespuesta: r.sinRespuesta, caracteres: d.pregunta.length },
   });
 
-  return NextResponse.json(r);
+  // Un reporte de facturas: el modelo sólo puso los FILTROS; las cifras y los
+  // archivos los arma el hub. Los enlaces van firmados (24 h) porque el
+  // navegador de HospitalOS no manda su Bearer en un <a href>.
+  const { reporte, ...resto } = r;
+  if (reporte) {
+    try {
+      const rep = await crearReporte(prisma, { companyId: d.companyId, userId: user.id, origen: "hospital-ayuda", filtros: reporte });
+      if (rep.estado === "SIN_PERMISO") return NextResponse.json({ ...resto, respuesta: rep.motivo, descargas: [] });
+      if (rep.estado === "ACLARAR") {
+        const lineas = [
+          ...rep.ambiguas.map((a) => `«${a.termino}» coincide con varios: ${a.candidatos.map((c) => `${c.razonSocial} (${c.rfc})`).join("; ")}. ¿Cuál es?`),
+          ...rep.noEncontradas.map((t) => `No encontré a «${t}» en el directorio. ¿Cómo aparece su razón social o cuál es su RFC?`),
+        ];
+        return NextResponse.json({ ...resto, respuesta: lineas.join("\n"), descargas: [] });
+      }
+      const host = req.headers.get("x-forwarded-host")?.split(",")[0].trim() ?? req.headers.get("host");
+      const proto = req.headers.get("x-forwarded-proto")?.split(",")[0].trim() ?? "https";
+      const base = host ? `${proto}://${host}` : new URL(req.url).origin;
+      return NextResponse.json({ ...resto, respuesta: `${resto.respuesta}\n\n${textoResumen(rep)}`, descargas: descargasDeReporte(rep.id, { base, firmar: true }), reporteId: rep.id });
+    } catch (e) {
+      const motivo = e instanceof Error && !/prisma|Invalid.*invocation|SELECT /i.test(e.message) ? e.message : "No pude armar el reporte.";
+      return NextResponse.json({ ...resto, respuesta: `No pude armar el reporte: ${motivo}`, descargas: [] });
+    }
+  }
+  return NextResponse.json({ ...resto, descargas: [] });
 });

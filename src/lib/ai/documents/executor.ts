@@ -5,6 +5,7 @@ import type { ToolContext } from "../tool-executor";
 import { documentRefSchema, DOCUMENT_PREPARE_NAMES, type DocumentRef } from "./contract";
 import { readDocument } from "./read";
 import { fiscalDay, prepareDocument } from "./prepare";
+import { crearReporte, textoResumen } from "@/lib/facturas/reporte-servicio";
 
 const searchSchema = z.object({ kind: z.enum(["factura", "prefactura", "nomina", "recibo_nomina"]), q: z.string().trim().max(200).optional(), date_from: fiscalDay.optional(), date_to: fiscalDay.optional(), cursor: z.number().int().min(0).max(10000).default(0) }).strict();
 export async function executeDocumentTool(name: string, input: Record<string, unknown>, companyId: string, context: ToolContext) {
@@ -14,6 +15,14 @@ export async function executeDocumentTool(name: string, input: Record<string, un
     if (DOCUMENT_PREPARE_NAMES.has(name)) {
       if (!access.canWrite || !context.inApp || !context.conversationId) throw new Error("La preparación requiere permiso de escritura y una conversación en la app.");
       return JSON.stringify(await prepareDocument(name, input, companyId, context.userId, context.conversationId, context.userMessageId));
+    }
+    if (name === "reporte_facturas") {
+      if ("companyId" in input) throw new Error("La empresa la determina la conversación.");
+      const r = await crearReporte(prisma, { companyId, userId: context.userId, origen: "contabot", filtros: input });
+      if (r.estado === "SIN_PERMISO") throw new Error(r.motivo);
+      if (r.estado === "ACLARAR") return JSON.stringify({ aclarar: { ambiguas: r.ambiguas, noEncontradas: r.noEncontradas }, instruction: "Pregunta al usuario cuál contraparte es (o cómo se llama la que no se encontró) antes de repetir el reporte." });
+      const ref: DocumentRef = { kind: "reporte_facturas", companyId, id: r.id };
+      return JSON.stringify({ documents: [ref], resumen: textoResumen(r), facturas: r.resumen.facturas, cortado: r.cortado, instruction: "La tarjeta entrega el Excel y el ZIP de XML. Resume con las cifras de `resumen` tal cual." });
     }
     if (name === "mostrar_documento") {
       if ("companyId" in input) throw new Error("La empresa la determina la conversación.");
