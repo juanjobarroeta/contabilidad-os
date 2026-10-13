@@ -9354,6 +9354,9 @@ model HospProtocolo {
   requiereAnestesiologo  Boolean          @default(false)
   honorarioCirujano      Decimal?         @db.Decimal(18, 2)
   honorarioAnestesiologo Decimal?         @db.Decimal(18, 2)
+  /// Total con IVA pactado como paquete (de la tabla del hospital); la
+  /// cotización que nace del protocolo sale en paquete a este precio.
+  precioPaquete          Decimal?         @db.Decimal(18, 2)
   version                Int              @default(1)
   activo                 Boolean          @default(true)
 
@@ -9375,6 +9378,9 @@ model HospProtocoloPartida {
   descripcion String
   cantidad    Decimal            @db.Decimal(18, 4)
   opcional    Boolean            @default(false)
+  /// Precio unitario de la tabla de origen para la partida SIN servicio del
+  /// tarifario (con servicio manda la tarifa). Sin él queda en 0.
+  precioReferencia Decimal?      @db.Decimal(18, 6)
 
   protocolo HospProtocolo @relation(fields: [protocoloId], references: [id], onDelete: Cascade)
   servicio  HospServicio? @relation(fields: [servicioId], references: [id])
