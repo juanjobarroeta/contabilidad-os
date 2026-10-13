@@ -20,6 +20,7 @@ import { pacienteResumen } from "@/lib/hospital/serializar";
 import { nombreCompleto } from "@/lib/hospital/util";
 import { resolverAltasCita } from "@/lib/hospital/cita-altas";
 import { HospitalError } from "@/lib/hospital/errores";
+import { DIAS_PRIMER_SEGUIMIENTO, ORIGENES_COTIZACION } from "@/lib/hospital/cotizacion-crm";
 
 export const GET = withHospital(async (req: Request) => {
   const { searchParams } = new URL(req.url);
@@ -71,6 +72,12 @@ const createSchema = z.object({
   notas: z.string().max(4000).nullable().optional(),
   estado: z.enum(["BORRADOR", "ENVIADA"]).optional(),
   partidas: z.array(partidaSchema).min(1).max(200),
+  // Seguimiento: quién la trabaja y cómo localizar a quien la pidió.
+  contactoNombre: z.string().trim().max(200).nullable().optional(),
+  contactoTelefono: z.string().trim().max(40).nullable().optional(),
+  contactoEmail: z.string().trim().email().max(200).nullable().optional().or(z.literal("").transform(() => null)),
+  origen: z.enum(ORIGENES_COTIZACION).nullable().optional(),
+  responsableUserId: z.string().nullable().optional(),
 });
 
 export const POST = withHospital(async (req: Request) => {
@@ -98,6 +105,11 @@ export const POST = withHospital(async (req: Request) => {
     const p = await prisma.hospPagador.findUnique({ where: { id: d.pagadorId }, select: { companyId: true } });
     if (!p || p.companyId !== d.companyId) return error("pagadorId inválido");
   }
+  if (d.responsableUserId && d.responsableUserId !== user.id) {
+    const m = await prisma.companyMember.findUnique({ where: { userId_companyId: { userId: d.responsableUserId, companyId: d.companyId } }, select: { id: true } });
+    if (!m) return error("El responsable no es usuario de este hospital");
+  }
+  const estadoInicial = d.estado ?? "BORRADOR";
 
   const lista = await armarPartidas(prisma, d.companyId, d.pagadorId, d.partidas);
   const armado = d.precioPaquete ? aPaquete(lista, d.precioPaquete) : lista;
@@ -120,7 +132,14 @@ export const POST = withHospital(async (req: Request) => {
           dirigidaA: d.dirigidaA?.trim() || null,
           precioPaquete: d.precioPaquete ?? null,
           procedimiento: d.procedimiento.trim(),
-          estado: d.estado ?? "BORRADOR",
+          estado: estadoInicial,
+          // Quien la captura le da seguimiento salvo que se diga otro.
+          responsableUserId: d.responsableUserId ?? user.id,
+          contactoNombre: d.contactoNombre?.trim() || null,
+          contactoTelefono: d.contactoTelefono?.trim() || null,
+          contactoEmail: d.contactoEmail || null,
+          origen: d.origen ?? (medicoId ? "MEDICO" : null),
+          ...(estadoInicial === "ENVIADA" ? { enviadaAt: hoy, proximoSeguimiento: new Date(hoy.getTime() + DIAS_PRIMER_SEGUIMIENTO * 86_400_000) } : {}),
           vigenciaHasta: aFecha(d.vigenciaHasta),
           subtotal: armado.subtotal,
           iva: armado.iva,

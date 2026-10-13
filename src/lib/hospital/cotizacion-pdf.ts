@@ -65,7 +65,7 @@ const CATEGORIA: Record<string, string> = {
 };
 const ESTADO: Record<string, string> = {
   BORRADOR: "Borrador", ENVIADA: "Enviada", ACEPTADA: "Aceptada", VENCIDA: "Vencida",
-  CONVERTIDA: "Convertida en ingreso", CANCELADA: "Cancelada",
+  CONVERTIDA: "Convertida en ingreso", CANCELADA: "Cancelada", PERDIDA: "Perdida",
 };
 
 // Fuera de Latin-1, WinAnsi sólo tiene estos.
