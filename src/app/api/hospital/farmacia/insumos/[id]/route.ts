@@ -4,13 +4,16 @@ import { prisma } from "@/lib/prisma";
 import { AuthzError, requireModule, requireWriter, withAuthz } from "@/lib/authz";
 import { registrarBitacora } from "@/lib/audit";
 import { banderasControl, exigeLibroControl } from "@/lib/hospital/controlados";
+import { precioAlEntrar } from "@/lib/hospital/factores-precio";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PATCH /api/hospital/farmacia/insumos/[id]
 //
 // Edita la ficha del insumo: nombre, presentación, unidad, categoría,
 // controlado, grupo de control (LGS 234/245), registro sanitario, sustancia
-// activa, cadena de frío, mínimo, precio de venta, tasa de IVA y activo. La
+// activa, cadena de frío, mínimo, precio de venta (capturarlo lo deja fijo:
+// la tabla de factores ya no lo mueve; `precioFijo: false` lo regresa a la
+// tabla), tasa de IVA y activo. La
 // CLAVE no se edita (es la identidad con la que empata la derivación desde
 // CFDIs) y la existencia no se toca aquí: eso es un movimiento (AJUSTE) con
 // su motivo. Al fijar `grupoControl` sin mandar `controlado`, la bandera se
@@ -34,6 +37,8 @@ const patchSchema = z
     requiereRefrigeracion: z.boolean().optional(),
     minimo: z.number().min(0).max(1_000_000).optional(),
     precioVenta: z.number().min(0).nullable().optional(),
+    /** Precio capturado a mano: la tabla de factores no lo toca. */
+    precioFijo: z.boolean().optional(),
     ivaTasa: z.number().min(0).max(1).nullable().optional(),
     claveProdServ: z.string().trim().max(10).nullable().optional(),
     activo: z.boolean().optional(),
@@ -62,8 +67,15 @@ export const PATCH = withAuthz(async (req: Request, ctx: { params: Promise<{ id:
   if (data.grupoControl !== undefined && data.controlado === undefined) {
     data.controlado = exigeLibroControl(data.grupoControl);
   }
+  // Un precio capturado a mano queda fijo (la tabla de factores ya no lo mueve) salvo que se diga otra cosa.
+  if (data.precioVenta != null && data.precioFijo === undefined) data.precioFijo = true;
 
-  const actualizado = await prisma.hospInsumo.update({ where: { id }, data });
+  let actualizado = await prisma.hospInsumo.update({ where: { id }, data });
+  // Se le quitó el precio fijo: vuelve al de la tabla con su último costo.
+  if (data.precioFijo === false && actualizado.ultimoCosto != null) {
+    await precioAlEntrar(prisma, insumo.companyId, id, Number(actualizado.ultimoCosto));
+    actualizado = await prisma.hospInsumo.findUniqueOrThrow({ where: { id } });
+  }
 
   registrarBitacora({
     companyId: insumo.companyId,

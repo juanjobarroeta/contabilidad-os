@@ -760,6 +760,13 @@ GET  /api/hospital/episodios?origen=CFDI (filtro) · el episodio serializa `orig
 ```
 
 ### Farmacia
+- **Factores de precio** (`/api/hospital/farmacia/factores`, `…/factores/recalcular`,
+  `src/lib/hospital/factores-precio.ts`, migración `20261104_hosp_factores_precio`):
+  tabla por tramo de costo unitario (`HospConfig.factoresPrecio`, la del hospital
+  2025 como sugerida). Precio de venta = costo × factor del tramo, «por entrada»:
+  cada lote o CFDI de compra con costo lo recalcula, salvo `HospInsumo.precioFijo`
+  (capturar el precio a mano lo deja fijo). Con tabla, la última venta ya no
+  fija el precio. Recalcular todo tiene vista previa y exige `FINANZAS_ESCRIBIR`.
 ```
 GET  /api/hospital/farmacia/insumos?companyId=[&q=&tab=TODOS|BAJO_MINIMO|POR_CADUCAR|CONTROLADOS|SIN_EXISTENCIA&controlados=1&refrigeracion=1&grupo=I..VI]
      (q también busca sustanciaActiva / registroSanitario)

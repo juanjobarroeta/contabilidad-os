@@ -5,6 +5,7 @@ import { AuthzError, requireModule, requireWriter, withAuthz } from "@/lib/authz
 import { registrarBitacora } from "@/lib/audit";
 import { HospitalError } from "@/lib/hospital/errores";
 import { partidaRecibible, validarCantidadRecibida } from "@/lib/hospital/requisiciones";
+import { precioAlEntrar } from "@/lib/hospital/factores-precio";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/hospital/farmacia/lotes
@@ -174,8 +175,10 @@ export const POST = withAuthz(async (req: Request) => {
       if (n !== 1) throw new AuthzError(409, "La línea de la orden ya no tiene esa cantidad por recibir");
     }
     await tx.hospInsumo.update({ where: { id: insumoId }, data: { ultimoCosto: costoUnitario } });
+    // Precio «por entrada»: con tabla de factores, el costo nuevo fija el precio de venta.
+    const precioVenta = await precioAlEntrar(tx, companyId, insumoId, costoUnitario);
     const existencia = await tx.hospMovimientoInsumo.aggregate({ where: { insumoId }, _sum: { cantidad: true } });
-    return { lote, movimiento, adoptadoDeCfdi, existencia: r2(Number(existencia._sum.cantidad ?? 0)), sumadoALote: !!previo };
+    return { lote, movimiento, adoptadoDeCfdi, existencia: r2(Number(existencia._sum.cantidad ?? 0)), sumadoALote: !!previo, precioVenta };
   });
 
   registrarBitacora({
