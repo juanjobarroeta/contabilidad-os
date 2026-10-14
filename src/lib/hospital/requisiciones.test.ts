@@ -9,6 +9,7 @@ vi.mock("@/lib/prisma", () => ({
     solicitudCompra: { findUnique: m.sol, update: m.solUpdate },
     solicitudAdjudicacion: { findUnique: m.adj, update: m.adjUpdate },
     solicitudPartida: { findUnique: m.partida },
+    supplier: { findUnique: vi.fn().mockResolvedValue({ rfc: "AAA010101AAA" }) },
     $transaction: m.tx,
     $executeRaw: m.exec,
   },
@@ -39,7 +40,7 @@ beforeEach(() => {
   m.tx.mockImplementation((fn: (tx: unknown) => unknown) =>
     fn({
       solicitudCompra: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
-      solicitudAdjudicacion: { findFirst: vi.fn().mockResolvedValue({ id: "o1" }), update: vi.fn() },
+      solicitudAdjudicacion: { findFirst: vi.fn().mockResolvedValue({ id: "o1" }), findMany: vi.fn().mockResolvedValue([{ id: "o1", supplierNombre: "Prov" }]), update: vi.fn() },
       pagoProveedor: { create: m.pagoCreate.mockResolvedValue({ id: "pg1" }) },
     })
   );

@@ -935,15 +935,26 @@ flujo de efectivo en `src/lib/hospital/flujo-efectivo.ts`; padrón en
   líneas de la bandeja por DESABASTO o CANCELADA. Estado derivado: EN_BANDEJA →
   POR_AUTORIZAR → POR_ENVIAR → PEDIDA → PARCIAL → RECIBIDA (o RECHAZADA /
   DESABASTO / CANCELADA).
-- **Pedido** (`…/requisiciones/[id]/pedido { via }`): registra que la orden
-  autorizada se mandó al proveedor (`pedidoEnviadoAt/Via/PorId`); el mensaje
-  (WhatsApp o correo) lo arma el satélite.
+- **Cotizaciones y ganadoras** (migración `20261102_hosp_cotizaciones_multiples`):
+  el área puede sugerir proveedor (`HospSolicitudAreaLinea.proveedorSugerido*`).
+  Compras arma la requisición con una o varias `SolicitudCompraCotizacion`
+  (precio por línea, crédito, días de entrega, vigencia, notas); cada partida
+  gana con la más barata (`elegirGanadoras`) salvo que se elija otra, y toma su
+  precio. `PUT …/requisiciones/[id]/ganadoras` cambia ganadoras mientras está
+  por autorizar; `…/aprobar { ganadoras? }` lo hace en el mismo paso.
+  `generateAdjudicaciones` saca **una orden por proveedor ganador**; cada orden
+  lleva sólo sus líneas (`cotizacionGanadoraId = adjudicación.cotizacionId`)
+  para recepción, total, CFDI (RFC del proveedor de la orden) y pago.
+- **Pedido** (`…/ordenes/[id]/pedido { via }`): por orden (proveedor);
+  registra que se le mandó (`SolicitudAdjudicacion.pedidoEnviadoAt/Via/PorId`).
+  El mensaje (WhatsApp o correo) lo arma el satélite.
 - **Faltante** (`…/requisiciones/[id]/partidas/[partidaId]/faltante { accion }`):
   lo que el proveedor no surtió. La partida se cierra en lo recibido (importe
   y total de la orden se recalculan; topa contra lo pagado) y lo que faltó
   regresa a la bandeja (REENVIAR: `intentos`, `proveedoresIntentados`,
-  `cantidadSurtidaPrevia`) o se cierra por DESABASTO. Orden en cero → se
-  cancela si no tiene factura ni pagos.
+  `cantidadSurtidaPrevia`) o se cierra por DESABASTO. La orden del proveedor
+  que quedó en cero se quita (sin factura ni pagos); si toda la requisición
+  quedó en cero, se cancela.
 - **Autorizar / rechazar** (`…/[id]/aprobar`, `…/[id]/rechazar`): permiso
   `COMPRAS_AUTORIZAR`; nadie autoriza ni rechaza la suya. Al autorizar,
   `generateAdjudicaciones` crea la **orden de compra** (una adjudicación con el

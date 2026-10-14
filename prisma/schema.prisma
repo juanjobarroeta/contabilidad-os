@@ -3520,11 +3520,6 @@ model SolicitudCompra {
   rechazadaPorId String?
   rechazadaAt    DateTime?
   rechazoMotivo  String?
-  /// Hospital: cuándo y por dónde se mandó el pedido al proveedor (la orden
-  /// autorizada pasa a «pedido»). Null = autorizada, aún sin enviar.
-  pedidoEnviadoAt    DateTime?
-  pedidoEnviadoVia   String?
-  pedidoEnviadoPorId String?
 
   proyecto        Proyecto?                   @relation(fields: [proyectoId], references: [id])
   supplier        Supplier?                   @relation(fields: [supplierId], references: [id])
@@ -3681,6 +3676,11 @@ model SolicitudAdjudicacion {
   comprobanteData     String?   @db.Text
   comprobanteMime     String?
   comprobanteName     String?
+  /// Hospital: cuándo y por dónde se mandó el pedido a ESTE proveedor (la
+  /// orden autorizada pasa a «pedida»). Null = autorizada, aún sin enviar.
+  pedidoEnviadoAt     DateTime?
+  pedidoEnviadoVia    String?
+  pedidoEnviadoPorId  String?
   bankTransactionId   String?   @unique // se fija al conciliar, no al pagar
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
@@ -11028,6 +11028,10 @@ model HospSolicitudAreaLinea {
   cantidad     Decimal      @db.Decimal(18, 6)
   urgencia     HospUrgencia @default(NORMAL)
   motivo       String?
+  /// Proveedor que sugiere el área (del padrón o sólo el nombre). Compras lo
+  /// toma como primera cotización; no obliga.
+  proveedorSugeridoId     String?
+  proveedorSugeridoNombre String?
 
   /// La requisición (por proveedor) y su línea donde va hoy. Null = en la bandeja de compras.
   requisicionId      String?
