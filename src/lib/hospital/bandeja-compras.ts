@@ -8,9 +8,12 @@
 //   · La bandeja junta todas las líneas sin requisición. La urgencia que se ve
 //     es la mayor entre la del área y la del inventario: sin existencia es
 //     urgente, debajo del mínimo es semiurgente.
-//   · Compras elige líneas, proveedor y precios: se arma la requisición de
-//     siempre (crearRequisicion) con cada línea ligada a su partida. Desde ahí
-//     el camino es el de requisiciones: autorización, orden, recepción, pago.
+//   · El área puede sugerir proveedor. Compras elige líneas y captura una o
+//     varias cotizaciones (precio por línea, crédito, entrega); se arma la
+//     requisición (crearRequisicion) con cada línea ligada a su partida y la
+//     más barata como ganadora sugerida. Quien autoriza puede cambiar la
+//     ganadora por línea; sale una orden por proveedor ganador. Desde ahí el
+//     camino es el de requisiciones: pedido, recepción, factura, pago.
 //   · Si la requisición se cancela, sus líneas regresan a la bandeja.
 //   · Lo que el proveedor no surtió: la partida se cierra en lo recibido (la
 //     orden se paga por lo que llegó) y la línea regresa a la bandeja para
@@ -23,7 +26,7 @@ import type { HospLineaAreaCierre, HospUrgencia, Prisma, PrismaClient } from "@p
 import { prisma } from "@/lib/prisma";
 import { conFolioUnico, siguienteFolio } from "./folio";
 import { HospitalError } from "./errores";
-import { cancelarRequisicion, crearRequisicion, ORIGEN_HOSPITAL, recalcularTotalOrden } from "./requisiciones";
+import { cancelarRequisicion, crearRequisicion, ORIGEN_HOSPITAL, recalcularTotalOrden, VINCULO_ORDEN } from "./requisiciones";
 
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -63,6 +66,7 @@ export type EstadoLineaArea =
 /** Dónde va la línea, derivado de su requisición y de lo recibido. */
 export function estadoLinea(l: {
   cierre: HospLineaAreaCierre | null;
+  /** `pedidoEnviadoAt`: el de la orden del proveedor que ganó esta línea. */
   requisicion: { estado: string; pedidoEnviadoAt: Date | null } | null;
   partida: { cantidad: number; recibida: number } | null;
 }): EstadoLineaArea {
@@ -86,12 +90,18 @@ export interface LineaAreaInput {
   cantidad: number;
   urgencia?: HospUrgencia | null;
   motivo?: string | null;
+  /** Proveedor sugerido para esta línea (si no, el de la solicitud). */
+  proveedorSugeridoId?: string | null;
+  proveedorSugeridoNombre?: string | null;
 }
 
 export interface SolicitudAreaInput {
   area: string;
   urgencia?: HospUrgencia | null;
   notas?: string | null;
+  /** Proveedor que sugiere el área: del padrón (id) o sólo el nombre. */
+  proveedorSugeridoId?: string | null;
+  proveedorSugeridoNombre?: string | null;
   lineas: LineaAreaInput[];
 }
 
@@ -101,6 +111,16 @@ export async function crearSolicitudArea(companyId: string, usuario: { id: strin
     throw new HospitalError(404, "Algún insumo no es de esta empresa");
   }
   const urgencia = input.urgencia ?? "NORMAL";
+  const sugeridos = [...new Set([input.proveedorSugeridoId, ...input.lineas.map((l) => l.proveedorSugeridoId)].filter((x): x is string => !!x))];
+  const proveedores = new Map(
+    (await prisma.supplier.findMany({ where: { companyId, id: { in: sugeridos } }, select: { id: true, razonSocial: true } })).map((x) => [x.id, x.razonSocial])
+  );
+  if (proveedores.size !== sugeridos.length) throw new HospitalError(404, "El proveedor sugerido no es de esta empresa");
+  const sugerido = (l: LineaAreaInput) => {
+    const id = l.proveedorSugeridoId ?? (l.proveedorSugeridoNombre?.trim() ? null : input.proveedorSugeridoId) ?? null;
+    const nombre = id ? proveedores.get(id)! : l.proveedorSugeridoNombre?.trim() || input.proveedorSugeridoNombre?.trim() || null;
+    return { proveedorSugeridoId: id, proveedorSugeridoNombre: nombre };
+  };
   return conFolioUnico(() =>
     prisma.$transaction(async (tx) => {
       const folio = await siguienteFolio(tx, companyId, "solicitudArea");
@@ -122,6 +142,7 @@ export async function crearSolicitudArea(companyId: string, usuario: { id: strin
               cantidad: l.cantidad,
               urgencia: l.urgencia ?? urgencia,
               motivo: l.motivo?.trim() || null,
+              ...sugerido(l),
             })),
           },
         },
@@ -171,11 +192,11 @@ export async function lineasArea(db: Db, companyId: string, filtro: FiltroLineas
     select: {
       id: true, createdAt: true, updatedAt: true, hospInsumoId: true, descripcion: true, unidad: true, cantidad: true,
       urgencia: true, motivo: true, intentos: true, proveedoresIntentados: true, cantidadSurtidaPrevia: true,
-      cierre: true, cierreMotivo: true, cerradaAt: true,
+      cierre: true, cierreMotivo: true, cerradaAt: true, proveedorSugeridoId: true, proveedorSugeridoNombre: true,
       solicitud: { select: { id: true, folio: true, area: true, urgencia: true, notas: true, solicitanteId: true, solicitanteNombre: true, createdAt: true } },
       insumo: { select: { clave: true, nombre: true, unidad: true, minimo: true, ultimoCosto: true } },
-      requisicion: { select: { id: true, folio: true, estado: true, pedidoEnviadoAt: true, supplier: { select: { id: true, razonSocial: true } } } },
-      partida: { select: { id: true, cantidad: true, cantidadRecibida: true, precioUnitario: true } },
+      requisicion: { select: { id: true, folio: true, estado: true, adjudicaciones: { select: { id: true, cotizacionId: true, pedidoEnviadoAt: true } } } },
+      partida: { select: { id: true, cantidad: true, cantidadRecibida: true, precioUnitario: true, cotizacionGanadora: { select: { id: true, supplierId: true, supplierNombre: true } } } },
     },
     orderBy: { createdAt: "asc" },
     take: 2000,
@@ -187,7 +208,10 @@ export async function lineasArea(db: Db, companyId: string, filtro: FiltroLineas
     const minimo = r.insumo ? Number(r.insumo.minimo) : null;
     const porInventario = urgenciaPorExistencia(existencia, minimo);
     const partida = r.partida ? { cantidad: Number(r.partida.cantidad), recibida: Number(r.partida.cantidadRecibida) } : null;
-    const requisicion = r.requisicion && r.requisicion.estado !== "CANCELADA" ? r.requisicion : null;
+    const req = r.requisicion && r.requisicion.estado !== "CANCELADA" ? r.requisicion : null;
+    const ganadora = r.partida?.cotizacionGanadora ?? null;
+    const orden = req?.adjudicaciones.find((a) => a.cotizacionId === ganadora?.id) ?? null;
+    const requisicion = req ? { ...req, pedidoEnviadoAt: orden?.pedidoEnviadoAt ?? null } : null;
     return {
       id: r.id,
       createdAt: r.createdAt,
@@ -208,7 +232,10 @@ export async function lineasArea(db: Db, companyId: string, filtro: FiltroLineas
       diasEsperando: Math.max(0, Math.floor((hoy.getTime() - r.solicitud.createdAt.getTime()) / DIA)),
       intentos: r.intentos,
       proveedoresIntentados: r.proveedoresIntentados,
-      requisicion: requisicion ? { id: requisicion.id, folio: requisicion.folio, estado: requisicion.estado, proveedor: requisicion.supplier } : null,
+      proveedorSugerido: r.proveedorSugeridoNombre ? { id: r.proveedorSugeridoId, razonSocial: r.proveedorSugeridoNombre } : null,
+      requisicion: requisicion
+        ? { id: requisicion.id, folio: requisicion.folio, estado: requisicion.estado, ordenId: orden?.id ?? null, proveedor: ganadora ? { id: ganadora.supplierId, razonSocial: ganadora.supplierNombre } : null }
+        : null,
       partida: partida && r.partida ? { id: r.partida.id, ...partida, precioUnitario: Number(r.partida.precioUnitario) } : null,
       cierre: r.cierre ? { tipo: r.cierre, motivo: r.cierreMotivo, at: r.cerradaAt } : null,
       estado: estadoLinea({ cierre: r.cierre, requisicion, partida }),
@@ -221,21 +248,34 @@ export type LineaArea = Awaited<ReturnType<typeof lineasArea>>[number];
 
 // ── Armar requisiciones desde la bandeja ────────────────────────────────────
 
-export interface GrupoRequisicion {
+export interface CotizacionBandeja {
   supplierId: string;
+  tieneCredito?: boolean | null;
+  diasCredito?: number | null;
+  diasEntrega?: number | null;
+  vigenciaHasta?: Date | null;
+  notas?: string | null;
+  /** Precio por línea de la bandeja; la que no cotizó no va. */
+  precios: Array<{ lineaId: string; precioUnitario: number }>;
+}
+
+export interface RequisicionBandeja {
   notas?: string | null;
   fechaEntrega?: Date | null;
-  lineas: Array<{ lineaId: string; cantidad: number; precioUnitario: number; descripcion?: string | null; unidad?: string | null }>;
+  lineas: Array<{ lineaId: string; cantidad: number; descripcion?: string | null; unidad?: string | null }>;
+  cotizaciones: CotizacionBandeja[];
+  /** Ganadora sugerida por línea (lineaId → índice de cotización); sin ella, la más barata. */
+  ganadoras?: Record<string, number> | null;
 }
 
 /**
- * Una requisición por proveedor con las líneas elegidas de la bandeja. Cada
- * línea debe seguir en la bandeja (nadie más la tomó). La requisición nace por
- * autorizar, como cualquier otra.
+ * Una requisición con las líneas elegidas de la bandeja y las cotizaciones
+ * de uno o varios proveedores. Cada línea debe seguir en la bandeja (nadie
+ * más la tomó) y tener al menos un precio. Nace por autorizar.
  */
-export async function requisicionarLineas(companyId: string, userId: string, grupos: GrupoRequisicion[]) {
-  const ids = grupos.flatMap((g) => g.lineas.map((l) => l.lineaId));
-  if (new Set(ids).size !== ids.length) throw new HospitalError(400, "Una línea va en un solo proveedor");
+export async function requisicionarLineas(companyId: string, userId: string, input: RequisicionBandeja) {
+  const ids = input.lineas.map((l) => l.lineaId);
+  if (new Set(ids).size !== ids.length) throw new HospitalError(400, "Una línea va una sola vez");
   const lineas = await prisma.hospSolicitudAreaLinea.findMany({
     where: { id: { in: ids }, companyId },
     select: { id: true, hospInsumoId: true, descripcion: true, unidad: true, cierre: true, requisicionId: true, requisicion: { select: { estado: true } }, solicitud: { select: { area: true } } },
@@ -246,30 +286,32 @@ export async function requisicionarLineas(companyId: string, userId: string, gru
     if (l.cierre) throw new HospitalError(409, `«${l.descripcion}» ya se cerró`);
     if (l.requisicionId && l.requisicion?.estado !== "CANCELADA") throw new HospitalError(409, `«${l.descripcion}» ya está en otra requisición`);
   }
-
-  const creadas: Array<{ id: string; folio: string; total: number }> = [];
-  for (const g of grupos) {
-    const areas = [...new Set(g.lineas.map((x) => porId.get(x.lineaId)!.solicitud.area))];
-    const r = await crearRequisicion(companyId, userId, {
-      supplierId: g.supplierId,
-      area: areas.length === 1 ? areas[0] : "Varias áreas",
-      notas: g.notas ?? null,
-      fechaEntrega: g.fechaEntrega ?? null,
-      partidas: g.lineas.map((x) => {
-        const l = porId.get(x.lineaId)!;
-        return {
-          hospInsumoId: l.hospInsumoId,
-          descripcion: x.descripcion?.trim() || l.descripcion,
-          unidad: x.unidad?.trim() || l.unidad,
-          cantidad: x.cantidad,
-          precioUnitario: x.precioUnitario,
-          lineaAreaId: l.id,
-        };
-      }),
-    });
-    creadas.push(r);
+  for (const c of input.cotizaciones) {
+    for (const x of c.precios) if (!porId.has(x.lineaId) || !ids.includes(x.lineaId)) throw new HospitalError(400, "Un precio es de una línea que no va en la requisición");
   }
-  return creadas;
+
+  const areas = [...new Set(lineas.map((l) => l.solicitud.area))];
+  return crearRequisicion(companyId, userId, {
+    area: areas.length === 1 ? areas[0] : "Varias áreas",
+    notas: input.notas ?? null,
+    fechaEntrega: input.fechaEntrega ?? null,
+    partidas: input.lineas.map((x) => {
+      const l = porId.get(x.lineaId)!;
+      return {
+        hospInsumoId: l.hospInsumoId,
+        descripcion: x.descripcion?.trim() || l.descripcion,
+        unidad: x.unidad?.trim() || l.unidad,
+        cantidad: x.cantidad,
+        precioUnitario: 0,
+        lineaAreaId: l.id,
+      };
+    }),
+    cotizaciones: input.cotizaciones.map((c) => {
+      const precio = new Map(c.precios.map((x) => [x.lineaId, x.precioUnitario]));
+      return { ...c, precios: input.lineas.map((x) => precio.get(x.lineaId) ?? null) };
+    }),
+    ganadoras: input.ganadoras ? input.lineas.map((x) => input.ganadoras?.[x.lineaId] ?? null) : null,
+  });
 }
 
 // ── Cierres ─────────────────────────────────────────────────────────────────
@@ -306,7 +348,8 @@ export async function cerrarFaltante(partidaId: string, companyId: string, userI
     where: { id: partidaId },
     select: {
       id: true, cantidad: true, cantidadRecibida: true, precioUnitario: true, descripcion: true, unidad: true, hospInsumoId: true,
-      solicitud: { select: { id: true, companyId: true, origen: true, estado: true, folio: true, area: true, supplier: { select: { razonSocial: true } } } },
+      cotizacionGanadora: { select: { id: true, supplierNombre: true } },
+      solicitud: { select: { id: true, companyId: true, origen: true, estado: true, folio: true, area: true } },
       hospLineaArea: { select: { id: true, cantidad: true, cantidadSurtidaPrevia: true } },
     },
   });
@@ -316,7 +359,7 @@ export async function cerrarFaltante(partidaId: string, companyId: string, userI
   const recibida = Number(p.cantidadRecibida);
   const falta = r6(cantidad - recibida);
   if (falta <= EPS) throw new HospitalError(409, "Esta línea ya se recibió completa");
-  const proveedor = p.solicitud.supplier?.razonSocial ?? "proveedor";
+  const proveedor = p.cotizacionGanadora?.supplierNombre ?? "proveedor";
   const ahora = new Date();
   const nota = motivo.trim();
 
@@ -364,13 +407,27 @@ export async function cerrarFaltante(partidaId: string, companyId: string, userI
       lineaId = s.lineas[0].id;
     }
 
-    const restantes = await tx.solicitudPartida.findMany({ where: { solicitudId: p.solicitud.id }, select: { importe: true, cantidad: true } });
+    const restantes = await tx.solicitudPartida.findMany({ where: { solicitudId: p.solicitud.id }, select: { importe: true, cantidad: true, cotizacionGanadoraId: true } });
     const total = r2(restantes.reduce((s, x) => s + Number(x.importe), 0));
     await tx.solicitudCompra.update({ where: { id: p.solicitud.id }, data: { total } });
-    const orden = await tx.solicitudAdjudicacion.findFirst({ where: { solicitudId: p.solicitud.id }, select: { id: true } });
-    // Topa contra lo ya pagado: si se pagó más de lo que queda, no se cierra.
-    if (orden) await recalcularTotalOrden(tx, orden.id);
-    return { lineaId, vacia: restantes.every((x) => Number(x.cantidad) <= EPS) };
+    // La orden de ESTE proveedor (una requisición puede tener varias).
+    const orden = await tx.solicitudAdjudicacion.findFirst({
+      where: { solicitudId: p.solicitud.id, cotizacionId: p.cotizacionGanadora?.id ?? "" },
+      select: { id: true, aplicaciones: { select: { id: true } } },
+    });
+    let ordenVaciaQuitada = false;
+    if (orden) {
+      // Topa contra lo ya pagado: si se pagó más de lo que queda, no se cierra.
+      await recalcularTotalOrden(tx, orden.id);
+      const suyas = restantes.filter((x) => x.cotizacionGanadoraId === p.cotizacionGanadora?.id);
+      const sinFactura = (await tx.construccionCfdiVinculo.count({ where: { companyId, targetTipo: VINCULO_ORDEN, targetId: orden.id } })) === 0;
+      // A este proveedor no le quedó nada: su orden se quita si no tiene factura ni pagos.
+      if (suyas.every((x) => Number(x.cantidad) <= EPS) && orden.aplicaciones.length === 0 && sinFactura) {
+        await tx.solicitudAdjudicacion.delete({ where: { id: orden.id } });
+        ordenVaciaQuitada = true;
+      }
+    }
+    return { lineaId, vacia: restantes.every((x) => Number(x.cantidad) <= EPS), ordenVaciaQuitada };
   });
 
   // Nada llegó de toda la orden: se cancela con sus propias reglas (si ya
@@ -384,18 +441,19 @@ export async function cerrarFaltante(partidaId: string, companyId: string, userI
       if (!(e instanceof HospitalError)) throw e;
     }
   }
-  return { partidaId, falta, lineaAreaId: resultado.lineaId, accion, ordenCancelada };
+  return { partidaId, falta, lineaAreaId: resultado.lineaId, accion, ordenCancelada, ordenProveedorCancelada: resultado.ordenVaciaQuitada || ordenCancelada };
 }
 
 // ── Pedido al proveedor ─────────────────────────────────────────────────────
 
 export const VIAS_PEDIDO = ["WHATSAPP", "CORREO", "TELEFONO", "OTRO"] as const;
 
-export async function marcarPedidoEnviado(id: string, companyId: string, userId: string, via: (typeof VIAS_PEDIDO)[number]) {
-  const n = await prisma.solicitudCompra.updateMany({
-    where: { id, companyId, origen: ORIGEN_HOSPITAL, estado: "APROBADA" },
+/** Registra que el pedido de una orden (un proveedor) se mandó. Se puede volver a marcar: queda la última vez. */
+export async function marcarPedidoEnviado(ordenId: string, companyId: string, userId: string, via: (typeof VIAS_PEDIDO)[number]) {
+  const n = await prisma.solicitudAdjudicacion.updateMany({
+    where: { id: ordenId, companyId, solicitud: { origen: ORIGEN_HOSPITAL, estado: { in: ["APROBADA", "PAGADA"] } } },
     data: { pedidoEnviadoAt: new Date(), pedidoEnviadoVia: via, pedidoEnviadoPorId: userId },
   });
-  if (n.count !== 1) throw new HospitalError(409, "Sólo se envía el pedido de una requisición autorizada");
-  return { id, via };
+  if (n.count !== 1) throw new HospitalError(409, "Sólo se envía el pedido de una orden autorizada");
+  return { ordenId, via };
 }

@@ -4,8 +4,9 @@
  *      inventario, la mayor), existencia, mínimo, días esperando y dónde van
  *      (bandeja, por autorizar, pedida, recibida, desabasto…).
  *      bandeja = sólo las que esperan a compras; mias = las que pidió el usuario.
- * POST /api/hospital/solicitudes-area { companyId, area, urgencia?, notas?,
- *                                      lineas: [{ hospInsumoId?, descripcion, unidad?, cantidad, urgencia?, motivo? }] }
+ * POST /api/hospital/solicitudes-area { companyId, area, urgencia?, notas?, proveedorSugeridoId? | proveedorSugeridoNombre?,
+ *                                      lineas: [{ hospInsumoId?, descripcion, unidad?, cantidad, urgencia?, motivo?,
+ *                                                 proveedorSugeridoId?, proveedorSugeridoNombre? }] }
  *      Un área pide sin proveedor; folio SA-AAAA-NNNN. Va a la bandeja de compras.
  *
  * Motor: lib/hospital/bandeja-compras.ts.
@@ -26,6 +27,8 @@ const schema = z.object({
   area: z.string().trim().min(1, "Elige el área").max(80),
   urgencia: z.enum(URGENCIAS).nullable().optional(),
   notas: z.string().trim().max(1000).nullable().optional(),
+  proveedorSugeridoId: z.string().min(1).nullable().optional(),
+  proveedorSugeridoNombre: z.string().trim().max(200).nullable().optional(),
   lineas: z
     .array(
       z.object({
@@ -35,6 +38,8 @@ const schema = z.object({
         cantidad: z.number().positive("La cantidad debe ser mayor a cero").max(10_000_000),
         urgencia: z.enum(URGENCIAS).nullable().optional(),
         motivo: z.string().trim().max(500).nullable().optional(),
+        proveedorSugeridoId: z.string().min(1).nullable().optional(),
+        proveedorSugeridoNombre: z.string().trim().max(200).nullable().optional(),
       })
     )
     .min(1, "Agrega al menos una línea")

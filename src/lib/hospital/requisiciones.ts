@@ -49,46 +49,106 @@ export interface PartidaInput {
   lineaAreaId?: string | null;
 }
 
-export interface RequisicionInput {
+/** Oferta de un proveedor: precio por partida (mismo orden; null = no la cotizó) y sus condiciones. */
+export interface CotizacionInput {
   supplierId: string;
+  /** Sin dato, salen del padrón del proveedor (SupplierTerms). */
+  tieneCredito?: boolean | null;
+  diasCredito?: number | null;
+  diasEntrega?: number | null;
+  vigenciaHasta?: Date | null;
+  notas?: string | null;
+  precios: Array<number | null>;
+}
+
+export interface RequisicionInput {
+  /** Requisición de un solo proveedor (los precios van en las partidas). Con `cotizaciones` no se usa. */
+  supplierId?: string | null;
   area?: string | null;
   notas?: string | null;
   fechaEntrega?: Date | null;
   partidas: PartidaInput[];
+  /** Varias ofertas para comparar; quien autoriza elige la ganadora por línea. */
+  cotizaciones?: CotizacionInput[] | null;
+  /** Índice de la cotización ganadora por partida; sin él, la más barata. */
+  ganadoras?: Array<number | null> | null;
 }
 
 // ── Requisición ─────────────────────────────────────────────────────────────
 
-async function validarProveedorEInsumos(db: Db, companyId: string, input: RequisicionInput) {
-  const supplier = await db.supplier.findFirst({
-    where: { id: input.supplierId, companyId },
-    select: { id: true, razonSocial: true, terms: { select: { tieneCredito: true, diasCredito: true } } },
-  });
-  if (!supplier) throw new HospitalError(404, "Proveedor no encontrado en esta empresa");
-  const ids = [...new Set(input.partidas.map((p) => p.hospInsumoId).filter((x): x is string => !!x))];
-  if (ids.length) {
-    const n = await db.hospInsumo.count({ where: { companyId, id: { in: ids } } });
-    if (n !== ids.length) throw new HospitalError(404, "Algún insumo no es de esta empresa");
-  }
-  return supplier;
+/** Una requisición de un solo proveedor es una sola cotización con los precios de sus partidas. */
+export function cotizacionesDe(input: RequisicionInput): CotizacionInput[] {
+  if (input.cotizaciones?.length) return input.cotizaciones;
+  if (!input.supplierId) throw new HospitalError(400, "Elige el proveedor (o dalo de alta)");
+  return [{ supplierId: input.supplierId, precios: input.partidas.map((p) => p.precioUnitario) }];
 }
 
 /**
- * Líneas + la oferta única del proveedor, adjudicada completa. Devuelve el
- * total. La forma de pago y los días de crédito salen de las condiciones del
- * proveedor (SupplierTerms); sin ellas, contado.
+ * La cotización ganadora de cada partida: la elegida si la cotizó; si no, la
+ * más barata (en empate, la primera). Toda partida debe tener al menos un precio.
+ */
+export function elegirGanadoras(
+  partidas: Array<{ descripcion: string }>,
+  cotizaciones: Array<{ precios: Array<number | null> }>,
+  elegidas?: Array<number | null> | null
+): number[] {
+  return partidas.map((p, i) => {
+    const e = elegidas?.[i];
+    if (e != null) {
+      if (cotizaciones[e]?.precios[i] == null) throw new HospitalError(422, `«${p.descripcion}»: la cotización elegida no tiene precio para esta línea`);
+      return e;
+    }
+    let mejor = -1;
+    cotizaciones.forEach((c, k) => {
+      const v = c.precios[i];
+      if (v != null && (mejor < 0 || v < (cotizaciones[mejor].precios[i] as number))) mejor = k;
+    });
+    if (mejor < 0) throw new HospitalError(422, `«${p.descripcion}»: ningún proveedor la cotizó`);
+    return mejor;
+  });
+}
+
+type Proveedor = { id: string; razonSocial: string; terms: { tieneCredito: boolean; diasCredito: number } | null };
+
+async function validarProveedoresEInsumos(db: Db, companyId: string, input: RequisicionInput) {
+  const cots = cotizacionesDe(input);
+  const ids = cots.map((c) => c.supplierId);
+  if (new Set(ids).size !== ids.length) throw new HospitalError(400, "Un proveedor va una sola vez: junta sus precios en una cotización");
+  for (const c of cots) {
+    if (c.precios.length !== input.partidas.length) throw new HospitalError(400, "Cada cotización lleva un precio (o vacío) por línea");
+  }
+  const suppliers = await db.supplier.findMany({
+    where: { id: { in: ids }, companyId },
+    select: { id: true, razonSocial: true, terms: { select: { tieneCredito: true, diasCredito: true } } },
+  });
+  if (suppliers.length !== ids.length) throw new HospitalError(404, "Proveedor no encontrado en esta empresa");
+  const insumos = [...new Set(input.partidas.map((p) => p.hospInsumoId).filter((x): x is string => !!x))];
+  if (insumos.length) {
+    const n = await db.hospInsumo.count({ where: { companyId, id: { in: insumos } } });
+    if (n !== insumos.length) throw new HospitalError(404, "Algún insumo no es de esta empresa");
+  }
+  const ganadoras = elegirGanadoras(input.partidas, cots, input.ganadoras);
+  return { cots, ganadoras, porId: new Map<string, Proveedor>(suppliers.map((s) => [s.id, s])) };
+}
+
+/**
+ * Partidas + una cotización por proveedor, con la ganadora de cada línea. El
+ * precio de la partida es el de su ganadora; el encabezado lleva el
+ * proveedor con más monto adjudicado y su forma de pago. Devuelve el total.
  */
 async function armarLineas(
   tx: Prisma.TransactionClient,
   companyId: string,
   solicitudId: string,
-  supplier: { id: string; razonSocial: string; terms: { tieneCredito: boolean; diasCredito: number } | null },
-  partidas: PartidaInput[]
+  partidas: PartidaInput[],
+  cots: CotizacionInput[],
+  ganadoras: number[],
+  porId: Map<string, Proveedor>
 ): Promise<number> {
-  const creadas: { id: string; cantidad: number; precio: number; importe: number }[] = [];
+  const creadas: string[] = [];
   const ligas: Array<{ lineaAreaId: string; partidaId: string }> = [];
-  for (const p of partidas) {
-    const importe = r2(p.cantidad * p.precioUnitario);
+  for (const [i, p] of partidas.entries()) {
+    const precio = cots[ganadoras[i]].precios[i] as number;
     const row = await tx.solicitudPartida.create({
       data: {
         solicitudId,
@@ -96,42 +156,95 @@ async function armarLineas(
         descripcion: p.descripcion.trim(),
         unidad: p.unidad?.trim() || null,
         cantidad: p.cantidad,
-        precioUnitario: p.precioUnitario,
-        importe,
+        precioUnitario: precio,
+        importe: r2(p.cantidad * precio),
       },
       select: { id: true },
     });
-    creadas.push({ id: row.id, cantidad: p.cantidad, precio: p.precioUnitario, importe });
+    creadas.push(row.id);
     if (p.lineaAreaId) ligas.push({ lineaAreaId: p.lineaAreaId, partidaId: row.id });
   }
   await ligarLineasArea(tx, companyId, solicitudId, ligas);
-  const total = r2(creadas.reduce((a, c) => a + c.importe, 0));
-  const credito = supplier.terms?.tieneCredito ?? false;
-  const cot = await tx.solicitudCompraCotizacion.create({
-    data: {
-      solicitudId,
-      supplierId: supplier.id,
-      supplierNombre: supplier.razonSocial,
-      tieneCredito: credito,
-      diasCredito: credito ? supplier.terms?.diasCredito ?? 0 : null,
-      total,
-      isSelected: true,
-      partidas: {
-        create: creadas.map((c) => ({ solicitudPartidaId: c.id, precioUnitario: c.precio, importe: c.importe })),
+
+  for (const [k, c] of cots.entries()) {
+    const s = porId.get(c.supplierId)!;
+    const credito = c.tieneCredito ?? s.terms?.tieneCredito ?? false;
+    const lineas = partidas
+      .map((p, i) => ({ i, precio: c.precios[i] }))
+      .filter((x): x is { i: number; precio: number } => x.precio != null)
+      .map((x) => ({ solicitudPartidaId: creadas[x.i], precioUnitario: x.precio, importe: r2(partidas[x.i].cantidad * x.precio) }));
+    const cot = await tx.solicitudCompraCotizacion.create({
+      data: {
+        solicitudId,
+        supplierId: s.id,
+        supplierNombre: s.razonSocial,
+        tieneCredito: credito,
+        diasCredito: credito ? c.diasCredito ?? s.terms?.diasCredito ?? 0 : null,
+        diasEntrega: c.diasEntrega ?? null,
+        vigenciaHasta: c.vigenciaHasta ?? null,
+        notas: c.notas?.trim() || null,
+        total: r2(lineas.reduce((a, l) => a + l.importe, 0)),
+        isSelected: ganadoras.includes(k),
+        partidas: { create: lineas },
       },
-    },
-    select: { id: true },
+      select: { id: true },
+    });
+    const suyas = creadas.filter((_, i) => ganadoras[i] === k);
+    if (suyas.length) await tx.solicitudPartida.updateMany({ where: { id: { in: suyas } }, data: { cotizacionGanadoraId: cot.id } });
+  }
+  return resumirEncabezado(tx, solicitudId);
+}
+
+/** Total, proveedor principal (más monto adjudicado) y su forma de pago, desde las ganadoras. */
+async function resumirEncabezado(tx: Prisma.TransactionClient, solicitudId: string): Promise<number> {
+  const partidas = await tx.solicitudPartida.findMany({
+    where: { solicitudId },
+    select: { importe: true, cotizacionGanadora: { select: { supplierId: true, tieneCredito: true } } },
   });
-  await tx.solicitudPartida.updateMany({ where: { solicitudId }, data: { cotizacionGanadoraId: cot.id } });
+  const total = r2(partidas.reduce((a, p) => a + Number(p.importe), 0));
+  const porProveedor = new Map<string, { monto: number; credito: boolean }>();
+  for (const p of partidas) {
+    const sid = p.cotizacionGanadora?.supplierId;
+    if (!sid) continue;
+    const e = porProveedor.get(sid) ?? { monto: 0, credito: p.cotizacionGanadora!.tieneCredito };
+    e.monto += Number(p.importe);
+    porProveedor.set(sid, e);
+  }
+  const [principal] = [...porProveedor].sort((a, b) => b[1].monto - a[1].monto);
   await tx.solicitudCompra.update({
     where: { id: solicitudId },
-    data: { total, supplierId: supplier.id, formaPago: credito ? "CREDITO" : "CONTADO" },
+    data: { total, supplierId: principal?.[0] ?? null, formaPago: principal?.[1].credito ? "CREDITO" : "CONTADO" },
   });
   return total;
 }
 
+/**
+ * Cambia la ganadora de algunas partidas (mientras está por autorizar): la
+ * partida toma el precio de esa cotización y se recalcula el encabezado.
+ */
+export async function reasignarGanadoras(tx: Prisma.TransactionClient, solicitudId: string, ganadoras: Record<string, string>) {
+  const entradas = Object.entries(ganadoras);
+  if (!entradas.length) return;
+  const partidas = await tx.solicitudPartida.findMany({ where: { solicitudId, id: { in: entradas.map(([p]) => p) } }, select: { id: true, cantidad: true, descripcion: true } });
+  if (partidas.length !== entradas.length) throw new HospitalError(404, "Alguna línea no es de esta requisición");
+  for (const p of partidas) {
+    const cotId = ganadoras[p.id];
+    const oferta = await tx.solicitudCotizacionPartida.findFirst({
+      where: { solicitudPartidaId: p.id, cotizacionId: cotId, cotizacion: { solicitudId } },
+      select: { precioUnitario: true },
+    });
+    if (!oferta) throw new HospitalError(422, `«${p.descripcion}»: esa cotización no tiene precio para esta línea`);
+    const precio = Number(oferta.precioUnitario);
+    await tx.solicitudPartida.update({ where: { id: p.id }, data: { cotizacionGanadoraId: cotId, precioUnitario: precio, importe: r2(Number(p.cantidad) * precio) } });
+  }
+  const ganan = new Set((await tx.solicitudPartida.findMany({ where: { solicitudId }, select: { cotizacionGanadoraId: true } })).map((p) => p.cotizacionGanadoraId));
+  const cots = await tx.solicitudCompraCotizacion.findMany({ where: { solicitudId }, select: { id: true } });
+  for (const c of cots) await tx.solicitudCompraCotizacion.update({ where: { id: c.id }, data: { isSelected: ganan.has(c.id) } });
+  await resumirEncabezado(tx, solicitudId);
+}
+
 export async function crearRequisicion(companyId: string, userId: string, input: RequisicionInput) {
-  const supplier = await validarProveedorEInsumos(prisma, companyId, input);
+  const v = await validarProveedoresEInsumos(prisma, companyId, input);
   return conFolioUnico(() =>
     prisma.$transaction(async (tx) => {
       const folio = await siguienteFolio(tx, companyId, "requisicion");
@@ -149,7 +262,7 @@ export async function crearRequisicion(companyId: string, userId: string, input:
         },
         select: { id: true, folio: true },
       });
-      const total = await armarLineas(tx, companyId, sol.id, supplier, input.partidas);
+      const total = await armarLineas(tx, companyId, sol.id, input.partidas, v.cots, v.ganadoras, v.porId);
       return { id: sol.id, folio: sol.folio, total };
     })
   );
@@ -176,7 +289,7 @@ export async function editarRequisicion(id: string, companyId: string, input: Re
   if (sol.estado !== "PENDIENTE" && sol.estado !== "RECHAZADA") {
     throw new HospitalError(409, "Sólo se edita una requisición por autorizar o rechazada");
   }
-  const supplier = await validarProveedorEInsumos(prisma, companyId, input);
+  const v = await validarProveedoresEInsumos(prisma, companyId, input);
   return prisma.$transaction(async (tx) => {
     await tx.solicitudCotizacionPartida.deleteMany({ where: { cotizacion: { solicitudId: id } } });
     await tx.solicitudCompraCotizacion.deleteMany({ where: { solicitudId: id } });
@@ -193,12 +306,17 @@ export async function editarRequisicion(id: string, companyId: string, input: Re
         rechazoMotivo: null,
       },
     });
-    const total = await armarLineas(tx, companyId, id, supplier, input.partidas);
+    const total = await armarLineas(tx, companyId, id, input.partidas, v.cots, v.ganadoras, v.porId);
     return { id, folio: sol.folio, total };
   });
 }
 
-export async function aprobarRequisicion(id: string, companyId: string, userId: string) {
+/**
+ * Autoriza. Quien autoriza puede cambiar antes la ganadora de cualquier línea
+ * (`ganadoras`: partidaId → cotizacionId); se genera una orden por proveedor
+ * ganador.
+ */
+export async function aprobarRequisicion(id: string, companyId: string, userId: string, ganadoras?: Record<string, string> | null) {
   const sol = await cargarHospital(prisma, id, companyId);
   if (sol.estado !== "PENDIENTE") throw new HospitalError(409, `La requisición está ${sol.estado.toLowerCase()}: no se puede autorizar`);
   if (sol.creadaPorId === userId) throw new HospitalError(403, "No puedes autorizar tu propia requisición: la autoriza otra persona.");
@@ -209,9 +327,10 @@ export async function aprobarRequisicion(id: string, companyId: string, userId: 
       data: { estado: "APROBADA", aprobadaPorId: userId, aprobadaAt: new Date() },
     });
     if (n.count !== 1) throw new HospitalError(409, "La requisición cambió mientras se autorizaba");
+    if (ganadoras) await reasignarGanadoras(tx, id, ganadoras);
     await generateAdjudicaciones(tx, id);
-    const orden = await tx.solicitudAdjudicacion.findFirst({ where: { solicitudId: id }, select: { id: true } });
-    return { id, folio: sol.folio, ordenId: orden?.id ?? null };
+    const ordenes = await tx.solicitudAdjudicacion.findMany({ where: { solicitudId: id }, select: { id: true, supplierNombre: true } });
+    return { id, folio: sol.folio, ordenId: ordenes[0]?.id ?? null, ordenes };
   });
 }
 
@@ -399,16 +518,15 @@ export async function ordenesDeCompra(db: Db, companyId: string, filtro: FiltroO
       ...(filtro.soloAutorizadas ? { enviadaTesoreriaAt: { not: null } } : {}),
     },
     select: {
-      id: true, solicitudId: true, supplierId: true, supplierNombre: true, tieneCredito: true, diasCredito: true,
-      total: true, estado: true, enviadaTesoreriaAt: true, pagoAutorizadoPorId: true, fechaProgramada: true,
-      pagadaAt: true, referenciaPago: true, createdAt: true,
+      id: true, solicitudId: true, cotizacionId: true, supplierId: true, supplierNombre: true, tieneCredito: true, diasCredito: true,
+      diasEntrega: true, total: true, estado: true, enviadaTesoreriaAt: true, pagoAutorizadoPorId: true, fechaProgramada: true,
+      pagadaAt: true, referenciaPago: true, createdAt: true, pedidoEnviadoAt: true, pedidoEnviadoVia: true, pedidoEnviadoPorId: true,
       aplicaciones: { select: { monto: true, pago: { select: { id: true, fecha: true, referencia: true, monto: true } } } },
       solicitud: {
         select: {
           folio: true, area: true, notas: true, aprobadaAt: true, aprobadaPorId: true, creadaPorId: true, createdAt: true,
-          supplier: { select: { id: true, razonSocial: true, rfc: true, clabe: true, banco: true } },
           partidas: {
-            select: { id: true, descripcion: true, unidad: true, cantidad: true, cantidadRecibida: true, precioUnitario: true, importe: true, hospInsumoId: true },
+            select: { id: true, descripcion: true, unidad: true, cantidad: true, cantidadRecibida: true, precioUnitario: true, importe: true, hospInsumoId: true, cotizacionGanadoraId: true },
             orderBy: { id: "asc" },
           },
         },
@@ -418,6 +536,12 @@ export async function ordenesDeCompra(db: Db, companyId: string, filtro: FiltroO
     take: 500,
   });
   if (adjs.length === 0) return [];
+  const proveedores = new Map(
+    (await db.supplier.findMany({
+      where: { id: { in: [...new Set(adjs.map((a) => a.supplierId).filter((x): x is string => !!x))] } },
+      select: { id: true, razonSocial: true, rfc: true, clabe: true, banco: true, email: true },
+    })).map((p) => [p.id, p])
+  );
 
   const vinculos = await db.construccionCfdiVinculo.findMany({
     where: { companyId, targetTipo: VINCULO_ORDEN, targetId: { in: adjs.map((a) => a.id) } },
@@ -439,7 +563,8 @@ export async function ordenesDeCompra(db: Db, companyId: string, filtro: FiltroO
     const total = r2(Number(a.total));
     const aplicado = r2(a.aplicaciones.reduce((s, x) => s + Number(x.monto), 0));
     const saldo = r2(saldoDe({ total, estado: a.estado }, aplicado));
-    const partidas = a.solicitud.partidas.map((p) => ({
+    // Una requisición con varios proveedores da una orden por proveedor: cada orden lleva sus líneas ganadas.
+    const partidas = a.solicitud.partidas.filter((p) => p.cotizacionGanadoraId === a.cotizacionId).map((p) => ({
       id: p.id,
       descripcion: p.descripcion,
       unidad: p.unidad,
@@ -487,8 +612,10 @@ export async function ordenesDeCompra(db: Db, companyId: string, filtro: FiltroO
       creadaPorId: a.solicitud.creadaPorId,
       aprobadaAt: a.solicitud.aprobadaAt,
       aprobadaPorId: a.solicitud.aprobadaPorId,
-      proveedor: a.solicitud.supplier ?? { id: a.supplierId, razonSocial: a.supplierNombre, rfc: null, clabe: null, banco: null },
+      proveedor: (a.supplierId ? proveedores.get(a.supplierId) : null) ?? { id: a.supplierId, razonSocial: a.supplierNombre, rfc: null, clabe: null, banco: null, email: null },
       credito: { tieneCredito: a.tieneCredito, diasCredito: a.diasCredito },
+      diasEntrega: a.diasEntrega,
+      pedido: a.pedidoEnviadoAt ? { at: a.pedidoEnviadoAt, via: a.pedidoEnviadoVia, porId: a.pedidoEnviadoPorId } : null,
       total,
       autorizado: r2(partidas.reduce((s, p) => s + p.importe, 0)),
       partidas,
@@ -519,15 +646,17 @@ async function cargarOrden(db: Db, ordenId: string, companyId?: string) {
   const a = await db.solicitudAdjudicacion.findUnique({
     where: { id: ordenId },
     select: {
-      id: true, companyId: true, estado: true, total: true, supplierId: true, supplierNombre: true, solicitudId: true,
+      id: true, companyId: true, estado: true, total: true, supplierId: true, supplierNombre: true, solicitudId: true, cotizacionId: true,
       enviadaTesoreriaAt: true, pagoAutorizadoPorId: true,
-      solicitud: { select: { origen: true, folio: true, creadaPorId: true, aprobadaAt: true, supplier: { select: { rfc: true } } } },
+      solicitud: { select: { origen: true, folio: true, estado: true, creadaPorId: true, aprobadaAt: true } },
     },
   });
   if (!a || a.solicitud.origen !== ORIGEN_HOSPITAL || (companyId && a.companyId !== companyId)) {
     throw new HospitalError(404, "Orden de compra no encontrada");
   }
-  return a;
+  // El RFC es el del proveedor de ESTA orden (una requisición puede tener varios).
+  const proveedor = a.supplierId ? await db.supplier.findUnique({ where: { id: a.supplierId }, select: { rfc: true } }) : null;
+  return { ...a, rfc: proveedor?.rfc?.toUpperCase() ?? null };
 }
 
 export async function companyDeOrden(ordenId: string): Promise<string> {
@@ -546,7 +675,7 @@ const rfcDeCfdi = (f: { customer: { rfc: string } | null; contraparteRfc: string
  */
 export async function candidatosCfdi(ordenId: string, companyId: string) {
   const o = await cargarOrden(prisma, ordenId, companyId);
-  const rfc = o.solicitud.supplier?.rfc?.toUpperCase();
+  const rfc = o.rfc;
   if (!rfc) return [];
   const desde = new Date((o.solicitud.aprobadaAt ?? new Date()).getTime() - 30 * DIA);
   const facturas = await prisma.invoice.findMany({
@@ -582,7 +711,7 @@ export async function vincularCfdi(ordenId: string, companyId: string, invoiceId
   if (!f) throw new HospitalError(404, "CFDI no encontrado en esta empresa");
   if (f.tipo !== "EGRESO") throw new HospitalError(422, "Sólo se liga una factura recibida de proveedor");
   if (f.status === "CANCELLED") throw new HospitalError(422, "El CFDI está cancelado");
-  const rfc = o.solicitud.supplier?.rfc?.toUpperCase();
+  const rfc = o.rfc;
   if (!rfc || rfcDeCfdi(f) !== rfc) throw new HospitalError(422, "El CFDI es de otro proveedor");
   const previo = await prisma.construccionCfdiVinculo.findUnique({ where: { invoiceId }, select: { targetId: true } });
   if (previo && previo.targetId !== ordenId) throw new HospitalError(409, "Ese CFDI ya está ligado a otra orden o gasto");
@@ -618,9 +747,9 @@ export async function desvincularCfdi(ordenId: string, companyId: string, invoic
 export async function recalcularTotalOrden(tx: Prisma.TransactionClient, ordenId: string) {
   const a = await tx.solicitudAdjudicacion.findUniqueOrThrow({
     where: { id: ordenId },
-    select: { id: true, companyId: true, solicitud: { select: { partidas: { select: { importe: true } } } } },
+    select: { id: true, companyId: true, cotizacionId: true, solicitud: { select: { partidas: { select: { importe: true, cotizacionGanadoraId: true } } } } },
   });
-  const autorizado = r2(a.solicitud.partidas.reduce((s, p) => s + Number(p.importe), 0));
+  const autorizado = r2(a.solicitud.partidas.filter((p) => p.cotizacionGanadoraId === a.cotizacionId).reduce((s, p) => s + Number(p.importe), 0));
   const vinculos = await tx.construccionCfdiVinculo.findMany({
     where: { companyId: a.companyId, targetTipo: VINCULO_ORDEN, targetId: ordenId },
     select: { invoice: { select: { total: true, status: true } } },
