@@ -18,7 +18,7 @@ import { partesLocales } from "./tz";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
-export type SerieFolio = "episodio" | "cotizacion" | "ticket" | "expediente" | "requisicion";
+export type SerieFolio = "episodio" | "cotizacion" | "ticket" | "expediente" | "requisicion" | "solicitudArea";
 
 /** El número de expediente del paciente (NOM-004) usa la misma serie anual: EXP-2026-0001. */
 export const PREFIJO_DEFAULT: Record<SerieFolio, string> = {
@@ -27,6 +27,7 @@ export const PREFIJO_DEFAULT: Record<SerieFolio, string> = {
   ticket: "MANT",
   expediente: "EXP",
   requisicion: "REQ",
+  solicitudArea: "SA",
 };
 
 export function formatearFolio(prefijo: string, anio: number, n: number): string {
@@ -55,7 +56,7 @@ export function siguienteConsecutivo(folios: string[], prefijo: string, anio: nu
 export async function prefijoDeSerie(db: Db, companyId: string, serie: SerieFolio): Promise<string> {
   // El expediente no es configurable: un solo prefijo para que el número sea
   // reconocible en cualquier establecimiento que use el módulo.
-  if (serie === "expediente" || serie === "requisicion") return PREFIJO_DEFAULT[serie];
+  if (serie === "expediente" || serie === "requisicion" || serie === "solicitudArea") return PREFIJO_DEFAULT[serie];
   const cfg = await db.hospConfig.findUnique({
     where: { companyId },
     select: { serieEpisodio: true, serieCotizacion: true, serieTicket: true },
@@ -92,6 +93,8 @@ export async function siguienteFolio(
   const filas =
     serie === "requisicion"
       ? await db.solicitudCompra.findMany({ where, select })
+      : serie === "solicitudArea"
+      ? await db.hospSolicitudArea.findMany({ where, select })
       : serie === "episodio"
       ? await db.hospEpisodio.findMany({ where, select })
       : serie === "cotizacion"

@@ -472,6 +472,8 @@ model Company {
   // Orden de rotación del barrido de vigencia (nulls primero: las empresas
   // nunca barridas van al frente de la fila).
   @@index([vigenciaBarridoAt])
+  hospSolicitudesArea       HospSolicitudArea[]
+  hospSolicitudesAreaLineas HospSolicitudAreaLinea[]
 }
 
 model CompanyMember {
@@ -3518,12 +3520,18 @@ model SolicitudCompra {
   rechazadaPorId String?
   rechazadaAt    DateTime?
   rechazoMotivo  String?
+  /// Hospital: cuándo y por dónde se mandó el pedido al proveedor (la orden
+  /// autorizada pasa a «pedido»). Null = autorizada, aún sin enviar.
+  pedidoEnviadoAt    DateTime?
+  pedidoEnviadoVia   String?
+  pedidoEnviadoPorId String?
 
   proyecto        Proyecto?                   @relation(fields: [proyectoId], references: [id])
   supplier        Supplier?                   @relation(fields: [supplierId], references: [id])
   company         Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   bankTransaction BankTransaction?            @relation(fields: [bankTransactionId], references: [id])
   partidas        SolicitudPartida[]
+  hospLineasArea  HospSolicitudAreaLinea[]
   cotizaciones    SolicitudCompraCotizacion[]
   adjudicaciones  SolicitudAdjudicacion[]
 
@@ -3583,6 +3591,7 @@ model SolicitudPartida {
   insumo          Insumo?                      @relation(fields: [insumoId], references: [id])
   cotizaciones    SolicitudCotizacionPartida[]
   hospMovimientos HospMovimientoInsumo[]
+  hospLineaArea   HospSolicitudAreaLinea?
 }
 
 // ─── Cotizaciones (multi-vendor quotes for a requisición) ────────────────────
@@ -9038,6 +9047,7 @@ model HospInsumo {
   movimientos       HospMovimientoInsumo[]
   protocoloInsumos  HospProtocoloInsumo[]
   solicitudPartidas SolicitudPartida[]
+  lineasArea        HospSolicitudAreaLinea[]
 
   @@unique([companyId, clave])
   @@index([companyId, categoria])
@@ -10959,3 +10969,78 @@ model ReporteFacturas {
   @@index([companyId, createdAt])
 }
 
+
+// ─── Hospital: lo que piden las áreas y la bandeja de compras ──────────────
+// Un área pide (sin proveedor) con su urgencia; compras ve todas las líneas
+// pendientes en una bandeja, arma con ellas la requisición por proveedor (la
+// SolicitudCompra que se autoriza) y, si el proveedor no surte, la línea
+// regresa a la bandeja o se cierra por desabasto.
+
+enum HospUrgencia {
+  URGENTE
+  SEMIURGENTE
+  NORMAL
+}
+
+enum HospLineaAreaCierre {
+  DESABASTO
+  CANCELADA
+}
+
+model HospSolicitudArea {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+
+  folio             String
+  area              String
+  urgencia          HospUrgencia @default(NORMAL)
+  notas             String?
+  solicitanteId     String?
+  solicitanteNombre String?
+
+  company Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  lineas  HospSolicitudAreaLinea[]
+
+  @@unique([companyId, folio])
+  @@index([companyId, createdAt])
+}
+
+model HospSolicitudAreaLinea {
+  id          String   @id @default(cuid())
+  companyId   String
+  solicitudId String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  hospInsumoId String?
+  descripcion  String
+  unidad       String?
+  cantidad     Decimal      @db.Decimal(18, 6)
+  urgencia     HospUrgencia @default(NORMAL)
+  motivo       String?
+
+  /// La requisición (por proveedor) y su línea donde va hoy. Null = en la bandeja de compras.
+  requisicionId      String?
+  solicitudPartidaId String? @unique
+
+  /// Veces que regresó a la bandeja porque el proveedor no surtió, y a quiénes se les pidió.
+  intentos              Int      @default(0)
+  proveedoresIntentados String[]
+  /// Lo ya recibido en requisiciones anteriores de esta línea.
+  cantidadSurtidaPrevia Decimal  @default(0) @db.Decimal(18, 6)
+
+  cierre       HospLineaAreaCierre?
+  cierreMotivo String?
+  cerradaAt    DateTime?
+  cerradaPorId String?
+
+  company     Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  solicitud   HospSolicitudArea @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
+  insumo      HospInsumo?       @relation(fields: [hospInsumoId], references: [id], onDelete: SetNull)
+  requisicion SolicitudCompra?  @relation(fields: [requisicionId], references: [id], onDelete: SetNull)
+  partida     SolicitudPartida? @relation(fields: [solicitudPartidaId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, requisicionId])
+  @@index([solicitudId])
+}
