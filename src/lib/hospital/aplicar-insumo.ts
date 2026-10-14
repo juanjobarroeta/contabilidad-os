@@ -36,6 +36,7 @@ import { exigeLibroControl, nombreReceta } from "./controlados";
 import { ivaContextoPorEpisodio, ivaTasaPorContexto } from "./cuenta";
 import { hashNota } from "./notas";
 import { asentarSalidaFarmacia } from "./asientos";
+import { rebasaPrecioMaximo } from "./codigos-barras";
 
 export interface AplicarInsumoArgs {
   solicitudId?: string;
@@ -67,6 +68,17 @@ const limpiar = (s: string | null | undefined): string | null => {
   return t ? t : null;
 };
 
+/**
+ * Aviso (no bloqueo) cuando el precio al paciente rebasa el «precio máximo al
+ * público» impreso en la caja de ese lote — el escáner lo captura al recibir.
+ */
+function advertenciasDePrecio(precioUnitario: number, lote: { lote: string; precioMaximoPublico: unknown }): string[] {
+  const max = lote.precioMaximoPublico == null ? null : Number(lote.precioMaximoPublico);
+  return rebasaPrecioMaximo(precioUnitario, max)
+    ? [`El precio al paciente ($${precioUnitario.toFixed(2)}) rebasa el precio máximo al público del lote ${lote.lote} ($${max!.toFixed(2)}).`]
+    : [];
+}
+
 export async function aplicarInsumo(db: PrismaClient, args: AplicarInsumoArgs) {
   const cantidad = Number(args.cantidad);
   if (!(cantidad > 0)) throw new HospitalError(400, "La cantidad debe ser mayor que cero");
@@ -85,7 +97,7 @@ export async function aplicarInsumo(db: PrismaClient, args: AplicarInsumoArgs) {
           tx.hospNota.findUniqueOrThrow({ where: { id: previous.notaId } }),
           tx.hospLote.findUniqueOrThrow({ where: { id: previous.loteId } }),
         ]);
-        return { cargo, movimiento, nota, lote };
+        return { cargo, movimiento, nota, lote, advertencias: advertenciasDePrecio(Number(cargo.precioUnitario), lote) };
       }
     }
     const hoy = new Date(`${claveDia(new Date())}T00:00:00.000Z`);
@@ -261,6 +273,6 @@ export async function aplicarInsumo(db: PrismaClient, args: AplicarInsumoArgs) {
       companyId: args.companyId, clave: args.solicitudId, hash: requestHash,
       cargoId: cargo.id, movimientoId: movimiento.id, notaId: nota.id, loteId: lote.id,
     } });
-    return { cargo, movimiento, nota, lote: loteActualizado };
+    return { cargo, movimiento, nota, lote: loteActualizado, advertencias: advertenciasDePrecio(precioUnitario, lote) };
   });
 }
