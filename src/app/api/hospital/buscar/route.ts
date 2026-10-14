@@ -85,7 +85,9 @@ export const GET = withAuthz(async (req: Request) => {
       take: POR_GRUPO,
     }),
     prisma.hospInsumo.findMany({
-      where: { companyId, activo: true, OR: [{ clave: como }, { nombre: como }, { presentacion: como }] },
+      // El número de LOTE también busca: tras un conteo o un retiro sanitario,
+      // lo que alguien teclea es «101CQH», no el nombre del insumo.
+      where: { companyId, activo: true, OR: [{ clave: como }, { nombre: como }, { presentacion: como }, { lotes: { some: { lote: como } } }] },
       select: { id: true, clave: true, nombre: true, presentacion: true, unidad: true, categoria: true, controlado: true },
       orderBy: { nombre: "asc" },
       take: POR_GRUPO,
