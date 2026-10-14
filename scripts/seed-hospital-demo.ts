@@ -758,7 +758,7 @@ async function main() {
       select: { id: true },
     });
     const entrada = (i.lote.existencia + (APLICADO_ORTEGA[i.clave] ?? 0));
-    const existenteLote = await prisma.hospLote.findUnique({ where: { insumoId_lote: { insumoId: insumo.id, lote: i.lote.lote } }, select: { id: true } });
+    const existenteLote = await prisma.hospLote.findUnique({ where: { insumoId_lote_almacen: { insumoId: insumo.id, lote: i.lote.lote, almacen: "GENERAL" } }, select: { id: true } });
     let loteId = existenteLote?.id;
     if (!loteId) {
       const lote = await prisma.hospLote.create({

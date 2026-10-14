@@ -7813,6 +7813,13 @@ model HospLote {
   createdAt DateTime @default(now())
 
   lote          String
+  /// DÓNDE está esta existencia. El hospital mueve el mismo lote entre
+  /// almacenes —bodega, CEYE, consigna y siete carros rojos— y el inventario
+  /// físico los cuenta por separado: una caja en el carro rojo de Quirófano no
+  /// es stock disponible, es el paro cardiaco de alguien. Sin esta columna los
+  /// 19 almacenes del inventario de Haltus se colapsan en un número y se
+  /// pierde lo único que dice si hay que surtir.
+  almacen       String    @default("GENERAL")
   caducidad     DateTime?
   existencia    Decimal   @default(0) @db.Decimal(18, 6)
   costoUnitario Decimal   @default(0) @db.Decimal(18, 6)
@@ -7828,8 +7835,10 @@ model HospLote {
   movimientos HospMovimientoInsumo[]
   cargos      HospCargo[]
 
-  @@unique([insumoId, lote])
+  @@unique([insumoId, lote, almacen])
   @@index([companyId, caducidad])
+  /// «¿qué hay en este almacén?» es la consulta del surtido y del conteo.
+  @@index([companyId, almacen])
 }
 
 enum HospMovimientoTipo {
