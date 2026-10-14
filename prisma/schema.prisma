@@ -433,6 +433,8 @@ model Company {
   hospCitas         HospCita[]
   hospCotizaciones  HospCotizacion[]
   hospInsumos       HospInsumo[]
+  hospCodigosBarras HospCodigoBarras[]
+  hospConteos       HospConteo[]
   hospTickets       HospTicket[]
   hospTicketFotos   HospTicketFoto[]
   hospAccesos       HospAcceso[]
@@ -9046,6 +9048,8 @@ model HospInsumo {
   lotes             HospLote[]
   movimientos       HospMovimientoInsumo[]
   protocoloInsumos  HospProtocoloInsumo[]
+  codigosBarras     HospCodigoBarras[]
+  conteoLineas      HospConteoLinea[]
   solicitudPartidas SolicitudPartida[]
   lineasArea        HospSolicitudAreaLinea[]
 
@@ -9078,6 +9082,9 @@ model HospLote {
   /// CFDI de compra que lo amparó y proveedor que lo surtió.
   invoiceId     String?
   supplierId    String?
+  /// «Precio máximo al público» impreso en la caja (medicamento de patente),
+  /// leído de la foto al recibir. Cobrar al paciente por encima avisa.
+  precioMaximoPublico Decimal? @db.Decimal(18, 6)
 
   insumo   HospInsumo @relation(fields: [insumoId], references: [id], onDelete: Cascade)
   invoice  Invoice?   @relation(fields: [invoiceId], references: [id])
@@ -9085,6 +9092,7 @@ model HospLote {
 
   movimientos HospMovimientoInsumo[]
   cargos      HospCargo[]
+  conteoLineas HospConteoLinea[]
 
   @@unique([insumoId, lote, almacen])
   @@index([companyId, caducidad])
@@ -11053,3 +11061,76 @@ model HospSolicitudAreaLinea {
   @@index([companyId, requisicionId])
   @@index([solicitudId])
 }
+
+/// Código de barras de un insumo de farmacia. Un producto puede tener varios
+/// (EAN de la caja, GTIN-14 del corrugado, otro laboratorio). Se guarda
+/// normalizado a GTIN-14 con dígito verificador válido: el EAN-13
+/// 7502245840289 es 07502245840289. Se liga UNA vez, la primera vez que se
+/// escanea un código desconocido; desde ahí el escáner reconoce el insumo.
+model HospCodigoBarras {
+  id        String   @id @default(cuid())
+  companyId String
+  insumoId  String
+  createdAt DateTime @default(now())
+
+  gtin     String
+  /// Tal como lo entregó el escáner (con GS1, prefijos…), para auditar.
+  original String
+  creadoPorNombre String?
+
+  company Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  insumo  HospInsumo @relation(fields: [insumoId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, gtin])
+  @@index([insumoId])
+}
+
+/// Conteo físico con escáner: una sesión por almacén. Se escanea y se cuenta
+/// por lote; al cerrar, cada diferencia contra el sistema se vuelve un AJUSTE
+/// del kardex (y su asiento, si la contabilidad del hospital está activa).
+model HospConteo {
+  id        String   @id @default(cuid())
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  almacen String @default("GENERAL")
+  /// "ABIERTO" | "CERRADO" | "CANCELADO"
+  estado  String @default("ABIERTO")
+  notas   String?
+  iniciadoPorId     String?
+  iniciadoPorNombre String?
+  cerradoAt         DateTime?
+  cerradoPorNombre  String?
+  /// Al cerrar: ¿los lotes de un insumo contado que nadie escaneó se ajustaron a cero?
+  faltantesEnCero   Boolean   @default(false)
+
+  company Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  lineas  HospConteoLinea[]
+
+  @@index([companyId, estado])
+}
+
+/// Lo contado de un lote en una sesión. El mismo lote escaneado varias veces suma.
+model HospConteoLinea {
+  id        String   @id @default(cuid())
+  conteoId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  insumoId  String
+  /// El lote existente, si lo hay; un lote que el sistema no conoce entra al cerrar.
+  loteId    String?
+  lote      String
+  caducidad DateTime?
+  cantidad  Decimal  @db.Decimal(18, 6)
+  escaneadoPorNombre String?
+
+  conteo HospConteo @relation(fields: [conteoId], references: [id], onDelete: Cascade)
+  insumo HospInsumo @relation(fields: [insumoId], references: [id], onDelete: Cascade)
+  loteRef HospLote? @relation(fields: [loteId], references: [id], onDelete: SetNull)
+
+  @@unique([conteoId, insumoId, lote])
+  @@index([conteoId])
+}
+

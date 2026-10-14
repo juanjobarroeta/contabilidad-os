@@ -302,6 +302,9 @@ Reglas del servidor:
 - Vistas **Inventario** y **Libro de control**. Facetas Todos, Bajo mínimo, Por caducar, Controlados, Refrigeración, Sin existencia.
 - **Recibir lote** → insumo, Lote, Caducidad, cantidad, Costo unitario → **Recibir**. **Nuevo insumo** → Clave, Categoría, Nombre, Presentación, Mínimo en existencia, Precio de venta, Sustancia activa, Registro sanitario, Grupo de control, Controlado, Cadena de frío → **Registrar**. Por insumo: **Editar**, **Ajuste** / «Ajuste / merma» (cantidad y motivo → **Registrar movimiento**) y kardex.
 - Libro de control (grupos I–III): balance por sustancia y movimientos; **CSV** / **Exportar XLSX**.
+- **Recibir con escáner** (teléfono o lector de mano): escanea el código de barras de la caja → sale el insumo (un código nuevo se liga una sola vez: «¿A qué insumo pertenece?»). Lote, caducidad y precio máximo NO vienen en el código de la caja mexicana: **Tomar foto de la etiqueta** los propone y tú los confirmas. Si hay una orden autorizada pendiente de ese insumo, elige la línea para que cuente como recibido. Cantidad, costo → **Recibir**.
+- **Conteo físico**: **Iniciar conteo** → escanea cada caja (cada escaneo suma 1; puedes fijar la cantidad) con su lote → ve **Diferencias** (contado vs sistema por lote) → **Cerrar conteo** genera los ajustes. Sólo se comparan los insumos que contaste; los lotes que no escaneaste van a cero sólo si marcas «Lo que no conté ya no existe».
+- Cámara: si dice «Permiso de cámara denegado», actívalo en el candado de la barra de direcciones (Chrome) o en Ajustes → Safari → Cámara (iPhone). Siempre puedes teclear el código o usar un lector de mano.
 - Los insumos también se derivan de los CFDIs de compra (Configuración → Derivar ahora). Las aplicaciones en piso descuentan el lote.
 
 ## compras — Compras (/compras)

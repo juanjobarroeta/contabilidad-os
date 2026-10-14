@@ -50,6 +50,9 @@ const schema = z.object({
   // Recepción contra la línea de una orden de compra autorizada: suma a lo
   // recibido de esa línea y el lote hereda el proveedor de la orden.
   solicitudPartidaId: z.string().min(1).nullable().optional(),
+  // «Precio máximo al público» impreso en la caja (lo lee el escáner de la
+  // foto). Sólo avisa al cargar al paciente por encima; no bloquea.
+  precioMaximoPublico: z.number().positive().max(100_000_000).nullable().optional(),
 });
 
 export const POST = withAuthz(async (req: Request) => {
@@ -65,6 +68,7 @@ export const POST = withAuthz(async (req: Request) => {
   const invoiceId = parsed.data.invoiceId ?? null;
   let supplierId = parsed.data.supplierId ?? null;
   const solicitudPartidaId = parsed.data.solicitudPartidaId ?? null;
+  const precioMaximoPublico = parsed.data.precioMaximoPublico ?? null;
   const fecha = parsed.data.fecha ?? new Date();
 
   const { user } = await requireWriter(companyId, req);
@@ -113,13 +117,14 @@ export const POST = withAuthz(async (req: Request) => {
             ...(caducidad ? { caducidad } : {}),
             ...(invoiceId ? { invoiceId } : {}),
             ...(supplierId ? { supplierId } : {}),
+            ...(precioMaximoPublico ? { precioMaximoPublico } : {}),
           },
         })
       : await tx.hospLote.create({
           data: {
             companyId, almacen,
             insumoId, lote: nombreLote, caducidad,
-            existencia: cantidad, costoUnitario, recibidoAt: fecha, invoiceId, supplierId,
+            existencia: cantidad, costoUnitario, recibidoAt: fecha, invoiceId, supplierId, precioMaximoPublico,
           },
         });
 
@@ -193,6 +198,7 @@ export const POST = withAuthz(async (req: Request) => {
         ...resultado.lote,
         existencia: r2(Number(resultado.lote.existencia)),
         costoUnitario: Number(resultado.lote.costoUnitario),
+        precioMaximoPublico: resultado.lote.precioMaximoPublico == null ? null : Number(resultado.lote.precioMaximoPublico),
       },
       movimiento: {
         ...resultado.movimiento,

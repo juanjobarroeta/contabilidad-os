@@ -774,6 +774,39 @@ GET/POST /api/hospital/farmacia/derivar          { companyId }  → backfill des
 `existencia` = Σ `HospMovimientoInsumo.cantidad` del insumo (el kardex es la
 verdad); `HospLote.existencia` es el saldo materializado por lote.
 
+#### Escáner de códigos de barras y conteo físico
+La caja mexicana típica trae un EAN-13 llano (`7502245840289`) que identifica
+SÓLO el producto; lote, caducidad («JUL 28» = 31-jul-2028) y «precio máximo al
+público» van impresos con tinta al lado. Por eso: el código se liga UNA vez a
+su insumo (`HospCodigoBarras`, GTIN-14, único por empresa) y lo impreso se lee
+de una foto (el modelo propone, la persona confirma). GS1-128 / DataMatrix
+traen además (17) caducidad y (10) lote, y el escaneo los llena solo.
+Parser puro: `src/lib/hospital/codigos-barras.ts`; lo que toca la base del
+conteo: `conteo-db.ts`.
+```
+GET  /api/hospital/farmacia/codigos?companyId=&codigo=   → { leido, insumo|null (con lotes), ordenesPendientes: [{ id, folio, faltan, supplierId }], motivo? }
+POST /api/hospital/farmacia/codigos   { companyId, codigo, insumoId, reasignar? }   (409 si ya es de otro insumo y no se pide reasignar)
+POST /api/hospital/farmacia/etiqueta  { companyId, archivoBase64, mime } → { lote, caducidadTexto, caducidad, precioMaximoPublico, codigoImpreso, gtinImpreso, producto, confianza, advertencias }
+GET/POST /api/hospital/farmacia/conteos            { companyId, almacen?, notas? }  (GET trae `almacenes` tal como están en los lotes; uno ABIERTO por almacén)
+GET  /api/hospital/farmacia/conteos/[id]?companyId=  → { lineas, diferencias: [{ insumoId, lote, loteId, sistema, contado|null, diferencia|null }], resumen }
+POST /api/hospital/farmacia/conteos/[id]           { companyId, accion: "cerrar"|"cancelar", faltantesEnCero? }
+POST /api/hospital/farmacia/conteos/[id]/lineas    { companyId, insumoId, lote, caducidad?, cantidad, modo?: SUMAR|FIJAR }
+DELETE /api/hospital/farmacia/conteos/[id]/lineas?companyId=&lineaId=
+```
+- **Recibir con escáner** NO tiene endpoint propio: usa `POST /farmacia/lotes`
+  (con `solicitudPartidaId` de `ordenesPendientes` cuando llega contra una
+  orden, y `precioMaximoPublico` opcional que queda en el lote).
+- **Conteo**: compara por lote sólo los insumos que se contaron (un anaquel no
+  pone en cero el resto). Un lote del sistema no escaneado queda «sin contar» y
+  sólo va a cero si al cerrar se marca `faltantesEnCero`. Un lote contado que el
+  sistema no conocía se crea (costo = último costo del insumo). Cerrar genera un
+  `AJUSTE` por diferencia y lo asienta por `asentarMovimientoKardex` (501.08 /
+  704.23; no-op con la contabilidad del hospital apagada). Nunca deja un lote
+  en negativo.
+- **Precio máximo**: al aplicar un insumo cuyo lote tiene `precioMaximoPublico`
+  y el precio al paciente lo rebasa, la respuesta trae `advertencias` (no
+  bloquea).
+
 ### Crons
 ```
 POST /api/cron/hospital-estancia          — cargos de estancia de anoche para todos los episodios hospitalizados
