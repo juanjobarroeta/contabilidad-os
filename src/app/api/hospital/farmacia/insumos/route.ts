@@ -1,6 +1,7 @@
 /**
  * GET  /api/hospital/farmacia/insumos?companyId=…[&q=&tab=TODOS|BAJO_MINIMO|POR_CADUCAR|CONTROLADOS|SIN_EXISTENCIA
- *                                                  &controlados=1&refrigeracion=1&grupo=I|II|III|IV|V|VI&incluirInactivos=1]
+ *                                                  &controlados=1&refrigeracion=1&grupo=I|II|III|IV|V|VI&incluirInactivos=1
+ *                                                  &origen=INVENTARIO|CFDI|TODOS&almacen=<nombre>]
  * POST /api/hospital/farmacia/insumos   { companyId, nombre, clave?, …, grupoControl?, registroSanitario?, sustanciaActiva?, requiereRefrigeracion? }
  *
  * Farmacia y almacén como lo lee el jefe de farmacia: una fila por insumo con
@@ -21,6 +22,15 @@
  * derivados del archivo de CFDIs nacen en insumos-cfdi.ts. Sin `grupoControl`
  * explícito se PROPONE por nombre (lib/hospital/controlados) —la respuesta lo
  * avisa con `grupoControlPropuesto`— y el responsable sanitario lo confirma.
+ *
+ * ORIGEN y ALMACÉN (lib/hospital/farmacia-almacenes): la lista arranca en
+ * `origen=INVENTARIO` —lo que cargó el inventario físico y lo capturado a
+ * mano—; los insumos que sólo nacieron de CFDIs, sin lote, se ven con
+ * `origen=CFDI`. `almacen=` deja los insumos con lotes o kardex en ese almacén
+ * y su existencia ES la de ese almacén: el kardex repartido por el almacén del
+ * lote de cada movimiento. Sin filtro, cada insumo trae `porAlmacen`. La
+ * respuesta trae `almacenes` (para el selector) y `porOrigen`, ambos sobre la
+ * búsqueda y los filtros vigentes, como los KPIs.
  */
 
 import { NextResponse } from "next/server";
@@ -32,6 +42,7 @@ import { registrarBitacora } from "@/lib/audit";
 import { diasDesde, r2 } from "@/lib/hospital/cobranza";
 import { claveDeInsumo } from "@/lib/hospital/insumos-cfdi";
 import { banderasControl, exigeLibroControl, GRUPOS_LIBRO_CONTROL, sustanciaControladaPorNombre } from "@/lib/hospital/controlados";
+import { ORIGENES, origenDe, pasaOrigen, repartirPorAlmacen, type FiltroOrigen } from "@/lib/hospital/farmacia-almacenes";
 
 const TABS = ["TODOS", "BAJO_MINIMO", "POR_CADUCAR", "CONTROLADOS", "SIN_EXISTENCIA"] as const;
 type Tab = (typeof TABS)[number];
@@ -59,6 +70,9 @@ export const GET = withAuthz(async (req: Request) => {
   const grupo = (GRUPOS as readonly string[]).includes(grupoParam) ? (grupoParam as HospGrupoControl) : null;
   const como = { contains: q, mode: "insensitive" as const };
   const hoy = new Date();
+  const origenParam = (searchParams.get("origen") ?? "INVENTARIO").toUpperCase();
+  const origen: FiltroOrigen = (ORIGENES as readonly string[]).includes(origenParam) ? (origenParam as FiltroOrigen) : "INVENTARIO";
+  const almacen = (searchParams.get("almacen") ?? "").trim() || null;
 
   const condiciones: Prisma.HospInsumoWhereInput[] = [];
   if (!incluirInactivos) condiciones.push({ activo: true });
@@ -67,7 +81,7 @@ export const GET = withAuthz(async (req: Request) => {
   if (soloRefrigeracion) condiciones.push({ requiereRefrigeracion: true });
   if (grupo) condiciones.push({ grupoControl: grupo });
 
-  const [config, insumosDb, existencias] = await Promise.all([
+  const [config, insumosDb, existencias, lotesEmpresa] = await Promise.all([
     prisma.hospConfig.findUnique({ where: { companyId }, select: { diasAlertaCaducidad: true } }),
     prisma.hospInsumo.findMany({
       where: { companyId, AND: condiciones },
@@ -76,23 +90,38 @@ export const GET = withAuthz(async (req: Request) => {
         controlado: true, grupoControl: true, registroSanitario: true, sustanciaActiva: true, requiereRefrigeracion: true,
         minimo: true, ultimoCosto: true, precioVenta: true, ivaTasa: true,
         claveProdServ: true, derivadoDeCfdi: true, activo: true, updatedAt: true,
+        _count: { select: { lotes: true } },
         lotes: {
-          where: { existencia: { gt: 0 } },
-          select: { id: true, lote: true, caducidad: true, existencia: true, costoUnitario: true, recibidoAt: true, invoiceId: true, bloqueado: true, bloqueoMotivo: true },
+          where: { existencia: { gt: 0 }, ...(almacen ? { almacen } : {}) },
+          select: { id: true, lote: true, almacen: true, caducidad: true, existencia: true, costoUnitario: true, recibidoAt: true, invoiceId: true, bloqueado: true, bloqueoMotivo: true },
           orderBy: [{ caducidad: { sort: "asc", nulls: "last" } }],
         },
       },
       orderBy: { nombre: "asc" },
     }),
     prisma.hospMovimientoInsumo.groupBy({
-      by: ["insumoId"],
+      by: ["insumoId", "loteId"],
       where: { companyId },
       _sum: { cantidad: true },
     }),
+    prisma.hospLote.findMany({ where: { companyId }, select: { id: true, almacen: true, costoUnitario: true } }),
   ]);
 
   const diasAlerta = config?.diasAlertaCaducidad ?? 90;
-  const existenciaDe = new Map(existencias.map((e) => [e.insumoId, r2(Number(e._sum.cantidad ?? 0))]));
+  const movs = existencias.map((e) => ({ insumoId: e.insumoId, loteId: e.loteId, cantidad: Number(e._sum.cantidad ?? 0) }));
+  const existenciaDe = new Map<string, number>();
+  for (const m of movs) existenciaDe.set(m.insumoId, r2((existenciaDe.get(m.insumoId) ?? 0) + m.cantidad));
+  const lotesMapa = new Map(lotesEmpresa.map((l) => [l.id, { almacen: l.almacen, costoUnitario: Number(l.costoUnitario) }]));
+
+  // Origen de cada insumo y conteo por origen (sobre la búsqueda y filtros).
+  const origenPorId = new Map(insumosDb.map((i) => [i.id, origenDe({ derivadoDeCfdi: i.derivadoDeCfdi, lotes: i._count.lotes })]));
+  const porOrigen = {
+    INVENTARIO: [...origenPorId.values()].filter((o) => o === "INVENTARIO").length,
+    CFDI: [...origenPorId.values()].filter((o) => o === "CFDI").length,
+    TODOS: origenPorId.size,
+  };
+  const delOrigen = new Set(insumosDb.filter((i) => pasaOrigen(origen, origenPorId.get(i.id)!)).map((i) => i.id));
+  const { porInsumo: almacenDe, resumen: almacenes } = repartirPorAlmacen(movs, lotesMapa, delOrigen);
 
   const estadoLote = (caducidad: Date | null): { dias: number | null; estado: EstadoLote } => {
     if (!caducidad) return { dias: null, estado: "SIN_VERIFICAR" };
@@ -102,8 +131,10 @@ export const GET = withAuthz(async (req: Request) => {
     return { dias, estado: "EN_NIVEL" };
   };
 
-  const insumos = insumosDb.map((i) => {
-    const existencia = existenciaDe.get(i.id) ?? 0;
+  const enAlmacen = (id: string) => !almacen || almacenDe.get(id)?.has(almacen) === true;
+  const insumos = insumosDb.filter((i) => delOrigen.has(i.id) && (enAlmacen(i.id) || (almacen != null && i.lotes.length > 0))).map((i) => {
+    // Con almacén elegido, la existencia es la de ESE almacén (kardex por lote).
+    const existencia = almacen ? r2(almacenDe.get(i.id)?.get(almacen) ?? 0) : existenciaDe.get(i.id) ?? 0;
     const minimo = Number(i.minimo);
     const ultimoCosto = i.ultimoCosto == null ? null : Number(i.ultimoCosto);
     const estado: EstadoInsumo =
@@ -115,6 +146,7 @@ export const GET = withAuthz(async (req: Request) => {
       return {
         id: l.id,
         lote: l.lote,
+        almacen: l.almacen,
         caducidad: l.caducidad,
         existencia: existenciaL,
         costoUnitario: costoL,
@@ -147,6 +179,9 @@ export const GET = withAuthz(async (req: Request) => {
       ivaTasa: i.ivaTasa == null ? null : Number(i.ivaTasa),
       claveProdServ: i.claveProdServ,
       derivadoDeCfdi: i.derivadoDeCfdi,
+      origen: origenPorId.get(i.id)!,
+      // Desglose por almacén (sólo sin filtro de almacén: con filtro ya es uno).
+      porAlmacen: almacen ? null : Object.fromEntries(almacenDe.get(i.id) ?? []),
       activo: i.activo,
       estado,
       // Bajo mínimo incluye el que ya no tiene nada: es el más urgente de pedir.
@@ -172,7 +207,9 @@ export const GET = withAuthz(async (req: Request) => {
     hoy: hoy.toISOString(),
     tab,
     q: q || null,
-    filtros: { controlados: soloControlados, refrigeracion: soloRefrigeracion, grupo },
+    filtros: { controlados: soloControlados, refrigeracion: soloRefrigeracion, grupo, origen, almacen },
+    almacenes,
+    porOrigen,
     kpis: {
       valorInventario: r2(insumos.reduce((s, i) => s + i.valor, 0)),
       claves: insumos.length,
