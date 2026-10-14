@@ -218,7 +218,14 @@ async function comprasPorProveedor(db: PrismaClient, companyId: string, a: z.inf
   const [cfdis, ordenes, entradas] = await Promise.all([
     db.invoice.groupBy({
       by: ["contraparteRfc", "contraparteNombre"],
-      where: { companyId, tipo: "EGRESO", status: { not: "CANCELLED" }, NOT: { tipoSat: "E" }, fecha: { gte: desde, lte: hasta }, ...porNombre("contraparte") },
+      // tipoSat NULL (CFDI viejos) cuenta: `NOT {tipoSat:"E"}` solo lo descartaría en SQL.
+      where: {
+        companyId,
+        tipo: "EGRESO",
+        status: { not: "CANCELLED" },
+        fecha: { gte: desde, lte: hasta },
+        AND: [{ OR: [{ tipoSat: null }, { tipoSat: { not: "E" } }] }, porNombre("contraparte")],
+      },
       _sum: { total: true },
       _count: { _all: true },
     }),
