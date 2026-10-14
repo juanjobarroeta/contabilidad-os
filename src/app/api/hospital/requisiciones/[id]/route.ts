@@ -1,5 +1,6 @@
 /**
- * GET    /api/hospital/requisiciones/[id]   Detalle: líneas, proveedor, historial y su orden (si ya se autorizó).
+ * GET    /api/hospital/requisiciones/[id]   Detalle: líneas (con la solicitud de área que atienden), proveedor,
+ *                                            historial, pedido enviado y su orden (si ya se autorizó).
  * PUT    /api/hospital/requisiciones/[id]   Reescribe una requisición por autorizar o rechazada (vuelve a «por autorizar»).
  * DELETE /api/hospital/requisiciones/[id]   Cancela (nunca borra). Autorizada, sólo si su orden no tiene recepción, factura ni pagos.
  */
@@ -25,18 +26,20 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
     select: {
       id: true, folio: true, estado: true, area: true, notas: true, total: true, formaPago: true, fechaEntrega: true, createdAt: true,
       creadaPorId: true, aprobadaPorId: true, aprobadaAt: true, rechazadaPorId: true, rechazadaAt: true, rechazoMotivo: true,
-      supplier: { select: { id: true, razonSocial: true, rfc: true, terms: { select: { tieneCredito: true, diasCredito: true } } } },
+      pedidoEnviadoAt: true, pedidoEnviadoVia: true, pedidoEnviadoPorId: true,
+      supplier: { select: { id: true, razonSocial: true, rfc: true, email: true, terms: { select: { tieneCredito: true, diasCredito: true } } } },
       partidas: {
         select: {
           id: true, descripcion: true, unidad: true, cantidad: true, precioUnitario: true, importe: true, cantidadRecibida: true,
           hospInsumo: { select: { id: true, clave: true, nombre: true, unidad: true } },
+          hospLineaArea: { select: { id: true, urgencia: true, intentos: true, solicitud: { select: { folio: true, area: true, solicitanteNombre: true } } } },
         },
         orderBy: { id: "asc" },
       },
     },
   });
   const [orden] = await ordenesDeCompra(prisma, companyId, { solicitudId: id });
-  const nombres = await nombresDeUsuarios([r.creadaPorId, r.aprobadaPorId, r.rechazadaPorId, orden?.autorizacionPago?.porId]);
+  const nombres = await nombresDeUsuarios([r.creadaPorId, r.aprobadaPorId, r.rechazadaPorId, r.pedidoEnviadoPorId, orden?.autorizacionPago?.porId]);
   return NextResponse.json({
     usuarioId: user.id,
     ...r,
@@ -45,6 +48,7 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
     creadaPor: r.creadaPorId ? nombres[r.creadaPorId] ?? null : null,
     aprobadaPor: r.aprobadaPorId ? nombres[r.aprobadaPorId] ?? null : null,
     rechazadaPor: r.rechazadaPorId ? nombres[r.rechazadaPorId] ?? null : null,
+    pedidoEnviadoPor: r.pedidoEnviadoPorId ? nombres[r.pedidoEnviadoPorId] ?? null : null,
     orden: orden ? { ...orden, pagoAutorizadoPor: orden.autorizacionPago?.porId ? nombres[orden.autorizacionPago.porId] ?? null : null } : null,
   });
 });

@@ -45,6 +45,8 @@ export interface PartidaInput {
   unidad?: string | null;
   cantidad: number;
   precioUnitario: number;
+  /** Línea de la bandeja de compras que esta partida atiende. */
+  lineaAreaId?: string | null;
 }
 
 export interface RequisicionInput {
@@ -78,11 +80,13 @@ async function validarProveedorEInsumos(db: Db, companyId: string, input: Requis
  */
 async function armarLineas(
   tx: Prisma.TransactionClient,
+  companyId: string,
   solicitudId: string,
   supplier: { id: string; razonSocial: string; terms: { tieneCredito: boolean; diasCredito: number } | null },
   partidas: PartidaInput[]
 ): Promise<number> {
   const creadas: { id: string; cantidad: number; precio: number; importe: number }[] = [];
+  const ligas: Array<{ lineaAreaId: string; partidaId: string }> = [];
   for (const p of partidas) {
     const importe = r2(p.cantidad * p.precioUnitario);
     const row = await tx.solicitudPartida.create({
@@ -98,7 +102,9 @@ async function armarLineas(
       select: { id: true },
     });
     creadas.push({ id: row.id, cantidad: p.cantidad, precio: p.precioUnitario, importe });
+    if (p.lineaAreaId) ligas.push({ lineaAreaId: p.lineaAreaId, partidaId: row.id });
   }
+  await ligarLineasArea(tx, companyId, solicitudId, ligas);
   const total = r2(creadas.reduce((a, c) => a + c.importe, 0));
   const credito = supplier.terms?.tieneCredito ?? false;
   const cot = await tx.solicitudCompraCotizacion.create({
@@ -143,7 +149,7 @@ export async function crearRequisicion(companyId: string, userId: string, input:
         },
         select: { id: true, folio: true },
       });
-      const total = await armarLineas(tx, sol.id, supplier, input.partidas);
+      const total = await armarLineas(tx, companyId, sol.id, supplier, input.partidas);
       return { id: sol.id, folio: sol.folio, total };
     })
   );
@@ -187,7 +193,7 @@ export async function editarRequisicion(id: string, companyId: string, input: Re
         rechazoMotivo: null,
       },
     });
-    const total = await armarLineas(tx, id, supplier, input.partidas);
+    const total = await armarLineas(tx, companyId, id, supplier, input.partidas);
     return { id, folio: sol.folio, total };
   });
 }
@@ -243,11 +249,50 @@ export async function cancelarRequisicion(id: string, companyId: string) {
     await prisma.$transaction([
       prisma.solicitudAdjudicacion.deleteMany({ where: { solicitudId: id } }),
       prisma.solicitudCompra.update({ where: { id }, data: { estado: "CANCELADA" } }),
+      liberarLineasDeRequisicion(prisma, companyId, id),
     ]);
     return { id, folio: sol.folio };
   }
-  await prisma.solicitudCompra.update({ where: { id }, data: { estado: "CANCELADA" } });
+  await prisma.$transaction([
+    prisma.solicitudCompra.update({ where: { id }, data: { estado: "CANCELADA" } }),
+    liberarLineasDeRequisicion(prisma, companyId, id),
+  ]);
   return { id, folio: sol.folio };
+}
+
+// ── Líneas de la bandeja de compras (lib/hospital/bandeja-compras.ts) ───────
+
+/**
+ * Liga cada línea de área a la partida recién creada (armarLineas) y regresa
+ * a la bandeja las que estaban en esta requisición y ya no traen partida
+ * (se quitaron al editarla). Condicionado: sólo toma líneas libres o de esta
+ * misma requisición, así dos compradores no se llevan la misma.
+ */
+export async function ligarLineasArea(tx: Prisma.TransactionClient, companyId: string, requisicionId: string, ligas: Array<{ lineaAreaId: string; partidaId: string }>) {
+  for (const { lineaAreaId, partidaId } of ligas) {
+    const n = await tx.hospSolicitudAreaLinea.updateMany({
+      where: {
+        id: lineaAreaId,
+        companyId,
+        cierre: null,
+        OR: [{ requisicionId: null }, { requisicionId }, { requisicion: { estado: "CANCELADA" } }],
+      },
+      data: { requisicionId, solicitudPartidaId: partidaId },
+    });
+    if (n.count !== 1) throw new HospitalError(409, "Una de las líneas ya la tomó otra requisición o se cerró: recarga la bandeja");
+  }
+  await tx.hospSolicitudAreaLinea.updateMany({
+    where: { companyId, requisicionId, solicitudPartidaId: null },
+    data: { requisicionId: null },
+  });
+}
+
+/** La requisición se canceló: sus líneas regresan a la bandeja. */
+export function liberarLineasDeRequisicion(db: PrismaClient, companyId: string, requisicionId: string) {
+  return db.hospSolicitudAreaLinea.updateMany({
+    where: { companyId, requisicionId, cierre: null },
+    data: { requisicionId: null, solicitudPartidaId: null },
+  });
 }
 
 // ── Recepción ───────────────────────────────────────────────────────────────

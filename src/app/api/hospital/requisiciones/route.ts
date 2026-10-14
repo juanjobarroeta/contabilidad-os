@@ -40,6 +40,7 @@ export const GET = withHospital(async (req: Request) => {
     select: {
       id: true, folio: true, estado: true, area: true, notas: true, total: true, formaPago: true, fechaEntrega: true, createdAt: true,
       creadaPorId: true, aprobadaPorId: true, aprobadaAt: true, rechazadaPorId: true, rechazadaAt: true, rechazoMotivo: true,
+      pedidoEnviadoAt: true, pedidoEnviadoVia: true,
       supplier: { select: { id: true, razonSocial: true, rfc: true } },
       _count: { select: { partidas: true } },
       adjudicaciones: { select: { id: true } },

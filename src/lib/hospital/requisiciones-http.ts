@@ -19,6 +19,7 @@ export const requisicionSchema = z.object({
         unidad: z.string().trim().max(20).nullable().optional(),
         cantidad: z.number().positive().max(10_000_000),
         precioUnitario: z.number().min(0).max(100_000_000),
+        lineaAreaId: z.string().min(1).nullable().optional(),
       })
     )
     .min(1, "Agrega al menos una línea"),

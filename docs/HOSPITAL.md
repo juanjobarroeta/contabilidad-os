@@ -922,6 +922,28 @@ flujo de efectivo en `src/lib/hospital/flujo-efectivo.ts`; padrón en
   `REQ-AAAA-NNNN`. Se guarda como una sola oferta adjudicada completa. Nace
   PENDIENTE: **toda compra se autoriza**. Editable mientras está pendiente o
   rechazada; se cancela, nunca se borra.
+- **Solicitudes de área y bandeja de compras** (`/api/hospital/solicitudes-area`,
+  `src/lib/hospital/bandeja-compras.ts`, migración `20261102_hosp_bandeja_compras`):
+  el área pide sin proveedor (`HospSolicitudArea`, folio `SA-AAAA-NNNN`) con
+  urgencia por línea. La bandeja (`?vista=bandeja`) junta las líneas sin
+  requisición; la urgencia que se ve es la mayor entre la del área y la del
+  inventario (existencia de lotes vigentes ≤ 0 → URGENTE; < `minimo` →
+  SEMIURGENTE). Compras arma una requisición por proveedor
+  (`…/requisicionar`); cada `SolicitudPartida` queda ligada a su línea
+  (`HospSolicitudAreaLinea.solicitudPartidaId`). Cancelar la requisición, o
+  quitar la línea al editarla, la regresa a la bandeja. `…/cerrar` cierra
+  líneas de la bandeja por DESABASTO o CANCELADA. Estado derivado: EN_BANDEJA →
+  POR_AUTORIZAR → POR_ENVIAR → PEDIDA → PARCIAL → RECIBIDA (o RECHAZADA /
+  DESABASTO / CANCELADA).
+- **Pedido** (`…/requisiciones/[id]/pedido { via }`): registra que la orden
+  autorizada se mandó al proveedor (`pedidoEnviadoAt/Via/PorId`); el mensaje
+  (WhatsApp o correo) lo arma el satélite.
+- **Faltante** (`…/requisiciones/[id]/partidas/[partidaId]/faltante { accion }`):
+  lo que el proveedor no surtió. La partida se cierra en lo recibido (importe
+  y total de la orden se recalculan; topa contra lo pagado) y lo que faltó
+  regresa a la bandeja (REENVIAR: `intentos`, `proveedoresIntentados`,
+  `cantidadSurtidaPrevia`) o se cierra por DESABASTO. Orden en cero → se
+  cancela si no tiene factura ni pagos.
 - **Autorizar / rechazar** (`…/[id]/aprobar`, `…/[id]/rechazar`): permiso
   `COMPRAS_AUTORIZAR`; nadie autoriza ni rechaza la suya. Al autorizar,
   `generateAdjudicaciones` crea la **orden de compra** (una adjudicación con el
