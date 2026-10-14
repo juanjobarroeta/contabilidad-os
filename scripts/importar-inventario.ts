@@ -48,7 +48,10 @@ async function main() {
   const i = process.argv.indexOf("--rfc");
   const rfc = i > 0 ? process.argv[i + 1] : null;
   const aplicar = process.argv.includes("--aplicar");
-  if (!ruta || !rfc) throw new Error("uso: importar-inventario.ts <archivo.xls> --rfc RFC [--aplicar]");
+  const j = process.argv.indexOf("--fecha");
+  const fechaConteo = j > 0 ? new Date(`${process.argv[j + 1]}T12:00:00Z`) : new Date();
+  if (!ruta || !rfc) throw new Error("uso: importar-inventario.ts <archivo.xls> --rfc RFC [--fecha AAAA-MM-DD] [--aplicar]");
+  if (Number.isNaN(fechaConteo.getTime())) throw new Error("--fecha debe ser AAAA-MM-DD");
 
   const empresa = await prisma.company.findFirst({ where: { rfc }, select: { id: true, razonSocial: true } });
   if (!empresa) throw new Error(`empresa ${rfc} no encontrada`);
@@ -144,6 +147,39 @@ async function main() {
       await prisma.hospLote.createMany({ data: filasLote.slice(k, k + 500), skipDuplicates: true });
     }
     console.log(`  ESCRITOS: ${filasLote.length} lotes`);
+
+    // EL LOTE SOLO NO ES EXISTENCIA. La verdad del inventario es el kardex
+    // (Σ HospMovimientoInsumo.cantidad) y `HospLote.existencia` es el saldo
+    // por lote: cargar lotes sin su movimiento deja a toda la farmacia
+    // diciendo «sin existencia» mientras los lotes muestran piezas. Un conteo
+    // físico de apertura es un AJUSTE, no una compra — no hay CFDI detrás.
+    const referencia = `Inventario físico ${fechaConteo.toISOString().slice(0, 10)}`;
+    const yaHay = new Set(
+      (await prisma.hospMovimientoInsumo.findMany({
+        where: { companyId: empresa.id, referencia },
+        select: { loteId: true },
+      })).map((m) => m.loteId).filter(Boolean) as string[],
+    );
+    const lotesEnBase = await prisma.hospLote.findMany({
+      where: { companyId: empresa.id, insumoId: { in: [...new Set(filasLote.map((f) => f.insumoId))] } },
+      select: { id: true, insumoId: true, lote: true, almacen: true, existencia: true, costoUnitario: true },
+    });
+    const movs = lotesEnBase
+      .filter((l) => !yaHay.has(l.id) && Number(l.existencia) !== 0)
+      .map((l) => ({
+        companyId: empresa.id,
+        insumoId: l.insumoId,
+        loteId: l.id,
+        tipo: "AJUSTE" as const,
+        cantidad: l.existencia,
+        costoUnitario: l.costoUnitario,
+        fecha: fechaConteo,
+        referencia,
+      }));
+    for (let k = 0; k < movs.length; k += 500) {
+      await prisma.hospMovimientoInsumo.createMany({ data: movs.slice(k, k + 500), skipDuplicates: true });
+    }
+    console.log(`  ESCRITOS: ${movs.length} movimientos de kardex (AJUSTE · «${referencia}»)`);
   } else {
     console.log(`\n  (dry-run — con --aplicar se escribe)`);
   }
