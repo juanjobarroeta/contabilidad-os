@@ -52,6 +52,17 @@ export interface LlamadaModelo {
   modelo?: string;
   /** Para pruebas y scripts: cliente ya construido. */
   cliente?: Anthropic;
+  /**
+   * Herramientas de SÓLO LECTURA que el modelo puede pedir antes de contestar
+   * el JSON. `ejecutar` decide permisos y nunca debe lanzar por datos del
+   * usuario (si lanza, el modelo recibe un error genérico y sigue).
+   */
+  herramientas?: {
+    tools: Anthropic.Tool[];
+    ejecutar: (nombre: string, input: unknown) => Promise<unknown>;
+    /** Rondas de herramientas antes de obligarlo a contestar (default 4). */
+    maxRondas?: number;
+  };
 }
 
 export interface RespuestaModelo<T> {
@@ -61,6 +72,16 @@ export interface RespuestaModelo<T> {
   /** Llamadas hechas al modelo (1 normal, 2 si hubo reintento). */
   intentos: number;
   usage: { inputTokens: number; outputTokens: number };
+  /** Herramientas que pidió el modelo, en orden (sólo con `herramientas`). */
+  herramientasUsadas?: string[];
+}
+
+/** Tope del resultado de una herramienta que se le devuelve al modelo. */
+export const MAX_RESULTADO_HERRAMIENTA = 12_000;
+
+function resultadoTexto(r: unknown): string {
+  const t = JSON.stringify(r ?? null);
+  return t.length > MAX_RESULTADO_HERRAMIENTA ? `${t.slice(0, MAX_RESULTADO_HERRAMIENTA)}… (recortado: pide un filtro más específico)` : t;
 }
 
 /**
@@ -140,24 +161,55 @@ export async function llamarModelo<T extends Record<string, unknown> = Record<st
   const mensajes: Anthropic.MessageParam[] = [{ role: "user", content: args.user }];
   const usage = { inputTokens: 0, outputTokens: 0 };
 
+  const herr = args.herramientas;
+  const maxRondas = herr?.maxRondas ?? 4;
+  const usadas: string[] = [];
+  let rondas = 0;
+  // Con herramientas el system va en bloque con cache_control: las rondas
+  // repiten herramientas + guía, y así sólo la primera paga el prefijo completo.
+  const system: Anthropic.MessageCreateParamsNonStreaming["system"] = herr
+    ? [{ type: "text", text: args.system, cache_control: { type: "ephemeral" } }]
+    : args.system;
+
   for (let intento = 1; intento <= 2; intento++) {
-    let msg: Anthropic.Message;
-    try {
-      msg = await crear(cliente, ctx, {
-        max_tokens: intento === 1 ? maxTokens : maxTokens * 2,
-        system: args.system,
-        messages: mensajes,
-      }, args.modelo);
-    } catch (e) {
-      throw errorProveedor(e);
+    const pedir = async (): Promise<Anthropic.Message> => {
+      try {
+        const msg = await crear(cliente, ctx, {
+          max_tokens: intento === 1 ? maxTokens : maxTokens * 2,
+          system,
+          messages: mensajes,
+          ...(herr ? { tools: herr.tools, ...(rondas >= maxRondas ? { tool_choice: { type: "none" as const } } : {}) } : {}),
+        }, args.modelo);
+        usage.inputTokens += msg.usage?.input_tokens ?? 0;
+        usage.outputTokens += msg.usage?.output_tokens ?? 0;
+        return msg;
+      } catch (e) {
+        throw errorProveedor(e);
+      }
+    };
+    let msg = await pedir();
+    while (herr && msg.stop_reason === "tool_use") {
+      rondas++;
+      const usos = msg.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
+      const resultados = await Promise.all(
+        usos.map(async (u): Promise<Anthropic.ToolResultBlockParam> => {
+          usadas.push(u.name);
+          try {
+            return { type: "tool_result", tool_use_id: u.id, content: resultadoTexto(await herr.ejecutar(u.name, u.input)) };
+          } catch (e) {
+            console.error(`[hospital/asistente] la herramienta ${u.name} falló:`, e instanceof Error ? e.message : e);
+            return { type: "tool_result", tool_use_id: u.id, content: "No se pudo consultar en este momento.", is_error: true };
+          }
+        })
+      );
+      mensajes.push({ role: "assistant", content: msg.content }, { role: "user", content: resultados });
+      msg = await pedir();
     }
-    usage.inputTokens += msg.usage?.input_tokens ?? 0;
-    usage.outputTokens += msg.usage?.output_tokens ?? 0;
     if (msg.stop_reason === "refusal") throw new HospitalError(502, "El modelo declinó procesar este texto; captura la nota a mano");
 
     const texto = textoDe(msg);
     const datos = parsearJsonEstricto(texto);
-    if (datos) return { datos: datos as T, modelo: msg.model, intentos: intento, usage };
+    if (datos) return { datos: datos as T, modelo: msg.model, intentos: intento, usage, herramientasUsadas: usadas };
 
     // Reintento único: se le enseña lo que contestó y se le pide sólo el objeto.
     mensajes.push(

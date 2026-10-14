@@ -80,7 +80,7 @@ describe("preguntarAyuda", () => {
   it("guarda la pregunta con la respuesta saneada", async () => {
     llamar.mockResolvedValue({ datos: { respuesta: "En Caja.", paginas: ["caja"], sinRespuesta: false }, modelo: "claude-haiku-4-5" });
     const r = await preguntarAyuda(db, args);
-    expect(r).toEqual({ id: "p1", modelo: "claude-haiku-4-5", respuesta: "En Caja.", paginas: ["caja"], sinRespuesta: false });
+    expect(r).toEqual({ id: "p1", modelo: "claude-haiku-4-5", herramientas: [], respuesta: "En Caja.", paginas: ["caja"], sinRespuesta: false });
     expect(llamar.mock.calls[0][0]).toMatchObject({ subtipo: "hospital.ayuda", companyId: "c", userId: "u" });
     expect(create.mock.calls[0][0].data).toMatchObject({ pregunta: "¿Cómo cobro?", pagina: "caja", paginasSugeridas: ["caja"], userNombre: "Ana" });
   });
