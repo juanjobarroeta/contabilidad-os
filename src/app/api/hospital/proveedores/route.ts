@@ -2,7 +2,9 @@
  * GET  /api/hospital/proveedores?companyId=[&q=][&conCuenta=1]
  *      Padrón de proveedores (Supplier del hub, el mismo de bancos, obra y
  *      médicos): RFC, datos de pago, condiciones de crédito y cuántas
- *      requisiciones tiene. `q` busca por razón social o RFC.
+ *      requisiciones tiene. `q` busca por razón social (sin acentos, palabra
+ *      por palabra) o RFC; un emisor de CFDIs recibidos que coincide y aún no
+ *      está en el padrón se da de alta solo.
  * POST /api/hospital/proveedores { companyId, rfc, razonSocial, regimenFiscal?, email?,
  *                                  clabe?, banco?, titularCuenta?, tieneCredito?, diasCredito? }
  *      Alta (también desde una requisición). RFC con formato del SAT y único
@@ -18,6 +20,7 @@ import { withHospital } from "@/lib/hospital/with-hospital";
 import { bitacora, error } from "@/lib/hospital/http";
 import { assertPuedeEscribir } from "@/lib/subscription";
 import { requireClinicalPermission } from "@/lib/hospital/permisos";
+import { idsProveedoresQueCoinciden } from "@/lib/hospital/proveedores-buscar";
 import { proveedorSchema, tocaDatosDePago, guardarTerminos, SELECT_PROVEEDOR } from "@/lib/hospital/proveedores";
 
 export const GET = withHospital(async (req: Request) => {
@@ -27,10 +30,11 @@ export const GET = withHospital(async (req: Request) => {
   await requireMembership(companyId, undefined, req);
   await requireModule(companyId, "HOSPITAL", req);
   const q = sp.get("q")?.trim();
+  const ids = q ? await idsProveedoresQueCoinciden(companyId, q) : null;
   const proveedores = await prisma.supplier.findMany({
     where: {
       companyId,
-      ...(q ? { OR: [{ razonSocial: { contains: q, mode: "insensitive" } }, { rfc: { contains: q.toUpperCase() } }] } : {}),
+      ...(ids ? { id: { in: ids } } : {}),
       ...(sp.get("conCuenta") === "1" ? { clabe: { not: null } } : {}),
     },
     select: { ...SELECT_PROVEEDOR, _count: { select: { solicitudesCompra: true } } },
