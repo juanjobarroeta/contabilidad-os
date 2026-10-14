@@ -37,6 +37,9 @@ const schema = z.object({
   companyId: z.string().min(1),
   insumoId: z.string().min(1),
   lote: z.string().trim().min(1).max(60),
+  /// A qué almacén entra. El mismo lote vive en varios a la vez y se cuentan
+  /// por separado; sin decirlo, entra al general.
+  almacen: z.string().trim().min(1).max(60).optional(),
   caducidad: fechaIso.nullable().optional(),
   cantidad: z.number().positive().max(10_000_000),
   costoUnitario: z.number().min(0).max(100_000_000),
@@ -57,6 +60,7 @@ export const POST = withAuthz(async (req: Request) => {
     return NextResponse.json({ error: first }, { status: 400 });
   }
   const { companyId, insumoId, lote: nombreLote, cantidad, costoUnitario, nota } = parsed.data;
+  const almacen = parsed.data.almacen ?? "GENERAL";
   const caducidad = parsed.data.caducidad ?? null;
   const invoiceId = parsed.data.invoiceId ?? null;
   let supplierId = parsed.data.supplierId ?? null;
@@ -97,7 +101,7 @@ export const POST = withAuthz(async (req: Request) => {
 
   const resultado = await prisma.$transaction(async (tx) => {
     const previo = await tx.hospLote.findUnique({
-      where: { insumoId_lote: { insumoId, lote: nombreLote } },
+      where: { insumoId_lote_almacen: { insumoId, lote: nombreLote, almacen } },
       select: { id: true, existencia: true },
     });
     const lote = previo
@@ -113,7 +117,8 @@ export const POST = withAuthz(async (req: Request) => {
         })
       : await tx.hospLote.create({
           data: {
-            companyId, insumoId, lote: nombreLote, caducidad,
+            companyId, almacen,
+            insumoId, lote: nombreLote, caducidad,
             existencia: cantidad, costoUnitario, recibidoAt: fecha, invoiceId, supplierId,
           },
         });
