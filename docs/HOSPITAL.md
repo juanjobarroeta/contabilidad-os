@@ -156,7 +156,22 @@ hecho contable, hasta que se factura.
    periodos declarados; lo derivado de CFDIs para los que aún no se
    presentan (`/api/contabilidad/ce-estado-resultados`, `ce-balance-general`,
    `ce-serie`). Sin código nuevo en el hub: ya son bearer + CORS.
-4. **Inventario de farmacia.** Los CFDIs de compra con conceptos de
+4. **Inventario de farmacia.** **La recepción manda** (default,
+   `HospConfig.cfdiCreaInventario = false`): el inventario es el físico
+   (catálogo del Excel + lotes por almacén) y la existencia la pone la
+   recepción (`POST /farmacia/lotes`, contra la línea de la orden). El CFDI de
+   compra NO crea insumos ni kardex: sus renglones se ligan al catálogo en
+   `HospCfdiLinea` (`lib/hospital/cfdi-ligado.ts`) — por la orden de compra
+   ligada al CFDI (vínculo ADJUDICACION → líneas de la requisición que ganó
+   esa cotización, por descripción/cantidad/importe), por la clave aprendida
+   del proveedor (`HospProveedorInsumo`: NoIdentificacion o descripción) o a
+   mano desde la cola `GET /api/hospital/compras/por-ligar` +
+   `PATCH …/por-ligar/[id] { accion: ligar|ignorar|reabrir }` (escritor +
+   dueño/admin o COMPRAS_AUTORIZAR/FINANZAS_ESCRIBIR; ligar aprende la clave).
+   El retiro del catálogo derivado viejo: `scripts/retirar-insumos-cfdi.ts`
+   (en seco por default; `--apply --salida`, `--revertir`).
+   Con `cfdiCreaInventario = true` (empresa sin inventario físico) sigue la
+   derivación vieja: los CFDIs de compra con conceptos de
    medicamento/material (claves SAT 51xx medicamentos, 42xx equipo y material
    médico, 41xx laboratorio, o descripción que lo delate) dan de alta el
    insumo (`derivadoDeCfdi = true`) y una ENTRADA_COMPRA por línea; los
@@ -818,7 +833,7 @@ DELETE /api/hospital/farmacia/conteos/[id]/lineas?companyId=&lineaId=
 ### Crons
 ```
 POST /api/cron/hospital-estancia          — cargos de estancia de anoche para todos los episodios hospitalizados
-POST /api/cron/hospital-insumos-backfill  — drenado histórico del catálogo/kardex desde CFDIs (cursor) [?etiquetar=1 propone grupo de control a los derivados sin etiquetar]
+POST /api/cron/hospital-insumos-backfill  — drenado histórico desde CFDIs (cursor): liga renglones de compra al catálogo y reintenta la cola «por ligar» (con cfdiCreaInventario: catálogo/kardex) [?companyId=…&reiniciar=1 recorre otra vez el archivo; ?etiquetar=1 propone grupo de control a los derivados sin etiquetar]
 ```
 
 ## Satélite `Hospital` (repo aparte)

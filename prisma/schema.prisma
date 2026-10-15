@@ -433,6 +433,8 @@ model Company {
   hospCitas         HospCita[]
   hospCotizaciones  HospCotizacion[]
   hospInsumos       HospInsumo[]
+  hospCfdiLineas    HospCfdiLinea[]
+  hospProveedorInsumos HospProveedorInsumo[]
   hospCodigosBarras HospCodigoBarras[]
   hospConteos       HospConteo[]
   hospTickets       HospTicket[]
@@ -1132,6 +1134,7 @@ model Invoice {
   hospCobros            HospCobro[]
   hospLotes             HospLote[]
   hospMovimientosInsumo HospMovimientoInsumo[]
+  hospCfdiLineas        HospCfdiLinea[]
 
   // Salamería: el pedido (tienda o mostrador) que se facturó con este CFDI.
   salPedido      SalPedido?
@@ -3589,6 +3592,7 @@ model SolicitudPartida {
   cotizaciones    SolicitudCotizacionPartida[]
   hospMovimientos HospMovimientoInsumo[]
   hospLineaArea   HospSolicitudAreaLinea?
+  hospCfdiLineas  HospCfdiLinea[]
 }
 
 // ─── Cotizaciones (multi-vendor quotes for a requisición) ────────────────────
@@ -7909,6 +7913,12 @@ model HospConfig {
   /// para sugerir crearlo). Se escribe solo al importar, así la siguiente lista
   /// con los mismos encabezados se mapea sola (lib/hospital/tarifario-ancho-db).
   aliasTarifas               Json?
+  /// Inventario: false (default) = «la recepción manda». Un CFDI de compra ya
+  /// NO da de alta insumos ni escribe kardex; sus renglones se LIGAN al
+  /// catálogo físico (por la orden, por lo aprendido del proveedor o a mano)
+  /// en HospCfdiLinea. true = la derivación vieja (insumos-cfdi), sólo para
+  /// una empresa sin inventario físico.
+  cfdiCreaInventario         Boolean  @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -9068,6 +9078,8 @@ model HospInsumo {
   conteoLineas      HospConteoLinea[]
   solicitudPartidas SolicitudPartida[]
   lineasArea        HospSolicitudAreaLinea[]
+  cfdiLineas        HospCfdiLinea[]
+  proveedorClaves   HospProveedorInsumo[]
 
   @@unique([companyId, clave])
   @@index([companyId, categoria])
@@ -11154,3 +11166,64 @@ model HospConteoLinea {
   @@index([conteoId])
 }
 
+/// Renglón de un CFDI de COMPRA de hospital frente al catálogo físico. El CFDI
+/// ya no crea inventario (HospConfig.cfdiCreaInventario): sólo dice qué se
+/// facturó y a qué insumo corresponde. La existencia la pone la recepción
+/// (HospLote). Se liga por la orden de compra que ampara el CFDI
+/// (REQUISICION), por la clave del proveedor ya aprendida (APRENDIDO) o a
+/// mano desde la cola «por ligar» (MANUAL). lib/hospital/cfdi-ligado.ts.
+model HospCfdiLinea {
+  id        String   @id @default(cuid())
+  companyId String
+  invoiceId String
+  /// descripción normalizada | cantidad | importe: estable entre re-pasadas.
+  llave     String
+  descripcion      String
+  noIdentificacion String?
+  claveProdServ    String?
+  claveUnidad      String?
+  cantidad         Decimal @db.Decimal(18, 6)
+  /// Importe MENOS descuento (costo de la línea, sin IVA).
+  importe          Decimal @db.Decimal(18, 6)
+  proveedorRfc     String?
+  /// POR_LIGAR | LIGADA | IGNORADA
+  estado           String  @default("POR_LIGAR")
+  /// REQUISICION | APRENDIDO | MANUAL
+  origen           String?
+  insumoId           String?
+  solicitudPartidaId String?
+  ligadoPorId        String?
+  ligadoAt           DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company          Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invoice          Invoice           @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  insumo           HospInsumo?       @relation(fields: [insumoId], references: [id], onDelete: SetNull)
+  solicitudPartida SolicitudPartida? @relation(fields: [solicitudPartidaId], references: [id], onDelete: SetNull)
+
+  @@unique([invoiceId, llave])
+  @@index([companyId, estado])
+  @@index([insumoId])
+  @@index([solicitudPartidaId])
+}
+
+/// Lo que se aprende al ligar a mano: este proveedor llama así a este insumo.
+/// `claveProveedor` = "NI:<NoIdentificacion>" cuando el proveedor lo pone, y
+/// siempre "D:<descripción normalizada>" de respaldo.
+model HospProveedorInsumo {
+  id             String   @id @default(cuid())
+  companyId      String
+  proveedorRfc   String
+  claveProveedor String
+  insumoId       String
+  creadoPorId    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  company Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  insumo  HospInsumo @relation(fields: [insumoId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, proveedorRfc, claveProveedor])
+  @@index([insumoId])
+}

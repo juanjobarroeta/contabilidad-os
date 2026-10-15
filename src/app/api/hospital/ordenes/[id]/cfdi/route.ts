@@ -14,6 +14,8 @@ import { withHospital } from "@/lib/hospital/with-hospital";
 import { bitacora, error } from "@/lib/hospital/http";
 import { assertPuedeEscribir } from "@/lib/subscription";
 import { candidatosCfdi, companyDeOrden, desvincularCfdi, vincularCfdi } from "@/lib/hospital/requisiciones";
+import { religarCfdiDeOrden } from "@/lib/hospital/cfdi-ligado";
+import { prisma } from "@/lib/prisma";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -34,6 +36,8 @@ export const POST = withHospital(async (req: Request, ctx: Ctx) => {
   await requireModule(companyId, "HOSPITAL", req);
   await assertPuedeEscribir(user.id);
   const r = await vincularCfdi(id, companyId, parsed.data.invoiceId);
+  // Renglones del CFDI → líneas de la orden (catálogo físico; no mueve inventario).
+  await religarCfdiDeOrden(prisma, companyId, parsed.data.invoiceId);
   bitacora(user, req, { companyId, accion: "hospital.orden.ligar-cfdi", entidad: "SolicitudAdjudicacion", entidadId: id, detalle: r });
   return NextResponse.json({ ok: true, ...r });
 });
@@ -47,6 +51,7 @@ export const DELETE = withHospital(async (req: Request, ctx: Ctx) => {
   await requireModule(companyId, "HOSPITAL", req);
   await assertPuedeEscribir(user.id);
   const r = await desvincularCfdi(id, companyId, invoiceId);
+  await religarCfdiDeOrden(prisma, companyId, invoiceId);
   bitacora(user, req, { companyId, accion: "hospital.orden.soltar-cfdi", entidad: "SolicitudAdjudicacion", entidadId: id, detalle: r });
   return NextResponse.json({ ok: true, ...r });
 });

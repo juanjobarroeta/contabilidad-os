@@ -307,9 +307,12 @@ export interface DerivarInsumosResultado {
   insumos: number;
   /** Movimientos de kardex escritos (0 si el CFDI ya estaba derivado). */
   movimientos: number;
+  /** «La recepción manda»: renglones de compra ligados al catálogo / en la cola. */
+  ligadas?: number;
+  porLigar?: number;
 }
 
-const llaveLinea = (descripcion: string, cantidad: number, importe: number) =>
+export const llaveLinea = (descripcion: string, cantidad: number, importe: number) =>
   `${normalizarDescripcion(descripcion)}|${Math.round(cantidad * 1e6)}|${Math.round(importe * 100)}`;
 
 /**
@@ -318,7 +321,7 @@ const llaveLinea = (descripcion: string, cantidad: number, importe: number) =>
  * parser del hub descarta conceptos malformados y correría la numeración).
  * Si la factura no guardó items, los conceptos del XML son las líneas.
  */
-function prepararLineas(items: LineaCfdiInsumo[], rawXml: string | null | undefined): LineaCfdiInsumo[] {
+export function prepararLineas(items: LineaCfdiInsumo[], rawXml: string | null | undefined): LineaCfdiInsumo[] {
   const lineas = items.map((it) => ({
     ...it,
     cantidad: Number(it.cantidad),
@@ -373,9 +376,36 @@ interface AgregadoCompra {
   monto: number;
 }
 
+// Cache del flag por empresa: el backfill pasa miles de CFDIs por corrida.
+const flagCache = new Map<string, { crea: boolean; t: number }>();
+const FLAG_TTL_MS = 60_000;
+
 /**
- * Deriva catálogo + kardex de UN CFDI. Sólo INGRESO/EGRESO que no sean nota de
+ * ¿El CFDI crea inventario en esta empresa? Default NO: «la recepción manda»
+ * (HospConfig.cfdiCreaInventario). Sin HospConfig también es no.
+ */
+export async function cfdiCreaInventario(db: Db, companyId: string): Promise<boolean> {
+  const c = flagCache.get(companyId);
+  if (c && Date.now() - c.t < FLAG_TTL_MS) return c.crea;
+  const cfg = await db.hospConfig.findUnique({ where: { companyId }, select: { cfdiCreaInventario: true } });
+  const crea = cfg?.cfdiCreaInventario ?? false;
+  flagCache.set(companyId, { crea, t: Date.now() });
+  return crea;
+}
+
+/** Tras cambiar el flag en Configuración. */
+export function olvidarFlagInventario(companyId: string) {
+  flagCache.delete(companyId);
+}
+
+/**
+ * Lo que un CFDI le hace a farmacia. Sólo INGRESO/EGRESO que no sean nota de
  * crédito; devuelve ceros (nunca lanza) cuando no aplica.
+ *
+ *   • «La recepción manda» (default): la compra NO crea insumos ni kardex;
+ *     sus renglones se ligan al catálogo físico (cfdi-ligado.ts). La venta no
+ *     hace nada: la salida real es el cargo al paciente.
+ *   • cfdiCreaInventario = true: la derivación de siempre (catálogo + kardex).
  */
 export async function derivarInsumosDesdeCfdi(
   db: Db,
@@ -387,6 +417,14 @@ export async function derivarInsumosDesdeCfdi(
 
   const lineas = prepararLineas(args.items, args.rawXml).filter((l) => l.cantidad > 0);
   if (lineas.length === 0) return vacio;
+
+  if (!(await cfdiCreaInventario(db, args.companyId))) {
+    if (args.tipo !== "EGRESO") return vacio;
+    // Import dinámico: cfdi-ligado importa de aquí.
+    const { ligarCfdiCompra } = await import("./cfdi-ligado");
+    const r = await ligarCfdiCompra(db, { companyId: args.companyId, invoiceId: args.invoiceId, lineas });
+    return { ...vacio, ...r };
+  }
 
   return args.tipo === "EGRESO" ? derivarCompra(db, args, lineas) : derivarVenta(db, args, lineas);
 }
@@ -702,6 +740,9 @@ export interface BackfillInsumosResultado {
   procesados: number;
   insumos: number;
   movimientos: number;
+  /** «La recepción manda»: renglones de compra ligados / dejados en la cola. */
+  ligadas: number;
+  porLigar: number;
   nextAfterId: string | null;
   completado: boolean;
   elapsedMs: number;
@@ -737,6 +778,8 @@ export async function derivarInsumosBackfill(
   let procesados = 0;
   let insumos = 0;
   let movimientos = 0;
+  let ligadas = 0;
+  let porLigar = 0;
   let completado = true;
 
   while (true) {
@@ -808,6 +851,8 @@ export async function derivarInsumosBackfill(
       });
       insumos += r.insumos;
       movimientos += r.movimientos;
+      ligadas += r.ligadas ?? 0;
+      porLigar += r.porLigar ?? 0;
     }
 
     cursor = lote[lote.length - 1].id;
@@ -820,6 +865,8 @@ export async function derivarInsumosBackfill(
     procesados,
     insumos,
     movimientos,
+    ligadas,
+    porLigar,
     nextAfterId: completado ? null : cursor,
     completado,
     elapsedMs: Date.now() - startedAt,
@@ -856,13 +903,23 @@ export async function etiquetarControlados(db: Db, companyId: string): Promise<{
 
 /** Conteos de lo derivado, para Configuración y GET /farmacia/derivar. */
 export async function conteosDerivacion(db: Db, companyId: string) {
-  const [insumosDerivados, movimientosDerivados] = await Promise.all([
-    db.hospInsumo.count({ where: { companyId, derivadoDeCfdi: true } }),
+  const [insumosDerivados, movimientosDerivados, lineas, crea] = await Promise.all([
+    db.hospInsumo.count({ where: { companyId, derivadoDeCfdi: true, activo: true } }),
     db.hospMovimientoInsumo.count({
       where: { companyId, invoiceId: { not: null }, tipo: { in: ["ENTRADA_COMPRA", "SALIDA_VENTA"] } },
     }),
+    db.hospCfdiLinea.groupBy({ by: ["estado"], where: { companyId }, _count: { _all: true } }),
+    cfdiCreaInventario(db, companyId),
   ]);
-  return { insumosDerivados, movimientosDerivados };
+  const n = (estado: string) => lineas.find((l) => l.estado === estado)?._count._all ?? 0;
+  return {
+    cfdiCreaInventario: crea,
+    insumosDerivados,
+    movimientosDerivados,
+    lineasLigadas: n("LIGADA"),
+    lineasPorLigar: n("POR_LIGAR"),
+    lineasIgnoradas: n("IGNORADA"),
+  };
 }
 
 // ─── Derivación INLINE (sat-sync / import-cfdi) ───────────────────────────────

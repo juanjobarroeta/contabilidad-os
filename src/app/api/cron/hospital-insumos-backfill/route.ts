@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { withCronLock } from "@/lib/cron-lock";
 import { prisma } from "@/lib/prisma";
+import { religarPendientes } from "@/lib/hospital/cfdi-ligado";
 import {
+  cfdiCreaInventario,
   derivarInsumosBackfill,
   empresasHospitalParaBackfill,
   etiquetarControlados,
@@ -13,7 +15,12 @@ import {
 // POST (o GET) /api/cron/hospital-insumos-backfill[?companyId=…&afterId=…]
 //
 // Drenado histórico del catálogo/kardex de farmacia desde los CFDIs de las
-// empresas con módulo HOSPITAL (docs/HOSPITAL.md §4). Cursor por id de factura
+// empresas con módulo HOSPITAL (docs/HOSPITAL.md §4). Con «la recepción
+// manda» (HospConfig.cfdiCreaInventario = false, el default) el mismo drenado
+// ya no crea insumos ni kardex: liga los renglones de compra al catálogo
+// físico y deja el resto en la cola «por ligar» (lib/hospital/cfdi-ligado);
+// al final de cada empresa reintenta la cola (órdenes ligadas después, claves
+// aprendidas). `reiniciar=1` recorre otra vez el archivo para llenar la cola. Cursor por id de factura
 // en BackfillProgreso (job hospital-insumos); cada corrida avanza hasta agotar
 // su presupuesto y guarda dónde se quedó. Idempotente: repetir no duplica.
 //
@@ -26,7 +33,9 @@ import {
 //                   derivados (ENTRADA_COMPRA/SALIDA_VENTA con CFDI y SIN
 //                   lote) antes de rederivarlos. Los que farmacia ya amarró a
 //                   un lote son recepción física y no se tocan; los AJUSTE,
-//                   MERMA, etc. tampoco. Exige companyId explícito.
+//                   MERMA, etc. tampoco. Exige companyId explícito, y que
+//                   la empresa siga con cfdiCreaInventario: con «la
+//                   recepción manda» borraría sin volver a derivar.
 //   etiquetar=1   → tras derivar, propone grupo de control y sustancia activa
 //                   a los insumos derivados que nadie ha etiquetado (los
 //                   nuevos ya nacen etiquetados). No toca lo capturado a mano.
@@ -71,13 +80,20 @@ async function handle(req: Request) {
     ? [onlyCompanyId]
     : await empresasHospitalParaBackfill(prisma, EMPRESAS_POR_CORRIDA);
 
+  if (recalcular && !(await cfdiCreaInventario(prisma, onlyCompanyId!))) {
+    return NextResponse.json(
+      { error: "recalcular=1 no aplica: la empresa no deja que el CFDI cree inventario (la recepción manda)" },
+      { status: 409 }
+    );
+  }
+
   if (onlyCompanyId && (reiniciar || recalcular)) {
     await reiniciarProgresoInsumos(prisma, onlyCompanyId);
   }
 
   let borrados = 0;
   let etiquetados = 0;
-  const empresas: Array<{ companyId: string } & BackfillInsumosResultado> = [];
+  const empresas: Array<{ companyId: string; cola: number | null } & BackfillInsumosResultado> = [];
   for (const companyId of objetivos) {
     const restante = TIME_BUDGET_MS - (Date.now() - startedAt);
     if (restante <= 5_000) break;
@@ -101,7 +117,13 @@ async function handle(req: Request) {
           }
         : undefined,
     });
-    empresas.push({ companyId, ...r });
+    let cola: number | null = null;
+    if (!(await cfdiCreaInventario(prisma, companyId))) {
+      const rl = await religarPendientes(prisma, companyId);
+      r.ligadas += rl.ligadas;
+      cola = rl.porLigar;
+    }
+    empresas.push({ companyId, ...r, cola });
     if (etiquetar) etiquetados += (await etiquetarControlados(prisma, companyId)).etiquetados;
   }
 
@@ -112,6 +134,8 @@ async function handle(req: Request) {
     procesados: empresas.reduce((s, e) => s + e.procesados, 0),
     insumos: empresas.reduce((s, e) => s + e.insumos, 0),
     movimientos: empresas.reduce((s, e) => s + e.movimientos, 0),
+    ligadas: empresas.reduce((s, e) => s + e.ligadas, 0),
+    porLigar: empresas.reduce((s, e) => s + e.porLigar, 0),
     ...(recalcular ? { borrados } : {}),
     ...(etiquetar ? { etiquetados } : {}),
     // Compatibilidad con el encadenado por cursor de una sola empresa.
