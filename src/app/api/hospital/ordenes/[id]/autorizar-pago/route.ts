@@ -1,8 +1,8 @@
 /**
  * POST   /api/hospital/ordenes/[id]/autorizar-pago { fechaProgramada? }
  *        Manda la orden a tesorería: queda autorizada para pagarse (en la
- *        fecha programada, o a su vencimiento). Exige PAGOS_AUTORIZAR y no la
- *        autoriza quien pidió la compra.
+ *        fecha programada, o a su vencimiento). Exige PAGOS_AUTORIZAR (también
+ *        para quien pidió la compra).
  * DELETE /api/hospital/ordenes/[id]/autorizar-pago
  *        Retira la autorización mientras no haya pagos registrados.
  */

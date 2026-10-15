@@ -76,10 +76,9 @@ describe("autorización de la requisición", () => {
     m.sol.mockResolvedValueOnce({ ...req, origen: null });
     await expect(aprobarRequisicion("s1", "c", "dir")).rejects.toMatchObject({ status: 404 });
   });
-  it("quien pidió no autoriza el pago", async () => {
-    await expect(autorizarPago("o1", "c", "ana")).rejects.toMatchObject({ status: 403 });
-    await autorizarPago("o1", "c", "dir");
-    expect(m.adjUpdate.mock.calls[0][0].data).toMatchObject({ pagoAutorizadoPorId: "dir" });
+  it("quien pidió también autoriza el pago si tiene el permiso", async () => {
+    await autorizarPago("o1", "c", "ana");
+    expect(m.adjUpdate.mock.calls[0][0].data).toMatchObject({ pagoAutorizadoPorId: "ana" });
   });
   it("tesorería paga sólo lo autorizado, y no lo paga quien lo autorizó", async () => {
     m.adj.mockResolvedValueOnce({ ...orden, enviadaTesoreriaAt: null });

@@ -118,7 +118,7 @@ Sobre el puesto se pueden hacer ajustes por persona (páginas o acciones «extra
 | AGENDA_PROGRAMAR | Programar agenda | Agendar, editar, mover, confirmar o cancelar citas de quirófano, endoscopia y consultorio. Sin él la agenda es de sólo consulta. |
 | FINANZAS_ESCRIBIR | Operaciones financieras | Cobrar, facturar, depósitos, cargos a la cuenta, bancos, nómina, tesorería, contabilidad y datos de pago de proveedores. |
 | COMPRAS_AUTORIZAR | Autorizar compras | Autorizar o rechazar requisiciones de otros (nunca la propia). |
-| PAGOS_AUTORIZAR | Autorizar pagos | Mandar a tesorería el pago de una orden que no pidió. |
+| PAGOS_AUTORIZAR | Autorizar pagos | Mandar a tesorería el pago de una orden (también de una que pidió). |
 | TESORERIA_PAGAR | Tesorería: registrar pagos | Registrar el pago de lo que otra persona autorizó. |
 
 Reglas del servidor:
@@ -126,7 +126,7 @@ Reglas del servidor:
 - Escribir en lo clínico exige **CLINICA_ESCRIBIR**; agendar o mover citas (y programar un plan) exige **AGENDA_PROGRAMAR**; registrar una aplicación exige **ADMINISTRAR**; una indicación exige **PRESCRIBIR**.
 - Escribir en cuentas, caja, depósitos, cobros, bancos, contabilidad, liquidaciones, facturación, nómina o tesorería exige **FINANZAS_ESCRIBIR** (y no ser Sólo lectura).
 - **Autorizar alta** requiere ALTA + Documentar atención + identidad médica verificada; **Registrar salida** requiere ALTA + Documentar atención.
-- Segregación del ciclo de compras: la requisición la autoriza quien tenga «Autorizar compras» (también la que armó), quien pidió no autoriza el pago, y quien autorizó el pago no lo registra.
+- Segregación del ciclo de compras: la requisición la autoriza quien tenga «Autorizar compras» (también la que armó), el pago lo autoriza quien tenga «Autorizar pagos» (también quien pidió), y quien autorizó el pago no lo registra.
 
 ## Roles
 - **Dueño (OWNER)** y **Administrador (ADMIN)**: administran usuarios, guardan Configuración y Cumplimiento. El dueño se administra a sí mismo o en ContabilidadOS; a un administrador sólo lo cambia el dueño; tu propio acceso lo cambia el dueño.
@@ -317,7 +317,7 @@ Reglas del servidor:
 - **Nueva requisición** → Proveedor, Área que pide, Se necesita para, líneas («Del catálogo» para insumos de farmacia; Cantidad, Precio estimado; **+ Agregar línea**), Justificación → guardar: queda por autorizar.
 - **Autorizar** / **Rechazar** (con motivo; requiere COMPRAS_AUTORIZAR, nunca la propia). **Editar** o **Corregir y reenviar**; **Cancelar**.
 - Orden autorizada: **Recibir** (o recibir en Farmacia si es insumo), **Ligar factura**, **Autorizar pago** (PAGOS_AUTORIZAR, no quien pidió), **Retirar autorización**, **Ir a tesorería**.
-- Errores: «Elige el proveedor de: …» (al autorizar falta elegir líneas con varias cotizaciones), «No autorizas el pago de una compra que tú pediste: lo autoriza otra persona.»
+- Errores: «Elige el proveedor de: …» (al autorizar falta elegir líneas con varias cotizaciones)
 
 ## clientes — Clientes (/clientes)
 - Directorio de receptores fiscales derivado de los CFDIs de ingreso, ordenado por lo facturado; buscador por nombre o RFC. Perfil (/contactos/:id): pestañas Como cliente / Como proveedor, Episodios, Por cobrar, Facturas, **Estado de cuenta**, **Imprimir**.
