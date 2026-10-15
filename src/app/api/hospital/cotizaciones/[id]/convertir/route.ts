@@ -55,7 +55,7 @@ export const POST = withHospital(async (req: Request, ctx: { params: Promise<{ i
     customerId: d.customerId,
     diagnostico: d.diagnostico ?? null,
     diagnosticoCie10: d.diagnosticoCie10 ?? null,
-    procedimiento: c.procedimiento,
+    procedimiento: c.procedimiento || null,
     motivo: d.motivo ?? null,
     autorizacionPagador: d.autorizacionPagador ?? null,
     cotizacionId: c.id,

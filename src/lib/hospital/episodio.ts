@@ -265,7 +265,7 @@ export async function crearEpisodio(db: PrismaClient, args: CrearEpisodioArgs) {
           customerId: customerId ?? null,
           diagnosticoCie10: args.diagnosticoCie10?.trim() || null,
           diagnostico: args.diagnostico?.trim() || null,
-          procedimiento: args.procedimiento?.trim() || (cotizacion?.procedimiento ?? null),
+          procedimiento: args.procedimiento?.trim() || cotizacion?.procedimiento?.trim() || null,
           motivo: args.motivo?.trim() || null,
           medicoReferencia: args.medicoReferencia?.trim() || null,
           unidadReferencia: args.unidadReferencia?.trim() || null,
@@ -283,7 +283,7 @@ export async function crearEpisodio(db: PrismaClient, args: CrearEpisodioArgs) {
           documentos: {
             create: documentosRequeridos({
               tipo: args.tipo,
-              procedimiento: args.procedimiento ?? cotizacion?.procedimiento,
+              procedimiento: args.procedimiento?.trim() || cotizacion?.procedimiento?.trim() || undefined,
               conCitaQuirofano,
               pagadorTipo: pagador?.tipo,
             }).map((d) => ({ companyId: args.companyId, pacienteId: paciente.id, tipo: d.tipo, nombre: d.nombre, requerido: true })),

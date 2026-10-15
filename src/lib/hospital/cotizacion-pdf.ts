@@ -260,8 +260,8 @@ export async function generarPdfCotizacion(c: CotizacionParaPdf, emisor: EmisorP
     ...(c.dirigidaA || c.medicoNombre ? [["Dirigida a", c.dirigidaA || c.medicoNombre || ""] as [string, string]] : []),
     ...(c.medicoNombre ? [["Médico", c.medicoNombre] as [string, string]] : []),
     ...(c.pacienteNombre ? [["Paciente", c.pacienteNombre] as [string, string]] : []),
-    ...(paquete ? [] : [["Pagador", c.pagador ? `${c.pagador.nombre}${c.pagador.tabulador ? ` · tarifario ${c.pagador.tabulador}` : ""}` : "Particular · precio de lista"] as [string, string]]),
-    ["Procedimiento", c.procedimiento],
+    ...(paquete ? [] : [["Empresa", c.pagador ? `${c.pagador.nombre}${c.pagador.tabulador ? ` · tarifario ${c.pagador.tabulador}` : ""}` : "Particular · precio de lista"] as [string, string]]),
+    ...(c.procedimiento?.trim() ? [["Procedimiento", c.procedimiento] as [string, string]] : []),
   ];
   for (const [k, v] of datos) {
     page.drawText(k, { x: MARGEN, y: l.y, size: 8.5, font: regular, color: GRIS });
