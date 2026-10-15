@@ -91,57 +91,90 @@ export async function abrirBuzonSat<T>(
   const cerPath = path.join(dir, "e.cer");
   const keyPath = path.join(dir, "e.key");
   try {
-    const ctx = await browser.newContext({ ignoreHTTPSErrors: true, acceptDownloads: true });
-    const page = await ctx.newPage();
-
-    // El certform a veces llega lento (card de login del SAT). Espéralo
-    // ACTIVAMENTE y reintenta la navegación un par de veces antes de rendirse —
-    // evita fallos transitorios en el barrido de cartera.
-    let certform = false;
-    for (let intento = 1; intento <= 3 && !certform; intento++) {
-      await page.goto(ENTRADA, { waitUntil: "networkidle", timeout: 45000 }).catch(() => {});
-      // Tab e.firma: #buttonFiel navega al contrato fiel_Aviso, que sirve el certform.
-      await page.locator("#buttonFiel").click({ timeout: 8000 }).catch(() => {});
-      certform = await page
-        .locator("#fileCertificate")
-        .waitFor({ state: "attached", timeout: 15000 })
-        .then(() => true)
-        .catch(() => false);
-      if (!certform) {
-        log(`certform no apareció (intento ${intento}/3)`);
-        await page.waitForTimeout(2000);
-      }
-    }
-    if (!certform) {
-      throw new BuzonAccesoError(
-        fiel.rfc,
-        "no apareció el certform de e.firma tras 3 intentos (¿SAT lento/throttling, o cambió el login?)",
-      );
-    }
-
     fs.writeFileSync(cerPath, fiel.cerDer);
     fs.writeFileSync(keyPath, fiel.keyDer);
-    await page.locator("#fileCertificate").setInputFiles(cerPath);
-    await page.locator("#filePrivateKey").setInputFiles(keyPath);
-    await page.locator("#privateKeyPassword").fill(fiel.pass);
-    await page.locator("#submit").click({ timeout: 8000 }).catch(() =>
-      // Si el click sí disparó la navegación, este evaluate truena con
-      // «context destroyed»: no importa, abajo se espera la URL del buzón.
-      page.evaluate(() => (document.getElementById("submit") as HTMLElement | null)?.click()).catch(() => {}),
-    );
-    await page.waitForURL((u) => EN_BUZON.test(String(u)), { timeout: 45000 }).catch(() => {});
-    await page.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
-
-    if (!EN_BUZON.test(page.url())) {
-      throw new BuzonAccesoError(
-        fiel.rfc,
-        `el gateway no autorizó (¿buzón no habilitado? url=${page.url().slice(0, 80)})`,
-      );
+    // El gateway del SAT rechaza logins al azar («no autorizó» en saml2/acs o
+    // atorado en login.siat): en oct-2026 la misma cuenta fallaba en una
+    // corrida y entraba en la siguiente. Cada intento usa un contexto limpio
+    // (cookies nuevas); sólo se rinde tras INTENTOS_LOGIN seguidos.
+    let page: Page | null = null;
+    let ctx: BrowserContext | null = null;
+    let ultimo: BuzonAccesoError | null = null;
+    for (let intento = 1; intento <= INTENTOS_LOGIN && !page; intento++) {
+      const c = await browser.newContext({ ignoreHTTPSErrors: true, acceptDownloads: true });
+      try {
+        page = await loginBuzon(c, fiel, cerPath, keyPath, log);
+        ctx = c;
+      } catch (e) {
+        await c.close().catch(() => {});
+        if (!(e instanceof BuzonAccesoError)) throw e;
+        ultimo = e;
+        log(`login ${intento}/${INTENTOS_LOGIN}: ${e.message.slice(0, 100)}`);
+        if (intento < INTENTOS_LOGIN) await new Promise((r) => setTimeout(r, 8000 * intento));
+      }
     }
+    if (!page || !ctx) throw ultimo ?? new BuzonAccesoError(fiel.rfc, "sin sesión");
     log(`buzón autenticado (${fiel.rfc})`);
     return await fn(page, ctx);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
     await browser.close().catch(() => {});
   }
+}
+
+const INTENTOS_LOGIN = 3;
+
+/** Un intento de login e.firma en un contexto limpio. Devuelve la página ya en el buzón. */
+async function loginBuzon(
+  ctx: BrowserContext,
+  fiel: FielBytes,
+  cerPath: string,
+  keyPath: string,
+  log: (msg: string) => void,
+): Promise<Page> {
+  const page = await ctx.newPage();
+
+  // El certform a veces llega lento (card de login del SAT). Espéralo
+  // ACTIVAMENTE y reintenta la navegación un par de veces antes de rendirse —
+  // evita fallos transitorios en el barrido de cartera.
+  let certform = false;
+  for (let intento = 1; intento <= 3 && !certform; intento++) {
+    await page.goto(ENTRADA, { waitUntil: "networkidle", timeout: 45000 }).catch(() => {});
+    // Tab e.firma: #buttonFiel navega al contrato fiel_Aviso, que sirve el certform.
+    await page.locator("#buttonFiel").click({ timeout: 8000 }).catch(() => {});
+    certform = await page
+      .locator("#fileCertificate")
+      .waitFor({ state: "attached", timeout: 15000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!certform) {
+      log(`certform no apareció (intento ${intento}/3)`);
+      await page.waitForTimeout(2000);
+    }
+  }
+  if (!certform) {
+    throw new BuzonAccesoError(
+      fiel.rfc,
+      "no apareció el certform de e.firma tras 3 intentos (¿SAT lento/throttling, o cambió el login?)",
+    );
+  }
+
+  await page.locator("#fileCertificate").setInputFiles(cerPath);
+  await page.locator("#filePrivateKey").setInputFiles(keyPath);
+  await page.locator("#privateKeyPassword").fill(fiel.pass);
+  await page.locator("#submit").click({ timeout: 8000 }).catch(() =>
+    // Si el click sí disparó la navegación, este evaluate truena con
+    // «context destroyed»: no importa, abajo se espera la URL del buzón.
+    page.evaluate(() => (document.getElementById("submit") as HTMLElement | null)?.click()).catch(() => {}),
+  );
+  await page.waitForURL((u) => EN_BUZON.test(String(u)), { timeout: 45000 }).catch(() => {});
+  await page.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
+
+  if (!EN_BUZON.test(page.url())) {
+    throw new BuzonAccesoError(
+      fiel.rfc,
+      `el gateway no autorizó (¿buzón no habilitado? url=${page.url().slice(0, 80)})`,
+    );
+  }
+  return page;
 }
