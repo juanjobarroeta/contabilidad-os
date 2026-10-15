@@ -70,7 +70,9 @@ async function cargarDerivados(companyId: string): Promise<Derivado[]> {
     contarPor(ids, async (x) => g(await prisma.hospCfdiLinea.groupBy({ by: ["insumoId"], where: { insumoId: { in: x } }, _count: { _all: true } }), "insumoId")),
     contarPor(ids, async (x) => g(await prisma.hospProveedorInsumo.groupBy({ by: ["insumoId"], where: { insumoId: { in: x } }, _count: { _all: true } }), "insumoId")),
     prisma.solicitudPartida.findMany({
-      where: { hospInsumoId: { in: ids } },
+      // Una requisición cancelada o rechazada (lo que la UI llama «eliminar»)
+      // ya no recibe nada: no detiene el retiro ni se remapea.
+      where: { hospInsumoId: { in: ids }, solicitud: { estado: { notIn: ["CANCELADA", "RECHAZADA"] } } },
       select: { id: true, descripcion: true, hospInsumoId: true, solicitud: { select: { folio: true } } },
     }),
   ]);
