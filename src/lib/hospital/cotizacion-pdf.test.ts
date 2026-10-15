@@ -96,7 +96,7 @@ describe("generarPdfCotizacion", () => {
 });
 
 describe("generarPdfCotizacion — paquete para un médico", () => {
-  it("genera la carta de paquete sin precios por partida", async () => {
+  it("paquete: cada partida con su precio y el total pactado", async () => {
     const { generarPdfCotizacion } = await import("./cotizacion-pdf");
     const bytes = await generarPdfCotizacion(
       {
@@ -113,7 +113,12 @@ describe("generarPdfCotizacion — paquete para un médico", () => {
       },
       { nombre: "Hospital Haltus Hope", razonSocial: "Haltus", rfc: "HAL010101AAA", domicilio: null, telefono: null, email: null, clues: null, licenciaSanitaria: null },
     );
-    expect(bytes.length).toBeGreaterThan(1000);
+    const t = await texto(bytes);
+    expect(t).toContain("$3,000.00");
+    expect(t).toContain("$9,000.00");
+    expect(t).toMatch(/Total del paquete, con IVA[\s\S]*\$23,000\.00/);
+    // La nota vieja que copiaba una especificación no sale dos veces.
+    expect(t.match(/HONORARIOS MÉDICOS no se encuentran/g)?.length).toBe(1);
   });
 });
 
@@ -126,14 +131,21 @@ describe("conceptos «No cotizado»", () => {
     ],
   });
 
-  it("carta normal: el concepto sale con «No cotizado» en vez de precio", async () => {
-    const t = await texto(await generarPdfCotizacion(conNoCotizado(false), emisor));
-    expect(t).toContain("Torre de laparoscopia");
-    expect(t).toContain("No cotizado");
-  });
+  for (const paquete of [false, true]) {
+    it(`${paquete ? "paquete" : "carta normal"}: lo no cotizado va en EXCEPCIONES, sin precio`, async () => {
+      const t = await texto(await generarPdfCotizacion(conNoCotizado(paquete), emisor));
+      expect(t).toMatch(/EXCEPCIONES · NO INCLUIDO EN ESTA COTIZACI[ÓO]N[\s\S]*Torre de laparoscopia/);
+    });
+  }
+});
 
-  it("paquete: va aparte, «no incluido en esta cotización»", async () => {
-    const t = await texto(await generarPdfCotizacion(conNoCotizado(true), emisor));
-    expect(t).toMatch(/NO INCLUIDO EN ESTA COTIZACI[ÓO]N \(NO COTIZADO\)[\s\S]*Torre de laparoscopia/);
+describe("especificaciones al pie", () => {
+  it("siempre salen, con las notas antes", async () => {
+    const t = await texto(await generarPdfCotizacion(cot, emisor));
+    expect(t).toMatch(/NOTAS Y EXCEPCIONES[\s\S]*Dra\. Ruiz[\s\S]*ESPECIFICACIONES:[\s\S]*NO REFLEJA EL IMPORTE FINAL DE LA FACTURA[\s\S]*NO INCLUYE torre de laparoscopia/);
+  });
+  it("notasSinEspecificaciones quita lo repetido", async () => {
+    const { notasSinEspecificaciones } = await import("./cotizacion-pdf");
+    expect(notasSinEspecificaciones("ESPECIFICACIONES:\n- NO INCLUYE paquetes globulares.\nAutorizó Dr. X: sin cargo de sala")).toEqual(["Autorizó Dr. X: sin cargo de sala"]);
   });
 });

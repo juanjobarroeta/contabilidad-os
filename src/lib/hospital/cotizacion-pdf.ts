@@ -37,7 +37,7 @@ export type CotizacionParaPdf = {
   medicoNombre?: string | null;
   /** Encabezado de la carta («A quien corresponda»). */
   dirigidaA?: string | null;
-  /** Paquete: total con IVA pactado; las partidas se imprimen sin precio, agrupadas. */
+  /** Paquete: total con IVA pactado; las partidas salen con su precio prorrateado a ese total. */
   precioPaquete?: number | null;
   procedimiento: string;
   notas: string | null;
@@ -160,65 +160,30 @@ function encabezadoTabla(l: Lienzo) {
   l.y -= 24;
 }
 
-// Grupos de la carta de paquete (el formato de Haltus): QUIRÓFANO, INSUMOS Y MEDICAMENTOS, HOSPITALIZACIÓN…
-const GRUPO_PAQUETE: Record<string, string> = {
-  QUIROFANO: "QUIRÓFANO", FARMACIA: "INSUMOS Y MEDICAMENTOS", MATERIAL: "INSUMOS Y MEDICAMENTOS",
-  HABITACION: "HOSPITALIZACIÓN", EQUIPO: "EQUIPO", ESTUDIO: "ESTUDIOS", PROCEDIMIENTO: "PROCEDIMIENTOS",
-  URGENCIAS: "URGENCIAS", HONORARIO: "HONORARIOS MÉDICOS", OTRO: "OTROS",
-};
-const ORDEN_GRUPO = ["QUIRÓFANO", "PROCEDIMIENTOS", "INSUMOS Y MEDICAMENTOS", "EQUIPO", "ESTUDIOS", "URGENCIAS", "HOSPITALIZACIÓN", "HONORARIOS MÉDICOS", "OTROS"];
+/** Siempre al pie de la cotización (lo pidió el hospital, oct-2026). */
+export const ESPECIFICACIONES = [
+  "Este documento corresponde únicamente a una cotización, NO REFLEJA EL IMPORTE FINAL DE LA FACTURA.",
+  "Los HONORARIOS MÉDICOS no se encuentran dentro de esta cotización y se pagan directo al médico tratante.",
+  "No incluye medicamentos y/o insumos ADICIONALES Y/O ESPECIFICOS que el médico utilice ajenos a esta cotización.",
+  "NO INCLUYE estudios de laboratorio clínico, imagenología y patología.",
+  "NO INCLUYE paquetes globulares.",
+  "NO INCLUYE torre de laparoscopia.",
+];
 
-/** Partidas agrupadas, sólo descripción y cantidad, y el total con IVA pactado. */
-function dibujarPaquete(l: Lienzo, c: CotizacionParaPdf) {
-  const { regular, negrita } = l;
-  const grupos = new Map<string, PartidaParaPdf[]>();
-  // Lo no cotizado no va dentro del paquete: sale aparte, al final.
-  for (const p of c.partidas.filter((x) => !x.sinCotizar)) {
-    const g = GRUPO_PAQUETE[p.categoria] ?? "OTROS";
-    grupos.set(g, [...(grupos.get(g) ?? []), p]);
-  }
-  const orden = [...grupos.keys()].sort((a, b) => ORDEN_GRUPO.indexOf(a) - ORDEN_GRUPO.indexOf(b));
-  const cabecera = () => {
-    l.page.drawRectangle({ x: MARGEN, y: l.y - 16, width: ANCHO, height: 18, color: SUAVE });
-    l.page.drawText("Grupo / descripción", { x: COL.concepto + 6, y: l.y - 11, size: 8.5, font: regular, color: GRIS });
-    textoDerecha(l.page, "Cantidad", COL.importe - 6, l.y - 11, regular, 8.5, GRIS);
-    l.y -= 24;
-  };
-  cabecera();
-  for (const g of orden) {
-    if (l.y < MARGEN + 110) { nuevaPagina(l); cabecera(); }
-    l.page.drawText(textoSeguro(g), { x: COL.concepto + 6, y: l.y, size: 9, font: negrita, color: TINTA });
-    l.y -= 14;
-    for (const p of grupos.get(g)!) {
-      const lineas = envolver(p.descripcion, regular, 9.5, ANCHO - 120);
-      if (l.y - lineas.length * 11.5 < MARGEN + 90) { nuevaPagina(l); cabecera(); }
-      textoDerecha(l.page, cantidad(p.cantidad), COL.importe - 6, l.y, regular, 9.5);
-      for (const t of lineas) { l.page.drawText(t, { x: COL.concepto + 18, y: l.y, size: 9.5, font: regular, color: TINTA }); l.y -= 11.5; }
-      l.y -= 2;
-    }
-    l.page.drawLine({ start: { x: MARGEN, y: l.y + 4 }, end: { x: CARTA[0] - MARGEN, y: l.y + 4 }, thickness: 0.4, color: LINEA });
-    l.y -= 8;
-  }
-  const fuera = c.partidas.filter((x) => x.sinCotizar);
-  if (fuera.length) {
-    if (l.y < MARGEN + 110) { nuevaPagina(l); cabecera(); }
-    l.page.drawText("NO INCLUIDO EN ESTA COTIZACIÓN (NO COTIZADO)", { x: COL.concepto + 6, y: l.y, size: 9, font: negrita, color: TINTA });
-    l.y -= 14;
-    for (const p of fuera) {
-      const lineas = envolver(p.descripcion, regular, 9.5, ANCHO - 120);
-      if (l.y - lineas.length * 11.5 < MARGEN + 90) { nuevaPagina(l); cabecera(); }
-      textoDerecha(l.page, cantidad(p.cantidad), COL.importe - 6, l.y, regular, 9.5);
-      for (const t of lineas) { l.page.drawText(t, { x: COL.concepto + 18, y: l.y, size: 9.5, font: regular, color: GRIS }); l.y -= 11.5; }
-      l.y -= 2;
-    }
-    l.page.drawLine({ start: { x: MARGEN, y: l.y + 4 }, end: { x: CARTA[0] - MARGEN, y: l.y + 4 }, thickness: 0.4, color: LINEA });
-    l.y -= 8;
-  }
-  if (l.y < MARGEN + 110) nuevaPagina(l);
-  l.y -= 6;
-  textoDerecha(l.page, "TOTAL, CON IVA", X_ETIQUETA_TOTAL, l.y, negrita, 10);
-  textoDerecha(l.page, dinero(c.precioPaquete ?? c.total), COL.importe - 6, l.y, negrita, 12);
-  l.y -= 20;
+const normal = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/^[\s\-•*]+/, "").replace(/[.:\s]+$/, "").replace(/\s+/g, " ").trim().toLowerCase();
+const ESPEC_NORMAL = ESPECIFICACIONES.map(normal);
+/** Una nota que ya dice (o empieza a decir) una especificación. */
+const repiteEspecificacion = (t: string) => {
+  const n = normal(t);
+  return n === "especificaciones" || (n.length >= 12 && ESPEC_NORMAL.some((e) => e.startsWith(n) || n.startsWith(e)));
+};
+
+/** Las notas sin lo que ya va en ESPECIFICACIONES (las cotizaciones viejas las traían copiadas). */
+export function notasSinEspecificaciones(notas: string | null): string[] {
+  return (notas ?? "")
+    .split(/\r?\n/)
+    .map((t) => t.trim())
+    .filter((t) => t && !repiteEspecificacion(t));
 }
 
 export async function generarPdfCotizacion(c: CotizacionParaPdf, emisor: EmisorParaPdf, hoy: Date = new Date()): Promise<Uint8Array> {
@@ -260,7 +225,7 @@ export async function generarPdfCotizacion(c: CotizacionParaPdf, emisor: EmisorP
     ...(c.dirigidaA || c.medicoNombre ? [["Dirigida a", c.dirigidaA || c.medicoNombre || ""] as [string, string]] : []),
     ...(c.medicoNombre ? [["Médico", c.medicoNombre] as [string, string]] : []),
     ...(c.pacienteNombre ? [["Paciente", c.pacienteNombre] as [string, string]] : []),
-    ...(paquete ? [] : [["Empresa", c.pagador ? `${c.pagador.nombre}${c.pagador.tabulador ? ` · tarifario ${c.pagador.tabulador}` : ""}` : "Particular · precio de lista"] as [string, string]]),
+    ["Empresa", c.pagador ? `${c.pagador.nombre}${c.pagador.tabulador ? ` · tarifario ${c.pagador.tabulador}` : ""}` : "Particular · precio de lista"],
     ...(c.procedimiento?.trim() ? [["Procedimiento", c.procedimiento] as [string, string]] : []),
   ];
   for (const [k, v] of datos) {
@@ -271,12 +236,12 @@ export async function generarPdfCotizacion(c: CotizacionParaPdf, emisor: EmisorP
   }
   l.y -= 8;
 
-  if (paquete) {
-    dibujarPaquete(l, c);
-  } else {
   // ── Partidas ──────────────────────────────────────────────────────────────
   encabezadoTabla(l);
-  for (const p of c.partidas) {
+  // Cada partida con su precio, también en paquete (prorrateada al total pactado).
+  const cotizadas = c.partidas.filter((p) => !p.sinCotizar);
+  const fuera = c.partidas.filter((p) => p.sinCotizar);
+  for (const p of cotizadas) {
     const lineas = envolver(p.descripcion, regular, 9.5, ANCHO_CONCEPTO);
     const alto = lineas.length * 11.5 + 12 + 6;
     if (l.y - alto < MARGEN + 90) { nuevaPagina(l); encabezadoTabla(l); }
@@ -285,18 +250,14 @@ export async function generarPdfCotizacion(c: CotizacionParaPdf, emisor: EmisorP
     for (const t of lineas) { pg.drawText(t, { x: COL.concepto + 6, y: yy, size: 9.5, font: regular, color: TINTA }); yy -= 11.5; }
     pg.drawText(CATEGORIA[p.categoria] ?? textoSeguro(p.categoria), { x: COL.concepto + 6, y: yy, size: 7.5, font: regular, color: GRIS });
     textoDerecha(pg, cantidad(p.cantidad), COL.cant, l.y, regular, 9.5);
-    if (p.sinCotizar) {
-      textoDerecha(pg, "No cotizado", COL.importe - 6, l.y, regular, 9.5, GRIS);
-    } else {
-      textoDerecha(pg, dinero(p.precioUnitario), COL.unitario, l.y, regular, 9.5);
-      pg.drawText(ivaTexto(p.ivaTasa), { x: COL.iva, y: l.y, size: 9.5, font: regular, color: TINTA });
-      textoDerecha(pg, dinero(p.importe), COL.importe - 6, l.y, regular, 9.5);
-    }
+    textoDerecha(pg, dinero(p.precioUnitario), COL.unitario, l.y, regular, 9.5);
+    pg.drawText(ivaTexto(p.ivaTasa), { x: COL.iva, y: l.y, size: 9.5, font: regular, color: TINTA });
+    textoDerecha(pg, dinero(p.importe), COL.importe - 6, l.y, regular, 9.5);
     l.y = yy - 10;
     pg.drawLine({ start: { x: MARGEN, y: l.y + 4 }, end: { x: CARTA[0] - MARGEN, y: l.y + 4 }, thickness: 0.4, color: LINEA });
     l.y -= 6;
   }
-  if (c.partidas.length === 0) {
+  if (cotizadas.length === 0) {
     l.page.drawText("Sin partidas.", { x: COL.concepto + 6, y: l.y, size: 9.5, font: regular, color: GRIS });
     l.y -= 18;
   }
@@ -307,7 +268,7 @@ export async function generarPdfCotizacion(c: CotizacionParaPdf, emisor: EmisorP
   const totales: Array<[string, string, PDFFont, number]> = [
     ["Subtotal", dinero(c.subtotal), regular, 9.5],
     ["IVA", dinero(c.iva), regular, 9.5],
-    ["Total estimado", dinero(c.total), negrita, 12],
+    [paquete ? "Total del paquete, con IVA" : "Total estimado", dinero(paquete ? c.precioPaquete ?? c.total : c.total), negrita, 12],
   ];
   for (const [k, v, font, size] of totales) {
     textoDerecha(l.page, k, X_ETIQUETA_TOTAL, l.y, font === negrita ? negrita : regular, size === 12 ? 10 : 9, font === negrita ? TINTA : GRIS);
@@ -315,17 +276,35 @@ export async function generarPdfCotizacion(c: CotizacionParaPdf, emisor: EmisorP
     l.y -= size + 6;
   }
 
+  // ── Excepciones: lo mencionado que no se cotizó ────────────────────────────
+  if (fuera.length) {
+    l.y -= 6;
+    if (l.y < MARGEN + 110) nuevaPagina(l);
+    l.page.drawText("EXCEPCIONES · NO INCLUIDO EN ESTA COTIZACIÓN", { x: MARGEN, y: l.y, size: 8.5, font: negrita, color: TINTA });
+    l.y -= 13;
+    for (const p of fuera) {
+      const lineas = envolver(`${p.descripcion}${p.cantidad !== 1 ? ` (${cantidad(p.cantidad)})` : ""}`, regular, 9, ANCHO - 12);
+      if (l.y - lineas.length * 11.5 < MARGEN + 60) nuevaPagina(l);
+      lineas.forEach((t, n) => { l.page.drawText(n === 0 ? `- ${t}` : `  ${t}`, { x: MARGEN, y: l.y, size: 9, font: regular, color: TINTA }); l.y -= 11.5; });
+    }
   }
 
-  // ── Notas (en paquete: especificaciones, una por renglón) ─────────────────
-  if (c.notas && textoSeguro(c.notas)) {
+  // ── Notas y excepciones autorizadas, luego las especificaciones de siempre ─
+  const bloque = (titulo: string, renglones: string[], vineta: boolean) => {
+    const lineas = renglones.flatMap((t) => envolver(vineta && !/^[-•*]/.test(t) ? `- ${t}` : t, regular, 9, ANCHO));
     l.y -= 10;
-    const lineas = c.notas.split(/\r?\n/).filter((t) => t.trim()).flatMap((t) => envolver(t, regular, 9, ANCHO));
-    if (l.y - lineas.length * 11.5 < MARGEN + 60) nuevaPagina(l);
-    l.page.drawText(paquete ? "ESPECIFICACIONES" : "Notas", { x: MARGEN, y: l.y, size: 8.5, font: paquete ? negrita : regular, color: paquete ? TINTA : GRIS });
+    if (l.y - Math.min(lineas.length, 6) * 11.5 < MARGEN + 60) nuevaPagina(l);
+    l.page.drawText(titulo, { x: MARGEN, y: l.y, size: 8.5, font: negrita, color: TINTA });
     l.y -= 13;
-    for (const t of lineas) { l.page.drawText(t, { x: MARGEN, y: l.y, size: 9, font: regular, color: TINTA }); l.y -= 11.5; }
-  }
+    for (const t of lineas) {
+      if (l.y < MARGEN + 40) nuevaPagina(l);
+      l.page.drawText(t, { x: MARGEN, y: l.y, size: 9, font: regular, color: TINTA });
+      l.y -= 11.5;
+    }
+  };
+  const notas = notasSinEspecificaciones(c.notas).filter((t) => textoSeguro(t));
+  if (notas.length) bloque("NOTAS Y EXCEPCIONES", notas, false);
+  bloque("ESPECIFICACIONES:", ESPECIFICACIONES, true);
 
   // ── Pie en cada página ────────────────────────────────────────────────────
   const aviso = paquete

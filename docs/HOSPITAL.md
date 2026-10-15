@@ -334,7 +334,9 @@ GET  /api/hospital/citas?companyId=&desde=&hasta= · POST (409 si empalma; nace 
      · diasEstancia (sólo HOSPITALIZACION) · insumos[] { descripcion, cantidad, servicioId?, clave? } de la lista de precios o libres
 GET  /api/hospital/cotizaciones?companyId=[&medicoId=&pacienteId=] (desde la agenda: las del médico o del paciente; la cita guarda `cotizacionId` y la trae con folio, procedimiento y total) · POST · GET/PATCH /cotizaciones/[id] · POST /cotizaciones/[id]/convertir
 POST /api/hospital/cotizaciones/leer { companyId, archivoBase64, mime: PDF|imagen, pagadorId? } — lee la cotización de OTRO hospital (IA, efímera, no escribe) y empareja cada renglón con el tarifario (palabras en común; la presentación cuenta). Devuelve su total, el nuestro con IVA y los renglones sin emparejar, para mejorar su precio.
-Partida «No cotizado» (`sinCotizar: true`): el concepto se menciona sin precio (importe 0, fuera del total); en el PDF sale «No cotizado» o, en paquete, en un bloque «NO INCLUIDO EN ESTA COTIZACIÓN»; al convertir no pasa a la cuenta.
+Partida «No cotizado» (`sinCotizar: true`): el concepto se menciona sin precio (importe 0, fuera del total); en el PDF sale aparte, en «EXCEPCIONES · NO INCLUIDO EN ESTA COTIZACIÓN»; al convertir no pasa a la cuenta.
+
+PDF: cada partida con su precio, también en paquete (prorrateada al total pactado); luego las excepciones (lo no cotizado), «NOTAS Y EXCEPCIONES» (las notas, sin repetir especificaciones) y siempre «ESPECIFICACIONES:» fijas (`ESPECIFICACIONES` en cotizacion-pdf.ts).
 
 Descuento por partida (`descuentoPct`, 0–100): `precioUnitario` se guarda ya neto; `precioOriginal` guarda el del tarifario/lista (o el base, en libre) siempre que el cotizado sea otro —por descuento o por precio movido—, y la pantalla enseña el descuento contra él (p. ej. −100 %). El PDF y la cuenta al convertir sólo ven el neto; el descuento es interno. En paquete no aplica (el total pactado manda).
 
