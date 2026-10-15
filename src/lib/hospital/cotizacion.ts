@@ -157,6 +157,8 @@ export const incluyeCotizacion = {
   paciente: { select: { id: true, nombre: true, apellidoPaterno: true, apellidoMaterno: true, fechaNacimiento: true } },
   pagador: { select: { id: true, nombre: true, tipo: true, tabulador: true } },
   episodio: { select: { id: true, folio: true, estado: true } },
+  /** Citas agendadas con esta cotización (la aceptada se agenda, no se convierte a mano). */
+  citas: { where: { estado: { not: "CANCELADA" as const } }, orderBy: { inicio: "asc" as const }, select: { id: true, inicio: true, estado: true, episodioId: true } },
   partidas: { orderBy: { orden: "asc" as const }, include: { servicio: { select: { id: true, clave: true, nombre: true } } } },
 } as const;
 
