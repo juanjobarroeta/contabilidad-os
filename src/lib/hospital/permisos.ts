@@ -86,7 +86,11 @@ export async function enforceHospitalAccess(companyId: string, userId: string, r
   // Compras consulta el catálogo de insumos y su ficha de compras (sin pacientes):
   // buscar, ver existencia, lotes, proveedores y precios. Escribir sigue siendo de farmacia.
   const fichaDeCompras = root === "farmacia" && !writing && path[1] === "insumos";
-  const permitidas = fichaDeCompras ? [...paginas.farmacia, "compras", "requisiciones", "tesoreria"] : paginas[root] ?? [root];
+  // Completar la cuenta o el crédito de un proveedor al cotizar es de compras, no de médicos.
+  const completarProveedor = root === "proveedores" && path[2] === "completar";
+  const permitidas = fichaDeCompras
+    ? [...paginas.farmacia, "compras", "requisiciones", "tesoreria"]
+    : completarProveedor ? ["proveedores", "compras", "requisiciones", "tesoreria"] : paginas[root] ?? [root];
   if (!(root === "config" && !writing) && member?.hospitalPaginas.length && !permitidas.some(p => member.hospitalPaginas.includes(p))) {
     throw new AuthzError(403, "Tu usuario no tiene acceso a esta sección del hospital. Pide a un administrador que habilite esta sección en Usuarios.");
   }
