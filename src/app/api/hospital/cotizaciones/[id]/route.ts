@@ -148,7 +148,7 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
   if (d.action === "partidas") {
     if (c.estado !== "BORRADOR" && c.estado !== "ENVIADA") return error(`Las partidas sólo se editan en BORRADOR o ENVIADA (está ${c.estado})`, 409);
     const precioPaquete = d.precioPaquete !== undefined ? d.precioPaquete : c.precioPaquete == null ? null : Number(c.precioPaquete);
-    const lista = await armarPartidas(prisma, c.companyId, c.pagadorId, d.partidas);
+    const lista = await armarPartidas(prisma, c.companyId, c.pagadorId, d.partidas, { conOriginal: true });
     if (lista.preciosMovidos.length && !(await tieneClinicalPermission(c.companyId, user.id, PERMISO_PRECIOS))) return error(mensajePreciosMovidos(lista.preciosMovidos), 403);
     const armado = precioPaquete ? aPaquete(lista, precioPaquete) : lista;
     const actualizada = await prisma.$transaction(async (tx) => {

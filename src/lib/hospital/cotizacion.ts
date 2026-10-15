@@ -39,9 +39,11 @@ export interface PartidaArmada {
   ivaTasa: number | null;
   importe: number;
   sinCotizar?: boolean;
-  /** Sólo con descuento: el % y el precio antes de él (precioUnitario ya es el neto). */
+  /** Descuento capturado (%); precioUnitario ya es el neto. */
   descuentoPct?: number;
-  precioSinDescuento?: number;
+  /** El precio del tarifario/lista (o el capturado, en libre) cuando el
+   *  cotizado es otro: contra él se ve cuánto se descontó. */
+  precioOriginal?: number;
 }
 
 /** Precio unitario neto: el base menos el descuento (6 decimales, como se guarda). */
@@ -54,7 +56,9 @@ export async function armarPartidas(
   db: Db,
   companyId: string,
   pagadorId: string | null | undefined,
-  entradas: PartidaEntrada[]
+  entradas: PartidaEntrada[],
+  /** Sólo las cotizaciones guardan descuento y precio original (planes y protocolos crean sus filas tal cual). */
+  opciones: { conOriginal?: boolean } = {}
 ): Promise<{ partidas: PartidaArmada[]; subtotal: number; iva: number; total: number; preciosMovidos: number[] }> {
   const ids = [...new Set(entradas.map((p) => p.servicioId).filter(Boolean))] as string[];
   const servicios = ids.length
@@ -81,12 +85,12 @@ export async function armarPartidas(
       throw new HospitalError(400, `La partida ${i + 1} necesita servicioId o (categoria, descripcion, precioUnitario)`);
     }
     const descuento = !p.sinCotizar && p.descuentoPct && base > 0 ? p.descuentoPct : 0;
-    if (!p.sinCotizar) {
-      const delTarifario = servicio ? r2(Number(tarifa?.precio ?? servicio.precioLista)) : null;
-      const capturado = p.precioUnitario != null && (delTarifario == null ? p.precioUnitario > 0 : Math.abs(p.precioUnitario - delTarifario) >= 0.005);
-      if (capturado || descuento) preciosMovidos.push(i + 1);
-    }
+    const delTarifario = servicio ? r2(Number(tarifa?.precio ?? servicio.precioLista)) : null;
+    const capturado = !p.sinCotizar && p.precioUnitario != null && (delTarifario == null ? p.precioUnitario > 0 : Math.abs(p.precioUnitario - delTarifario) >= 0.005);
+    if (capturado || descuento) preciosMovidos.push(i + 1);
     const precioUnitario = precioConDescuento(base, descuento);
+    const original = delTarifario ?? base;
+    const conOriginal = opciones.conOriginal && !p.sinCotizar && (descuento > 0 || Math.abs(precioUnitario - original) >= 0.005);
     const ivaTasa =
       p.ivaTasa !== undefined ? p.ivaTasa : servicio ? (servicio.ivaTasa == null ? null : Number(servicio.ivaTasa)) : ivaDefault(categoria, ivaServicios);
     return {
@@ -99,7 +103,7 @@ export async function armarPartidas(
       ivaTasa,
       importe: r2(p.cantidad * precioUnitario),
       sinCotizar: p.sinCotizar ?? false,
-      ...(descuento ? { descuentoPct: descuento, precioSinDescuento: base } : {}),
+      ...(conOriginal ? { precioOriginal: original, ...(descuento ? { descuentoPct: descuento } : {}) } : {}),
     };
   });
 
@@ -130,7 +134,7 @@ export function aPaquete(
   const factor = precioPaquete / armado.total;
   const conIva = (p: PartidaArmada) => p.importe * (1 + (p.ivaTasa ?? 0));
   // En paquete el total pactado manda: el descuento por partida ya no aplica.
-  const partidas = armado.partidas.map(({ descuentoPct: _d, precioSinDescuento: _b, ...p }) => {
+  const partidas = armado.partidas.map(({ descuentoPct: _d, precioOriginal: _b, ...p }) => {
     const importe = r2(p.importe * factor);
     return { ...p, importe, precioUnitario: p.cantidad > 0 ? Math.round((importe / p.cantidad) * 1e6) / 1e6 : 0 };
   });
@@ -162,7 +166,7 @@ export function serializarCotizacion<
     iva: unknown;
     total: unknown;
     precioPaquete?: unknown;
-    partidas?: Array<{ cantidad: unknown; precioUnitario: unknown; ivaTasa: unknown; importe: unknown; descuentoPct?: unknown; precioSinDescuento?: unknown } & Record<string, unknown>>;
+    partidas?: Array<{ cantidad: unknown; precioUnitario: unknown; ivaTasa: unknown; importe: unknown; descuentoPct?: unknown; precioOriginal?: unknown } & Record<string, unknown>>;
   },
 >(c: T) {
   return {
@@ -180,7 +184,7 @@ export function serializarCotizacion<
         cantidad: Number(p.cantidad),
         precioUnitario: Number(p.precioUnitario),
         descuentoPct: p.descuentoPct == null ? null : Number(p.descuentoPct),
-        precioSinDescuento: p.precioSinDescuento == null ? null : Number(p.precioSinDescuento),
+        precioOriginal: p.precioOriginal == null ? null : Number(p.precioOriginal),
         ivaTasa,
         importe,
         iva,

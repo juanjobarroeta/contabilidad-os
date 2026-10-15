@@ -118,7 +118,7 @@ export const POST = withHospital(async (req: Request) => {
   }
   const estadoInicial = d.estado ?? "BORRADOR";
 
-  const lista = await armarPartidas(prisma, d.companyId, d.pagadorId, d.partidas);
+  const lista = await armarPartidas(prisma, d.companyId, d.pagadorId, d.partidas, { conOriginal: true });
   if (lista.preciosMovidos.length && !(await tieneClinicalPermission(d.companyId, user.id, PERMISO_PRECIOS))) return error(mensajePreciosMovidos(lista.preciosMovidos), 403);
   const armado = d.precioPaquete ? aPaquete(lista, d.precioPaquete) : lista;
   const hoy = new Date();
