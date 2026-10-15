@@ -100,7 +100,7 @@ const compras = z.object({
 /** Todas las palabras del texto, sin importar mayúsculas (el resto de la búsqueda la afina el modelo). */
 const palabras = (t: string) => t.split(/\s+/).filter((p) => p.length >= 2).slice(0, 5);
 
-async function consultarInventario(db: PrismaClient, companyId: string, t: string) {
+async function consultarInventario(db: PrismaClient, companyId: string, t: string, completo = false) {
   const ps = palabras(t);
   const insumos = await db.hospInsumo.findMany({
     where: {
@@ -118,11 +118,11 @@ async function consultarInventario(db: PrismaClient, companyId: string, t: strin
         where: { existencia: { gt: 0 } },
         select: { lote: true, caducidad: true, existencia: true, bloqueado: true, supplier: { select: { razonSocial: true } } },
         orderBy: [{ caducidad: { sort: "asc", nulls: "last" } }],
-        take: 8,
+        take: completo ? 100 : 8,
       },
     },
     orderBy: { nombre: "asc" },
-    take: 10,
+    take: completo ? 1000 : 10,
   });
   const hoy = Date.now();
   return {
@@ -152,13 +152,13 @@ async function consultarInventario(db: PrismaClient, companyId: string, t: strin
   };
 }
 
-async function insumosPorCaducar(db: PrismaClient, companyId: string, dias: number) {
+async function insumosPorCaducar(db: PrismaClient, companyId: string, dias: number, completo = false) {
   const limite = new Date(Date.now() + dias * DIA);
   const lotes = await db.hospLote.findMany({
     where: { companyId, existencia: { gt: 0 }, caducidad: { not: null, lte: limite } },
     select: { lote: true, caducidad: true, existencia: true, insumo: { select: { clave: true, nombre: true, unidad: true } } },
     orderBy: { caducidad: "asc" },
-    take: 40,
+    take: completo ? 5000 : 40,
   });
   const hoy = Date.now();
   return {
@@ -179,12 +179,12 @@ const porTexto = (t: string) => ({
   OR: [{ rfc: { contains: t.trim().toUpperCase() } }, { AND: palabras(t).map((p) => ({ razonSocial: { contains: p, mode: "insensitive" as const } })) }],
 });
 
-async function buscarProveedores(db: PrismaClient, companyId: string, t: string) {
+async function buscarProveedores(db: PrismaClient, companyId: string, t: string, completo = false) {
   const ps = await db.supplier.findMany({
     where: { companyId, ...porTexto(t) },
     select: { razonSocial: true, rfc: true, email: true, terms: { select: { tieneCredito: true, diasCredito: true } }, _count: { select: { solicitudesCompra: true } } },
     orderBy: { razonSocial: "asc" },
-    take: 10,
+    take: completo ? 2000 : 10,
   });
   return {
     proveedores: ps.map((p) => ({
@@ -197,17 +197,17 @@ async function buscarProveedores(db: PrismaClient, companyId: string, t: string)
   };
 }
 
-async function buscarClientes(db: PrismaClient, companyId: string, t: string) {
+async function buscarClientes(db: PrismaClient, companyId: string, t: string, completo = false) {
   const cs = await db.customer.findMany({
     where: { companyId, ...porTexto(t) },
     select: { razonSocial: true, rfc: true, regimenFiscal: true, email: true },
     orderBy: { razonSocial: "asc" },
-    take: 10,
+    take: completo ? 2000 : 10,
   });
   return { clientes: cs.map((c) => ({ razonSocial: c.razonSocial, rfc: c.rfc, regimenFiscal: c.regimenFiscal, correo: c.email })) };
 }
 
-async function comprasPorProveedor(db: PrismaClient, companyId: string, a: z.infer<typeof compras>) {
+async function comprasPorProveedor(db: PrismaClient, companyId: string, a: z.infer<typeof compras>, completo = false) {
   const desde = new Date(`${a.desde}T00:00:00`);
   const hasta = new Date(`${a.hasta}T23:59:59.999`);
   if (!(desde <= hasta)) return { error: "El periodo está al revés: «desde» va antes de «hasta»." };
@@ -270,9 +270,9 @@ async function comprasPorProveedor(db: PrismaClient, companyId: string, a: z.inf
   return {
     periodo: { desde: a.desde, hasta: a.hasta },
     proveedor: filtro ?? null,
-    facturasRecibidas: { porProveedor: facturas.slice(0, 15), proveedores: facturas.length, total: r2(facturas.reduce((s, f) => s + f.totalConIva, 0)) },
-    ordenesAutorizadas: [...ordenesPor.values()].sort((x, y) => y.total - x.total).slice(0, 15),
-    insumosRecibidos: [...insumos.values()].sort((x, y) => y.monto - x.monto).slice(0, 15),
+    facturasRecibidas: { porProveedor: completo ? facturas : facturas.slice(0, 15), proveedores: facturas.length, total: r2(facturas.reduce((s, f) => s + f.totalConIva, 0)) },
+    ordenesAutorizadas: [...ordenesPor.values()].sort((x, y) => y.total - x.total).slice(0, completo ? undefined : 15),
+    insumosRecibidos: [...insumos.values()].sort((x, y) => y.monto - x.monto).slice(0, completo ? undefined : 15),
     nota: "Facturas con IVA (CFDI recibidos, sin notas de crédito); órdenes y entradas a costo sin IVA.",
   };
 }
@@ -281,7 +281,15 @@ async function comprasPorProveedor(db: PrismaClient, companyId: string, a: z.inf
  * Ejecuta una herramienta para este usuario. Siempre devuelve un objeto
  * (también los errores y la falta de permiso, para que la mascota los explique).
  */
-export async function ejecutarHerramienta(db: PrismaClient, ctx: { companyId: string; paginas: string[] }, nombre: string, input: unknown): Promise<Record<string, unknown>> {
+export async function ejecutarHerramienta(
+  db: PrismaClient,
+  ctx: { companyId: string; paginas: string[] },
+  nombre: string,
+  input: unknown,
+  /** Para el Excel: sin los topes que mantienen corta la respuesta del chat. */
+  opciones: { completo?: boolean } = {}
+): Promise<Record<string, unknown>> {
+  const completo = opciones.completo === true;
   if (!PAGINAS_HERRAMIENTA[nombre]) return { error: `Herramienta desconocida: ${nombre}` };
   if (!puedeUsarHerramienta(ctx.paginas, nombre)) {
     return { sinPermiso: true, requiereAlgunaDe: PAGINAS_HERRAMIENTA[nombre], mensaje: "El usuario no tiene acceso a esta información; un administrador lo habilita en Usuarios." };
@@ -289,15 +297,15 @@ export async function ejecutarHerramienta(db: PrismaClient, ctx: { companyId: st
   try {
     switch (nombre) {
       case "consultar_inventario":
-        return consultarInventario(db, ctx.companyId, texto.parse(input).texto);
+        return consultarInventario(db, ctx.companyId, texto.parse(input).texto, completo);
       case "insumos_por_caducar":
-        return insumosPorCaducar(db, ctx.companyId, caducar.parse(input ?? {}).dias ?? 90);
+        return insumosPorCaducar(db, ctx.companyId, caducar.parse(input ?? {}).dias ?? 90, completo);
       case "buscar_proveedores":
-        return buscarProveedores(db, ctx.companyId, texto.parse(input).texto);
+        return buscarProveedores(db, ctx.companyId, texto.parse(input).texto, completo);
       case "buscar_clientes":
-        return buscarClientes(db, ctx.companyId, texto.parse(input).texto);
+        return buscarClientes(db, ctx.companyId, texto.parse(input).texto, completo);
       case "compras_por_proveedor":
-        return comprasPorProveedor(db, ctx.companyId, compras.parse(input));
+        return comprasPorProveedor(db, ctx.companyId, compras.parse(input), completo);
     }
   } catch (e) {
     if (e instanceof z.ZodError) return { error: `Parámetros inválidos: ${e.issues.map((i) => `${i.path.join(".")} ${i.message}`).join("; ")}` };

@@ -14,6 +14,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, requireModule } from "@/lib/authz";
 import { crearReporte, descargasDeReporte, textoResumen } from "@/lib/facturas/reporte-servicio";
+import { firmarExportacion } from "@/lib/hospital/ayuda/exportar";
+import { puedeUsarHerramienta } from "@/lib/hospital/ayuda/herramientas";
 import { withHospital } from "@/lib/hospital/with-hospital";
 import { bitacora, errorZod } from "@/lib/hospital/http";
 import { nombreUsuario } from "@/lib/hospital/util";
@@ -81,7 +83,18 @@ export const POST = withHospital(async (req: Request) => {
   // Un reporte de facturas: el modelo sólo puso los FILTROS; las cifras y los
   // archivos los arma el hub. Los enlaces van firmados (24 h) porque el
   // navegador de HospitalOS no manda su Bearer en un <a href>.
-  const { reporte, herramientas: _herramientas, ...resto } = r;
+  const { reporte, exportar, herramientas: _herramientas, ...resto } = r;
+  const baseUrl = () => {
+    const host = req.headers.get("x-forwarded-host")?.split(",")[0].trim() ?? req.headers.get("host");
+    const proto = req.headers.get("x-forwarded-proto")?.split(",")[0].trim() ?? "https";
+    return host ? `${proto}://${host}` : new URL(req.url).origin;
+  };
+  // Excel de una consulta de datos (lotes por caducar, inventario…): enlace
+  // firmado; al bajarlo se vuelve a consultar con los permisos de ese momento.
+  const descargasDatos =
+    exportar && puedeUsarHerramienta(member?.hospitalPaginas ?? [], exportar.herramienta)
+      ? [{ label: "Excel", href: `${baseUrl()}/api/hospital/ayuda/exportar?${firmarExportacion({ companyId: d.companyId, userId: user.id, ...exportar })}` }]
+      : [];
   if (reporte) {
     try {
       const rep = await crearReporte(prisma, { companyId: d.companyId, userId: user.id, origen: "hospital-ayuda", filtros: reporte });
@@ -102,5 +115,5 @@ export const POST = withHospital(async (req: Request) => {
       return NextResponse.json({ ...resto, respuesta: `No pude armar el reporte: ${motivo}`, descargas: [] });
     }
   }
-  return NextResponse.json({ ...resto, descargas: [] });
+  return NextResponse.json({ ...resto, descargas: descargasDatos });
 });

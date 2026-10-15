@@ -300,7 +300,8 @@ Reglas del servidor:
 - **Nuevo médico** → Nombre, Especialidad, Cédula profesional, Teléfono, CURP y nombre por partes (responsable SAEH), Proveedor en el hub (para dispersar honorarios) → **Registrar médico**. La cédula es necesaria para el libro de control de controlados; el perfil médico se vincula al usuario en Usuarios para poder firmar.
 
 ## farmacia — Farmacia y almacén (/farmacia)
-- Vistas **Inventario** y **Libro de control**. Facetas Todos, Bajo mínimo, Por caducar, Controlados, Refrigeración, Sin existencia.
+- Vistas **Inventario**, **Por surtir** (medicamento y material cotizados: preparar lo agendado; **Surtido · cargar a la cuenta** lo ingresado) y **Libro de control**. Facetas Todos, Bajo mínimo, Por caducar, Controlados, Refrigeración, Sin existencia.
+- Excel de caducidades, inventario, proveedores, clientes o compras por proveedor: pídeselo a la mascota (p. ej. «Excel de lotes que caducan en 90 días»); contesta con el resumen y un enlace **Excel** (24 h).
 - **Recibir lote** → insumo, Lote, Caducidad, cantidad, Costo unitario → **Recibir**. **Nuevo insumo** → Clave, Categoría, Nombre, Presentación, Mínimo en existencia, Precio de venta, Sustancia activa, Registro sanitario, Grupo de control, Controlado, Cadena de frío → **Registrar**. Por insumo: **Editar**, **Ajuste** / «Ajuste / merma» (cantidad y motivo → **Registrar movimiento**) y kardex.
 - Libro de control (grupos I–III): balance por sustancia y movimientos; **CSV** / **Exportar XLSX**.
 - **Recibir con escáner** (teléfono o lector de mano): escanea el código de barras de la caja → sale el insumo (un código nuevo se liga una sola vez: «¿A qué insumo pertenece?»). Lote, caducidad y precio máximo NO vienen en el código de la caja mexicana: **Tomar foto de la etiqueta** los propone y tú los confirmas. Si hay una orden autorizada pendiente de ese insumo, elige la línea para que cuente como recibido. Cantidad, costo → **Recibir**.
