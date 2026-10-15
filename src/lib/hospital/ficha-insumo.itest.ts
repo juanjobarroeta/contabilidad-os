@@ -34,8 +34,8 @@ describe.skipIf(skip)("ficha del insumo: sus compras", () => {
       partidas: [{ hospInsumoId: insumoId, descripcion: "ONDANSETRON 8MG", unidad: "AMP", cantidad: 36, precioUnitario: 0 }],
       cotizaciones: [{ supplierId: provA, precios: [18.5] }, { supplierId: provB, precios: [21] }],
     });
-    await aprobarRequisicion(r.id, companyId, "u-director");
     const partida = await prisma.solicitudPartida.findFirstOrThrow({ where: { solicitudId: r.id } });
+    await aprobarRequisicion(r.id, companyId, "u-director", { [partida.id]: partida.cotizacionGanadoraId! });
     const lote = await prisma.hospLote.create({ data: { companyId, insumoId, lote: "L1", existencia: 12, costoUnitario: 18.5, supplierId: provA } });
     await prisma.hospMovimientoInsumo.create({
       data: { companyId, insumoId, loteId: lote.id, tipo: "ENTRADA_COMPRA", cantidad: 12, costoUnitario: 18.5, fecha: new Date(), solicitudPartidaId: partida.id, usuarioNombre: "Almacén" },

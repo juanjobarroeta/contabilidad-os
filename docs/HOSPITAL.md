@@ -983,8 +983,11 @@ flujo de efectivo en `src/lib/hospital/flujo-efectivo.ts`; padrón en
   Compras arma la requisición con una o varias `SolicitudCompraCotizacion`
   (precio por línea, crédito, días de entrega, vigencia, notas); cada partida
   gana con la más barata (`elegirGanadoras`) salvo que se elija otra, y toma su
-  precio. `PUT …/requisiciones/[id]/ganadoras` cambia ganadoras mientras está
-  por autorizar; `…/aprobar { ganadoras? }` lo hace en el mismo paso.
+  precio, pero al armar es sólo SUGERENCIA (de ahí el total estimado): **el
+  proveedor lo elige quien autoriza**. `…/aprobar { ganadoras }` exige elegir
+  cada línea que cotizaron dos o más proveedores (`faltaElegir`, 422 si falta);
+  las de una sola oferta no se eligen. `HospInsumo.maximo` (opcional) y la
+  existencia viajan en la bandeja y en el detalle para decidir cuánto pedir.
   `generateAdjudicaciones` saca **una orden por proveedor ganador**; cada orden
   lleva sólo sus líneas (`cotizacionGanadoraId = adjudicación.cotizacionId`)
   para recepción, total, CFDI (RFC del proveedor de la orden) y pago.
@@ -999,7 +1002,7 @@ flujo de efectivo en `src/lib/hospital/flujo-efectivo.ts`; padrón en
   que quedó en cero se quita (sin factura ni pagos); si toda la requisición
   quedó en cero, se cancela.
 - **Autorizar / rechazar** (`…/[id]/aprobar`, `…/[id]/rechazar`): permiso
-  `COMPRAS_AUTORIZAR`; nadie autoriza ni rechaza la suya. Al autorizar,
+  `COMPRAS_AUTORIZAR` (también la que armó quien lo tiene). Al autorizar,
   `generateAdjudicaciones` crea la **orden de compra** (una adjudicación con el
   crédito del proveedor).
 - **Recepción**: insumos con su lote en Farmacia (`/farmacia/lotes` +

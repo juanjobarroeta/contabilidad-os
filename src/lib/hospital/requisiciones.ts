@@ -316,10 +316,24 @@ export async function editarRequisicion(id: string, companyId: string, input: Re
  * (`ganadoras`: partidaId → cotizacionId); se genera una orden por proveedor
  * ganador.
  */
+/**
+ * Las líneas que quien autoriza tiene que decidir: las que cotizaron dos o
+ * más proveedores y no vienen en `ganadoras`. Al armar la requisición la más
+ * barata queda sólo como sugerencia; el proveedor lo elige quien autoriza.
+ */
+export function faltaElegir(partidas: Array<{ id: string; descripcion: string; ofertas: number }>, ganadoras?: Record<string, string> | null): string[] {
+  return partidas.filter((p) => p.ofertas > 1 && !ganadoras?.[p.id]).map((p) => p.descripcion);
+}
+
 export async function aprobarRequisicion(id: string, companyId: string, userId: string, ganadoras?: Record<string, string> | null) {
   const sol = await cargarHospital(prisma, id, companyId);
   if (sol.estado !== "PENDIENTE") throw new HospitalError(409, `La requisición está ${sol.estado.toLowerCase()}: no se puede autorizar`);
-  if (sol.creadaPorId === userId) throw new HospitalError(403, "No puedes autorizar tu propia requisición: la autoriza otra persona.");
+  const partidas = await prisma.solicitudPartida.findMany({
+    where: { solicitudId: id },
+    select: { id: true, descripcion: true, _count: { select: { cotizaciones: true } } },
+  });
+  const pendientes = faltaElegir(partidas.map((p) => ({ id: p.id, descripcion: p.descripcion, ofertas: p._count.cotizaciones })), ganadoras);
+  if (pendientes.length) throw new HospitalError(422, `Elige el proveedor de: ${pendientes.join(", ")}`);
   return prisma.$transaction(async (tx) => {
     // Condicionado al estado: dos autorizaciones simultáneas no duplican la orden.
     const n = await tx.solicitudCompra.updateMany({
@@ -337,7 +351,6 @@ export async function aprobarRequisicion(id: string, companyId: string, userId: 
 export async function rechazarRequisicion(id: string, companyId: string, userId: string, motivo: string) {
   const sol = await cargarHospital(prisma, id, companyId);
   if (sol.estado !== "PENDIENTE") throw new HospitalError(409, "Sólo se rechaza una requisición por autorizar");
-  if (sol.creadaPorId === userId) throw new HospitalError(403, "Tu propia requisición no la rechazas: edítala o cancélala.");
   await prisma.solicitudCompra.update({
     where: { id },
     data: { estado: "RECHAZADA", rechazadaPorId: userId, rechazadaAt: new Date(), rechazoMotivo: motivo.trim() },

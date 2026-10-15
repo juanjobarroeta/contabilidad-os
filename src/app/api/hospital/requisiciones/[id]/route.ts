@@ -13,6 +13,8 @@ import { withHospital } from "@/lib/hospital/with-hospital";
 import { bitacora, error } from "@/lib/hospital/http";
 import { assertPuedeEscribir } from "@/lib/subscription";
 import { cancelarRequisicion, companyDeRequisicion, editarRequisicion, ordenesDeCompra } from "@/lib/hospital/requisiciones";
+import { existenciaPorInsumo } from "@/lib/hospital/bandeja-compras";
+import { tieneClinicalPermission } from "@/lib/hospital/permisos";
 import { aRequisicionInput, nombresDeUsuarios, requisicionSchema } from "@/lib/hospital/requisiciones-http";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -31,7 +33,7 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
       partidas: {
         select: {
           id: true, descripcion: true, unidad: true, cantidad: true, precioUnitario: true, importe: true, cantidadRecibida: true,
-          hospInsumo: { select: { id: true, clave: true, nombre: true, unidad: true } },
+          hospInsumo: { select: { id: true, clave: true, nombre: true, unidad: true, minimo: true, maximo: true } },
           cotizacionGanadoraId: true,
           hospLineaArea: { select: { id: true, urgencia: true, intentos: true, proveedorSugeridoNombre: true, solicitud: { select: { folio: true, area: true, solicitanteNombre: true } } } },
         },
@@ -47,6 +49,8 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
       },
     },
   });
+  const insumoIds = [...new Set(r.partidas.map((p) => p.hospInsumo?.id).filter((x): x is string => !!x))];
+  const existencias = await existenciaPorInsumo(prisma, companyId, insumoIds);
   const ordenes = await ordenesDeCompra(prisma, companyId, { solicitudId: id });
   const nombres = await nombresDeUsuarios([r.creadaPorId, r.aprobadaPorId, r.rechazadaPorId, ...ordenes.flatMap((o) => [o.autorizacionPago?.porId, o.pedido?.porId])]);
   const emails = new Map(
@@ -54,9 +58,15 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
   );
   return NextResponse.json({
     usuarioId: user.id,
+    // Quien tiene COMPRAS_AUTORIZAR autoriza o rechaza, también las que armó.
+    puedeAutorizar: await tieneClinicalPermission(companyId, user.id, "COMPRAS_AUTORIZAR"),
     ...r,
     total: Number(r.total),
-    partidas: r.partidas.map((p) => ({ ...p, cantidad: Number(p.cantidad), precioUnitario: Number(p.precioUnitario), importe: Number(p.importe), cantidadRecibida: Number(p.cantidadRecibida) })),
+    partidas: r.partidas.map((p) => ({
+      ...p,
+      // Inventario del insumo para decidir cuánto pedir: existencia, mínimo y máximo.
+      hospInsumo: p.hospInsumo ? { ...p.hospInsumo, minimo: Number(p.hospInsumo.minimo), maximo: p.hospInsumo.maximo == null ? null : Number(p.hospInsumo.maximo), existencia: existencias.get(p.hospInsumo.id) ?? 0 } : null,
+      cantidad: Number(p.cantidad), precioUnitario: Number(p.precioUnitario), importe: Number(p.importe), cantidadRecibida: Number(p.cantidadRecibida) })),
     // La comparación: cada cotización con su precio por partida (null = no la cotizó).
     cotizaciones: r.cotizaciones.map((c) => {
       const precio = new Map(c.partidas.map((x) => [x.solicitudPartidaId, Number(x.precioUnitario)]));

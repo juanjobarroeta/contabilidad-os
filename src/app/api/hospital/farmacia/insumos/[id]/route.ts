@@ -36,6 +36,7 @@ const patchSchema = z
     sustanciaActiva: z.string().trim().max(120).nullable().optional(),
     requiereRefrigeracion: z.boolean().optional(),
     minimo: z.number().min(0).max(1_000_000).optional(),
+    maximo: z.number().min(0).max(1_000_000).nullable().optional(),
     precioVenta: z.number().min(0).nullable().optional(),
     /** Precio capturado a mano: la tabla de factores no lo toca. */
     precioFijo: z.boolean().optional(),
@@ -92,6 +93,7 @@ export const PATCH = withAuthz(async (req: Request, ctx: { params: Promise<{ id:
     ...actualizado,
     ...banderasControl(actualizado.grupoControl),
     minimo: Number(actualizado.minimo),
+    maximo: actualizado.maximo == null ? null : Number(actualizado.maximo),
     precioVenta: actualizado.precioVenta == null ? null : Number(actualizado.precioVenta),
     ultimoCosto: actualizado.ultimoCosto == null ? null : Number(actualizado.ultimoCosto),
     ivaTasa: actualizado.ivaTasa == null ? null : Number(actualizado.ivaTasa),
