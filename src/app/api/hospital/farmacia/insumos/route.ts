@@ -89,7 +89,7 @@ export const GET = withAuthz(async (req: Request) => {
       select: {
         id: true, clave: true, nombre: true, presentacion: true, unidad: true, categoria: true,
         controlado: true, grupoControl: true, registroSanitario: true, sustanciaActiva: true, requiereRefrigeracion: true,
-        minimo: true, ultimoCosto: true, precioVenta: true, precioFijo: true, ivaTasa: true,
+        minimo: true, maximo: true, ultimoCosto: true, precioVenta: true, precioFijo: true, ivaTasa: true,
         claveProdServ: true, derivadoDeCfdi: true, activo: true, updatedAt: true,
         _count: { select: { lotes: true } },
         lotes: {
@@ -173,6 +173,7 @@ export const GET = withAuthz(async (req: Request) => {
       requiereRefrigeracion: i.requiereRefrigeracion,
       ...banderas,
       minimo,
+      maximo: i.maximo == null ? null : Number(i.maximo),
       existencia,
       ultimoCosto,
       precioVenta: i.precioVenta == null ? null : Number(i.precioVenta),
@@ -245,6 +246,7 @@ const createSchema = z.object({
   sustanciaActiva: z.string().trim().max(120).nullable().optional(),
   requiereRefrigeracion: z.boolean().default(false),
   minimo: z.number().min(0).max(1_000_000).default(0),
+  maximo: z.number().min(0).max(1_000_000).nullable().optional(),
   precioVenta: z.number().min(0).nullable().optional(),
   ultimoCosto: z.number().min(0).nullable().optional(),
   ivaTasa: z.number().min(0).max(1).nullable().optional(),
@@ -300,6 +302,7 @@ export const POST = withAuthz(async (req: Request) => {
       registroSanitario: datos.registroSanitario ?? null,
       requiereRefrigeracion: datos.requiereRefrigeracion,
       minimo: datos.minimo,
+      maximo: datos.maximo ?? null,
       precioVenta: datos.precioVenta ?? null,
       // Capturado a mano al dar de alta: la tabla de factores no lo mueve.
       precioFijo: datos.precioVenta != null,
@@ -337,6 +340,7 @@ export const POST = withAuthz(async (req: Request) => {
       ...banderasControl(insumo.grupoControl),
       grupoControlPropuesto: propuesta != null,
       minimo: Number(insumo.minimo),
+      maximo: insumo.maximo == null ? null : Number(insumo.maximo),
       precioVenta: insumo.precioVenta == null ? null : Number(insumo.precioVenta),
       ultimoCosto: insumo.ultimoCosto == null ? null : Number(insumo.ultimoCosto),
       ivaTasa: insumo.ivaTasa == null ? null : Number(insumo.ivaTasa),

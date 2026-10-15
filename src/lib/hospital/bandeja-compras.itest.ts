@@ -118,7 +118,7 @@ describe.skipIf(skip)("bandeja de compras: del área al pedido y lo que no surti
     expect((await bandeja()).map((x) => x.id)).toContain(linea.id);
   });
 
-  it("varios proveedores: gana el más barato por línea, quien autoriza cambia una y sale una orden por proveedor", async () => {
+  it("varios proveedores: la más barata queda sugerida, quien autoriza elige cada línea y sale una orden por proveedor", async () => {
     const s = await crearSolicitudArea(companyId, { id: "u-area", nombre: null }, {
       area: "Urgencias", proveedorSugeridoId: proveedorB,
       lineas: [{ descripcion: "Jeringa 5 ml", cantidad: 100 }, { descripcion: "Gasa estéril", cantidad: 50 }, { descripcion: "Venda elástica", cantidad: 20 }],
@@ -142,9 +142,12 @@ describe.skipIf(skip)("bandeja de compras: del área al pedido y lo que no surti
     expect(de("Jeringa").cotizacionGanadora?.supplierId).toBe(proveedorA);
     expect(de("Gasa").cotizacionGanadora?.supplierId).toBe(proveedorB);
 
+    // Sin elegir las líneas con dos ofertas no se autoriza.
+    await expect(aprobarRequisicion(r.id, companyId, director)).rejects.toMatchObject({ status: 422 });
+    await expect(aprobarRequisicion(r.id, companyId, director, { [de("Jeringa").id]: de("Jeringa").cotizacionGanadoraId! })).rejects.toThrow(/Gasa/);
     // Quien autoriza manda la jeringa también a B (un solo proveedor para casi todo).
     const cotB = de("Gasa").cotizacionGanadoraId!;
-    const { ordenes } = await aprobarRequisicion(r.id, companyId, director, { [de("Jeringa").id]: cotB });
+    const { ordenes } = await aprobarRequisicion(r.id, companyId, director, { [de("Jeringa").id]: cotB, [de("Gasa").id]: cotB });
     expect(ordenes).toHaveLength(1);
     const orden = await prisma.solicitudAdjudicacion.findFirstOrThrow({ where: { solicitudId: r.id } });
     expect([orden.supplierId, Number(orden.total), orden.tieneCredito]).toEqual([proveedorB, 100 * 4 + 50 * 8 + 20 * 25, true]);

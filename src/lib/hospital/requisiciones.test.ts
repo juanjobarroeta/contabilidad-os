@@ -2,13 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const m = vi.hoisted(() => ({
   sol: vi.fn(), adj: vi.fn(), adjUpdate: vi.fn(), solUpdate: vi.fn(), tx: vi.fn(), exec: vi.fn(), partida: vi.fn(),
-  gen: vi.fn(), aplicado: vi.fn(), aplicar: vi.fn(), pagoCreate: vi.fn(),
+  gen: vi.fn(), partidas: vi.fn(), aplicado: vi.fn(), aplicar: vi.fn(), pagoCreate: vi.fn(),
 }));
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     solicitudCompra: { findUnique: m.sol, update: m.solUpdate },
     solicitudAdjudicacion: { findUnique: m.adj, update: m.adjUpdate },
-    solicitudPartida: { findUnique: m.partida },
+    solicitudPartida: { findUnique: m.partida, findMany: m.partidas },
     supplier: { findUnique: vi.fn().mockResolvedValue({ rfc: "AAA010101AAA" }) },
     $transaction: m.tx,
     $executeRaw: m.exec,
@@ -22,7 +22,7 @@ vi.mock("@/lib/construccion/pagos-proveedor", () => ({
 }));
 
 import {
-  totalAPagar,
+  totalAPagar, faltaElegir,
   aprobarRequisicion, autorizarPago, etapaDe, recibirManual, registrarPago, validarCantidadRecibida, vencimientoDe,
 } from "./requisiciones";
 
@@ -45,6 +45,21 @@ beforeEach(() => {
     })
   );
   m.aplicado.mockResolvedValue(0);
+  m.partidas.mockResolvedValue([{ id: "p1", descripcion: "Gasa", _count: { cotizaciones: 1 } }]);
+});
+
+describe("el proveedor lo elige quien autoriza", () => {
+  it("las líneas con dos o más ofertas exigen elección; las de una sola no", () => {
+    const ps = [{ id: "a", descripcion: "Jeringa", ofertas: 2 }, { id: "b", descripcion: "Gasa", ofertas: 1 }, { id: "c", descripcion: "Venda", ofertas: 3 }];
+    expect(faltaElegir(ps, null)).toEqual(["Jeringa", "Venda"]);
+    expect(faltaElegir(ps, { a: "cot1" })).toEqual(["Venda"]);
+    expect(faltaElegir(ps, { a: "cot1", c: "cot2" })).toEqual([]);
+  });
+  it("sin elegir no autoriza (422) y no toca nada", async () => {
+    m.partidas.mockResolvedValueOnce([{ id: "p1", descripcion: "Jeringa", _count: { cotizaciones: 2 } }]);
+    await expect(aprobarRequisicion("s1", "c", "dir")).rejects.toMatchObject({ status: 422, message: expect.stringContaining("Jeringa") });
+    expect(m.tx).not.toHaveBeenCalled();
+  });
 });
 
 describe("separación de funciones", () => {
