@@ -289,7 +289,8 @@ GET /api/hospital/fiscal?companyId=&year=&month=             → posición fisca
 ```
 GET  /api/hospital/pacientes?companyId=[&q=&activo=]  · POST  · GET/PATCH /pacientes/[id]  · GET /pacientes/[id]/accesos   (q también busca expedienteNumero; reglas de identidad en «P1 normativa»)
 GET  /api/hospital/episodios?companyId=[&estado=ACTIVOS|ALTA|TODOS&q=]
-POST /api/hospital/episodios                           { companyId, pacienteId, tipo, recursoId?, medicoId?, pagadorId?, customerId?, diagnosticoCie10?, diagnostico?, procedimiento?, motivo?, cotizacionId?, fechaIngreso?, diagnosticoIngresoCie10?, procedimientoCie9?, triageNivel?, triageAt?, asa? }
+POST /api/hospital/episodios                           { companyId, pacienteId, tipo, recursoId?, medicoId?, pagadorId?, customerId?, diagnosticoCie10?, diagnostico?, procedimiento?, motivo?, cotizacionId?, fechaIngreso?, diagnosticoIngresoCie10?, diagnosticosAdicionales?: [{ codigo, glosa? }], procedimientoCie9?, triageNivel?, triageAt?, asa? }
+                                                        sin medicoId toma el médico del alta (HospPaciente.medicoId); los adicionales se validan por catálogo CIE-10 y se guardan en HospEpisodio.diagnosticosAdicionales
 GET  /api/hospital/episodios/[id]                      → el expediente completo (+ cie, ambulatorio, notas[].hashVerificado)
 PATCH /api/hospital/episodios/[id]                     { action: "estado"|"traslado"|"alta"|"datos"|"cancelar"|"seguimiento", … }
 POST /api/hospital/episodios/[id]/notas                { tipo, texto, secciones?, fecha?, medicoId?, autorCedula?, reemplazaId? }

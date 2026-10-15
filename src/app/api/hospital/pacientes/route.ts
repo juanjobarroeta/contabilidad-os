@@ -86,6 +86,7 @@ export const GET = withHospital(async (req: Request) => {
     where,
     include: {
       pagador: { select: { id: true, nombre: true, tipo: true } },
+      medico: { select: { id: true, nombre: true } },
       customer: { select: { id: true, razonSocial: true, rfc: true } },
       _count: { select: { episodios: true } },
       episodios: {

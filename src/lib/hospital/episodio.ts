@@ -79,6 +79,8 @@ export interface CrearEpisodioArgs {
   fechaIngreso?: Date | null;
   /** CIE-10 del diagnóstico de ingreso, por catálogo. */
   diagnosticoIngresoCie10?: string | null;
+  /** Diagnósticos de ingreso además del principal: código CIE-10 y glosa libre. */
+  diagnosticosAdicionales?: Array<{ codigo: string; glosa?: string | null }> | null;
   /** CIE-9-MC del procedimiento programado, por catálogo. */
   procedimientoCie9?: string | null;
   /** Triage 1-5 (obligatorio en URGENCIAS) y su hora (default: el ingreso). */
@@ -156,7 +158,7 @@ export async function crearEpisodio(db: PrismaClient, args: CrearEpisodioArgs) {
     db.$transaction(async (tx) => {
       const paciente = await tx.hospPaciente.findUnique({
         where: { id: args.pacienteId },
-        select: { id: true, companyId: true, pagadorId: true, customerId: true, activo: true, curp: true, sinCurp: true, sinCurpMotivo: true, sexo: true, fechaNacimiento: true },
+        select: { id: true, companyId: true, pagadorId: true, customerId: true, medicoId: true, activo: true, curp: true, sinCurp: true, sinCurpMotivo: true, sexo: true, fechaNacimiento: true },
       });
       if (!paciente || paciente.companyId !== args.companyId) throw new HospitalError(404, "Paciente no encontrado");
       if (!identidadCompleta(paciente)) throw new HospitalError(409, MENSAJE_SIN_CURP);
@@ -171,6 +173,14 @@ export async function crearEpisodio(db: PrismaClient, args: CrearEpisodioArgs) {
       }
       if (diagnosticoIngresoCie10) {
         diagnosticoIngresoCie10 = (await resolverCie(tx, "CIE10", diagnosticoIngresoCie10, { etiqueta: "El diagnóstico de ingreso", paciente, hoy })).codigo;
+      }
+      // Diagnósticos adicionales: cada uno por catálogo, sin repetir el principal ni entre sí.
+      const diagnosticosAdicionales: Array<{ codigo: string; nombre: string | null; glosa: string | null }> = [];
+      for (const [i, d] of (args.diagnosticosAdicionales ?? []).entries()) {
+        if (!d?.codigo?.trim()) continue;
+        const cie = await resolverCie(tx, "CIE10", d.codigo, { etiqueta: `El diagnóstico adicional ${i + 1}`, paciente, hoy });
+        if (cie.codigo === diagnosticoIngresoCie10 || diagnosticosAdicionales.some((x) => x.codigo === cie.codigo)) continue;
+        diagnosticosAdicionales.push({ codigo: cie.codigo, nombre: cie.nombre ?? null, glosa: d.glosa?.trim() || null });
       }
       let procedimientoCie9 = args.procedimientoCie9?.trim() || null;
       if (procedimientoCie9) {
@@ -192,8 +202,10 @@ export async function crearEpisodio(db: PrismaClient, args: CrearEpisodioArgs) {
       if (args.recursoId && (!recurso || recurso.companyId !== args.companyId)) throw new HospitalError(400, "recursoId inválido");
       if (recurso && (!recurso.activo || recurso.estado !== "LIBRE")) throw new HospitalError(409, describirRecursoNoLibre(recurso));
 
-      if (args.medicoId) {
-        const m = await tx.hospMedico.findUnique({ where: { id: args.medicoId }, select: { companyId: true } });
+      // Sin médico en el ingreso, el que se capturó en el alta del paciente.
+      const medicoId = args.medicoId === undefined ? paciente.medicoId : args.medicoId;
+      if (medicoId) {
+        const m = await tx.hospMedico.findUnique({ where: { id: medicoId }, select: { companyId: true } });
         if (!m || m.companyId !== args.companyId) throw new HospitalError(400, "medicoId inválido");
       }
       const pagador = pagadorId
@@ -248,7 +260,7 @@ export async function crearEpisodio(db: PrismaClient, args: CrearEpisodioArgs) {
           estado,
           fechaIngreso,
           recursoId: recurso?.id ?? null,
-          medicoId: args.medicoId ?? null,
+          medicoId: medicoId ?? null,
           pagadorId: pagadorId ?? null,
           customerId: customerId ?? null,
           diagnosticoCie10: args.diagnosticoCie10?.trim() || null,
@@ -262,6 +274,7 @@ export async function crearEpisodio(db: PrismaClient, args: CrearEpisodioArgs) {
           cotizacionId: cotizacion?.id ?? null,
           creadoPorUserId: args.usuario?.id ?? null,
           diagnosticoIngresoCie10,
+          ...(diagnosticosAdicionales.length ? { diagnosticosAdicionales } : {}),
           procedimientoCie9,
           triageNivel,
           triageAt: triageNivel != null ? (args.triageAt ?? fechaIngreso) : null,
