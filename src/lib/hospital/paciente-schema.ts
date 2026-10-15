@@ -67,6 +67,8 @@ export const pacienteSchema = z.object({
   avisoPrivacidadAceptado: z.boolean().optional(),
   customerId: z.string().nullable().optional(),
   pagadorId: z.string().nullable().optional(),
+  /** Médico tratante por default: se propone en cada ingreso. */
+  medicoId: z.string().nullable().optional(),
   notas: z.string().max(4000).nullable().optional(),
   activo: z.boolean().optional(),
 
@@ -271,7 +273,7 @@ export async function avisoPrivacidadDe(
 /** Los FK canónicos deben ser de la misma empresa (fail-closed). */
 export async function validarVinculosPaciente(
   companyId: string,
-  d: { customerId?: string | null; pagadorId?: string | null }
+  d: { customerId?: string | null; pagadorId?: string | null; medicoId?: string | null }
 ): Promise<string | null> {
   if (d.customerId) {
     const c = await prisma.customer.findUnique({ where: { id: d.customerId }, select: { companyId: true } });
@@ -280,6 +282,10 @@ export async function validarVinculosPaciente(
   if (d.pagadorId) {
     const p = await prisma.hospPagador.findUnique({ where: { id: d.pagadorId }, select: { companyId: true } });
     if (!p || p.companyId !== companyId) return "pagadorId inválido";
+  }
+  if (d.medicoId) {
+    const m = await prisma.hospMedico.findUnique({ where: { id: d.medicoId }, select: { companyId: true } });
+    if (!m || m.companyId !== companyId) return "medicoId inválido";
   }
   return null;
 }

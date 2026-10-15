@@ -8068,6 +8068,9 @@ model HospPaciente {
   customerId String?
   /// Convenio (pagador) por default.
   pagadorId  String?
+  /// Médico tratante por default (se captura en el alta y se propone en cada ingreso).
+  medicoId   String?
+  medico     HospMedico? @relation("MedicoDelPaciente", fields: [medicoId], references: [id], onDelete: SetNull)
 
   /// Identidad verificada (NOM-024 6.5.1: la CURP VALIDADA es la llave y el
   /// SIRES no la autogenera). De dónde salió la CURP y qué dijo RENAPO.
@@ -8286,6 +8289,7 @@ model HospMedico {
   employee Employee? @relation(fields: [employeeId], references: [id])
 
   episodios           HospEpisodio[]
+  pacientes           HospPaciente[] @relation("MedicoDelPaciente")
   citas               HospCita[] @relation("CitaMedico")
   citasAnestesiologo  HospCita[] @relation("CitaAnestesiologo")
   cotizaciones        HospCotizacion[]
@@ -8392,6 +8396,8 @@ model HospEpisodio {
   /// CIE-10 con punto («K80.20») y CIE-9-MC («51.23»). Los campos de texto
   /// de arriba se conservan como glosa.
   diagnosticoIngresoCie10 String?
+  /// Diagnósticos de ingreso adicionales al principal: [{ codigo, nombre, glosa }] (CIE-10 por catálogo).
+  diagnosticosAdicionales Json?
   diagnosticoEgresoCie10  String?
   procedimientoCie9       String?
   motivoEgreso            HospMotivoEgreso?

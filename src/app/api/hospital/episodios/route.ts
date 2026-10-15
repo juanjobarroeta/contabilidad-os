@@ -113,6 +113,7 @@ const createSchema = z.object({
   cotizacionId: z.string().nullable().optional(),
   fechaIngreso: fechaSchema.nullable().optional(),
   diagnosticoIngresoCie10: z.string().max(10).nullable().optional(),
+  diagnosticosAdicionales: z.array(z.object({ codigo: z.string().trim().min(1).max(10), glosa: z.string().trim().max(300).nullable().optional() })).max(12).nullable().optional(),
   procedimientoCie9: z.string().max(10).nullable().optional(),
   triageNivel: z.number().int().min(1).max(5).nullable().optional(),
   triageAt: fechaSchema.nullable().optional(),

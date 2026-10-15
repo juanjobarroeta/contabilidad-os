@@ -53,6 +53,7 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
     where: { id },
     include: {
       pagador: true,
+      medico: { select: { id: true, nombre: true, especialidad: true } },
       customer: { select: { id: true, razonSocial: true, rfc: true } },
       responsable: true,
       episodios: {
@@ -275,7 +276,7 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
     return tx.hospPaciente.update({
       where: { id },
       data: { ...data, ...identidad, ...aviso, ...identidadP2.datos, ...origen, ...saehEntrada, ...claves.datos, ...(cambioResponsable ? { responsableModo: cambioResponsable.modo } : {}) },
-      include: { pagador: true, customer: { select: { id: true, razonSocial: true, rfc: true } }, responsable: true },
+      include: { pagador: true, medico: { select: { id: true, nombre: true, especialidad: true } }, customer: { select: { id: true, razonSocial: true, rfc: true } }, responsable: true },
     });
   });
 
