@@ -10,11 +10,11 @@
 // unidad que se recibe, se factura, se autoriza y se paga.
 //
 // Controles (separación de funciones):
-//   · Toda requisición requiere autorización (COMPRAS_AUTORIZAR) y nadie
-//     autoriza la suya.
-//   · Autorizar el pago (PAGOS_AUTORIZAR) lo hace alguien distinto de quien
-//     pidió; registrar el pago (TESORERIA_PAGAR), alguien distinto de quien
-//     lo autorizó. Los permisos los valida la ruta; aquí van las reglas.
+//   · Toda requisición requiere autorización (COMPRAS_AUTORIZAR); quien
+//     tiene el permiso autoriza también la que armó.
+//   · Autorizar el pago (PAGOS_AUTORIZAR): quien tenga el permiso, aunque
+//     haya pedido la compra; registrar el pago (TESORERIA_PAGAR), alguien
+//     distinto de quien lo autorizó. Los permisos los valida la ruta; aquí van las reglas.
 //   · Registrar el pago NO toca bancos ni contabilidad: el movimiento real
 //     llega con el estado de cuenta y se concilia en el hub (la factura queda
 //     pagada con evidencia).
@@ -788,9 +788,6 @@ export function totalAPagar(autorizado: number, facturado: number): number {
 export async function autorizarPago(ordenId: string, companyId: string, userId: string, fechaProgramada?: Date | null) {
   const o = await cargarOrden(prisma, ordenId, companyId);
   if (o.estado !== "POR_PAGAR" && o.estado !== "PARCIAL") throw new HospitalError(409, "La orden ya está pagada");
-  if (o.solicitud.creadaPorId === userId) {
-    throw new HospitalError(403, "No autorizas el pago de una compra que tú pediste: lo autoriza otra persona.");
-  }
   await prisma.solicitudAdjudicacion.update({
     where: { id: ordenId },
     data: { enviadaTesoreriaAt: new Date(), pagoAutorizadoPorId: userId, fechaProgramada: fechaProgramada ?? null },

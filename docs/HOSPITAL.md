@@ -1038,8 +1038,8 @@ flujo de efectivo en `src/lib/hospital/flujo-efectivo.ts`; padrón en
   crédito. **Etapa**: POR_RECIBIR → POR_FACTURAR → POR_AUTORIZAR_PAGO →
   EN_TESORERIA → PAGADA → CONCILIADA (el banco ya mostró la salida contra la
   factura).
-- **Autorizar pago** (`/ordenes/[id]/autorizar-pago`): `PAGOS_AUTORIZAR`, no
-  quien pidió; fecha programada opcional; se retira mientras no haya pagos.
+- **Autorizar pago** (`/ordenes/[id]/autorizar-pago`): `PAGOS_AUTORIZAR`, aunque
+  haya pedido la compra; fecha programada opcional; se retira mientras no haya pagos.
 - **Pagar** (`/ordenes/[id]/pagar`): `TESORERIA_PAGAR`, sólo lo autorizado y no
   quien lo autorizó. Crea el `PagoProveedor` aplicado (parciales). No toca
   bancos ni mayor: se paga en el portal y se concilia después en el hub.
