@@ -138,7 +138,7 @@ export function honorariosDePlan(json: unknown): PlanHonorario[] {
 
 export const PLAN_ESTADOS = ["PROPUESTO", "AUTORIZADO", "EN_CURSO", "CERRADO", "CANCELADO"] as const;
 
-export const planPartidaSchema = partidaSchema.extend({ opcional: z.boolean().default(false) });
+export const planPartidaSchema = partidaSchema.omit({ descuentoPct: true }).extend({ opcional: z.boolean().default(false) });
 export const planInsumoSchema = z.object({
   insumoId: z.string().min(1),
   cantidad: z.number().positive().max(100000),

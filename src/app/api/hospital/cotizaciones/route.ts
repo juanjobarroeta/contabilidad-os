@@ -16,7 +16,8 @@ import { withHospital } from "@/lib/hospital/with-hospital";
 import { aFecha, bitacora, error, errorZod, fechaSchema } from "@/lib/hospital/http";
 import { conFolioUnico, siguienteFolio } from "@/lib/hospital/folio";
 import { datosDeVersion, fotoDeProtocolo } from "@/lib/hospital/cotizacion-historial-db";
-import { aPaquete, armarPartidas, incluyeCotizacion, partidaSchema, serializarCotizacion } from "@/lib/hospital/cotizacion";
+import { PERMISO_PRECIOS, aPaquete, armarPartidas, incluyeCotizacion, mensajePreciosMovidos, partidaSchema, serializarCotizacion } from "@/lib/hospital/cotizacion";
+import { tieneClinicalPermission } from "@/lib/hospital/permisos";
 import { pacienteResumen } from "@/lib/hospital/serializar";
 import { nombreCompleto } from "@/lib/hospital/util";
 import { resolverAltasCita } from "@/lib/hospital/cita-altas";
@@ -68,7 +69,8 @@ const createSchema = z.object({
   medicoNuevo: z.object({ nombre: z.string().trim().min(3).max(200) }).optional(),
   dirigidaA: z.string().max(200).nullable().optional(),
   precioPaquete: z.number().positive().max(100_000_000).nullable().optional(),
-  procedimiento: z.string().min(1).max(300),
+  /** Opcional: la cotización se guarda sin él («» en la base, no sale en el PDF). */
+  procedimiento: z.string().max(300).nullable().optional(),
   vigenciaHasta: fechaSchema.nullable().optional(),
   notas: z.string().max(4000).nullable().optional(),
   estado: z.enum(["BORRADOR", "ENVIADA"]).optional(),
@@ -117,6 +119,7 @@ export const POST = withHospital(async (req: Request) => {
   const estadoInicial = d.estado ?? "BORRADOR";
 
   const lista = await armarPartidas(prisma, d.companyId, d.pagadorId, d.partidas);
+  if (lista.preciosMovidos.length && !(await tieneClinicalPermission(d.companyId, user.id, PERMISO_PRECIOS))) return error(mensajePreciosMovidos(lista.preciosMovidos), 403);
   const armado = d.precioPaquete ? aPaquete(lista, d.precioPaquete) : lista;
   const hoy = new Date();
   // Historia: la foto del protocolo de origen (si nace de uno) y la versión 1.
@@ -139,7 +142,7 @@ export const POST = withHospital(async (req: Request) => {
           medicoId,
           dirigidaA: d.dirigidaA?.trim() || null,
           precioPaquete: d.precioPaquete ?? null,
-          procedimiento: d.procedimiento.trim(),
+          procedimiento: d.procedimiento?.trim() ?? "",
           estado: estadoInicial,
           // Quien la captura le da seguimiento salvo que se diga otro.
           responsableUserId: d.responsableUserId ?? user.id,

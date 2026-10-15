@@ -8999,6 +8999,10 @@ model HospCotizacionPartida {
   /// «No cotizado»: el concepto se menciona (el médico ve que se consideró)
   /// pero no lleva precio ni entra al total ni a la cuenta al convertir.
   sinCotizar     Boolean            @default(false)
+  /// Descuento interno (%). precioUnitario ya es el neto; la impresa no lo enseña.
+  descuentoPct       Decimal? @db.Decimal(9, 4)
+  /// Precio antes del descuento (tarifa, lista o capturado).
+  precioSinDescuento Decimal? @db.Decimal(18, 6)
 
   cotizacion HospCotizacion @relation(fields: [cotizacionId], references: [id], onDelete: Cascade)
   servicio   HospServicio?  @relation(fields: [servicioId], references: [id])

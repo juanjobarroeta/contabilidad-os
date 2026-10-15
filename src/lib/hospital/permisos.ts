@@ -3,13 +3,13 @@ import { AuthzError, requireMembership } from "@/lib/authz";
 import { extractBearer } from "@/lib/api-token";
 import { DEMO_CEDULA, demoMedicalGrant, isDemoPatient } from "./demo";
 
-export const PERMISOS_CLINICOS = ["CLINICA_LEER", "CLINICA_ESCRIBIR", "ADMINISTRAR", "ALTA", "PRESCRIBIR", "AGENDA_PROGRAMAR", "FINANZAS_ESCRIBIR", "COMPRAS_AUTORIZAR", "PAGOS_AUTORIZAR", "TESORERIA_PAGAR"] as const;
+export const PERMISOS_CLINICOS = ["CLINICA_LEER", "CLINICA_ESCRIBIR", "ADMINISTRAR", "ALTA", "PRESCRIBIR", "AGENDA_PROGRAMAR", "FINANZAS_ESCRIBIR", "COMPRAS_AUTORIZAR", "PAGOS_AUTORIZAR", "TESORERIA_PAGAR", "COTIZACION_PRECIOS"] as const;
 export type PermisoClinico = typeof PERMISOS_CLINICOS[number];
 
 // Dos grupos que se administran por separado en Usuarios: lo clínico (va con
 // la identidad médica verificada) y lo de operación (dinero, compras, pagos).
 // Guardar un grupo nunca toca el otro.
-export const PERMISOS_OPERACION = ["FINANZAS_ESCRIBIR", "COMPRAS_AUTORIZAR", "PAGOS_AUTORIZAR", "TESORERIA_PAGAR"] as const satisfies readonly PermisoClinico[];
+export const PERMISOS_OPERACION = ["FINANZAS_ESCRIBIR", "COMPRAS_AUTORIZAR", "PAGOS_AUTORIZAR", "TESORERIA_PAGAR", "COTIZACION_PRECIOS"] as const satisfies readonly PermisoClinico[];
 export type GrupoPermisos = "clinicos" | "operacion";
 
 export function permisosDelGrupo(grupo: GrupoPermisos): PermisoClinico[] {
@@ -43,6 +43,7 @@ const ACCION_POR_PERMISO: Record<PermisoClinico, string> = {
   COMPRAS_AUTORIZAR: "autorizar requisiciones de compra",
   PAGOS_AUTORIZAR: "autorizar pagos a proveedores",
   TESORERIA_PAGAR: "registrar pagos de tesorería",
+  COTIZACION_PRECIOS: "cambiar precios o dar descuentos en cotizaciones",
 };
 function mensajeSinPermiso(permission: PermisoClinico) {
   return `Tu usuario no tiene permiso para ${ACCION_POR_PERMISO[permission]} en este hospital. Pide a un administrador que habilite este acceso en Usuarios.`;

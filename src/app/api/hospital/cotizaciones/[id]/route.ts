@@ -16,7 +16,8 @@ import { prisma } from "@/lib/prisma";
 import { AuthzError, requireMembership, requireModule, requireWriter } from "@/lib/authz";
 import { withHospital } from "@/lib/hospital/with-hospital";
 import { aFecha, bitacora, error, errorZod, fechaSchema } from "@/lib/hospital/http";
-import { aPaquete, armarPartidas, incluyeCotizacion, partidaSchema, serializarCotizacion } from "@/lib/hospital/cotizacion";
+import { PERMISO_PRECIOS, aPaquete, armarPartidas, incluyeCotizacion, mensajePreciosMovidos, partidaSchema, serializarCotizacion } from "@/lib/hospital/cotizacion";
+import { tieneClinicalPermission } from "@/lib/hospital/permisos";
 import { pacienteResumen } from "@/lib/hospital/serializar";
 import { datosDeVersion, historiaDeCotizacion, lineasDeArmado } from "@/lib/hospital/cotizacion-historial-db";
 import { totalLineas } from "@/lib/hospital/cotizacion-historial";
@@ -72,7 +73,8 @@ const patchSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("partidas"), partidas: z.array(partidaSchema).min(1).max(200), precioPaquete: z.number().positive().max(100_000_000).nullable().optional(), motivo: z.string().trim().max(1000).nullable().optional() }),
   z.object({
     action: z.literal("datos"),
-    procedimiento: z.string().min(1).max(300).optional(),
+    // Opcional: null/«» lo deja vacío (la columna no admite null).
+    procedimiento: z.string().max(300).nullable().optional().transform((v) => (v === null ? "" : v?.trim())),
     vigenciaHasta: fechaSchema.nullable().optional(),
     notas: z.string().max(4000).nullable().optional(),
     pagadorId: z.string().nullable().optional(),
@@ -147,6 +149,7 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
     if (c.estado !== "BORRADOR" && c.estado !== "ENVIADA") return error(`Las partidas sólo se editan en BORRADOR o ENVIADA (está ${c.estado})`, 409);
     const precioPaquete = d.precioPaquete !== undefined ? d.precioPaquete : c.precioPaquete == null ? null : Number(c.precioPaquete);
     const lista = await armarPartidas(prisma, c.companyId, c.pagadorId, d.partidas);
+    if (lista.preciosMovidos.length && !(await tieneClinicalPermission(c.companyId, user.id, PERMISO_PRECIOS))) return error(mensajePreciosMovidos(lista.preciosMovidos), 403);
     const armado = precioPaquete ? aPaquete(lista, precioPaquete) : lista;
     const actualizada = await prisma.$transaction(async (tx) => {
       // Historia: cada guardado es una versión. Una cotización anterior a la

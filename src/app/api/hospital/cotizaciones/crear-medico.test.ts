@@ -11,6 +11,8 @@ vi.mock("@/lib/prisma", () => {
     prisma: {
       hospConfig: { findUnique: vi.fn(async () => ({ ivaServicios: 0.16 })) },
       hospServicio: { findMany: vi.fn(async () => []) },
+      // La partida libre lleva precio capturado: quien cotiza tiene COTIZACION_PRECIOS.
+      companyMember: { findUnique: vi.fn(async () => ({ role: "ADMIN", hospitalPermisos: ["COTIZACION_PRECIOS"] })) },
       $transaction: vi.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
     },
   };
