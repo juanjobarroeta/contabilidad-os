@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// El adulto responsable del paciente.
+// El familiar responsable del paciente.
 //
 // Quién responde por el paciente durante la atención y firma, como
 // REPRESENTANTE, los consentimientos y documentos del paquete de admisión:
@@ -74,12 +74,12 @@ export function resolverResponsable(args: {
   const modo = args.modo ?? null;
   const edadPaciente = edad(args.fechaNacimientoPaciente, hoy);
   if (modo === "PROPIO" && edadPaciente != null && edadPaciente < MAYORIA_DE_EDAD) {
-    return { ok: false, status: 400, error: `El paciente tiene ${edadPaciente} años: un menor de edad necesita un adulto responsable` };
+    return { ok: false, status: 400, error: `El paciente tiene ${edadPaciente} años: un menor de edad necesita un familiar responsable mayor de edad` };
   }
   if (modo !== "TERCERO") return { ok: true, modo, responsable: null };
 
   const r = args.responsable;
-  if (!r) return { ok: false, status: 400, error: "Captura los datos del adulto responsable (nombre, apellido, parentesco y teléfono)" };
+  if (!r) return { ok: false, status: 400, error: "Captura los datos del familiar responsable (nombre, apellido, parentesco y teléfono)" };
 
   let curp: string | null = null;
   let sexo = r.sexo ?? null;

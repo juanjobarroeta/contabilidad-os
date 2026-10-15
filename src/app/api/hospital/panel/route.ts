@@ -516,13 +516,13 @@ export const GET = withAuthz(async (req: Request) => {
         });
       }
     }
-    // Adulto responsable pendiente (urgencia registrada antes) o menor sin responsable.
+    // Familiar responsable pendiente (urgencia registrada antes) o menor sin responsable.
     if (responsablePendiente(e.paciente, hoy) && !sinResponsable.has(e.pacienteId)) {
       sinResponsable.add(e.pacienteId);
       if (sinResponsable.size <= MAX_POR_ALERTA) {
         atencion.push({
           tipo: "RESPONSABLE_PENDIENTE",
-          titulo: `${nombrePaciente(e.paciente)} sin adulto responsable`,
+          titulo: `${nombrePaciente(e.paciente)} sin familiar responsable`,
           detalle: `${e.folio} · registra quién responde por el paciente y firma sus documentos`,
           href: `/pacientes/${e.pacienteId}`,
           refId: e.pacienteId,
