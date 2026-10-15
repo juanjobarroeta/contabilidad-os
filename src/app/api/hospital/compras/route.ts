@@ -22,7 +22,7 @@ import {
   pagadoPorEvidencia,
   r2,
 } from "@/lib/hospital/cobranza";
-import { claveDeInsumo, clasificarInsumo, normalizarDescripcion } from "@/lib/hospital/insumos-cfdi";
+import { claveDeInsumo, clasificarInsumo, llaveLinea, normalizarDescripcion } from "@/lib/hospital/insumos-cfdi";
 
 const TOPE_FACTURAS = 200;
 
@@ -89,9 +89,11 @@ export const GET = withAuthz(async (req: Request) => {
   const facturasDb = visibles.filter((f) => (f.tipoSat ?? "I") !== "E");
   const notasDb = visibles.filter((f) => (f.tipoSat ?? "I") === "E");
 
-  // Ligar conceptos con el catálogo de farmacia: por la llave de descripción y,
-  // para los insumos cuya clave nació del NoIdentificacion del XML (que
-  // InvoiceItem no guarda), por los movimientos que ese mismo CFDI derivó.
+  // Ligar conceptos con el catálogo de farmacia: primero el ligado del renglón
+  // (HospCfdiLinea: por la orden, lo aprendido del proveedor o a mano); si no,
+  // por la llave de descripción y, para los insumos cuya clave nació del
+  // NoIdentificacion del XML (que InvoiceItem no guarda), por los movimientos
+  // que ese mismo CFDI derivó (empresas que aún dejan al CFDI crear inventario).
   const clavesDesc = new Set<string>();
   for (const f of facturasDb) {
     for (const it of f.items) {
@@ -100,7 +102,7 @@ export const GET = withAuthz(async (req: Request) => {
       if (k) clavesDesc.add(k);
     }
   }
-  const [amparado, insumosPorClave, derivados] = await Promise.all([
+  const [amparado, insumosPorClave, derivados, ligados] = await Promise.all([
     amparadoPorReps(prisma, companyId, facturasDb.map((f) => f.uuid)),
     clavesDesc.size
       ? prisma.hospInsumo.findMany({
@@ -114,7 +116,14 @@ export const GET = withAuthz(async (req: Request) => {
           select: { invoiceId: true, insumoId: true, insumo: { select: { nombre: true } } },
         })
       : Promise.resolve([] as Array<{ invoiceId: string | null; insumoId: string; insumo: { nombre: string } }>),
+    facturasDb.length
+      ? prisma.hospCfdiLinea.findMany({
+          where: { companyId, estado: "LIGADA", insumoId: { not: null }, invoiceId: { in: facturasDb.slice(0, TOPE_FACTURAS).map((f) => f.id) } },
+          select: { invoiceId: true, llave: true, insumoId: true },
+        })
+      : Promise.resolve([] as Array<{ invoiceId: string; llave: string; insumoId: string | null }>),
   ]);
+  const ligadoDe = new Map(ligados.map((l) => [`${l.invoiceId}|${l.llave}`, l.insumoId!]));
   const insumoPorClave = new Map(insumosPorClave.map((i) => [i.clave, i.id]));
   const derivadosPorFactura = new Map<string, Array<{ insumoId: string; nombreNorm: string }>>();
   for (const d of derivados) {
@@ -182,7 +191,10 @@ export const GET = withAuthz(async (req: Request) => {
       items: f.items.map((it) => {
         const clasif = clasificarInsumo(it);
         let insumoId: string | null = null;
-        if (clasif.esInsumo) {
+        const ligado = ligadoDe.get(`${f.id}|${llaveLinea(it.descripcion, Number(it.cantidad), Number(it.importe))}`) ?? null;
+        if (ligado) {
+          insumoId = ligado;
+        } else if (clasif.esInsumo) {
           const kDesc = claveDeInsumo(null, it.descripcion);
           insumoId =
             (kDesc && insumoPorClave.get(kDesc)) ||
@@ -198,7 +210,7 @@ export const GET = withAuthz(async (req: Request) => {
           claveProdServ: it.claveProdServ,
           valorUnitario: Number(it.valorUnitario),
           importe: Number(it.importe),
-          esInsumo: clasif.esInsumo,
+          esInsumo: clasif.esInsumo || !!ligado,
           categoria: clasif.esInsumo ? clasif.categoria : null,
           insumoId,
         };

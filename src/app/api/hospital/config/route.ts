@@ -4,7 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireMembership, requireModule, requireWriter, withAuthz } from "@/lib/authz";
 import { registrarBitacora } from "@/lib/audit";
-import { conteosDerivacion, leerProgresoInsumos } from "@/lib/hospital/insumos-cfdi";
+import { conteosDerivacion, leerProgresoInsumos, olvidarFlagInventario } from "@/lib/hospital/insumos-cfdi";
 import { validarPlantillasConfig, versionesVigentes, type PlantillasConfig } from "@/lib/hospital/plantillas-legales";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -26,7 +26,9 @@ import { validarPlantillasConfig, versionesVigentes, type PlantillasConfig } fro
 // el cursor). P3: captura asistida — `iaAsistencia` (apaga los endpoints
 // /asistente/*) y `sttProveedor` ("navegador" = Web Speech API sin costo,
 // "openai" = transcripción en el hub; `sttServidorDisponible` dice si el
-// servidor tiene la llave para ofrecerla).
+// servidor tiene la llave para ofrecerla). `cfdiCreaInventario` (default
+// false): el CFDI de compra ya no crea insumos ni kardex, se liga al catálogo
+// físico (lib/hospital/cfdi-ligado) y la existencia la pone la recepción.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DEFAULTS = {
@@ -48,6 +50,7 @@ const DEFAULTS = {
   plantillasDocumentos: null as PlantillasConfig | null,
   iaAsistencia: true,
   sttProveedor: "navegador" as string | null,
+  cfdiCreaInventario: false,
 };
 
 export const GET = withAuthz(async (req: Request) => {
@@ -90,6 +93,7 @@ export const GET = withAuthz(async (req: Request) => {
         plantillasDocumentos: plantillas,
         iaAsistencia: config.iaAsistencia,
         sttProveedor: config.sttProveedor ?? "navegador",
+        cfdiCreaInventario: config.cfdiCreaInventario,
         guardada: true,
         updatedAt: config.updatedAt,
       }
@@ -144,6 +148,8 @@ const putSchema = z.object({
   iaAsistencia: z.boolean().optional(),
   /** "navegador" (Web Speech API) u "openai" (transcripción en el hub); null vuelve a navegador. */
   sttProveedor: z.enum(["navegador", "openai"]).nullable().optional(),
+  /** false (default) = la recepción manda: el CFDI de compra se liga al catálogo y no crea inventario. */
+  cfdiCreaInventario: z.boolean().optional(),
 });
 
 export const PUT = withAuthz(async (req: Request) => {
@@ -194,6 +200,7 @@ export const PUT = withAuthz(async (req: Request) => {
     create: { companyId, ...limpio },
     update: limpio,
   });
+  if (datos.cfdiCreaInventario !== undefined) olvidarFlagInventario(companyId);
 
   registrarBitacora({
     companyId,

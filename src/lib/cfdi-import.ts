@@ -335,10 +335,12 @@ export async function importarCfdiXml(args: ImportarCfdiArgs): Promise<Resultado
     subtotal: cfdi.subtotal,
   });
 
-  // Farmacia hospitalaria inline: los conceptos de medicamento/material de un
-  // CFDI de compra dan de alta el insumo y su entrada al kardex; los de venta
-  // descuentan lo que ya existe. Sólo empresas con el módulo HOSPITAL; el
-  // cron hospital-insumos-backfill es la red de seguridad.
+  // Farmacia hospitalaria inline. Por default «la recepción manda»: los
+  // renglones del CFDI de compra se ligan al catálogo físico y no mueven
+  // inventario (cfdi-ligado). Con HospConfig.cfdiCreaInventario, la derivación
+  // vieja (alta del insumo y su entrada al kardex; la venta descuenta lo que
+  // existe). Sólo empresas con el módulo HOSPITAL; el cron
+  // hospital-insumos-backfill es la red de seguridad.
   await derivarInsumosInline(prisma, {
     companyId,
     invoiceId: createdInvoice.id,

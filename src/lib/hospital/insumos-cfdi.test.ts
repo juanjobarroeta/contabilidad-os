@@ -153,8 +153,9 @@ function fakeDb() {
     _movs: movs,
     _progreso: progreso,
     _invoices: invoices,
-    // Sin tabla de factores de precio: el precio no se mueve por costo.
-    hospConfig: { findUnique: async () => null },
+    // Sin tabla de factores de precio: el precio no se mueve por costo. Estas
+    // pruebas son de la derivación vieja: la empresa deja al CFDI crear inventario.
+    hospConfig: { findUnique: async ({ select }: any) => (select?.cfdiCreaInventario ? { cfdiCreaInventario: true } : null) },
     hospInsumo: {
       findUnique: async ({ where, select }: any) => {
         const k = where.companyId_clave;
