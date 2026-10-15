@@ -111,6 +111,7 @@ const createSchema = z.object({
   autorizacionPagador: z.string().max(80).nullable().optional(),
   notasAdmin: z.string().max(4000).nullable().optional(),
   cotizacionId: z.string().nullable().optional(),
+  citaId: z.string().nullable().optional(),
   fechaIngreso: fechaSchema.nullable().optional(),
   diagnosticoIngresoCie10: z.string().max(10).nullable().optional(),
   diagnosticosAdicionales: z.array(z.object({ codigo: z.string().trim().min(1).max(10), glosa: z.string().trim().max(300).nullable().optional() })).max(12).nullable().optional(),

@@ -56,6 +56,12 @@ export function validarTriage(_tipo: HospEpisodioTipo, triageNivel: number | nul
   }
 }
 
+/** Categorías de la cotización que surte farmacia: no entran al ingreso, las carga farmacia. */
+export const CATEGORIAS_FARMACIA = ["FARMACIA", "MATERIAL"] as const;
+export const esDeFarmacia = (categoria: string) => (CATEGORIAS_FARMACIA as readonly string[]).includes(categoria);
+/** Partida de cotización que se carga al registrar el ingreso. */
+export const pasaAlIngreso = (p: { sinCotizar: boolean; categoria: string }) => !p.sinCotizar && !esDeFarmacia(p.categoria);
+
 export interface CrearEpisodioArgs {
   companyId: string;
   pacienteId: string;
@@ -76,6 +82,8 @@ export interface CrearEpisodioArgs {
   autorizacionPagador?: string | null;
   notasAdmin?: string | null;
   cotizacionId?: string | null;
+  /** La cita de la agenda de la que nace el ingreso: queda ligada al episodio. */
+  citaId?: string | null;
   fechaIngreso?: Date | null;
   /** CIE-10 del diagnóstico de ingreso, por catálogo. */
   diagnosticoIngresoCie10?: string | null;
@@ -228,7 +236,8 @@ export async function crearEpisodio(db: PrismaClient, args: CrearEpisodioArgs) {
       }
       if (cotizacion) {
         if (cotizacion.episodio) throw new HospitalError(409, `La cotización ${cotizacion.folio} ya se convirtió en el episodio ${cotizacion.episodio.folio}`);
-        if (cotizacion.vigenciaHasta && cotizacion.vigenciaHasta < new Date()) throw new HospitalError(409, "La cotización venció; revisa y renueva su vigencia antes de convertirla");
+        // Aceptada = precio pactado: se respeta aunque la fecha de la cirugía pase la vigencia.
+        if (cotizacion.estado !== "ACEPTADA" && cotizacion.vigenciaHasta && cotizacion.vigenciaHasta < new Date()) throw new HospitalError(409, "La cotización venció; revisa y renueva su vigencia antes de convertirla");
         if (cotizacion.estado === "CANCELADA" || cotizacion.estado === "VENCIDA") {
           throw new HospitalError(409, `La cotización ${cotizacion.folio} está ${cotizacion.estado.toLowerCase()}`);
         }
@@ -303,11 +312,12 @@ export async function crearEpisodio(db: PrismaClient, args: CrearEpisodioArgs) {
                 },
               }
             : {}),
-          ...(cotizacion && cotizacion.partidas.some((p) => !p.sinCotizar)
+          ...(cotizacion && cotizacion.partidas.some((p) => pasaAlIngreso(p))
             ? {
                 cargos: {
-                  // Lo «no cotizado» no se cobró: no pasa a la cuenta.
-                  create: cotizacion.partidas.filter((p) => !p.sinCotizar).map((p) => ({
+                  // Lo «no cotizado» no se cobró: no pasa a la cuenta. Medicamentos
+                  // y material los surte farmacia y ella los carga (por-surtir).
+                  create: cotizacion.partidas.filter((p) => pasaAlIngreso(p)).map((p) => ({
                     companyId: args.companyId,
                     fecha: fechaIngreso,
                     categoria: p.categoria,
@@ -338,6 +348,13 @@ export async function crearEpisodio(db: PrismaClient, args: CrearEpisodioArgs) {
 
       if (recurso) {
         await tx.hospRecurso.update({ where: { id: recurso.id }, data: { estado: "OCUPADA" } });
+      }
+      if (args.citaId) {
+        const cita = await tx.hospCita.findUnique({ where: { id: args.citaId }, select: { companyId: true, pacienteId: true, episodioId: true } });
+        if (!cita || cita.companyId !== args.companyId) throw new HospitalError(404, "Cita no encontrada");
+        if (cita.episodioId) throw new HospitalError(409, "La cita ya tiene un ingreso ligado");
+        if (cita.pacienteId && cita.pacienteId !== paciente.id) throw new HospitalError(409, "La cita es de otro paciente");
+        await tx.hospCita.update({ where: { id: args.citaId }, data: { episodioId: episodio.id, pacienteId: paciente.id } });
       }
       if (cotizacion) {
         await tx.hospCotizacion.update({
