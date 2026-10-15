@@ -107,13 +107,19 @@ async function main() {
         force,
         log: () => {},
       });
-      ok = true;
+      // Un año que tronó no es «el SAT no tiene CE»: en oct-2026 un cambio del
+      // form tumbó todos los años y el panel decía ok con 0 archivos.
+      const fallidos = res.aniosFallidos.map((f) => f.anio);
+      ok = fallidos.length === 0;
       nuevos = res.importados;
-      info = `${res.importados} nuevos · ${res.balanzas} balanzas · ${res.archivosNuevos} archivos${res.catalogo ? ` · catálogo ${res.catalogo.total} cuentas` : ""}`;
-      resumen.ok++;
+      info =
+        `${res.importados} nuevos · ${res.balanzas} balanzas · ${res.archivosNuevos} archivos${res.catalogo ? ` · catálogo ${res.catalogo.total} cuentas` : ""}` +
+        (fallidos.length ? ` · FALLARON ${fallidos.join(",")}: ${res.aniosFallidos[0].error}` : "");
+      if (ok) resumen.ok++;
+      else resumen.error++;
       resumen.importados += res.importados;
       console.log(
-        `[${i + 1}/${elegibles.length}] ${c.rfc} ✅ ${res.importados} períodos nuevos · ${res.archivosNuevos} archivos` +
+        `[${i + 1}/${elegibles.length}] ${c.rfc} ${ok ? "✅" : "⚠️"} ${res.importados} períodos nuevos · ${res.archivosNuevos} archivos` +
           `${res.catalogo ? ` · catálogo ${res.catalogo.nombre} (${res.catalogo.total} cuentas, ${res.catalogo.creadas} nuevas)` : ""} (${Date.now() - t0}ms)`,
       );
     } catch (e) {
