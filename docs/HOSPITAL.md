@@ -1047,13 +1047,13 @@ Editar un puesto recalcula a todos sus miembros en la misma transacción; si lo 
 el propio actor), sólo el dueño lo edita. Un acceso sin páginas se rechaza ([] significaría «todas»).
 Sólo lectura no recibe escritura (al recalcular se le filtra). Borrar un puesto con miembros: 409.
 
-### Urgencias y adulto responsable
+### Urgencias y familiar responsable
 
 - **Urgencias sin triage al registrar.** `POST /episodios` con `tipo: URGENCIAS` ya no exige
   `triageNivel`: admisión abre el expediente al llegar el paciente y el médico captura el triage
   al valorar (`PATCH /episodios/[id]` o la Hoja de urgencias, que sí lo exige). El panel avisa
   `TRIAGE_PENDIENTE` mientras falte.
-- **Adulto responsable** (`HospResponsable`, 1:1 con el paciente; `HospPaciente.responsableModo`):
+- **Familiar responsable** (`HospResponsable`, 1:1 con el paciente; `HospPaciente.responsableModo`):
   `TERCERO` (otra persona, con los mismos datos de identificación que el paciente; nombre,
   apellido, parentesco y teléfono obligatorios, mayor de edad), `PROPIO` (paciente mayor de
   edad) o `PENDIENTE` (urgencia). POST/PATCH `/pacientes` aceptan `responsableModo` y
@@ -1073,7 +1073,7 @@ Sólo lectura no recibe escritura (al recalcular se le filtra). Borrar un puesto
   `src/lib/hospital/nota-firma.ts`.
 - **Hojas impresas en el satélite** (sin endpoints nuevos): nota clínica, hoja frontal, hoja de
   internamiento y verificación RENAPO, con encabezado del hospital y ficha con alergias.
-- **Identificación del adulto responsable**: `IDENTIFICACION` con `contenido.titular =
+- **Identificación del familiar responsable**: `IDENTIFICACION` con `contenido.titular =
   "RESPONSABLE"`; el paquete de admisión no la cuenta como la del paciente
   (`esIdentificacionDeResponsable`). Las imágenes viven en `HospDocumento.archivo` (≤ 10 MB) y su
   descarga se registra como acceso.

@@ -104,7 +104,7 @@ export const pacienteSchema = z.object({
   otraLocalidad: z.string().trim().max(120).nullable().optional(),
   derechohabienciaClave: claveCatalogo(3),
 
-  // ── Adulto responsable (lib/hospital/responsable.ts) ──
+  // ── Familiar responsable (lib/hospital/responsable.ts) ──
   responsableModo: z.enum(RESPONSABLE_MODOS).nullable().optional(),
   responsable: responsableSchema.nullable().optional(),
 });

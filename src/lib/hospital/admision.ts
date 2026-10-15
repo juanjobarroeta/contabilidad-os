@@ -27,7 +27,7 @@ type Db = PrismaClient | Prisma.TransactionClient;
 /** Tipos que viven en el paciente (episodioId null) aunque los pida un episodio. */
 export const TIPOS_NIVEL_PACIENTE: readonly HospDocumentoTipo[] = ["AVISO_PRIVACIDAD", "IDENTIFICACION", "CONSTANCIA_CURP"];
 
-/** La identificación del adulto responsable (contenido.titular = RESPONSABLE), no la del paciente. */
+/** La identificación del familiar responsable (contenido.titular = RESPONSABLE), no la del paciente. */
 export function esIdentificacionDeResponsable(contenido: unknown): boolean {
   return !!contenido && typeof contenido === "object" && (contenido as Record<string, unknown>).titular === "RESPONSABLE";
 }
@@ -266,7 +266,7 @@ export async function paqueteAdmision(db: PrismaClient, a: PaqueteAdmisionArgs) 
         continue;
       }
     } else if (tipo === "IDENTIFICACION") {
-      // La del adulto responsable también es IDENTIFICACION, pero no es la del paciente.
+      // La del familiar responsable también es IDENTIFICACION, pero no es la del paciente.
       const propias = [...delEpisodio, ...delPaciente].filter((d) => !esIdentificacionDeResponsable(d.contenido));
       const recibida = propias.find((d) => d.estado !== "PENDIENTE");
       const pendiente = propias[0];
