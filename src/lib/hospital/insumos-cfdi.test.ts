@@ -153,6 +153,8 @@ function fakeDb() {
     _movs: movs,
     _progreso: progreso,
     _invoices: invoices,
+    // Sin tabla de factores de precio: el precio no se mueve por costo.
+    hospConfig: { findUnique: async () => null },
     hospInsumo: {
       findUnique: async ({ where, select }: any) => {
         const k = where.companyId_clave;

@@ -34,6 +34,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { precioAlEntrar } from "@/lib/hospital/factores-precio";
 import { z } from "zod";
 import type { HospGrupoControl, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -88,7 +89,7 @@ export const GET = withAuthz(async (req: Request) => {
       select: {
         id: true, clave: true, nombre: true, presentacion: true, unidad: true, categoria: true,
         controlado: true, grupoControl: true, registroSanitario: true, sustanciaActiva: true, requiereRefrigeracion: true,
-        minimo: true, ultimoCosto: true, precioVenta: true, ivaTasa: true,
+        minimo: true, ultimoCosto: true, precioVenta: true, precioFijo: true, ivaTasa: true,
         claveProdServ: true, derivadoDeCfdi: true, activo: true, updatedAt: true,
         _count: { select: { lotes: true } },
         lotes: {
@@ -175,6 +176,7 @@ export const GET = withAuthz(async (req: Request) => {
       existencia,
       ultimoCosto,
       precioVenta: i.precioVenta == null ? null : Number(i.precioVenta),
+      precioFijo: i.precioFijo,
       valor: r2(existencia * (ultimoCosto ?? 0)),
       ivaTasa: i.ivaTasa == null ? null : Number(i.ivaTasa),
       claveProdServ: i.claveProdServ,
@@ -284,7 +286,7 @@ export const POST = withAuthz(async (req: Request) => {
   const sustanciaActiva = datos.sustanciaActiva !== undefined ? datos.sustanciaActiva : (propuesta?.sustancia ?? null);
   const controlado = datos.controlado ?? exigeLibroControl(grupoControl);
 
-  const insumo = await prisma.hospInsumo.create({
+  let insumo = await prisma.hospInsumo.create({
     data: {
       companyId,
       clave,
@@ -299,6 +301,8 @@ export const POST = withAuthz(async (req: Request) => {
       requiereRefrigeracion: datos.requiereRefrigeracion,
       minimo: datos.minimo,
       precioVenta: datos.precioVenta ?? null,
+      // Capturado a mano al dar de alta: la tabla de factores no lo mueve.
+      precioFijo: datos.precioVenta != null,
       ultimoCosto: datos.ultimoCosto ?? null,
       // Sin tasa explícita: medicinas y soluciones a 0 %, lo demás al 16 %.
       ivaTasa:
@@ -311,6 +315,10 @@ export const POST = withAuthz(async (req: Request) => {
       derivadoDeCfdi: false,
     },
   });
+  // Sin precio capturado pero con costo: el de la tabla de factores, si la hay.
+  if (datos.precioVenta == null && datos.ultimoCosto != null && (await precioAlEntrar(prisma, companyId, insumo.id, datos.ultimoCosto)) != null) {
+    insumo = await prisma.hospInsumo.findUniqueOrThrow({ where: { id: insumo.id } });
+  }
 
   registrarBitacora({
     companyId,

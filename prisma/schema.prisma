@@ -7867,6 +7867,11 @@ model HospConfig {
   /// gravan como parte del servicio; sólo la venta directa va al 0 %. El
   /// contador puede cambiarlo si su criterio difiere (PRODECON lo disputa).
   ivaMedicinasHospitalizacion Decimal  @default(0.16) @db.Decimal(18, 6)
+  /// Factores de precio de farmacia por tramo de costo unitario (sin IVA):
+  /// [{ hasta: number | null, factor: number }] ordenados; el tramo empieza
+  /// donde acaba el anterior. Precio de venta = costo × factor del tramo. Null
+  /// = sin tabla (el precio se captura a mano).
+  factoresPrecio              Json?
 
   /// Identidad sanitaria del establecimiento (NOM-024, NOM-035, COFEPRIS):
   /// va en el encabezado de reportes, CDA y libro de control.
@@ -9036,6 +9041,9 @@ model HospInsumo {
   /// Mínimo en existencia; debajo dispara «bajo mínimo».
   minimo                Decimal             @default(0) @db.Decimal(18, 6)
   precioVenta           Decimal?            @db.Decimal(18, 6)
+  /// Precio capturado a mano: la tabla de factores no lo toca. Sin él, cada
+  /// entrada con costo recalcula el precio de venta (costo × factor).
+  precioFijo            Boolean             @default(false)
   ultimoCosto           Decimal?            @db.Decimal(18, 6)
   /// Medicinas de patente: tasa 0 % (Art. 2-A LIVA). Material: 16 %.
   ivaTasa               Decimal?            @default(0) @db.Decimal(18, 6)

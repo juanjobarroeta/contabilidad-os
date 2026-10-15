@@ -30,6 +30,7 @@
 import type { HospGrupoControl, HospInsumoCategoria, Prisma, PrismaClient } from "@prisma/client";
 import { exigeLibroControl, sustanciaControladaPorNombre } from "./controlados";
 import { normalizarDescripcion } from "./cfdi-texto";
+import { precioAlEntrar, tablaDe } from "./factores-precio";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -460,6 +461,8 @@ async function derivarCompra(
         });
         insumoId = creado.id;
         insumos++;
+        // Con tabla de factores, el insumo nace con su precio de venta.
+        await precioAlEntrar(db, args.companyId, insumoId, costo);
       } catch {
         // Carrera con otra derivación (import inline + cron) sobre la misma
         // clave: el otro ganó el @@unique; se lee y se sigue.
@@ -484,6 +487,8 @@ async function derivarCompra(
           where: { id: insumoId },
           data: { ultimoCosto: costo, ...(a.claveProdServ ? { claveProdServ: a.claveProdServ } : {}) },
         });
+        // Precio «por entrada»: el costo nuevo recalcula el precio (tabla de factores).
+        await precioAlEntrar(db, args.companyId, insumoId, costo);
       }
     }
 
@@ -564,6 +569,8 @@ async function derivarVenta(
   }
 
   let movimientos = 0;
+  // Con tabla de factores el precio lo pone el costo, no la última venta.
+  const conFactores = (await tablaDe(db, args.companyId)) != null;
   for (const v of porInsumo.values()) {
     const { count } = await db.hospMovimientoInsumo.createMany({
       data: [
@@ -585,7 +592,7 @@ async function derivarVenta(
     if (count === 0) continue;
     movimientos += count;
     const ultima = v.insumo.movimientos[0]?.fecha;
-    if (v.cantidad > 0 && (!ultima || args.fecha.getTime() >= new Date(ultima).getTime())) {
+    if (!conFactores && v.cantidad > 0 && (!ultima || args.fecha.getTime() >= new Date(ultima).getTime())) {
       await db.hospInsumo.update({
         where: { id: v.insumo.id },
         data: { precioVenta: r2(v.monto / v.cantidad) },
