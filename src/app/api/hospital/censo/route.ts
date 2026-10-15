@@ -41,6 +41,7 @@ export const GET = withHospital(async (req: Request) => {
           include: {
             paciente: { select: { id: true, nombre: true, apellidoPaterno: true, apellidoMaterno: true, fechaNacimiento: true } },
             medico: { select: { id: true, nombre: true, especialidad: true } },
+            pagador: { select: { id: true, nombre: true } },
           },
         },
       },
@@ -86,6 +87,9 @@ export const GET = withHospital(async (req: Request) => {
             folio: ep.folio,
             paciente: nombreCompleto(ep.paciente),
             pacienteId: ep.paciente.id,
+            // Para el reporte de censo: fecha de nacimiento y compañía (convenio; sin él, particular).
+            fechaNacimiento: ep.paciente.fechaNacimiento,
+            compania: ep.pagador?.nombre ?? null,
             dia: diaDeEstancia(ep.fechaIngreso, hoy),
             fechaIngreso: ep.fechaIngreso,
             medico: ep.medico?.nombre ?? null,
