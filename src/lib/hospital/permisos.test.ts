@@ -32,6 +32,13 @@ describe('hospital server permission matrix', () => {
     member.hospitalPaginas = ['mantenimiento'];
     await expect(enforceHospitalAccess('company', 'user', request('farmacia/insumos'))).rejects.toMatchObject({ status: 403 });
   });
+  it('compras fills a supplier bank account or credit; a médicos-only user cannot', async () => {
+    member.hospitalPaginas = ['compras'];
+    await expect(enforceHospitalAccess('company', 'user', request('proveedores/abc/completar', 'POST'))).resolves.toBeUndefined();
+    member.hospitalPaginas = ['medicos'];
+    await expect(enforceHospitalAccess('company', 'user', request('proveedores/abc/completar', 'POST'))).rejects.toMatchObject({ status: 403 });
+    await expect(enforceHospitalAccess('company', 'user', request('proveedores?q=x'))).resolves.toBeUndefined();
+  });
   it('separates clinical administration from financial writes', async () => {
     member.hospitalPermisos = ['CLINICA_ESCRIBIR', 'ADMINISTRAR'];
     await expect(enforceHospitalAccess('company', 'user', request('episodios/one/cargos', 'POST'))).rejects.toMatchObject({ status: 403 });

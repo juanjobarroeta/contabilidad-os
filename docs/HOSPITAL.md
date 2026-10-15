@@ -957,6 +957,9 @@ flujo de efectivo en `src/lib/hospital/flujo-efectivo.ts`; padrón en
 - **Proveedores** (`/api/hospital/proveedores`, `…/[id]`): el `Supplier` del hub
   (uno por RFC). Alta desde la requisición; CLABE, banco y crédito exigen
   `FINANZAS_ESCRIBIR` y un cambio de CLABE queda en bitácora enmascarado.
+  `POST …/[id]/completar` (compras, requisiciones, tesorería, proveedores) sólo
+  LLENA lo que falta al cotizar: la cuenta si no hay CLABE y el crédito si no
+  hay condiciones registradas (escritura condicional, nunca sobrescribe).
 - **Requisición** (`/api/hospital/requisiciones`): un proveedor, líneas con
   insumo del catálogo (`SolicitudPartida.hospInsumoId`) o texto libre, folio
   `REQ-AAAA-NNNN`. Se guarda como una sola oferta adjudicada completa. Nace
