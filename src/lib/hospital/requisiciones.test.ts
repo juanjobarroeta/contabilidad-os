@@ -62,9 +62,10 @@ describe("el proveedor lo elige quien autoriza", () => {
   });
 });
 
-describe("separación de funciones", () => {
-  it("nadie autoriza su propia requisición", async () => {
-    await expect(aprobarRequisicion("s1", "c", "ana")).rejects.toMatchObject({ status: 403 });
+describe("autorización de la requisición", () => {
+  it("quien tiene el permiso autoriza, también la que armó (el permiso lo exige la ruta)", async () => {
+    const propia = await aprobarRequisicion("s1", "c", "ana");
+    expect(propia.ordenId).toBe("o1");
     const r = await aprobarRequisicion("s1", "c", "dir");
     expect(r.ordenId).toBe("o1");
     expect(m.gen).toHaveBeenCalled();

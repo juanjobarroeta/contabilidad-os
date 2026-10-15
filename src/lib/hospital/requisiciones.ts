@@ -328,7 +328,6 @@ export function faltaElegir(partidas: Array<{ id: string; descripcion: string; o
 export async function aprobarRequisicion(id: string, companyId: string, userId: string, ganadoras?: Record<string, string> | null) {
   const sol = await cargarHospital(prisma, id, companyId);
   if (sol.estado !== "PENDIENTE") throw new HospitalError(409, `La requisición está ${sol.estado.toLowerCase()}: no se puede autorizar`);
-  if (sol.creadaPorId === userId) throw new HospitalError(403, "No puedes autorizar tu propia requisición: la autoriza otra persona.");
   const partidas = await prisma.solicitudPartida.findMany({
     where: { solicitudId: id },
     select: { id: true, descripcion: true, _count: { select: { cotizaciones: true } } },
@@ -352,7 +351,6 @@ export async function aprobarRequisicion(id: string, companyId: string, userId: 
 export async function rechazarRequisicion(id: string, companyId: string, userId: string, motivo: string) {
   const sol = await cargarHospital(prisma, id, companyId);
   if (sol.estado !== "PENDIENTE") throw new HospitalError(409, "Sólo se rechaza una requisición por autorizar");
-  if (sol.creadaPorId === userId) throw new HospitalError(403, "Tu propia requisición no la rechazas: edítala o cancélala.");
   await prisma.solicitudCompra.update({
     where: { id },
     data: { estado: "RECHAZADA", rechazadaPorId: userId, rechazadaAt: new Date(), rechazoMotivo: motivo.trim() },

@@ -14,6 +14,7 @@ import { bitacora, error } from "@/lib/hospital/http";
 import { assertPuedeEscribir } from "@/lib/subscription";
 import { cancelarRequisicion, companyDeRequisicion, editarRequisicion, ordenesDeCompra } from "@/lib/hospital/requisiciones";
 import { existenciaPorInsumo } from "@/lib/hospital/bandeja-compras";
+import { tieneClinicalPermission } from "@/lib/hospital/permisos";
 import { aRequisicionInput, nombresDeUsuarios, requisicionSchema } from "@/lib/hospital/requisiciones-http";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -57,6 +58,8 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
   );
   return NextResponse.json({
     usuarioId: user.id,
+    // Quien tiene COMPRAS_AUTORIZAR autoriza o rechaza, también las que armó.
+    puedeAutorizar: await tieneClinicalPermission(companyId, user.id, "COMPRAS_AUTORIZAR"),
     ...r,
     total: Number(r.total),
     partidas: r.partidas.map((p) => ({

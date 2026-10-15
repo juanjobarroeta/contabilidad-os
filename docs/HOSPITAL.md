@@ -999,7 +999,7 @@ flujo de efectivo en `src/lib/hospital/flujo-efectivo.ts`; padrón en
   que quedó en cero se quita (sin factura ni pagos); si toda la requisición
   quedó en cero, se cancela.
 - **Autorizar / rechazar** (`…/[id]/aprobar`, `…/[id]/rechazar`): permiso
-  `COMPRAS_AUTORIZAR`; nadie autoriza ni rechaza la suya. Al autorizar,
+  `COMPRAS_AUTORIZAR` (también la que armó quien lo tiene). Al autorizar,
   `generateAdjudicaciones` crea la **orden de compra** (una adjudicación con el
   crédito del proveedor).
 - **Recepción**: insumos con su lote en Farmacia (`/farmacia/lotes` +

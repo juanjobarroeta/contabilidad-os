@@ -109,6 +109,12 @@ export async function enforceHospitalAccess(companyId: string, userId: string, r
   }
 }
 
+/** Igual que requireClinicalPermission pero sin lanzar: para que la pantalla sepa qué botones mostrar. */
+export async function tieneClinicalPermission(companyId: string, userId: string, permission: PermisoClinico): Promise<boolean> {
+  const member = await prisma.companyMember.findUnique({ where: { userId_companyId: { userId, companyId } }, select: { role: true, hospitalPermisos: true } });
+  return !!member && member.role !== "VIEWER" && member.hospitalPermisos.includes(permission);
+}
+
 export async function requireClinicalPermission(companyId: string, userId: string, permission: PermisoClinico) {
   const member = await prisma.companyMember.findUnique({ where: { userId_companyId: { userId, companyId } } });
   if (!member || member.role === "VIEWER" || !member.hospitalPermisos.includes(permission)) {
