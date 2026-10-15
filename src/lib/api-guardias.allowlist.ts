@@ -100,6 +100,11 @@ export const RUTAS_PUBLICAS: EntradaAllowlist[] = [
  */
 export const RUTAS_CON_AUTH_PROPIA: EntradaAllowlist[] = [
   {
+    ruta: "api/hospital/ayuda/exportar/route.ts",
+    razon:
+      "Enlace firmado HMAC (24 h) que lleva empresa, usuario y la consulta (leerExportacion); el companyId sale de la firma, nunca de la petición. Antes de consultar se revisa que ese usuario siga siendo miembro de la empresa y que sus páginas abran la herramienta (ejecutarHerramienta).",
+  },
+  {
     ruta: "api/facturas/reporte/[id]/route.ts",
     razon:
       "El companyId sale del ReporteFacturas guardado, nunca de la petición. Con sesión (requireUser) o con enlace firmado HMAC atado al reporte y al formato; en ambos casos puedeVerFacturas (getEffectiveCompanyMembership + permisos de página) se revisa antes de consultar.",

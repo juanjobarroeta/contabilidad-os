@@ -60,6 +60,7 @@ const AUTENTICADORES: RegExp[] = [
   // Tokens firmados de recurso único
   /\bverifyFileToken\b/,
   /\bverifyDraftToken\b/,
+  /\bleerExportacion\b/, // Excel de la mascota del hospital: HMAC atado a empresa+usuario+consulta, 24 h
   // Webhooks con firma verificada
   /\bverifyTwilioSignature/,
   /\bconstructEventAsync\b/,
