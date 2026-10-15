@@ -6,7 +6,11 @@
  * que se aplicó, el CFDI de compra o venta que lo derivó, el motivo, quién
  * lo capturó y, en controlados, la receta y el prescriptor que amparan cada
  * salida. El insumo trae `exigeLibroControl` / `exigeRecetaEspecial` por su
- * grupo y `requiereRefrigeracion` / `registroSanitario` tal cual. Sólo lectura.
+ * grupo y `requiereRefrigeracion` / `registroSanitario` tal cual. `compras`:
+ * entradas por compra con proveedor, CFDI y la requisición que las amparó
+ * (quién pidió y autorizó), lo que viene en camino, historial de precios
+ * (entradas y cotizaciones) y resumen por proveedor (lib/hospital/ficha-insumo).
+ * Sólo lectura.
  */
 
 import { NextResponse } from "next/server";
@@ -15,6 +19,7 @@ import { AuthzError, requireMembership, requireModule, withAuthz } from "@/lib/a
 import { diasDesde, r2 } from "@/lib/hospital/cobranza";
 import { nombrePaciente } from "@/lib/hospital/formato";
 import { banderasControl } from "@/lib/hospital/controlados";
+import { comprasDeInsumo } from "@/lib/hospital/ficha-insumo";
 
 const MAX_MOVIMIENTOS = 200;
 
@@ -59,6 +64,7 @@ export const GET = withAuthz(async (req: Request) => {
     }),
     prisma.hospMovimientoInsumo.count({ where: { insumoId } }),
   ]);
+  const compras = await comprasDeInsumo(prisma, companyId, insumoId);
 
   const diasAlerta = config?.diasAlertaCaducidad ?? 90;
   return NextResponse.json({
@@ -82,6 +88,7 @@ export const GET = withAuthz(async (req: Request) => {
       };
     }),
     totalMovimientos: total,
+    compras,
     movimientos: movimientos.map((m) => ({
       id: m.id,
       fecha: m.fecha,
