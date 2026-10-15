@@ -35,6 +35,7 @@ import { crearNota, normalizarAsa, verificarHashNota } from "@/lib/hospital/nota
 import { motivoNoFirmable } from "@/lib/hospital/nota-firma";
 import { cancelarPlanDeEpisodio, cerrarPlanDeEpisodio } from "@/lib/hospital/plan";
 import { asentarHonorarios } from "@/lib/hospital/asientos";
+import { debePagarAntes, mensajeCuentaUrgencias, saldoPacienteEpisodio, saleDeUrgencias } from "@/lib/hospital/urgencias-salida";
 import { customerResumen, medicoResumen, pacienteResumen, pagadorResumen, recursoResumen, totalesCargos } from "@/lib/hospital/serializar";
 import { esActivo, r2 } from "@/lib/hospital/util";
 
@@ -283,6 +284,11 @@ export const PATCH = withHospital(async (req: Request, ctx: Ctx) => {
     if (!nuevo || nuevo.companyId !== ep.companyId) return error("recursoId inválido");
     if (nuevo.id === ep.recursoId) return error(`El paciente ya está en ${nuevo.nombre}`, 409);
     if (!nuevo.activo || nuevo.estado !== "LIBRE") return error(describirRecursoNoLibre(nuevo), 409);
+    // Urgencias se cobra aparte: para salir a otra área, su cuenta debe quedar en cero.
+    if (saleDeUrgencias({ tipoEpisodio: ep.tipo, areaOrigen: ep.recurso?.area, areaDestino: nuevo.area })) {
+      const saldo = await saldoPacienteEpisodio(prisma, id, ahora);
+      if (debePagarAntes(saldo)) return error(mensajeCuentaUrgencias(ep.folio, saldo), 409);
+    }
 
     const actualizado = await prisma.$transaction(async (tx) => {
       await bloquearEpisodio(tx);

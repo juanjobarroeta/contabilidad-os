@@ -292,6 +292,7 @@ GET  /api/hospital/episodios?companyId=[&estado=ACTIVOS|ALTA|TODOS&q=]
 POST /api/hospital/episodios                           { companyId, pacienteId, tipo, recursoId?, medicoId?, pagadorId?, customerId?, diagnosticoCie10?, diagnostico?, procedimiento?, motivo?, cotizacionId?, fechaIngreso?, diagnosticoIngresoCie10?, procedimientoCie9?, triageNivel?, triageAt?, asa? }
 GET  /api/hospital/episodios/[id]                      → el expediente completo (+ cie, ambulatorio, notas[].hashVerificado)
 PATCH /api/hospital/episodios/[id]                     { action: "estado"|"traslado"|"alta"|"datos"|"cancelar"|"seguimiento", … }
+                                                        traslado que SALE de Urgencias (cama de Urgencias, o ingreso de urgencias sin cama, a otra área): 409 si la parte del paciente menos sus depósitos vigentes no está en cero (urgencias-salida.ts)
 POST /api/hospital/episodios/[id]/notas                { tipo, texto, secciones?, fecha?, medicoId?, autorCedula?, reemplazaId? }
 POST /api/hospital/episodios/[id]/signos               { taSistolica?, taDiastolica?, fc?, fr?, temperatura?, spo2?, glucosa?, peso?, talla?, dolor?, nota?, fecha? }
 POST /api/hospital/episodios/[id]/documentos           { tipo, nombre, requerido?, estado?, contenido?, firmadoPor?, firmadoParentesco?, testigo1?, testigo2?, medicoId?, medicoNombre?, medicoCedula? }
