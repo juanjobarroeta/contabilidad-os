@@ -1,5 +1,5 @@
 /**
- * PATCH /api/hospital/recursos/[id] — nombre, área, estado (LIMPIEZA→LIBRE,
+ * PATCH /api/hospital/recursos/[id] — tipo, nombre, área, estado (LIMPIEZA→LIBRE,
  * FUERA_DE_SERVICIO…), servicio, activo, orden, minutos de limpieza entre
  * citas. No se pone LIBRE ni fuera de servicio una cama que un episodio
  * activo ocupa (409): eso lo hace el alta.
@@ -14,6 +14,8 @@ import { bitacora, error, errorZod } from "@/lib/hospital/http";
 import { ESTADOS_ACTIVOS } from "@/lib/hospital/util";
 
 const schema = z.object({
+  /** Cambiar de tipo (una «sala» que era cama): no con paciente dentro ni con citas por venir. */
+  tipo: z.enum(["CAMA", "QUIROFANO", "CONSULTORIO", "SALA"]).optional(),
   nombre: z.string().min(1).max(60).optional(),
   area: z.enum(["HOSPITALIZACION", "URGENCIAS", "RECUPERACION", "TERAPIA", "QUIROFANO", "CONSULTA_EXTERNA", "ENDOSCOPIA", "IMAGEN", "LABORATORIO", "OTRA"]).optional(),
   estado: z.enum(["LIBRE", "LIMPIEZA", "FUERA_DE_SERVICIO"]).optional(),
@@ -43,16 +45,23 @@ export const PATCH = withHospital(async (req: Request, ctx: { params: Promise<{ 
   if ((d.estado || d.activo === false) && ocupante) {
     return error(`${recurso.nombre} la ocupa el episodio ${ocupante.folio}: libérala con el alta o un traslado`, 409);
   }
+  const cambiaTipo = d.tipo !== undefined && d.tipo !== recurso.tipo;
+  if (cambiaTipo) {
+    if (ocupante) return error(`${recurso.nombre} la ocupa el episodio ${ocupante.folio}: no se cambia de tipo con paciente`, 409);
+    const citas = await prisma.hospCita.count({ where: { OR: [{ recursoId: id }, { camaId: id }], inicio: { gte: new Date() }, estado: { in: ["SOLICITADA", "PROGRAMADA", "CONFIRMADA", "EN_CURSO"] } } });
+    if (citas) return error(`${recurso.nombre} tiene ${citas} cita(s) por venir: reprográmalas antes de cambiarlo de tipo`, 409);
+  }
   if (d.servicioId) {
     const s = await prisma.hospServicio.findUnique({ where: { id: d.servicioId }, select: { companyId: true } });
     if (!s || s.companyId !== recurso.companyId) return error("servicioId inválido");
   }
-  if (d.nombre && d.nombre.trim() !== recurso.nombre) {
+  const nombreFinal = d.nombre?.trim() || recurso.nombre;
+  if (nombreFinal !== recurso.nombre || cambiaTipo) {
     const dup = await prisma.hospRecurso.findUnique({
-      where: { companyId_tipo_nombre: { companyId: recurso.companyId, tipo: recurso.tipo, nombre: d.nombre.trim() } },
+      where: { companyId_tipo_nombre: { companyId: recurso.companyId, tipo: d.tipo ?? recurso.tipo, nombre: nombreFinal } },
       select: { id: true },
     });
-    if (dup) return error(`Ya existe «${d.nombre.trim()}»`, 409);
+    if (dup && dup.id !== id) return error(`Ya existe «${nombreFinal}»`, 409);
   }
 
   const actualizado = await prisma.hospRecurso.update({
