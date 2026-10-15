@@ -56,9 +56,13 @@ export async function descargarCeAnioSat(
     await app.selectOption("#ddlMesInicio", "1");
     await app.selectOption("#ddlMesFin", "13");
     await app.selectOption("#ddlMotivo", opts.motivo ?? "0"); // REQUERIDO
-    await app.selectOption("#ddlTipoArchivo", opts.tipoArchivo ?? "0");
+    const tipoArchivo = opts.tipoArchivo ?? "0";
+    await app.selectOption("#ddlTipoArchivo", tipoArchivo);
     await app.selectOption("#ddlEstatus", "0");
-    await app.selectOption("#ddlTipoEnvio", "0");
+    // «Tipo de envío» (normal/complementaria) sólo se habilita —y sólo se
+    // exige— con Tipo de archivo = Balanzas. Con «Todos» queda deshabilitado, y
+    // seleccionarlo esperaba 30 s y tumbaba el año entero (oct-2026).
+    if (tipoArchivo === "2") await app.selectOption("#ddlTipoEnvio", "0");
     await app.click("#btnBuscar").catch(() => {});
     await page.waitForTimeout(4000);
 

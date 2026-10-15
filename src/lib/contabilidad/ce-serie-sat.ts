@@ -35,6 +35,8 @@ export interface ImportarCeSatResult extends ImportarSerieResult {
   archivosNuevos: number;
   /** El catálogo aplicado a ChartAccount en esta corrida, si había uno nuevo. */
   catalogo: (ImportarCatalogoResult & { anio: number; mes: number; nombre: string }) | null;
+  /** Años cuya consulta tronó (form cambiado, SAT caído): NO es «no hay CE». */
+  aniosFallidos: { anio: number; error: string }[];
 }
 
 export const hashXml = (xml: string) => createHash("sha256").update(xml).digest("hex");
@@ -74,7 +76,7 @@ export async function importarSerieBalanzasSat(companyId: string, opts: Importar
     (await prisma.ceArchivo.findMany({ where: { companyId }, select: { nombre: true, hash: true } })).map((a) => [a.nombre, a.hash]),
   );
 
-  const result: ImportarCeSatResult = { periodos: [], importados: 0, registros: 0, balanzas: 0, archivosNuevos: 0, catalogo: null };
+  const result: ImportarCeSatResult = { periodos: [], importados: 0, registros: 0, balanzas: 0, archivosNuevos: 0, catalogo: null, aniosFallidos: [] };
 
   await abrirBuzonSat(
     fiel,
@@ -84,6 +86,7 @@ export async function importarSerieBalanzasSat(companyId: string, opts: Importar
         // "0" = todos los tipos: balanzas, catálogo, pólizas y auxiliares.
         const xmls = await descargarCeAnioSat(page, { anio, tipoArchivo: "0" }).catch((e) => {
           log(`año ${anio} falló: ${String(e).slice(0, 80)}`);
+          result.aniosFallidos.push({ anio, error: String(e).split("\n")[0].slice(0, 120) });
           return [] as CeXml[];
         });
         result.registros += xmls.length;
