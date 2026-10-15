@@ -1097,13 +1097,21 @@ Sólo lectura no recibe escritura (al recalcular se le filtra). Borrar un puesto
 
 El satélite enseña en cada pantalla la mascota de ContabilidadOS; tocarla abre
 una ayuda de USO del software (dónde está algo, cómo se hace, por qué no ve una
-página). No tiene herramientas ni lee datos del hospital: sólo la guía
-`src/lib/hospital/ayuda/conocimiento.ts` y el perfil del usuario (rol, puesto,
-`hospitalPaginas`, `hospitalPermisos`). **Al cambiar una pantalla del satélite
+página) con la guía `src/lib/hospital/ayuda/conocimiento.ts` y el perfil del
+usuario (rol, puesto, `hospitalPaginas`, `hospitalPermisos`). Además CONSULTA
+datos (sólo lectura) con las herramientas de `ayuda/herramientas.ts`, cada una
+abierta sólo si el usuario ve alguna de sus páginas (`PAGINAS_HERRAMIENTA`;
+sin páginas restringidas = todas): `consultar_inventario` (existencia, lotes,
+caducidad, precio, proveedor del lote), `insumos_por_caducar`,
+`buscar_proveedores`, `buscar_clientes` y `compras_por_proveedor` (facturas
+recibidas, órdenes autorizadas e insumos que entraron, en un periodo). Si no
+tiene permiso, la herramienta contesta `sinPermiso` y la mascota dice qué
+página falta. El ciclo de herramientas vive en `llamarModelo` (máx. 4 rondas,
+resultados recortados a 12 000 caracteres). **Al cambiar una pantalla del satélite
 hay que actualizar su sección de la guía.**
 
-- `POST /api/hospital/ayuda { companyId, pregunta, pagina?, mascota?, historial? }` → `{ id, respuesta, paginas, sinRespuesta, modelo }`.
-  `elemento` = lo que el usuario señaló arrastrando la mascota encima (tipo, título y rótulos; nunca el
+- `POST /api/hospital/ayuda { companyId, pregunta, pagina?, mascota?, historial? }` → `{ id, respuesta, paginas, sinRespuesta, modelo }`
+  (la bitácora guarda qué herramientas usó). `elemento` = lo que el usuario señaló arrastrando la mascota encima (tipo, título y rótulos; nunca el
   texto libre del elemento, que puede traer nombres de pacientes).
   Cualquier miembro (la rejilla de páginas no aplica). Pasa por `llamarModelo`
   (topes de IA, CostEvent `hospital.ayuda`); modelo `AI_HOSPITAL_AYUDA_MODEL`

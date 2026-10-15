@@ -75,13 +75,13 @@ export const POST = withHospital(async (req: Request) => {
     accion: "hospital.ayuda.preguntar",
     entidad: "HospAyudaPregunta",
     entidadId: r.id,
-    detalle: { pagina: d.pagina ?? null, elemento: d.elemento?.tipo ?? null, modelo: r.modelo, sinRespuesta: r.sinRespuesta, caracteres: d.pregunta.length },
+    detalle: { pagina: d.pagina ?? null, elemento: d.elemento?.tipo ?? null, modelo: r.modelo, herramientas: r.herramientas, sinRespuesta: r.sinRespuesta, caracteres: d.pregunta.length },
   });
 
   // Un reporte de facturas: el modelo sólo puso los FILTROS; las cifras y los
   // archivos los arma el hub. Los enlaces van firmados (24 h) porque el
   // navegador de HospitalOS no manda su Bearer en un <a href>.
-  const { reporte, ...resto } = r;
+  const { reporte, herramientas: _herramientas, ...resto } = r;
   if (reporte) {
     try {
       const rep = await crearReporte(prisma, { companyId: d.companyId, userId: user.id, origen: "hospital-ayuda", filtros: reporte });
