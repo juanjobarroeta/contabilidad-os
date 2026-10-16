@@ -11,6 +11,7 @@
 import { useEffect, useState } from "react";
 import { X, Printer, Loader2, ShieldCheck } from "lucide-react";
 import type { Representacion, RepConcepto, RepTraslado, RepNominaConcepto } from "@/lib/facturas/representacion";
+import { separarFirmas } from "@/lib/facturas/firmas";
 
 const TIPO_COMP: Record<string, string> = { I: "Ingreso", E: "Egreso", T: "Traslado", N: "Nómina", P: "Pago" };
 const METODO: Record<string, string> = { PUE: "PUE — Pago en una sola exhibición", PPD: "PPD — Pago en parcialidades o diferido" };
@@ -297,7 +298,7 @@ function ConceptosTable({ conceptos }: { conceptos: RepConcepto[] }) {
             <tr key={i} className="border-t border-cos-line-soft align-top">
               <td className="px-2 py-1.5 font-mono text-[11px] text-cos-ink-soft">{c.claveProdServ}</td>
               <td className="px-2 py-1.5 text-cos-ink">
-                {c.descripcion}
+                <DescripcionConFirmas descripcion={c.descripcion} />
                 {/* Arrendamiento: la cuenta predial del inmueble va en el
                     concepto, así que se imprime bajo su descripción. */}
                 {c.cuentasPrediales?.length > 0 && (
@@ -314,6 +315,26 @@ function ConceptosTable({ conceptos }: { conceptos: RepConcepto[] }) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+// "Firma: Nombre / Cargo" dentro de la descripción → bloque con la línea encima
+// del nombre. El texto sigue íntegro en el XML; aquí sólo cambia cómo se ve.
+function DescripcionConFirmas({ descripcion }: { descripcion: string }) {
+  const { texto, firmas } = separarFirmas(descripcion);
+  if (firmas.length === 0) return <>{descripcion}</>;
+  return (
+    <>
+      {texto}
+      <span className="mt-10 grid grid-cols-2 gap-x-6 gap-y-8 break-inside-avoid">
+        {firmas.map((f, i) => (
+          <span key={i} className="block border-t border-cos-ink pt-1 text-center">
+            <span className="block font-medium">{f.nombre}</span>
+            {f.cargo && <span className="block text-[11px] text-cos-ink-soft">{f.cargo}</span>}
+          </span>
+        ))}
+      </span>
+    </>
   );
 }
 

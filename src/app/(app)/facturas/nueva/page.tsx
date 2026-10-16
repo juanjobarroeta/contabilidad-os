@@ -11,6 +11,7 @@ import { formatCurrency } from "@/lib/utils";
 import { SatCodePicker } from "@/components/ui/SatCodePicker";
 import { ManifiestoBanner } from "@/components/facturas/ManifiestoBanner";
 import { contradiccionIva } from "@/lib/fiscal/iva-esperado";
+import { MAX_DESCRIPCION, textoFirma } from "@/lib/facturas/firmas";
 import {
   aplicarRetencionLocal,
   montoRetencionLocal,
@@ -557,6 +558,7 @@ export default function NuevaFacturaPage() {
   function validateStep2() {
     for (const it of items) {
       if (!it.description.trim()) return "Todos los conceptos requieren descripción";
+      if (it.description.length > MAX_DESCRIPCION) return `La descripción no puede pasar de ${MAX_DESCRIPCION} caracteres (límite del SAT)`;
       if (!it.product_key.trim()) return "Todos los conceptos requieren clave SAT";
       if (it.quantity <= 0) return "La cantidad debe ser mayor a 0";
       if (it.price <= 0) return "El precio debe ser mayor a 0";
@@ -1170,14 +1172,25 @@ export default function NuevaFacturaPage() {
                   {/* Description — with concepto autocomplete from past invoices */}
                   <div className="relative">
                     <label className="block text-xs font-medium mb-1">Descripción <span className="text-cos-red-ink">*</span></label>
-                    <input type="text" value={item.description}
-                      onChange={(e) => { updateItem(item.id, "description", e.target.value); setConceptoOpenFor(item.id); }}
+                    {/* textarea para descripciones largas (contratos de obra); los
+                        saltos de línea se vuelven espacios porque el CFDI los
+                        normaliza y no llegarían al XML. */}
+                    <textarea value={item.description} rows={item.description.length > 80 ? 4 : 1} maxLength={MAX_DESCRIPCION}
+                      onChange={(e) => { updateItem(item.id, "description", e.target.value.replace(/\s*\n\s*/g, " ")); setConceptoOpenFor(item.id); }}
                       onFocus={() => setConceptoOpenFor(item.id)}
                       onBlur={() => setTimeout(() => setConceptoOpenFor((cur) => (cur === item.id ? null : cur)), 150)}
                       placeholder="Descripción del producto o servicio"
                       autoComplete="off"
-                      className="w-full px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
+                      className="w-full resize-y px-3 py-2 border border-cos-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-cos-brand/30"
                     />
+                    <div className="mt-1 flex items-center justify-between gap-3 text-[11px] text-cos-ink-faint">
+                      <button type="button" className="hover:text-cos-ink"
+                        title="Agrega 'Firma: Nombre / Cargo' — la representación impresa lo dibuja con la línea encima del nombre y queda en el XML"
+                        onClick={() => updateItem(item.id, "description", `${item.description.trimEnd()} ${textoFirma("C. Nombre", "Cargo")}`.trimStart().slice(0, MAX_DESCRIPCION))}>
+                        + Agregar firma
+                      </button>
+                      <span className={item.description.length > MAX_DESCRIPCION * 0.9 ? "text-cos-red-ink" : ""}>{item.description.length}/{MAX_DESCRIPCION}</span>
+                    </div>
                     {conceptoOpenFor === item.id && (() => {
                       const q = item.description.trim().toLowerCase();
                       const matches = (sugerencias?.conceptos ?? []).filter(
