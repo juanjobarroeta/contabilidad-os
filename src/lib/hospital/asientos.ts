@@ -291,7 +291,7 @@ export async function asentarMovimientoKardex(tx: Db, movimiento: MovimientoKard
 
 /** El cargo que canceló una DEVOLUCION del paciente (cargos.ts la referencia así). */
 export function cargoDeDevolucion(referencia: string | null | undefined): string | null {
-  const m = /^Cancelación del cargo (\S+?):/.exec(referencia ?? "");
+  const m = /^(?:Cancelación|Devolución parcial) del cargo (\S+?):/.exec(referencia ?? "");
   return m ? m[1] : null;
 }
 
