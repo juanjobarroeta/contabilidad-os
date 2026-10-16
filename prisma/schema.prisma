@@ -8891,6 +8891,9 @@ model HospCotizacion {
   motivoPerdida      String?
   /// Hospital que se la llevó, si se sabe.
   perdidaContra      String?
+  /// Hecha fuera del sistema: el documento original manda (folio y total como vienen).
+  externa            Boolean  @default(false)
+  folioExterno       String?
 
   company  Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   paciente HospPaciente? @relation(fields: [pacienteId], references: [id])
@@ -8906,11 +8909,26 @@ model HospCotizacion {
   origenPaquete HospCotizacionOrigen?
   /// Cada vez que se guardan sus partidas, una foto numerada.
   versiones     HospCotizacionVersion[]
+  /// Cotización hecha fuera del sistema y subida tal cual (su archivo va aparte).
+  archivoExterno HospCotizacionArchivo?
 
   @@unique([companyId, folio])
   @@index([companyId, estado])
   @@index([companyId, medicoId])
   @@index([companyId, proximoSeguimiento])
+}
+
+/// El documento de una cotización externa (PDF o foto), aparte para que las
+/// listas de cotizaciones no carguen los bytes.
+model HospCotizacionArchivo {
+  id           String   @id @default(cuid())
+  cotizacionId String   @unique
+  createdAt    DateTime @default(now())
+  nombre       String
+  mime         String
+  archivo      Bytes
+
+  cotizacion HospCotizacion @relation(fields: [cotizacionId], references: [id], onDelete: Cascade)
 }
 
 /// Bitácora comercial de una cotización: cada llamada, WhatsApp, correo o

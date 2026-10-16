@@ -23,6 +23,17 @@ export const GET = withHospital(async (req: Request, ctx: Ctx) => {
   await requireMembership(c.companyId, undefined, req);
   await requireModule(c.companyId, "HOSPITAL", req);
 
+  // Externa: se entrega el documento original tal como se subió.
+  if (c.externa) {
+    const doc = await prisma.hospCotizacionArchivo.findUnique({ where: { cotizacionId: c.id } });
+    if (doc) {
+      const ext = doc.mime === "application/pdf" ? "pdf" : doc.mime.split("/")[1] ?? "bin";
+      return new NextResponse(new Uint8Array(doc.archivo), {
+        headers: { "Content-Type": doc.mime, "Content-Disposition": `attachment; filename="cotizacion-${c.folio}.${ext}"`, "Cache-Control": "no-store" },
+      });
+    }
+  }
+
   const [company, config] = await Promise.all([
     prisma.company.findUnique({ where: { id: c.companyId }, select: { razonSocial: true, nombreComercial: true, rfc: true, domicilioFiscal: true, telefono: true, email: true } }),
     prisma.hospConfig.findUnique({ where: { companyId: c.companyId }, select: { nombreHospital: true, clues: true, licenciaSanitaria: true } }),
