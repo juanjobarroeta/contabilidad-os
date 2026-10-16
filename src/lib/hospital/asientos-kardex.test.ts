@@ -81,6 +81,7 @@ describe("kardex que no es aplicación", () => {
 
   it("cargoDeDevolucion lee la referencia que escribe cancelarCargo", () => {
     expect(cargoDeDevolucion("Cancelación del cargo ck123: error de captura")).toBe("ck123");
+    expect(cargoDeDevolucion("Devolución parcial del cargo ck9: sobró")).toBe("ck9");
     expect(cargoDeDevolucion("conteo")).toBeNull();
   });
 });

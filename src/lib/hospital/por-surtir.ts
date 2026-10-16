@@ -2,14 +2,16 @@
 // ingreso de una cotización esas partidas NO entran a la cuenta
 // (episodio.ts, pasaAlIngreso): farmacia las ve aquí —desde que se agenda la
 // cita, para prepararlas— y las carga a la cuenta del paciente al surtirlas,
-// al precio cotizado. Cada partida guarda el cargo con que pasó (cargoId):
-// no se carga dos veces.
+// al precio cotizado. Contra inventario (lib/hospital/surtido): sale con su
+// lote y puede surtirse en varias entregas; sin inventario (cargarPorSurtir):
+// la partida guarda el cargo con que pasó (cargoId) y no se carga dos veces.
 
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { HospitalError } from "./errores";
 import { CATEGORIAS_FARMACIA } from "./episodio";
 import { ivaContextoPorEpisodio } from "./cuenta";
 import { r2 } from "./util";
+import { pendienteDe } from "./surtido";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -19,16 +21,28 @@ const partidaPendiente = {
   categoria: { in: [...CATEGORIAS_FARMACIA] },
   sinCotizar: false,
   cargoId: null,
+  surtidaAt: null,
 } satisfies Prisma.HospCotizacionPartidaWhereInput;
 
-const selectPartida = { id: true, descripcion: true, categoria: true, cantidad: true, precioUnitario: true, ivaTasa: true, importe: true, servicio: { select: { clave: true } } } as const;
+const selectPartida = {
+  id: true, descripcion: true, categoria: true, cantidad: true, precioUnitario: true, ivaTasa: true, importe: true,
+  servicio: { select: { clave: true, insumo: { select: { id: true, clave: true, nombre: true, unidad: true } } } },
+  surtidos: { where: { cancelado: false }, select: { cantidad: true } },
+} as const;
 
-type PartidaFila = { id: string; descripcion: string; categoria: string; cantidad: unknown; precioUnitario: unknown; ivaTasa: unknown; importe: unknown; servicio: { clave: string } | null };
+type PartidaFila = {
+  id: string; descripcion: string; categoria: string; cantidad: unknown; precioUnitario: unknown; ivaTasa: unknown; importe: unknown;
+  servicio: { clave: string; insumo: { id: string; clave: string; nombre: string; unidad: string } | null } | null;
+  surtidos: Array<{ cantidad: unknown }>;
+};
 const fila = (p: PartidaFila) => ({
   id: p.id,
   descripcion: p.descripcion,
   categoria: p.categoria,
   clave: p.servicio?.clave ?? null,
+  /** Insumo que el servicio ya tiene ligado (se sugiere al surtir). */
+  insumo: p.servicio?.insumo ?? null,
+  ...pendienteDe({ cantidad: p.cantidad }, p.surtidos),
   cantidad: Number(p.cantidad),
   precioUnitario: Number(p.precioUnitario),
   ivaTasa: p.ivaTasa == null ? null : Number(p.ivaTasa),
@@ -125,8 +139,11 @@ export async function cargarPorSurtir(
     if (partidas.length !== ids.length) throw new HospitalError(400, "Alguna partida no es de la cotización de este episodio");
     const ajena = partidas.find((p) => p.sinCotizar || !(CATEGORIAS_FARMACIA as readonly string[]).includes(p.categoria));
     if (ajena) throw new HospitalError(400, `«${ajena.descripcion}» no la surte farmacia`);
-    const ya = partidas.find((p) => p.cargoId);
+    const ya = partidas.find((p) => p.cargoId || p.surtidaAt);
     if (ya) throw new HospitalError(409, `«${ya.descripcion}» ya se cargó a la cuenta`);
+    // Ya empezó a surtirse contra inventario: lo que falta se surte igual, no de golpe sin lote.
+    const conEntregas = await tx.hospCargo.findFirst({ where: { cotizacionPartidaId: { in: ids }, cancelado: false }, select: { cotizacionPartida: { select: { descripcion: true } } } });
+    if (conEntregas) throw new HospitalError(409, `«${conEntregas.cotizacionPartida?.descripcion}» ya tiene entregas de inventario: surte lo que falta desde su lote`);
 
     const ahora = new Date();
     const ivaContexto = ivaContextoPorEpisodio(ep.tipo);

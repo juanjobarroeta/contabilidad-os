@@ -6,7 +6,7 @@ const partida = (id: string, over: Record<string, unknown> = {}) => ({
   id, cotizacionId: "q1", descripcion: `P ${id}`, categoria: "FARMACIA", cantidad: 2, precioUnitario: 50, ivaTasa: 0, servicioId: null, sinCotizar: false, cargoId: null, ...over,
 });
 
-function db(partidas: ReturnType<typeof partida>[], marcadas = 1) {
+function db(partidas: ReturnType<typeof partida>[], marcadas = 1, conEntregas: null | { cotizacionPartida: { descripcion: string } } = null) {
   const creados: Record<string, unknown>[] = [];
   const tx = {
     hospEpisodio: { findUnique: vi.fn(async () => ({ id: "e1", companyId: "c", folio: "EP-1", estado: "HOSPITALIZADO", tipo: "HOSPITALIZACION", cotizacion: { id: "q1" } })) },
@@ -14,7 +14,10 @@ function db(partidas: ReturnType<typeof partida>[], marcadas = 1) {
       findMany: vi.fn(async ({ where }: { where: { id: { in: string[] } } }) => partidas.filter((p) => where.id.in.includes(p.id))),
       updateMany: vi.fn(async (_a: { where: Record<string, unknown> }) => ({ count: marcadas })),
     },
-    hospCargo: { create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => { creados.push(data); return { id: `cg${creados.length}`, ...data }; }) },
+    hospCargo: {
+      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => { creados.push(data); return { id: `cg${creados.length}`, ...data }; }),
+      findFirst: vi.fn(async () => conEntregas),
+    },
   };
   return { db: { $transaction: (fn: (t: typeof tx) => unknown) => fn(tx) } as never, tx, creados };
 }
@@ -38,6 +41,9 @@ describe("lo cotizado que surte farmacia", () => {
     await expect(cargarPorSurtir(db([partida("a", { cargoId: "x" })]).db, { companyId: "c", episodioId: "e1", partidaIds: ["a"], usuario })).rejects.toMatchObject({ status: 409 });
     await expect(cargarPorSurtir(db([partida("a", { categoria: "QUIROFANO" })]).db, { companyId: "c", episodioId: "e1", partidaIds: ["a"], usuario })).rejects.toMatchObject({ status: 400 });
     await expect(cargarPorSurtir(db([]).db, { companyId: "c", episodioId: "e1", partidaIds: ["zz"], usuario })).rejects.toMatchObject({ status: 400 });
+  });
+  it("con entregas de inventario ya hechas, no se carga lo demás de golpe sin lote", async () => {
+    await expect(cargarPorSurtir(db([partida("a")], 1, { cotizacionPartida: { descripcion: "P a" } }).db, { companyId: "c", episodioId: "e1", partidaIds: ["a"], usuario })).rejects.toMatchObject({ status: 409 });
   });
   it("si otra persona se adelantó (carrera), 409 y se revierte", async () => {
     await expect(cargarPorSurtir(db([partida("a")], 0).db, { companyId: "c", episodioId: "e1", partidaIds: ["a"], usuario })).rejects.toMatchObject({ status: 409 });

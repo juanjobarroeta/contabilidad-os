@@ -8228,8 +8228,12 @@ model HospServicio {
   /// Grupo de la lista de precios del hospital (LC, PAT, ENDOS, TAC…): así
   /// viene en su sistema y así lo buscan; `categoria` es la del cargo.
   grupo         String?
+  /// Insumo del inventario que surte este concepto (medicamento/material). Se
+  /// liga la primera vez que farmacia lo surte y se recuerda.
+  insumoId      String?
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  insumo  HospInsumo? @relation(fields: [insumoId], references: [id], onDelete: SetNull)
 
   tarifas            HospTarifa[]
   citas              HospCita[]
@@ -8730,6 +8734,10 @@ model HospCargo {
   canceladoAt       DateTime?
   motivoCancelacion String?
   creadoPorUserId   String?
+  /// Partida de la cotización que este cargo surte (farmacia, con su lote). Una
+  /// partida puede surtirse en varias entregas: lo surtido es la suma de sus
+  /// cargos vivos.
+  cotizacionPartidaId String?
 
   company    Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   episodio   HospEpisodio     @relation(fields: [episodioId], references: [id], onDelete: Cascade)
@@ -8738,6 +8746,7 @@ model HospCargo {
   medico     HospMedico?      @relation(fields: [medicoId], references: [id])
   invoice    Invoice?         @relation(fields: [invoiceId], references: [id])
   prefactura FacturaBorrador? @relation(fields: [prefacturaId], references: [id], onDelete: SetNull)
+  cotizacionPartida HospCotizacionPartida? @relation("SurtidoPartida", fields: [cotizacionPartidaId], references: [id], onDelete: SetNull)
 
   nota             HospNota?
   movimientoInsumo HospMovimientoInsumo?
@@ -8747,6 +8756,7 @@ model HospCargo {
   @@index([invoiceId])
   @@index([publicoGeneralCobroId])
   @@index([prefacturaId])
+  @@index([cotizacionPartidaId])
 }
 
 enum HospCitaTipo {
@@ -9028,6 +9038,8 @@ model HospCotizacionPartida {
 
   cotizacion HospCotizacion @relation(fields: [cotizacionId], references: [id], onDelete: Cascade)
   servicio   HospServicio?  @relation(fields: [servicioId], references: [id])
+  /// Las entregas de farmacia contra esta partida (cargos con lote).
+  surtidos   HospCargo[]    @relation("SurtidoPartida")
 
   @@index([cotizacionId])
 }
@@ -9106,6 +9118,7 @@ model HospInsumo {
   lineasArea        HospSolicitudAreaLinea[]
   cfdiLineas        HospCfdiLinea[]
   proveedorClaves   HospProveedorInsumo[]
+  servicios         HospServicio[]
 
   @@unique([companyId, clave])
   @@index([companyId, categoria])
