@@ -137,6 +137,8 @@ function opcionInsumo(i: InsumoFila, pendiente: number, hoy: Date) {
     existencia: plan.disponible,
     porAlmacen: Object.entries(porAlmacen).map(([almacen, existencia]) => ({ almacen, existencia })),
     plan: plan.tramos,
+    /** Lotes surtibles en orden FEFO: el satélite rehace el plan si cambia la cantidad. */
+    lotes: lotesElegibles(lotes, hoy).map((l) => ({ id: l.id, lote: l.lote, almacen: l.almacen, caducidad: l.caducidad, existencia: l.existencia })),
   };
 }
 
