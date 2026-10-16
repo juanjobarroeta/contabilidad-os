@@ -58,3 +58,17 @@ describe("POST /cotizaciones con médico nuevo", () => {
     expect((await crear({ medicoNuevo: { nombre: "Dr" } })).status).toBe(400);
   });
 });
+
+describe("POST /cotizaciones externa (hecha fuera del sistema)", () => {
+  const externa = { archivoBase64: Buffer.from("%PDF-1.4 cotizacion").toString("base64"), mime: "application/pdf", nombre: "cot.pdf", total: 23200, folioExterno: "C-881" };
+  it("sin partidas, con su archivo, el total del documento y ya aceptada", async () => {
+    const r = await crear({ pacienteNombre: "Ana Ruiz", partidas: [], estado: "ACEPTADA", externa });
+    expect(r.status).toBe(201);
+    expect(estado.creada).toMatchObject({ externa: true, folioExterno: "C-881", total: 23200, subtotal: 23200, iva: 0, estado: "ACEPTADA" });
+    expect((estado.creada?.archivoExterno as { create: { mime: string } }).create.mime).toBe("application/pdf");
+  });
+  it("sin archivo no hay cotización sin partidas, ni aceptada de entrada", async () => {
+    expect((await crear({ pacienteNombre: "Ana Ruiz", partidas: [] })).status).toBe(400);
+    expect((await crear({ pacienteNombre: "Ana Ruiz", estado: "ACEPTADA" })).status).toBe(400);
+  });
+});

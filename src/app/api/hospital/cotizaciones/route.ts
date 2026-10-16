@@ -73,8 +73,22 @@ const createSchema = z.object({
   procedimiento: z.string().max(300).nullable().optional(),
   vigenciaHasta: fechaSchema.nullable().optional(),
   notas: z.string().max(4000).nullable().optional(),
-  estado: z.enum(["BORRADOR", "ENVIADA"]).optional(),
-  partidas: z.array(partidaSchema).min(1).max(200),
+  estado: z.enum(["BORRADOR", "ENVIADA", "ACEPTADA"]).optional(),
+  partidas: z.array(partidaSchema).max(200).default([]),
+  /**
+   * Cotización hecha FUERA del sistema y subida tal cual: el documento manda
+   * (folio y total como vienen). Las partidas son opcionales; sin ellas el
+   * ingreso no carga nada (admisión ve el total del documento).
+   */
+  externa: z
+    .object({
+      archivoBase64: z.string().min(10).max(12_000_000),
+      mime: z.enum(["application/pdf", "image/jpeg", "image/png", "image/webp"]),
+      nombre: z.string().trim().min(1).max(200),
+      total: z.number().positive().max(100_000_000),
+      folioExterno: z.string().trim().max(60).nullable().optional(),
+    })
+    .optional(),
   // Seguimiento: quién la trabaja y cómo localizar a quien la pidió.
   contactoNombre: z.string().trim().max(200).nullable().optional(),
   contactoTelefono: z.string().trim().max(40).nullable().optional(),
@@ -116,6 +130,10 @@ export const POST = withHospital(async (req: Request) => {
     const m = await prisma.companyMember.findUnique({ where: { userId_companyId: { userId: d.responsableUserId, companyId: d.companyId } }, select: { id: true } });
     if (!m) return error("El responsable no es usuario de este hospital");
   }
+  if (!d.externa && d.partidas.length === 0) return error("La cotización necesita al menos una partida");
+  if (d.estado === "ACEPTADA" && !d.externa) return error("Sólo una cotización externa se sube ya aceptada");
+  const archivo = d.externa ? Buffer.from(d.externa.archivoBase64, "base64") : null;
+  if (archivo && archivo.length > 8 * 1024 * 1024) return error("El archivo pasa de 8 MB");
   const estadoInicial = d.estado ?? "BORRADOR";
 
   const lista = await armarPartidas(prisma, d.companyId, d.pagadorId, d.partidas, { conOriginal: true });
@@ -152,10 +170,19 @@ export const POST = withHospital(async (req: Request) => {
           origen: d.origen ?? (medicoId ? "MEDICO" : null),
           ...(estadoInicial === "ENVIADA" ? { enviadaAt: hoy, proximoSeguimiento: new Date(hoy.getTime() + DIAS_PRIMER_SEGUIMIENTO * 86_400_000) } : {}),
           vigenciaHasta: aFecha(d.vigenciaHasta),
-          subtotal: armado.subtotal,
-          iva: armado.iva,
-          total: armado.total,
+          // Externa sin partidas: el total es el del documento (con IVA, tal cual).
+          subtotal: d.externa && !armado.partidas.length ? d.externa.total : armado.subtotal,
+          iva: d.externa && !armado.partidas.length ? 0 : armado.iva,
+          total: d.externa && !armado.partidas.length ? d.externa.total : armado.total,
           notas: d.notas?.trim() || null,
+          ...(d.externa && archivo
+            ? {
+                externa: true,
+                folioExterno: d.externa.folioExterno?.trim() || null,
+                archivoExterno: { create: { nombre: d.externa.nombre, mime: d.externa.mime, archivo } },
+                ...(estadoInicial === "ACEPTADA" ? { cerradaAt: hoy } : {}),
+              }
+            : {}),
           creadoPorUserId: user.id,
           partidas: { create: armado.partidas },
           ...(origen ? { origenPaquete: { create: origen } } : {}),
@@ -171,7 +198,7 @@ export const POST = withHospital(async (req: Request) => {
     accion: "hospital.cotizacion.crear",
     entidad: "HospCotizacion",
     entidadId: cotizacion.id,
-    detalle: { folio: cotizacion.folio, paciente: pacienteNombre, medicoId: cotizacion.medicoId, medicoNuevo: d.medicoNuevo?.nombre ?? null, paquete: d.precioPaquete ?? null, procedimiento: cotizacion.procedimiento, total: armado.total, partidas: armado.partidas.length },
+    detalle: { folio: cotizacion.folio, externa: Boolean(d.externa), folioExterno: d.externa?.folioExterno ?? null, paciente: pacienteNombre, medicoId: cotizacion.medicoId, medicoNuevo: d.medicoNuevo?.nombre ?? null, paquete: d.precioPaquete ?? null, procedimiento: cotizacion.procedimiento, total: armado.total, partidas: armado.partidas.length },
   });
   return NextResponse.json({ ...serializarCotizacion(cotizacion), paciente: cotizacion.paciente ? pacienteResumen(cotizacion.paciente) : null }, { status: 201 });
 });
