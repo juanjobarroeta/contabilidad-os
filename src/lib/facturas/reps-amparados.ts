@@ -21,6 +21,7 @@
 
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { normalizarUuid, variantesUuid } from "../fiscal/uuid";
+import { consultarPorLotes } from "../prisma-lotes";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -34,15 +35,15 @@ export async function amparadoPorReps(
   const lista = variantesUuid(uuids);
   if (lista.length === 0) return out;
 
-  const links = await db.pagoDoctoRelacionado.findMany({
+  const links = await consultarPorLotes(lista, (lote) => db.pagoDoctoRelacionado.findMany({
     where: {
-      parentUuid: { in: lista },
+      parentUuid: { in: lote },
       // Un REP cancelado no ampara nada. La cancelación SOLICITADA sí ampara:
       // el CFDI sigue vigente hasta que el SAT la resuelve.
       pagoInvoice: { companyId, tipo: "PAGO", status: { not: "CANCELLED" }, sustituidoPorUuid: null },
     },
     select: { parentUuid: true, impPagado: true },
-  });
+  }));
   for (const l of links) {
     const k = normalizarUuid(l.parentUuid);
     out.set(k, (out.get(k) ?? 0) + Number(l.impPagado ?? 0));
@@ -67,13 +68,13 @@ export async function cierresDeclaradosPorReps(
   const out = new Map<string, { cerrada: boolean; saldoAnteriorMax: number }>();
   const lista = variantesUuid(uuids);
   if (lista.length === 0) return out;
-  const links = await db.pagoDoctoRelacionado.findMany({
+  const links = await consultarPorLotes(lista, (lote) => db.pagoDoctoRelacionado.findMany({
     where: {
-      parentUuid: { in: lista },
+      parentUuid: { in: lote },
       pagoInvoice: { companyId, tipo: "PAGO", status: { not: "CANCELLED" }, sustituidoPorUuid: null },
     },
     select: { parentUuid: true, impSaldoAnterior: true, impSaldoInsoluto: true },
-  });
+  }));
   for (const l of links) {
     const k = normalizarUuid(l.parentUuid);
     const prev = out.get(k) ?? { cerrada: false, saldoAnteriorMax: 0 };
@@ -115,9 +116,9 @@ export async function repsPorFactura(
   const lista = variantesUuid(uuids);
   if (lista.length === 0) return out;
 
-  const links = await db.pagoDoctoRelacionado.findMany({
+  const links = await consultarPorLotes(lista, (lote) => db.pagoDoctoRelacionado.findMany({
     where: {
-      parentUuid: { in: lista },
+      parentUuid: { in: lote },
       pagoInvoice: { companyId, tipo: "PAGO", status: { not: "CANCELLED" }, sustituidoPorUuid: null },
     },
     select: {
@@ -125,7 +126,7 @@ export async function repsPorFactura(
       impPagado: true,
       pagoInvoice: { select: { id: true, uuid: true, fecha: true } },
     },
-  });
+  }));
   for (const l of links) {
     const k = normalizarUuid(l.parentUuid);
     const lista2 = out.get(k) ?? [];
